@@ -7170,7 +7170,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'{t("msg_referral_link_title", lang=user_lang)}\n\n'
                 f'<code>{referral_link}</code>\n\n'
-                f'{t("msg_referral_send", lang=user_lang)}'
+                f'{t("msg_referral_send", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}'
             )
             keyboard = [
                 [InlineKeyboardButton(t('btn_copy_link', lang=user_lang), url=referral_link)],
@@ -25770,7 +25770,21 @@ async def main():
             error_type = type(error).__name__
             error_msg = str(error)
             
-            # Логируем с полным traceback для отладки
+            # ==================== КРИТИЧНО: Обработка 409 Conflict ====================
+            # Если это Conflict ошибка, обрабатываем её специально (graceful exit)
+            from telegram.error import Conflict as TelegramConflict
+            if isinstance(error, TelegramConflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+                logger.error(f"❌❌❌ 409 CONFLICT DETECTED: {error_msg}")
+                logger.error("   Another bot instance is running or webhook is active")
+                logger.error("   This process will exit gracefully to prevent conflicts")
+                logger.error("   💡 ACTIONS:")
+                logger.error("      1. Check Render Dashboard - ensure only ONE service is running")
+                logger.error("      2. Check local runs - stop all bot instances")
+                logger.error("      3. Verify singleton lock is working correctly")
+                handle_conflict_gracefully(error, "polling")
+                return  # Exit immediately after graceful handling
+            
+            # Логируем с полным traceback для отладки (только для не-Conflict ошибок)
             logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
             
             # ==================== SELF-HEAL: Попытка автоматического исправления ====================
