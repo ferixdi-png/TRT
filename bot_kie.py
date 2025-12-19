@@ -25077,9 +25077,38 @@ async def main():
     # Polling режим - продолжаем как обычно
     logger.info("📡 Starting polling mode")
     
-    # Wait a bit to let any previous instance finish
-    logger.info("⏳ Waiting 3 seconds to avoid conflicts with previous instance...")
-    await asyncio.sleep(3)
+    # CRITICAL: Wait longer to let any previous instance finish completely
+    # На Render может быть несколько инстансов, запускающихся одновременно
+    logger.info("⏳ Waiting 10 seconds to avoid conflicts with previous instance...")
+    await asyncio.sleep(10)
+    
+    # Дополнительная проверка: убеждаемся, что нет активного polling
+    logger.info("🔍 Final conflict check before polling...")
+    try:
+        from telegram import Bot
+        check_bot = Bot(token=BOT_TOKEN)
+        # Пробуем получить webhook info - если есть активный polling, это может вызвать конфликт
+        webhook_info = await check_bot.get_webhook_info()
+        if webhook_info.url:
+            logger.warning(f"⚠️ Webhook still active: {webhook_info.url}, removing...")
+            await check_bot.delete_webhook(drop_pending_updates=True)
+            await asyncio.sleep(2)
+        
+        # Пробуем getUpdates с очень коротким timeout для проверки конфликта
+        try:
+            await check_bot.get_updates(offset=-1, limit=1, timeout=1)
+        except Exception as test_e:
+            if "Conflict" in str(test_e) or "terminated by other getUpdates" in str(test_e):
+                logger.error("❌❌❌ CONFLICT DETECTED: Another instance is polling!")
+                logger.error("   Exiting gracefully to prevent 409 Conflict...")
+                handle_conflict_gracefully(test_e, "polling")
+                return
+    except Exception as e:
+        if "Conflict" in str(e) or "terminated by other getUpdates" in str(e):
+            logger.error("❌❌❌ CONFLICT DETECTED during pre-check!")
+            handle_conflict_gracefully(e, "polling")
+            return
+        logger.warning(f"⚠️ Pre-check warning (non-critical): {e}")
     
     # КРИТИЧНО: Удалить ВСЕ webhook и проверить конфликты перед запуском polling
     async def preflight_telegram():
@@ -25205,7 +25234,7 @@ async def main():
         # Используем временный bot для проверки (не application.bot, чтобы не инициализировать application)
         logger.info("🔍 Финальная проверка конфликта перед запуском polling...")
         conflict_detected = False
-        for attempt in range(3):  # 3 попытки
+        for attempt in range(5):  # 5 попыток с увеличивающейся задержкой
             try:
                 from telegram import Bot
                 check_bot = Bot(token=BOT_TOKEN)
@@ -25217,24 +25246,27 @@ async def main():
                 error_msg = str(test_error)
                 if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
                     conflict_detected = True
-                    logger.error(f"❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка {attempt + 1}/3)!")
+                    logger.error(f"❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка {attempt + 1}/5)!")
                     logger.error("Другой экземпляр бота уже работает!")
                     
-                    if attempt < 2:  # Не последняя попытка
-                        logger.info("🔄 Пытаюсь исправить: удаляю webhook и жду...")
+                    if attempt < 4:  # Не последняя попытка
+                        wait_time = (attempt + 1) * 5  # Увеличивающаяся задержка: 5, 10, 15, 20 секунд
+                        logger.info(f"🔄 Пытаюсь исправить: удаляю webhook и жду {wait_time} секунд...")
                         try:
                             await check_bot.delete_webhook(drop_pending_updates=True)
-                            await asyncio.sleep(3)  # Ждём больше времени
+                            await asyncio.sleep(wait_time)  # Увеличивающаяся задержка
                         except:
                             pass
                     else:
                         # Последняя попытка - критическая ошибка
-                        logger.error("❌ Не удалось исправить конфликт после 3 попыток!")
+                        logger.error("❌ Не удалось исправить конфликт после 5 попыток!")
                         logger.error("💡 ДЕЙСТВИЯ:")
                         logger.error("   1. Проверьте Render Dashboard - должен быть только ОДИН сервис")
                         logger.error("   2. Проверьте локальные запуски - все должны быть остановлены")
                         logger.error("   3. Убедитесь, что нет других сервисов с тем же токеном")
-                        raise RuntimeError("Another bot instance is running - conflict not resolved")
+                        logger.error("   4. Проверьте singleton lock - должен работать корректно")
+                        handle_conflict_gracefully(test_error, "polling")
+                        return  # Выходим без запуска polling
                 else:
                     # Не критичная ошибка (например, timeout), продолжаем
                     logger.debug(f"Проверка конфликта (попытка {attempt + 1}): {test_error}")
