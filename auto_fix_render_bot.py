@@ -33,15 +33,78 @@ class RenderBotMonitor:
         self.conflicts_detected = 0
         self.webhooks_removed = 0
         
+    def verify_service_id(self) -> bool:
+        """Проверяет, что Service ID существует и доступен"""
+        try:
+            # Получаем список всех сервисов
+            response = requests.get(f"{RENDER_API_BASE}/services", headers=self.headers, timeout=10)
+            response.raise_for_status()
+            
+            services = response.json()
+            if isinstance(services, list):
+                for service in services:
+                    service_info = service.get("service", {})
+                    if service_info.get("id") == self.service_id:
+                        print(f"✅ Service ID подтверждён: {service_info.get('name', 'N/A')}")
+                        return True
+            elif isinstance(services, dict):
+                # Если ответ - один сервис
+                service_info = services.get("service", {})
+                if service_info.get("id") == self.service_id:
+                    return True
+            
+            print(f"⚠️  Service ID {self.service_id} не найден в ваших сервисах")
+            print("💡 Используйте: python get_render_logs.py --list-services")
+            return False
+            
+        except Exception as e:
+            print(f"⚠️  Не удалось проверить Service ID: {e}")
+            return True  # Продолжаем, возможно проблема временная
+    
     def get_logs(self, lines: int = 200) -> Optional[List[Dict]]:
         """Получает логи с Render"""
         try:
+            # Попытка 1: Стандартный endpoint
             url = f"{RENDER_API_BASE}/services/{self.service_id}/logs"
             params = {"limit": lines, "tail": "true"}
             
             response = requests.get(url, headers=self.headers, params=params, timeout=30)
-            response.raise_for_status()
             
+            # Если 404, пробуем альтернативные способы
+            if response.status_code == 404:
+                print("⚠️  Endpoint /logs не найден, пробую альтернативный способ...")
+                
+                # Попытка 2: Через deploys
+                try:
+                    deploys_url = f"{RENDER_API_BASE}/services/{self.service_id}/deploys"
+                    deploys_response = requests.get(deploys_url, headers=self.headers, params={"limit": 1}, timeout=30)
+                    if deploys_response.status_code == 200:
+                        deploys_data = deploys_response.json()
+                        if isinstance(deploys_data, list) and len(deploys_data) > 0:
+                            deploy = deploys_data[0].get("deploy", {})
+                            deploy_id = deploy.get("id", "")
+                            if deploy_id:
+                                # Пробуем получить логи через deploy
+                                deploy_logs_url = f"{RENDER_API_BASE}/deploys/{deploy_id}/logs"
+                                deploy_logs_response = requests.get(deploy_logs_url, headers=self.headers, timeout=30)
+                                if deploy_logs_response.status_code == 200:
+                                    logs_data = deploy_logs_response.json()
+                                    if isinstance(logs_data, list):
+                                        return logs_data
+                                    elif isinstance(logs_data, dict) and "logs" in logs_data:
+                                        return logs_data["logs"]
+                except:
+                    pass
+                
+                # Если ничего не сработало, возвращаем ошибку
+                print(f"❌ Не удалось получить логи. Service ID: {self.service_id}")
+                print("💡 Проверьте:")
+                print("   1. Правильность Service ID")
+                print("   2. Что сервис существует и доступен")
+                print("   3. Что API ключ имеет права на чтение логов")
+                return None
+            
+            response.raise_for_status()
             logs_data = response.json()
             
             if isinstance(logs_data, list):
@@ -51,6 +114,19 @@ class RenderBotMonitor:
             else:
                 return [logs_data] if logs_data else []
                 
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"❌ Service ID {self.service_id} не найден или недоступен")
+                print("💡 Проверьте правильность Service ID в Render Dashboard")
+            else:
+                print(f"❌ Ошибка HTTP {e.response.status_code}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    print(f"   Детали: {error_detail}")
+                except:
+                    print(f"   Ответ: {e.response.text[:200]}")
+            return None
         except Exception as e:
             print(f"❌ Ошибка при получении логов: {e}")
             return None
