@@ -10642,21 +10642,27 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если мы дошли сюда без отправки сообщения - это КРИТИЧЕСКИЙ БАГ
     # ОБЯЗАТЕЛЬНО отправляем fallback
     try:
-        logger.warning(f"⚠️⚠️⚠️ NO-SILENCE VIOLATION: input_parameters reached end without response for user {user_id}")
-        user_lang = get_user_language(user_id) if user_id else 'ru'
-        keyboard = [
-            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-            [InlineKeyboardButton("🔄 Повторить", callback_data="back_to_menu")]
-        ]
-        await update.message.reply_text(
-            "⚠️ <b>Я не смог обработать ваш ввод.</b>\n\n"
-            "Вернитесь в главное меню и попробуйте снова.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='HTML'
-        )
-        track_outgoing_action(update_id)
+        logger.warning(f"⚠️⚠️⚠️ NO-SILENCE VIOLATION: input_parameters reached end without response for user {user_id}, waiting_for={waiting_for}")
+        # Проверяем через NO-SILENCE GUARD
+        await guard.check_and_ensure_response(update, context)
     except Exception as e:
-        logger.error(f"❌ CRITICAL: Failed to send NO-SILENCE fallback in input_parameters: {e}", exc_info=True)
+        logger.error(f"❌ CRITICAL: Failed to check NO-SILENCE in input_parameters: {e}", exc_info=True)
+        # Если даже check_and_ensure_response упал - отправляем напрямую
+        try:
+            user_lang = get_user_language(user_id) if user_id else 'ru'
+            keyboard = [
+                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                [InlineKeyboardButton("🔄 Повторить", callback_data="back_to_menu")]
+            ]
+            await update.message.reply_text(
+                "⚠️ <b>Я не смог обработать ваш ввод.</b>\n\n"
+                "Вернитесь в главное меню и попробуйте снова.",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            track_outgoing_action(update_id)
+        except Exception as e2:
+            logger.error(f"❌ CRITICAL: Failed to send NO-SILENCE fallback in input_parameters: {e2}", exc_info=True)
     # ==================== END NO-SILENCE GUARD ====================
     
     return INPUTTING_PARAMS
