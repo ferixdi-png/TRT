@@ -24529,6 +24529,33 @@ async def main():
             # Логируем с полным traceback для отладки
             logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
             
+            # ==================== SELF-HEAL: Попытка автоматического исправления ====================
+            try:
+                from app.observability.error_guard import ErrorGuard
+                project_root = Path(__file__).parent
+                error_guard = ErrorGuard(project_root)
+                
+                # Получаем контекст
+                user_id = None
+                callback_data = None
+                if isinstance(update, Update):
+                    if update.effective_user:
+                        user_id = update.effective_user.id
+                    if update.callback_query:
+                        callback_data = update.callback_query.data
+                
+                # Пытаемся применить безопасный фикс
+                fixed = await error_guard.handle_error(
+                    error, update, context, user_id, callback_data
+                )
+                
+                if fixed:
+                    logger.info("✅ Ошибка автоматически исправлена (self-heal)")
+                
+            except Exception as heal_error:
+                logger.warning(f"⚠️ Ошибка в self-heal: {heal_error}")
+                # Продолжаем обычную обработку ошибки
+            
             # Пытаемся получить user_id из update
             user_id = None
             user_lang = 'ru'
