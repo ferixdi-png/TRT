@@ -2,6 +2,7 @@
 Login to KIE.ai and save storage state for authenticated requests.
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -67,7 +68,18 @@ def main():
             storage_state, encoding="utf-8"
         )
 
-        print(f"\n✅ Storage state saved to {STATE_PATH}")
+        # Verify login worked
+        current_url = page.url
+        if "login" not in current_url.lower():
+            print(f"\n✅ Storage state saved to {STATE_PATH}")
+        else:
+            print(f"\n⚠️ Still on login page. Please login manually and press Enter again.")
+            input()
+            storage_state = context.storage_state()
+            STATE_PATH.write_text(
+                json.dumps(storage_state, indent=2), encoding="utf-8"
+            )
+            print(f"✅ Storage state saved to {STATE_PATH}")
         browser.close()
 
 
