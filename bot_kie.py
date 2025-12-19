@@ -25101,7 +25101,45 @@ async def main():
         await application.shutdown()
 
 
+# ==================== HEALTH HTTP SERVER FOR RENDER ====================
+# Простой HTTP сервер для health check (чтобы Render не жаловался на отсутствие порта)
+class HealthHandler(BaseHTTPRequestHandler):
+    """Обработчик для health check endpoints"""
+    def do_GET(self):
+        if self.path in ("/", "/health", "/healthz"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"ok")
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Отключаем логирование HTTP запросов (чтобы не засорять логи)
+        pass
+
+def start_health_server():
+    """Запускает простой HTTP сервер для health check"""
+    try:
+        port = int(os.getenv("PORT", "10000"))
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        logger.info(f"✅ Health server started on 0.0.0.0:{port}")
+        logger.info(f"   Health check: http://0.0.0.0:{port}/health")
+        server.serve_forever()
+    except Exception as e:
+        logger.error(f"❌ Failed to start health server: {e}")
+        # Не критично, продолжаем работу бота
+
 if __name__ == '__main__':
+    # Запускаем health сервер в отдельном потоке (daemon - умрёт с основным процессом)
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+    logger.info("🚀 Health server thread started")
+    
+    # Небольшая задержка, чтобы сервер успел запуститься
+    time.sleep(0.5)
+    
     # Единая точка входа через asyncio.run
     # НЕ запускаем бота при импортах - только при прямом вызове
     asyncio.run(main())
