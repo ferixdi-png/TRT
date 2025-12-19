@@ -35,16 +35,8 @@ def dump_json(path: Path, data: Dict[str, Any]):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def normalize_price_matrix(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Best-effort matrix extractor:
-    expects something like:
-      durations: [5,10,15]
-      resolutions: ["720p","1080p"]
-      usd table by duration/resolution OR credits + usd approx
-    Return our pricing block or None.
-    """
-    # We will accept already extracted matrix from extract step.
-    if raw.get("type") == "matrix" and "table" in raw and "axes" in raw:
+    """If raw already has matrix format, return it"""
+    if isinstance(raw, dict) and raw.get("type") == "matrix" and "table" in raw:
         return raw
     return None
 
@@ -79,103 +71,72 @@ def extract_next_data(page) -> Optional[Dict[str, Any]]:
     return None
 
 def extract_json_candidates(network_json: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
+    """Find JSON responses that might contain model data"""
     candidates = []
     for url, payload in network_json:
-        if not isinstance(payload, (dict, list)):
+        if not isinstance(payload, dict):
             continue
-        s = json.dumps(payload)[:5000].lower()
-        if "model" in s and ("prompt" in s or "input" in s or "schema" in s or "fields" in s):
+        # Простая проверка: есть ли ключевые слова
+        payload_str = json.dumps(payload).lower()[:1000]
+        if any(word in payload_str for word in ["model", "prompt", "schema", "fields"]):
             candidates.append((url, payload))
     return candidates
 
 def extract_schema_and_pricing(payload: Any) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str], Dict[str, Any]]:
-    """
-    Return: (schema, pricing, title, meta)
-    We do best-effort: search for keys that look like model, input schema, pricing.
-    """
-    meta: Dict[str, Any] = {}
+    """Extract schema and pricing from JSON payload. Returns: (schema, pricing, title, meta)"""
+    if not isinstance(payload, dict):
+        return None, None, None, {}
+    
     schema = None
     pricing = None
     title = None
-
-    # Helper recursive search
-    def walk(obj):
-        stack = [obj]
-        while stack:
-            x = stack.pop()
-            if isinstance(x, dict):
-                yield x
-                for v in x.values():
-                    stack.append(v)
-            elif isinstance(x, list):
-                for v in x:
-                    stack.append(v)
-
-    # Try find title/name
-    for d in walk(payload):
-        for k in ("title", "name", "modelName", "displayName"):
-            if k in d and isinstance(d[k], str) and len(d[k]) < 120:
-                title = title or d[k]
-
-    # Try find model id
     model_id = None
-    for d in walk(payload):
-        for k in ("model", "model_id", "modelId", "id", "slug"):
-            if k in d and isinstance(d[k], str):
-                v = d[k]
-                if "/" in v and len(v) < 80:
-                    model_id = model_id or v
-
-    # Try find schema fields
-    # Patterns: fields[], inputSchema, schema, form, input
-    for d in walk(payload):
-        if "fields" in d and isinstance(d["fields"], list):
-            # fields items maybe have name/required/type/enum etc.
-            fields = d["fields"]
-            parsed = {}
-            ok = 0
-            for f in fields:
-                if not isinstance(f, dict):
-                    continue
-                fname = f.get("name") or f.get("key") or f.get("field") or f.get("id")
-                if not fname or not isinstance(fname, str):
-                    continue
-                required = bool(f.get("required")) or bool(f.get("isRequired"))
-                ftype = (f.get("type") or f.get("valueType") or "string")
-                enum = f.get("enum") or f.get("options") or f.get("values")
-                min_len = f.get("minLength") or f.get("min_len")
-                max_len = f.get("maxLength") or f.get("max_len")
-                item = {"type": str(ftype), "required": required}
-                if isinstance(enum, list) and enum:
-                    item["values"] = [str(x) for x in enum]
-                if isinstance(min_len, (int, float)):
-                    item["min_len"] = int(min_len)
-                if isinstance(max_len, (int, float)):
-                    item["max_len"] = int(max_len)
-                parsed[fname] = item
-                ok += 1
-            if ok >= 2 and ("prompt" in parsed or "image_urls" in parsed or "video_urls" in parsed):
-                schema = schema or parsed
-
-        # Alternative: input schema object
-        for k in ("inputSchema", "schema", "input_schema", "inputSchemaJson"):
-            if k in d and isinstance(d[k], dict):
-                # if already nice
-                if "prompt" in d[k] or "image_urls" in d[k] or "video_urls" in d[k]:
-                    schema = schema or d[k]
-
-    # Try find pricing table
-    # Patterns: pricing, prices, credits, plans
-    for d in walk(payload):
-        for k in ("pricing", "prices", "priceTable", "plans", "credits"):
-            if k in d:
-                meta["raw_pricing_hint"] = k
-                # Keep raw; later we normalize when we have structured values
-                if pricing is None and isinstance(d[k], (dict, list)):
-                    pricing = d[k]
-
-    meta["model_id"] = model_id
-    return schema, pricing, title, meta
+    
+    # Простой поиск по ключам (без рекурсии)
+    if "fields" in payload and isinstance(payload["fields"], list):
+        schema = {}
+        for f in payload["fields"]:
+            if not isinstance(f, dict):
+                continue
+            fname = f.get("name") or f.get("key")
+            if not fname:
+                continue
+            schema[fname] = {
+                "type": str(f.get("type", "string")),
+                "required": bool(f.get("required", False))
+            }
+            if "enum" in f:
+                schema[fname]["values"] = [str(x) for x in f["enum"]]
+            if "maxLength" in f:
+                schema[fname]["max_len"] = int(f["maxLength"])
+            if "max_length" in f:
+                schema[fname]["max_len"] = int(f["max_length"])
+    
+    # Ищем в типичных местах
+    for key in ["inputSchema", "schema", "input_schema"]:
+        if key in payload and isinstance(payload[key], dict):
+            schema = payload[key]
+            break
+    
+    # Title
+    for key in ["title", "name", "modelName"]:
+        if key in payload and isinstance(payload[key], str):
+            title = payload[key]
+            break
+    
+    # Model ID
+    for key in ["model", "model_id", "modelId", "id"]:
+        if key in payload and isinstance(payload[key], str):
+            model_id = payload[key]
+            break
+    
+    # Pricing
+    for key in ["pricing", "prices"]:
+        if key in payload:
+            pricing = payload[key]
+            break
+    
+    return schema, pricing, title, {"model_id": model_id}
 
 def click_api_tab(page):
     # The UI has a tab called API
@@ -196,23 +157,23 @@ def click_api_tab(page):
             continue
 
 def collect_model_links(page) -> List[str]:
-    # Scroll + collect anchors that look like model pages
+    """Собираем ссылки на модели со страницы market"""
     links = set()
-    for _ in range(12):
-        page.evaluate("() => window.scrollBy(0, document.body.scrollHeight)")
-        page.wait_for_timeout(800)
-        for a in page.locator("a").all():
-            try:
-                href = a.get_attribute("href") or ""
-                if not href:
-                    continue
-                if href.startswith("/"):
-                    href = "https://kie.ai" + href
-                if "kie.ai" in href and "market" in href:
-                    # keep
-                    links.add(href.split("#")[0])
-            except Exception:
-                continue
+    # Скроллим страницу чтобы загрузить все модели
+    for _ in range(10):
+        page.evaluate("window.scrollBy(0, 500)")
+        page.wait_for_timeout(500)
+    
+    # Ищем все ссылки с /market/
+    for link in page.locator('a[href*="/market/"]').all():
+        try:
+            href = link.get_attribute("href") or ""
+            if href.startswith("/"):
+                href = "https://kie.ai" + href
+            if "/market/" in href and href != MARKET_URL:
+                links.add(href.split("#")[0].split("?")[0])
+        except:
+            pass
     return sorted(links)
 
 def main():
