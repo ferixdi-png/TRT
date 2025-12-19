@@ -24918,6 +24918,22 @@ async def main():
         await application.start()
         
         logger.info("📡 Запуск polling...")
+        
+        # КРИТИЧНО: Проверяем, что нет другого экземпляра перед запуском
+        try:
+            # Пробуем получить updates с offset=-1 для проверки конфликта
+            test_updates = await application.bot.get_updates(offset=-1, limit=1, timeout=1)
+            logger.info("✅ Проверка конфликта пройдена")
+        except Exception as test_error:
+            error_msg = str(test_error)
+            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+                logger.error("❌❌❌ КОНФЛИКТ ОБНАРУЖЕН ПЕРЕД ЗАПУСКОМ POLLING!")
+                logger.error("Другой экземпляр бота уже работает!")
+                logger.error("Остановите все другие экземпляры и перезапустите сервис")
+                raise RuntimeError("Another bot instance is running")
+            else:
+                logger.warning(f"⚠️ Предупреждение при проверке: {test_error}")
+        
         await application.updater.start_polling(drop_pending_updates=drop_updates)
         
         logger.info("✅ Polling started successfully!")

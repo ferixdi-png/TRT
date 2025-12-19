@@ -52,16 +52,37 @@ def _init_imports():
     
     if _t is None:
         from translations import t as _t_func
-        from knowledge_storage import (
-            get_user_balance as _get_user_balance_func,
-            get_is_admin as _get_is_admin_func,
-            get_user_language as _get_user_language_func,
-            get_user_free_generations_remaining as _get_user_free_generations_remaining_func,
-            has_claimed_gift as _has_claimed_gift_func,
-            get_admin_limit as _get_admin_limit_func,
-            get_admin_spent as _get_admin_spent_func,
-            get_admin_remaining as _get_admin_remaining_func
-        )
+        # Импортируем функции из bot_kie.py (не из knowledge_storage)
+        try:
+            from bot_kie import (
+                get_user_balance as _get_user_balance_func,
+                get_is_admin as _get_is_admin_func,
+                get_user_language as _get_user_language_func,
+                get_user_free_generations_remaining as _get_user_free_generations_remaining_func,
+                has_claimed_gift as _has_claimed_gift_func,
+                get_admin_limit as _get_admin_limit_func,
+                get_admin_spent as _get_admin_spent_func,
+                get_admin_remaining as _get_admin_remaining_func
+            )
+        except ImportError:
+            # Fallback: если bot_kie не импортируется, используем database
+            try:
+                from database import get_user_balance as _get_user_balance_func
+                # Остальные функции должны быть в bot_kie
+                logger.warning("⚠️ Используется fallback импорт из database для get_user_balance")
+                # Для остальных функций используем заглушки или пробуем импортировать из bot_kie
+                from bot_kie import (
+                    get_is_admin as _get_is_admin_func,
+                    get_user_language as _get_user_language_func,
+                    get_user_free_generations_remaining as _get_user_free_generations_remaining_func,
+                    has_claimed_gift as _has_claimed_gift_func,
+                    get_admin_limit as _get_admin_limit_func,
+                    get_admin_spent as _get_admin_spent_func,
+                    get_admin_remaining as _get_admin_remaining_func
+                )
+            except ImportError as e:
+                logger.error(f"❌ Не удалось импортировать функции: {e}")
+                raise
         from kie_models import (
             KIE_MODELS as _KIE_MODELS_obj,
             get_generation_types as _get_generation_types_func,
