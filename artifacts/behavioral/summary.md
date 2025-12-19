@@ -1,6 +1,6 @@
 # BEHAVIORAL E2E SUMMARY
 
-**Date:** 2025-12-19T17:15:24.327794
+**Date:** 2025-12-19T17:19:33.417884
 
 **Total models:** 72
 **Passed:** 72
