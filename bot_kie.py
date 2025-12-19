@@ -10609,8 +10609,21 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text:
         await update.message.reply_text("❌ Пожалуйста, отправьте текстовое сообщение.")
         return INPUTTING_PARAMS
-    
+
     text = update.message.text.strip()
+    
+    # Handle /cancel command
+    if text.lower() in ['/cancel', 'отмена', 'cancel']:
+        user_lang = get_user_language(user_id)
+        if user_id in user_sessions:
+            del user_sessions[user_id]
+        keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
+        await update.message.reply_text(
+            t('msg_operation_cancelled', lang=user_lang),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
     
     # ==================== TASK 1: Гарантия ответа на каждый ввод ====================
     # Сразу отправляем подтверждение, чтобы пользователь не думал, что бот завис
@@ -23831,14 +23844,22 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             "✅ <b>Генерация завершена!</b>\n\n"
                             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             "🎉 <b>Результат готов!</b>\n\n"
-                            "⏳ Загружаю результат...\n\n"
-                            "💡 Скоро вы увидите созданный контент!"
+                            "⏳ <b>Загружаю результат...</b>\n\n"
+                            "💡 <b>Что дальше:</b>\n"
+                            "• Результат будет показан ниже\n"
+                            "• Вы сможете сохранить или поделиться им\n"
+                            "• Можете создать новую генерацию\n\n"
+                            "✨ Скоро вы увидите созданный контент!"
                         ) if user_lang == 'ru' else (
                             "✅ <b>Generation Completed!</b>\n\n"
                             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             "🎉 <b>Result is ready!</b>\n\n"
-                            "⏳ Loading result...\n\n"
-                            "💡 You'll see the created content shortly!"
+                            "⏳ <b>Loading result...</b>\n\n"
+                            "💡 <b>What's next:</b>\n"
+                            "• Result will be shown below\n"
+                            "• You can save or share it\n"
+                            "• You can create a new generation\n\n"
+                            "✨ You'll see the created content shortly!"
                         ),
                         parse_mode='HTML'
                     )
