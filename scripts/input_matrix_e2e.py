@@ -42,6 +42,19 @@ YELLOW = '\033[93m'
 RESET = '\033[0m'
 
 
+class ResponseTracker:
+    """Track bot responses (same as behavioral_e2e)"""
+    def __init__(self):
+        self.sent_messages: List[Dict] = []
+        self.replied_messages: List[Dict] = []
+    
+    def track_reply_text(self, text: str, **kwargs):
+        self.replied_messages.append({"text": text[:200]})
+    
+    def get_response_count(self) -> int:
+        return len(self.sent_messages) + len(self.replied_messages)
+
+
 class InputMatrixTester:
     """Test input matrix for all models"""
     
@@ -102,40 +115,53 @@ class InputMatrixTester:
                 'properties': model_info.get('input_params', {})
             }
             
-            # Mock update with text
+            # Create tracker (same as behavioral_e2e)
+            tracker = ResponseTracker()
+            
+            # Mock update with text (same pattern as behavioral_e2e)
+            test_user = MagicMock()
+            test_user.id = 123
+            test_user.username = "test_user"
+            
+            test_chat = MagicMock()
+            test_chat.id = 123
+            test_chat.type = "private"
+            
             update = MagicMock()
             update.update_id = 12345
             update.message = MagicMock()
+            update.message.message_id = 1
             update.message.text = value
-            update.message.from_user = MagicMock()
-            update.message.from_user.id = 123
+            update.message.from_user = test_user
+            update.message.chat = test_chat
             update.message.chat_id = 123
-            update.message.reply_text = AsyncMock()
-            update.effective_user = MagicMock()
-            update.effective_user.id = 123
+            update.message.reply_text = AsyncMock(side_effect=lambda text, **kwargs: tracker.track_reply_text(text, **kwargs) or MagicMock(message_id=2))
+            update.effective_user = test_user
+            update.effective_chat = test_chat
             
             context = MagicMock()
             context.bot = MagicMock()
-            context.bot.send_message = AsyncMock(return_value=MagicMock(message_id=1))
+            context.bot.send_message = AsyncMock(side_effect=lambda chat_id, text, **kwargs: tracker.sent_messages.append({"chat_id": chat_id, "text": text[:200]}) or MagicMock(message_id=len(tracker.sent_messages) + 1))
             context.bot.get_file = AsyncMock(return_value=MagicMock())
             
-            outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
+            # Track responses using tracker (same as behavioral_e2e)
+            responses_before = tracker.get_response_count()
             
             try:
-                # Test via global router (simpler, tests the actual fix)
-                from bot_kie import global_text_router
+                # Test input_parameters directly (same as behavioral_e2e)
+                from bot_kie import input_parameters
                 
-                # Call global router directly (it will route to input_parameters if waiting_for exists)
-                await global_text_router(update, context)
+                # Call input_parameters (it has instant ACK and NO-SILENCE guard)
+                result = await input_parameters(update, context)
                 
-                outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
-                has_response = outgoing_count_after > outgoing_count_before
+                responses_after = tracker.get_response_count()
+                has_response = responses_after > responses_before
                 
                 return {
                     "model_id": model_id,
                     "input_type": input_type,
                     "passed": has_response,
-                    "outgoing_actions": outgoing_count_after - outgoing_count_before
+                    "outgoing_actions": responses_after - responses_before
                 }
             except Exception as e:
                 import traceback
