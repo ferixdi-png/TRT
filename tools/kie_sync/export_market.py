@@ -55,10 +55,18 @@ def safe_model_id(s: str) -> str:
     return s.strip()
 
 def guess_model_id_from_url(url: str) -> Optional[str]:
-    # Often pages: /market/<something> or /api/<model>
-    m = re.search(r"/(wan/[^/?#]+)", url)
+    # Extract model ID from URL patterns like:
+    # /market/wan-2-6-text-to-video -> wan/2-6-text-to-video
+    # /market/sora-2-text-to-video -> sora-2-text-to-video
+    # /api/wan/2-6-text-to-video -> wan/2-6-text-to-video
+    m = re.search(r"/(?:market|api)/([^/?#]+)", url)
     if m:
-        return m.group(1)
+        slug = m.group(1)
+        # Convert dashes to slashes for models like "wan-2-6" -> "wan/2-6"
+        # But keep simple models like "sora-2-text-to-video" as-is
+        if slug.startswith("wan-") and re.match(r"wan-\d+", slug):
+            slug = slug.replace("-", "/", 1)  # Only first dash
+        return slug
     return None
 
 def extract_next_data(page) -> Optional[Dict[str, Any]]:
