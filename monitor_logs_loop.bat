@@ -65,3 +65,4 @@ echo ⏳ Ожидание 60 секунд до следующей проверк
 timeout /t 60 /nobreak >nul
 goto loop
 
+

@@ -247,3 +247,4 @@ class ErrorGuard:
             "incidents_dir": str(self.incidents_dir)
         }
 
+

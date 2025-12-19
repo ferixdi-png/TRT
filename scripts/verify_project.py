@@ -10,8 +10,10 @@ import sys
 import subprocess
 import os
 import io
+import json
 from pathlib import Path
 from typing import List, Tuple
+from datetime import datetime
 
 # Установка кодировки UTF-8 для Windows
 if sys.platform == 'win32':
@@ -68,6 +70,21 @@ def main():
     project_root = Path(__file__).parent.parent
     os.chdir(project_root)
     
+    # 1. PREFLIGHT CHECKS (критические проверки)
+    print(f"\n{YELLOW}[PREFLIGHT]{RESET} Запуск критических проверок...")
+    preflight_result = subprocess.run(
+        [sys.executable, str(project_root / "scripts" / "preflight_checks.py")],
+        capture_output=True,
+        text=True,
+        timeout=600
+    )
+    if preflight_result.returncode != 0:
+        print(f"{RED}[FAIL]{RESET} Preflight checks failed!")
+        print(preflight_result.stdout)
+        print(preflight_result.stderr)
+        return 1
+    print(f"{GREEN}[PASS]{RESET} Preflight checks passed")
+    
     checks = [
         ("Compile Python", ["python", "-m", "compileall", ".", "-q"]),
         ("Snapshot Menu", ["python", "scripts/snapshot_menu.py"]),
@@ -78,14 +95,17 @@ def main():
         ("Verify Models Visible", ["python", "scripts/verify_models_visible_in_menu.py"]),
         ("Verify Callbacks", ["python", "scripts/verify_callbacks.py"]),
         ("Verify Payments Balance", ["python", "scripts/verify_payments_balance.py"]),
+        ("Behavioral E2E", ["python", "scripts/behavioral_e2e.py"]),  # КРИТИЧНО: Проверка реального поведения
     ]
     
-    # Проверяем наличие pytest
+    # Проверяем наличие pytest - FAIL если недоступен
     try:
         import pytest
         checks.append(("Run Tests", ["pytest", "-q", "--tb=short"]))
     except ImportError:
-        print(f"{YELLOW}WARN pytest not installed, skipping tests{RESET}")
+        print(f"{RED}[FAIL]{RESET} pytest не установлен - требуется для тестов")
+        print(f"{YELLOW}Установите: pip install pytest pytest-asyncio{RESET}")
+        return 1
     
     results = []
     for name, command in checks:
@@ -110,10 +130,22 @@ def main():
     
     if passed == total:
         print(f"\n{GREEN}ALL CHECKS PASSED!{RESET}")
+        
+        # Сохраняем timestamp последнего успешного запуска (для watchdog)
+        artifacts_dir = project_root / "artifacts"
+        artifacts_dir.mkdir(exist_ok=True)
+        verify_timestamp_file = artifacts_dir / "verify_last_pass.json"
+        with open(verify_timestamp_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                "last_pass": datetime.now().isoformat(),
+                "checks_passed": passed,
+                "total_checks": total
+            }, f, indent=2)
+        
         return 0
     else:
         print(f"\n{RED}THERE ARE ERRORS!{RESET}")
-        print(f"{YELLOW}Run: python scripts/autopilot.py{RESET}")
+        print(f"{YELLOW}Run: python scripts/autopilot_one_command.py{RESET}")
         return 1
 
 

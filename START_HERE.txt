@@ -1,48 +1,84 @@
-============================================================
-  🤖 ПОЛНАЯ ИНСТРУКЦИЯ: АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ
-============================================================
+════════════════════════════════════════════════════════════════
+🚀 START HERE - QUICK START GUIDE
+════════════════════════════════════════════════════════════════
 
-✅ ВСЁ ПРОВЕРЕНО И РАБОТАЕТ!
+📋 ЛОКАЛЬНЫЙ ЗАПУСК
+════════════════════════════════════════════════════════════════
 
-ОДИН ФАЙЛ ДЛЯ ЗАПУСКА:
-  cursor_auto_fix.bat
+1. Установи зависимости:
+   pip install -r requirements.txt
 
-ЧТО ДЕЛАЕТ:
-  1. Мониторит логи на Render каждые 60 секунд
-  2. Находит ошибки автоматически
-  3. Создаёт задачи для Cursor AI
-  4. Сохраняет промпты в .cursor/auto_fix_prompt.md
+2. Настрой ENV переменные (создай .env или используй системные):
+   TELEGRAM_BOT_TOKEN=your_token
+   KIE_API_KEY=your_key
+   DATABASE_URL=postgresql://...
+   BOT_MODE=polling
 
-КАК ИСПОЛЬЗОВАТЬ:
+3. Запусти проверки:
+   python scripts/autopilot_one_command.py
 
-ШАГ 1: Запустите скрипт
-  cursor_auto_fix.bat
+4. Запусти бота:
+   BOT_MODE=polling python bot_kie.py
 
-ШАГ 2: В Cursor откройте Chat (Ctrl+L)
-  Напишите: "Прочитай .cursor/auto_fix_prompt.md и исправь все ошибки"
+════════════════════════════════════════════════════════════════
+🔄 КАК CI/CD РАБОТАЕТ
+════════════════════════════════════════════════════════════════
 
-ШАГ 3: Cursor исправит ошибки автоматически!
+АВТОМАТИЧЕСКИЙ ДЕПЛОЙ:
 
-НАСТРОЙКИ:
-  Все ключи уже установлены:
-  ✅ RENDER_API_KEY: rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
-  ✅ RENDER_SERVICE_ID: srv-d4s025er433s73bsf62g
-  ✅ TELEGRAM_BOT_TOKEN: 8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
-  ✅ Owner ID: tea-d4rvtlshg0os73da2p6g (получается автоматически)
+1. Push в main → запускается CI workflow
+2. CI проверяет:
+   - verify_project.py
+   - behavioral_e2e.py
+   - singleton lock protection
+   - нет тишины
+3. Если все PASS → автоматически запускается Deploy workflow
+4. Deploy отправляет запрос на Render (Deploy Hook или API)
+5. Render деплоит новую версию
+6. Health check проверяет что сервис поднялся
 
-ФАЙЛЫ СОЗДАЮТСЯ:
-  - .cursor/auto_fix_tasks.json - все задачи
-  - .cursor/auto_fix_prompt.md - промпт для Cursor
+НАСТРОЙКА (ОДИН РАЗ):
 
-ПРОВЕРКА ПОДКЛЮЧЕНИЯ:
-  ✅ Render API: подключено
-  ✅ Логи: получаются успешно
-  ✅ Owner ID: определяется автоматически
+1. GitHub → Settings → Secrets and variables → Actions
+2. Добавь Secrets:
+   - RENDER_DEPLOY_HOOK (предпочтительно)
+     ИЛИ
+   - RENDER_API_KEY + RENDER_SERVICE_ID
+   - RENDER_HEALTH_URL (опционально, для health check)
 
-ОСТАНОВКА:
-  Нажмите Ctrl+C
+3. Готово! Дальше всё автоматически.
 
-============================================================
-  ВСЁ ГОТОВО! ЗАПУСКАЙТЕ cursor_auto_fix.bat
-============================================================
+════════════════════════════════════════════════════════════════
+📝 КОМАНДЫ
+════════════════════════════════════════════════════════════════
+
+# Полный цикл автопилота
+python scripts/autopilot_one_command.py
+
+# Отдельные проверки
+python scripts/verify_project.py
+python scripts/behavioral_e2e.py
+python scripts/preflight_checks.py
+
+# Логи Render
+python scripts/read_logs.py --since 60m --grep "ERROR"
+
+# Парсинг инцидентов
+python scripts/parse_logs.py
+
+════════════════════════════════════════════════════════════════
+✅ ПРОВЕРКА ГОТОВНОСТИ
+════════════════════════════════════════════════════════════════
+
+Проект готов ТОЛЬКО ЕСЛИ:
+
+✅ python scripts/verify_project.py = PASS
+✅ python scripts/behavioral_e2e.py = 100% MODELS RESPONDED
+✅ artifacts/behavioral/summary.md содержит "100% MODELS RESPONDED"
+✅ Нет тишины
+✅ Нет 409 Conflict
+
+БЕЗ ЭТОГО — НЕ ГОТОВО
+
+════════════════════════════════════════════════════════════════
 

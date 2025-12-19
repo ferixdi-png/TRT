@@ -142,3 +142,4 @@ TELEGRAM_BOT_TOKEN=8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
 
 **ВСЁ ГОТОВО! Настройте каждый сервис в Render Dashboard с нужными переменными окружения.**
 
+

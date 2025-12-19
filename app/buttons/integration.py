@@ -121,3 +121,4 @@ async def route_callback_with_fallback(
         await fallback_callback_handler(callback_data, update, context, user_id, user_lang)
         return False
 
+

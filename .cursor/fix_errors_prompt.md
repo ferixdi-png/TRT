@@ -80,3 +80,4 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request
 - Асинхронность (async/await)
 - Работу всех компонентов бота
 
+

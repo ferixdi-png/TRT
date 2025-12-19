@@ -1,53 +1,116 @@
 # KIE (Knowledge Is Everything) Telegram Bot
 
-A Telegram bot designed to help users find and share knowledge. The bot allows users to search for information, ask questions, and contribute new knowledge to a growing knowledge base.
+Production-grade Telegram bot for AI model generation via Kie.ai API.
 
-## Features
+## 🚀 БЫСТРЫЙ СТАРТ
 
-- `/search [query]` - Search for knowledge in the database
-- `/ask [question]` - Ask a question and get relevant information
-- `/add [knowledge]` - Contribute new knowledge to the database
-- `/help` - Show available commands
-- `/start` - Start interaction with the bot
+### Локальная разработка:
 
-## Setup
+```bash
+# 1. Установи зависимости
+pip install -r requirements.txt
 
-1. Clone this repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Copy `.env.example` to `.env` and fill in your Telegram bot token
-4. (Optional) Configure KIE AI integration in `.env`:
-	- `KIE_API_KEY` — your KIE API key
-	- `KIE_API_URL` — base URL of the KIE API (default: `https://api.kie.ai`)
-	- `KIE_DEFAULT_MODEL` — model id to use for `/ask` when no local answer found
-4. Run the bot: `python bot.py`
+# 2. Установи переменные окружения (см. ниже)
 
-## Prerequisites
+# 3. Запусти бота
+BOT_MODE=polling python bot_kie.py
+```
 
-- Python 3.8+
-- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+### Автоматический деплой через GitHub Actions:
 
-## Current Status
+1. **Добавь GitHub Secrets** (один раз):
+   - `RENDER_DEPLOY_HOOK` (предпочтительно) ИЛИ `RENDER_API_KEY` + `RENDER_SERVICE_ID`
+   - `RENDER_HEALTH_URL` (опционально, для health check)
 
-The core functionality is implemented:
-- Knowledge storage with JSON-based persistence
-- Search functionality to find entries
-- Ability to add new knowledge
-- Question answering based on existing knowledge
-- Proper error handling and user feedback
+2. **Push в main** → CI запускается автоматически
+3. **После CI PASS** → Deploy на Render автоматически
 
-## Project Structure
+**Подробнее:** см. `GITHUB_ACTIONS_SETUP.md`
+
+**GitHub Secrets (один раз):**
+- Перейди: Repository → Settings → Secrets and variables → Actions
+- Добавь: `RENDER_DEPLOY_HOOK` = `https://api.render.com/deploy/srv-XXXXX?key=XXXXX`
+  - Получи из: Render Dashboard → Service → Settings → Deploy Hook
+
+---
+
+## 🔐 ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
+
+### Обязательные:
+- `TELEGRAM_BOT_TOKEN` - токен бота от @BotFather
+- `KIE_API_KEY` - API ключ от Kie.ai
+- `DATABASE_URL` - PostgreSQL connection string (для production)
+
+### Опциональные:
+- `BOT_MODE` - `polling` (default) или `webhook`
+- `APP_ENV` - `prod` (default), `dev`, или `test`
+- `FAKE_KIE_MODE` - `1` для тестов (обязательно в CI)
+- `RENDER_API_KEY` - для чтения логов Render
+- `RENDER_SERVICE_ID` - для чтения логов Render
+
+**Все секреты ТОЛЬКО через ENV, никаких .env файлов в репо!**
+
+---
+
+## 🧪 ТЕСТИРОВАНИЕ
+
+```bash
+# Установи тестовое окружение
+export APP_ENV=test
+export FAKE_KIE_MODE=1
+
+# Запусти проверки
+python scripts/verify_project.py
+python scripts/behavioral_e2e.py
+```
+
+---
+
+## 📊 КОМАНДЫ
+
+### Проверка проекта:
+```bash
+python scripts/verify_project.py
+```
+
+### Поведенческое тестирование:
+```bash
+python scripts/behavioral_e2e.py
+```
+
+### Полный цикл автопилота:
+```bash
+python scripts/autopilot_one_command.py
+```
+
+### Чтение логов Render:
+```bash
+python scripts/read_logs.py --since 60m --grep "ERROR|Traceback"
+```
+
+---
+
+## 📁 СТРУКТУРА ПРОЕКТА
 
 ```
-kie-telegram-bot/
-├── bot.py              # Main bot implementation
-├── knowledge_storage.py # Knowledge storage module
-├── requirements.txt    # Project dependencies
-├── .env.example       # Environment variables template
-├── setup.py           # Setup script
-├── demo.py            # Demo of bot functionality
-├── test_storage.py    # Knowledge storage tests
-├── load_initial_knowledge.py # Initial data loader
-├── run_bot.py         # Bot runner with validation
+├── bot_kie.py              # Главный файл бота
+├── kie_models.py           # Список моделей KIE.ai
+├── app/                    # Модули приложения
+│   ├── config.py          # Конфигурация из ENV
+│   ├── singleton_lock.py  # Singleton lock (409 fix)
+│   └── bot_mode.py        # Управление режимами
+├── scripts/                # Скрипты автопилота
+│   ├── verify_project.py  # Единственная команда правды
+│   ├── behavioral_e2e.py  # Поведенческое тестирование
+│   ├── preflight_checks.py # Критические проверки
+│   └── autopilot_one_command.py # Полный цикл
+├── tests/                  # Тесты
+│   ├── fakes/             # Fake API для тестов
+│   └── test_*.py          # Unit/E2E тесты
+├── .github/workflows/      # GitHub Actions
+│   ├── ci.yml             # CI pipeline
+│   └── deploy_render.yml  # Deploy на Render
+└── artifacts/              # Артефакты проверок
 ├── knowledge_store/   # JSON storage directory
 │   └── entries.json
 └── README.md

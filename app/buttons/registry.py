@@ -181,3 +181,4 @@ class CallbackRouter:
         """Возвращает статистику обработки"""
         return self._stats.copy()
 
+

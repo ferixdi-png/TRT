@@ -1,0 +1,1304 @@
+{
+  "total": 72,
+  "passed": 72,
+  "failed": 0,
+  "silent_models": [],
+  "results": [
+    {
+      "model_id": "z-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "nano-banana-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "seedream/4.5-text-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "seedream/4.5-edit",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "sora-2-pro-image-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "sora-watermark-remover",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "sora-2-text-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling-2.6/image-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling-2.6/text-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "flux-2/pro-image-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "flux-2/pro-text-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "flux-2/flex-image-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "flux-2/flex-text-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "topaz/image-upscale",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-5-image-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-5-text-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-2-animate-move",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-2-animate-replace",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-standard",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-standard",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "topaz/video-upscale",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v1-avatar-standard",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "bytedance/seedream-v4-text-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "bytedance/seedream-v4-edit",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "recraft/remove-background",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "recraft/crisp-upscale",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/v3-reframe",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "bytedance/seedream",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "qwen/text-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "qwen/image-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "qwen/image-edit",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/character-edit",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/character-remix",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/character",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "bytedance/v1-pro-fast-image-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-1-master-image-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-1-standard",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-1-pro",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-1-master-text-to-video",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/v3-text-to-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/v3-edit",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "ideogram/v3-remix",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-2-a14b-text-to-video-turbo",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "wan/2-2-a14b-image-to-video-turbo",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/imagen4-ultra",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/imagen4-fast",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/imagen4",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/nano-banana",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/nano-banana-edit",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "elevenlabs/speech-to-text",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "grok/imagine",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "openai/4o-image",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "flux/kontext",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/veo-3",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/veo-3.1",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "sora-2-pro-storyboard",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "kling/v2-5-turbo",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "hailuo/2.3",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "infinitalk/from-audio",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "elevenlabs/audio-isolation",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "elevenlabs/sound-effect",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "elevenlabs/text-to-speech",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "google/nanobanana-gemini-2.5-flash",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "runway/gen-4",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "suno/v5",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    },
+    {
+      "model_id": "midjourney/api",
+      "passed": true,
+      "step": "complete",
+      "responses_after_button": 1,
+      "responses_after_input": 1,
+      "total_responses": 1,
+      "response_summary": {
+        "total": 1,
+        "send_message": 0,
+        "send_photo": 0,
+        "send_video": 0,
+        "edit_message_text": 0,
+        "reply_text": 1,
+        "has_response": true
+      },
+      "error": null
+    }
+  ]
+}

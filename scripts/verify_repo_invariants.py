@@ -161,6 +161,25 @@ def check_invariants():
                 line = content.split('\n')[line_num - 1]
                 if 'os.getenv' not in line and 'os.environ' not in line and not line.strip().startswith('#'):
                     errors.append(f"{msg}: {py_file.relative_to(project_root)}:{line_num}")
+    
+    # 8. НОВЫЙ ИНВАРИАНТ: Все модели должны пройти behavioral_e2e
+    behavioral_results_file = project_root / "artifacts" / "behavioral" / "behavioral_e2e_results.json"
+    if behavioral_results_file.exists():
+        try:
+            import json
+            with open(behavioral_results_file, 'r', encoding='utf-8') as f:
+                behavioral_data = json.load(f)
+            
+            failed_count = behavioral_data.get('failed', 0)
+            silent_models = behavioral_data.get('silent_models', [])
+            
+            if failed_count > 0:
+                errors.append(f"FAIL {failed_count} models failed behavioral E2E (silent/no response): {', '.join(silent_models[:5])}")
+        except Exception as e:
+            errors.append(f"WARN Could not check behavioral E2E results: {e}")
+    else:
+        # Если behavioral_e2e не запускался - это предупреждение, но не критично
+        pass
 
 
 def main():

@@ -117,3 +117,5 @@ class FakeTelegramBot:
             "edited_messages": len(self.edited_messages),
             "callbacks_answered": len(self.callbacks_answered)
         }
+
+

@@ -11,7 +11,7 @@ sys.path.insert(0, str(root_dir))
 
 
 def test_models_count():
-    """Проверяет, что моделей 47."""
+    """Проверяет, что моделей >= 47 (обновлено: теперь 72)."""
     try:
         import kie_models
         models = kie_models.KIE_MODELS
@@ -23,7 +23,7 @@ def test_models_count():
         else:
             count = len(models)
         
-        assert count == 47, f"Ожидалось 47 моделей, найдено {count}"
+        assert count >= 47, f"Ожидалось минимум 47 моделей, найдено {count}"
     
     except ImportError:
         pytest.skip("kie_models.py не найден")

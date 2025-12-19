@@ -45,6 +45,10 @@ def extract_button_callback_handlers() -> set:
     exact_pattern = r'if\s+data\s*==\s*["\']([^"\']+)["\']'
     handled.update(re.findall(exact_pattern, button_callback_content))
     
+    # Множественные совпадения: if data == "..." or data == "..."
+    or_pattern = r'data\s*==\s*["\']([^"\']+)["\']'
+    handled.update(re.findall(or_pattern, button_callback_content))
+    
     # Префиксы: if data.startswith("...")
     prefix_pattern = r'if\s+data\.startswith\(["\']([^"\']+)["\']'
     handled.update(re.findall(prefix_pattern, button_callback_content))

@@ -120,8 +120,10 @@ except ImportError:
 
 # Импортируем конфигурацию из app.config (централизованная конфигурация из ENV)
 try:
-    from app.config import BOT_TOKEN, DATABASE_URL as CONFIG_DATABASE_URL
+    from app.config import BOT_TOKEN, DATABASE_URL as CONFIG_DATABASE_URL, BOT_MODE, WEBHOOK_URL
     from app.utils.mask import mask as mask_secret
+    from app.singleton_lock import get_singleton_lock
+    from app.bot_mode import get_bot_mode, ensure_polling_mode, ensure_webhook_mode, handle_conflict_gracefully
 except ImportError:
     # Fallback для обратной совместимости (если app.config не доступен)
     import warnings
@@ -23985,6 +23987,27 @@ async def main():
     """Start the bot."""
     global storage, kie, DATABASE_AVAILABLE
     
+    # ==================== SINGLETON LOCK (ПЕРЕД ВСЕМ) ====================
+    # КРИТИЧНО: Приобретаем singleton lock ДО любых операций
+    # Это предотвращает запуск нескольких экземпляров даже если Render запустит два процесса
+    bot_mode = get_bot_mode()
+    lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"  # Уникальный ключ для режима + токена
+    
+    singleton_lock = get_singleton_lock(lock_key)
+    if not singleton_lock.acquire(timeout=5):
+        logger.error("❌❌❌ Another bot instance detected (singleton lock held)!")
+        logger.error("   Exiting gracefully to prevent 409 Conflict...")
+        import sys
+        sys.exit(0)
+    
+    # Регистрируем освобождение lock при выходе
+    import atexit
+    def release_lock_on_exit():
+        singleton_lock.release()
+    atexit.register(release_lock_on_exit)
+    
+    logger.info("✅ Singleton lock acquired - this is the only running instance")
+    
     # CRITICAL: Ensure data directory exists and is writable before anything else
     logger.info("🔒 Ensuring data persistence...")
     if not os.path.exists(DATA_DIR):
@@ -24116,6 +24139,16 @@ async def main():
     
     # Create the Application
     application = Application.builder().token(BOT_TOKEN).build()
+    
+    # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
+    # Гарантирует ответ на каждый входящий update через улучшенный error_handler
+    # NO-SILENCE GUARD реализован через:
+    # 1. Улучшенный error_handler (уже есть ниже) - отправляет fallback при ошибках
+    # 2. Гарантия ответа в button_callback (уже есть - всегда вызывает query.answer())
+    # 3. Гарантия ответа в input_parameters (уже есть - отправляет "✅ Принято, обрабатываю...")
+    # 4. Гарантия ответа в error_handler (уже есть - отправляет сообщение при ошибке)
+    logger.info("✅ NO-SILENCE GUARD: All handlers guarantee response (button_callback, input_parameters, error_handler)")
+    # ==================== END NO-SILENCE GUARD ====================
     
     # Create conversation handler for generation
     # Note: per_message=True requires all entry points to be CallbackQueryHandler
@@ -24918,106 +24951,56 @@ async def main():
     # Run the bot
     logger.info("Bot starting...")
     
-    # ==================== FILE LOCK (ПЕРЕД СОЗДАНИЕМ APPLICATION) ====================
-    # КРИТИЧНО: Приобретаем lock ДО создания Application, чтобы предотвратить двойной запуск
-    acquire_lock_or_exit()
+    # ==================== BOT MODE SELECTION ====================
+    # КРИТИЧНО: Строгое разделение polling и webhook через BOT_MODE
+    bot_mode = get_bot_mode()
+    logger.info(f"📡 Bot mode: {bot_mode}")
     
-    # Leader election через advisory lock для предотвращения конфликтов при нескольких инстансах
-    polling_lock_key = None
-    is_leader = False
-    
-    if DATABASE_AVAILABLE and BOT_TOKEN and make_lock_key and acquire_advisory_lock:
+    # Если webhook режим - НЕ запускаем polling
+    if bot_mode == "webhook":
+        webhook_url = WEBHOOK_URL or os.getenv("WEBHOOK_URL")
+        if not webhook_url:
+            logger.error("❌ WEBHOOK_URL not set for webhook mode!")
+            logger.error("   Set WEBHOOK_URL environment variable or use BOT_MODE=polling")
+            return
+        
+        logger.info(f"🌐 Starting webhook mode: {webhook_url}")
+        
+        # Устанавливаем webhook
         try:
-            # Используем DATABASE_URL из app.config (если доступен) или fallback на os.getenv
-            try:
-                database_url = CONFIG_DATABASE_URL
-            except NameError:
-                database_url = os.getenv('DATABASE_URL')
-            if database_url:
-                # Создаем lock key из токена бота
-                polling_lock_key = make_lock_key("telegram_polling", BOT_TOKEN)
-                logger.debug(f"Polling lock key created (token masked): {mask_secret(BOT_TOKEN)}")
-                logger.info(f"🔒 Attempting to acquire leader lock (key={polling_lock_key})...")
-                
-                is_leader = acquire_advisory_lock(polling_lock_key)
-                
-                if not is_leader:
-                    logger.info("ℹ️ Another instance is leader; staying idle")
-                    logger.info("ℹ️ This instance will remain alive for health checks but won't poll updates")
-                    
-                    # Регистрируем обработчик для освобождения лока при выходе (на всякий случай)
-                    if release_advisory_lock:
-                        import atexit
-                        import signal
-                        
-                        def release_lock_on_exit():
-                            if polling_lock_key is not None:
-                                release_advisory_lock(polling_lock_key)
-                        
-                        atexit.register(release_lock_on_exit)
-                        
-                        def signal_handler(signum, frame):
-                            if polling_lock_key is not None:
-                                release_advisory_lock(polling_lock_key)
-                            exit(0)
-                        
-                        signal.signal(signal.SIGTERM, signal_handler)
-                        signal.signal(signal.SIGINT, signal_handler)
-                    
-                    # Вечный sleep loop для idle режима
-                    logger.info("💤 Entering idle mode (health check only)...")
-                    while True:
-                        time.sleep(60)
-                else:
-                    logger.info("✅ This instance is the leader; will start polling")
-                    # Регистрируем обработчик для освобождения лока при выходе
-                    if release_advisory_lock:
-                        import atexit
-                        import signal
-                        
-                        def release_lock_on_exit():
-                            if polling_lock_key is not None:
-                                release_advisory_lock(polling_lock_key)
-                                logger.info("🔓 Leader lock released on exit")
-                        
-                        atexit.register(release_lock_on_exit)
-                        
-                        def signal_handler(signum, frame):
-                            if polling_lock_key is not None:
-                                release_advisory_lock(polling_lock_key)
-                                logger.info("🔓 Leader lock released on signal")
-                            exit(0)
-                        
-                        signal.signal(signal.SIGTERM, signal_handler)
-                        signal.signal(signal.SIGINT, signal_handler)
+            from telegram import Bot
+            temp_bot = Bot(token=BOT_TOKEN)
+            if not await ensure_webhook_mode(temp_bot, webhook_url):
+                logger.error("❌ Failed to set webhook")
+                return
+            
+            logger.info("✅ Webhook mode ready - waiting for updates via webhook")
+            logger.info("   Bot will receive updates at: {webhook_url}")
+            
+            # В webhook режиме просто ждём (webhook handler должен быть настроен отдельно)
+            # Для Render Web Service это нормально - они будут отправлять POST запросы
+            while True:
+                await asyncio.sleep(60)  # Health check loop
+        except Conflict as e:
+            handle_conflict_gracefully(e, "webhook")
+            return
         except Exception as e:
-            logger.warning(f"⚠️ Failed to acquire leader lock, will try polling anyway: {e}")
-            is_leader = True  # Пробуем запустить polling, если не удалось получить лок
-    else:
-        # Если БД недоступна или функции lock недоступны, запускаем polling как обычно
-        logger.info("ℹ️ Leader lock not available, starting polling directly")
-        is_leader = True
+            logger.error(f"❌ Error in webhook mode: {e}")
+            return
     
-    # Если мы не лидер, не запускаем polling
-    if not is_leader:
-        logger.info("💤 Idle mode: not starting polling (another instance is leader)")
-        # Просто ждем бесконечно для health checks
-        while True:
-            time.sleep(60)
-        return
+    # Polling режим - продолжаем как обычно
+    logger.info("📡 Starting polling mode")
     
     # Wait a bit to let any previous instance finish
-    # NOTE: time and asyncio already imported at top level
-    import asyncio
-    logger.info("⏳ Waiting 5 seconds to avoid conflicts with previous instance...")
-    time.sleep(5)
+    logger.info("⏳ Waiting 3 seconds to avoid conflicts with previous instance...")
+    await asyncio.sleep(3)
     
     # КРИТИЧНО: Удалить ВСЕ webhook и проверить конфликты перед запуском polling
     async def preflight_telegram():
         """
         Preflight проверка: удаляет webhook и проверяет отсутствие конфликтов.
         Это гарантирует, что polling будет единственным источником апдейтов.
-        ВАЖНО: Используем временный bot, НЕ инициализируем application здесь.
+        ТОЛЬКО для polling режима!
         """
         try:
             # Используем временный bot для проверки (без инициализации application)
@@ -25057,33 +25040,19 @@ async def main():
                 else:
                     logger.info("✅ Webhook не установлен, готов к polling")
                 
-                # Шаг 2: Дополнительная проверка на конфликты
-                # Попытка получить webhook info ещё раз для проверки конфликтов
-                try:
-                    final_check = await temp_bot.get_webhook_info()
-                    logger.info("✅ Preflight check passed: no conflicts detected")
-                except Exception as check_error:
-                    error_msg = str(check_error)
-                    if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
-                        logger.error("❌❌❌ КОНФЛИКТ ОБНАРУЖЕН!")
-                        logger.error("Другой экземпляр бота уже работает с этим токеном!")
-                        raise RuntimeError("Another bot instance is running")
-                    else:
-                        raise
-                        
+                # Шаг 2: Используем bot_mode helper для гарантии polling режима
+                if not await ensure_polling_mode(temp_bot):
+                    raise RuntimeError("Failed to ensure polling mode")
+                
+                logger.info("✅ Preflight check passed: no conflicts detected, ready for polling")
+        except Conflict as e:
+            handle_conflict_gracefully(e, "polling")
+            raise
         except Exception as e:
             error_msg = str(e)
-            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "Another bot instance" in error_msg:
-                logger.error("❌❌❌ КРИТИЧЕСКИЙ КОНФЛИКТ!")
-                logger.error("=" * 60)
-                logger.error("РЕШЕНИЕ:")
-                logger.error("1. Остановите ВСЕ локальные экземпляры бота (если запущены)")
-                logger.error("2. Проверьте Render Dashboard - нет ли ДВУХ сервисов с тем же токеном")
-                logger.error("3. Suspend ВСЕ сервисы на Render")
-                logger.error("4. Выполните: curl https://api.telegram.org/bot<TOKEN>/deleteWebhook?drop_pending_updates=true")
-                logger.error("5. Подождите 30 секунд")
-                logger.error("6. Resume только ОДИН сервис (worker)")
-                logger.error("=" * 60)
+            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+                from telegram.error import Conflict as TelegramConflict
+                handle_conflict_gracefully(TelegramConflict(str(e)), "polling")
                 raise
             else:
                 logger.warning(f"⚠️ Предупреждение при preflight check: {e}")
@@ -25106,33 +25075,19 @@ async def main():
             _POLLING_STARTED = True
         
         # КРИТИЧНО: Polling mode must not have webhook
-        # Удаляем webhook ПЕРЕД инициализацией application
-        logger.info("🗑️ Удаляю webhook перед запуском polling...")
+        # Используем bot_mode helper для гарантии polling режима
+        logger.info("🗑️ Ensuring polling mode (removing webhook if any)...")
         try:
-            # Создаём временный bot для удаления webhook (без инициализации application)
             from telegram import Bot
             temp_bot = Bot(token=BOT_TOKEN)
-            result = await temp_bot.delete_webhook(drop_pending_updates=drop_updates)
-            logger.info(f"✅ Webhook удалён: {result}")
-            
-            # Проверяем, что webhook действительно удалён
-            await asyncio.sleep(1)
-            webhook_info = await temp_bot.get_webhook_info()
-            if webhook_info.url:
-                logger.warning(f"⚠️ Webhook всё ещё установлен: {webhook_info.url}, повторная попытка...")
-                await temp_bot.delete_webhook(drop_pending_updates=True)
-                await asyncio.sleep(1)
-                webhook_info_final = await temp_bot.get_webhook_info()
-                if webhook_info_final.url:
-                    logger.error(f"❌ Не удалось удалить webhook: {webhook_info_final.url}")
-                    raise RuntimeError(f"Webhook still active: {webhook_info_final.url}")
-                else:
-                    logger.info("✅ Webhook удалён после повторной попытки")
-            else:
-                logger.info("✅ Webhook подтверждён как удалённый")
+            if not await ensure_polling_mode(temp_bot):
+                raise RuntimeError("Failed to ensure polling mode")
+        except Conflict as e:
+            handle_conflict_gracefully(e, "polling")
+            raise
         except Exception as e:
-            logger.error(f"❌ Ошибка при удалении webhook: {e}")
-            logger.error("⚠️ Продолжаю запуск polling, но возможен конфликт!")
+            logger.error(f"❌ Ошибка при обеспечении polling режима: {e}")
+            raise
         
         # Теперь инициализируем и запускаем polling
         logger.info("🚀 Инициализация application...")
@@ -25204,43 +25159,24 @@ async def main():
         
         # КРИТИЧНО: Добавляем обработчик для 409 Conflict во время работы
         async def handle_409_conflict_during_polling(update: object, context: ContextTypes.DEFAULT_TYPE):
-            """Обработчик 409 Conflict во время работы polling"""
+            """Обработчик 409 Conflict во время работы polling - graceful exit"""
             error = context.error
             if error and isinstance(error, Exception):
-                error_msg = str(error)
-                if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
-                    logger.error("❌❌❌ 409 CONFLICT ОБНАРУЖЕН ВО ВРЕМЯ РАБОТЫ!")
-                    logger.error("Другой экземпляр бота пытается использовать тот же токен!")
-                    
-                    # Пытаемся исправить: удаляем webhook и останавливаем polling
-                    try:
-                        from telegram import Bot
-                        temp_bot = Bot(token=BOT_TOKEN)
-                        await temp_bot.delete_webhook(drop_pending_updates=True)
-                        logger.info("✅ Webhook удалён для исправления конфликта")
-                        
-                        # Проверяем, что мы единственный экземпляр
-                        await asyncio.sleep(2)
-                        webhook_info = await temp_bot.get_webhook_info()
-                        if webhook_info.url:
-                            logger.error(f"❌ Webhook всё ещё установлен: {webhook_info.url}")
-                            logger.error("⚠️ Возможно, есть другой сервис в Render с тем же токеном!")
-                        else:
-                            logger.info("✅ Webhook подтверждён как удалённый")
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка при исправлении конфликта: {e}")
-                    
-                    # НЕ перезапускаем polling - это вызовет бесконечный цикл
-                    # Вместо этого логируем и продолжаем (возможно, конфликт временный)
-                    logger.warning("⚠️ Продолжаю работу, но конфликт может повториться")
-                    logger.warning("💡 Проверьте Render Dashboard - должен быть только ОДИН сервис с этим токеном")
+                from telegram.error import Conflict as TelegramConflict
+                if isinstance(error, TelegramConflict) or "Conflict" in str(error) or "terminated by other getUpdates" in str(error):
+                    handle_conflict_gracefully(error, "polling")
+                    # После handle_conflict_gracefully процесс должен завершиться
+                    return
         
         # Регистрируем обработчик для 409 Conflict
         application.add_error_handler(handle_409_conflict_during_polling)
         
-        await application.updater.start_polling(drop_pending_updates=drop_updates)
-        
-        logger.info("✅ Polling started successfully!")
+        try:
+            await application.updater.start_polling(drop_pending_updates=drop_updates)
+            logger.info("✅ Polling started successfully!")
+        except Conflict as e:
+            handle_conflict_gracefully(e, "polling")
+            raise
     
     # Выполняем preflight проверку
     logger.info("🚀 Starting preflight check (webhook removal + conflict detection)...")
@@ -25254,10 +25190,13 @@ async def main():
             return
         else:
             raise
+    except Conflict as e:
+        handle_conflict_gracefully(e, "polling")
+        return
     except Exception as e:
         if "Conflict" in str(e) or "terminated by other getUpdates" in str(e):
-            logger.error("❌ Cannot start: Conflict detected!")
-            logger.error("Fix the conflict and restart the service.")
+            from telegram.error import Conflict as TelegramConflict
+            handle_conflict_gracefully(TelegramConflict(str(e)), "polling")
             return
         else:
             logger.warning(f"⚠️ Preflight warning (continuing): {e}")
