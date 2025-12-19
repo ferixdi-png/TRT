@@ -95,7 +95,9 @@ def main():
         ("Verify Models Visible", ["python", "scripts/verify_models_visible_in_menu.py"]),
         ("Verify Callbacks", ["python", "scripts/verify_callbacks.py"]),
         ("Verify Payments Balance", ["python", "scripts/verify_payments_balance.py"]),
-        ("Behavioral E2E", ["python", "scripts/behavioral_e2e.py"]),  # КРИТИЧНО: Проверка реального поведения
+        ("Button Matrix E2E", ["python", "scripts/button_matrix_e2e.py"]),  # PHASE 3: Button responsibility matrix
+        ("Input Matrix E2E", ["python", "scripts/input_matrix_e2e.py"]),  # PHASE 4: Input matrix for all models
+        ("Behavioral E2E", ["python", "scripts/behavioral_e2e.py"]),  # PHASE 5: КРИТИЧНО: Проверка реального поведения
     ]
     
     # Проверяем наличие pytest - FAIL если недоступен
@@ -135,11 +137,26 @@ def main():
         artifacts_dir = project_root / "artifacts"
         artifacts_dir.mkdir(exist_ok=True)
         verify_timestamp_file = artifacts_dir / "verify_last_pass.json"
+        
+        # Save detailed log
+        proof_dir = artifacts_dir / "proof"
+        proof_dir.mkdir(exist_ok=True)
+        verify_log_file = proof_dir / "verify.log"
+        
+        with open(verify_log_file, 'w', encoding='utf-8') as f:
+            f.write(f"VERIFY PROJECT LOG - {datetime.now().isoformat()}\n")
+            f.write("="*80 + "\n\n")
+            for name, success in results:
+                status = "PASS" if success else "FAIL"
+                f.write(f"{status}: {name}\n")
+            f.write(f"\nTotal: {passed}/{total} passed\n")
+        
         with open(verify_timestamp_file, 'w', encoding='utf-8') as f:
             json.dump({
                 "last_pass": datetime.now().isoformat(),
                 "checks_passed": passed,
-                "total_checks": total
+                "total_checks": total,
+                "results": [{"name": name, "passed": success} for name, success in results]
             }, f, indent=2)
         
         return 0
