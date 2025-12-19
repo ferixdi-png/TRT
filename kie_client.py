@@ -353,8 +353,10 @@ class KIEClient:
                                     'taskId': task_data.get('taskId'),
                                     'state': task_data.get('state'),  # waiting, success, fail
                                     'resultJson': task_data.get('resultJson'),
+                                    'resultUrls': task_data.get('resultUrls', []),
                                     'failCode': task_data.get('failCode'),
                                     'failMsg': task_data.get('failMsg'),
+                                    'errorMessage': task_data.get('errorMessage'),
                                     'completeTime': task_data.get('completeTime'),
                                     'createTime': task_data.get('createTime')
                                 }
@@ -373,6 +375,61 @@ class KIEClient:
             return {'ok': False, 'error': 'Request to KIE timed out'}
         except Exception as e:
             return {'ok': False, 'error': str(e)}
+    
+    async def wait_task(self, task_id: str, timeout_s: int = 900, poll_s: int = 3) -> Dict[str, Any]:
+        """
+        Wait for task completion with polling.
+        
+        Args:
+            task_id: Task ID to wait for
+            timeout_s: Maximum wait time in seconds (default 900)
+            poll_s: Poll interval in seconds (default 3)
+        
+        Returns:
+            Final task status dict with state, resultUrls, etc.
+        
+        Raises:
+            TimeoutError: If task doesn't complete in timeout
+            ValueError: If task fails
+        """
+        max_iterations = timeout_s // poll_s
+        start_time = time.time()
+        
+        for i in range(max_iterations):
+            try:
+                result = await self.get_task_status(task_id)
+                
+                if not result.get('ok'):
+                    error = result.get('error', 'Unknown error')
+                    logger.warning(f"event=kie.wait_task task_id={task_id} iteration={i+1} error={error}, retrying...")
+                    await asyncio.sleep(poll_s)
+                    continue
+                
+                state = result.get('state')
+                elapsed = int(time.time() - start_time)
+                logger.info(f"event=kie.wait_task task_id={task_id} state={state} elapsed={elapsed}s iteration={i+1}")
+                
+                if state in ('success', 'fail'):
+                    if state == 'success':
+                        result_urls = result.get('resultUrls', [])
+                        logger.info(f"event=kie.wait_task task_id={task_id} status=success result_urls_count={len(result_urls)}")
+                        return result
+                    else:
+                        error_msg = result.get('failMsg') or result.get('errorMessage', 'Unknown error')
+                        logger.error(f"event=kie.wait_task task_id={task_id} status=fail error={error_msg}")
+                        raise ValueError(f"Task failed: {error_msg}")
+                
+                await asyncio.sleep(poll_s)
+            except ValueError:
+                # Task failure - re-raise
+                raise
+            except Exception as e:
+                logger.warning(f"event=kie.wait_task task_id={task_id} iteration={i+1} exception={e}, retrying...")
+                await asyncio.sleep(poll_s)
+        
+        elapsed = int(time.time() - start_time)
+        logger.error(f"event=kie.wait_task task_id={task_id} status=timeout elapsed={elapsed}s")
+        raise TimeoutError(f"Task {task_id} did not complete in {timeout_s}s")
 
     async def invoke_model(self, model_id: str, input_data: Any) -> Dict[str, Any]:
         """Invoke a model with given input_data. Returns parsed JSON or error dict."""
