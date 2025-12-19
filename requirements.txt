@@ -4,6 +4,7 @@ python-telegram-bot>=20.0
 # HTTP Client
 aiohttp>=3.8.0
 aiofiles>=23.0.0
+requests>=2.31.0  # Для работы с Render API
 
 # Environment variables
 python-dotenv>=1.0.0
