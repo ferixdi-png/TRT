@@ -9,6 +9,7 @@ config.local.*
 config.prod.*
 config.dev.*
 services_config.json
+render.yaml
 
 # Python
 __pycache__/

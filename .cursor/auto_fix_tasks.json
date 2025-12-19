@@ -3023,5 +3023,281 @@
     "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
     "status": "pending",
     "created_at": "2025-12-19T12:08:42.713740"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:15,901 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:15,901 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:15.904720444Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026322"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:19,998 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 1/3)!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:19,998 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 1/3)!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:19.999009743Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026498"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:19,998 - __main__ - ERROR - Другой экземпляр бота уже работает!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:19,998 - __main__ - ERROR - Другой экземпляр бота уже работает!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:19.999028053Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026538"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:23,593 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:23,593 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:23.594403143Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026565"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:28,189 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 2/3)!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:28,189 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 2/3)!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:28.190083079Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026598"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:28,190 - __main__ - ERROR - Другой экземпляр бота уже работает!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:28,190 - __main__ - ERROR - Другой экземпляр бота уже работает!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:28.19009841Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026627"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:31,803 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:31,803 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:31.804469672Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026649"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:37,350 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:37,350 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:37.351007405Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026672"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:40,821 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:40,821 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:40.825822197Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026697"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:44,912 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:44,912 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:44.913196516Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026719"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:50,253 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:50,253 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:50.254109381Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026743"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:54,844 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:54,844 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:54.844644358Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026766"
   }
 ]

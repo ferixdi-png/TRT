@@ -25137,17 +25137,23 @@ def start_health_server():
         # Не критично, продолжаем работу бота
 
 if __name__ == '__main__':
-    # КРИТИЧНО: Запускаем health сервер ПЕРЕД ботом, чтобы Render видел открытый порт
-    port = int(os.getenv("PORT", "10000"))
-    logger.info(f"🚀 Starting health server on port {port}...")
+    # ENV-управляемый режим: включаем health server только если нужно (для Web Service)
+    ENABLE_HEALTH_SERVER = os.getenv("ENABLE_HEALTH_SERVER", "1") == "1"
     
-    # Запускаем health сервер в отдельном потоке (daemon - умрёт с основным процессом)
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
-    health_thread.start()
-    
-    # Даём серверу время запуститься (Render проверяет порт сразу после старта)
-    time.sleep(1)
-    logger.info(f"✅ Health server listening on 0.0.0.0:{port}")
+    if ENABLE_HEALTH_SERVER:
+        # КРИТИЧНО: Запускаем health сервер ПЕРЕД ботом, чтобы Render видел открытый порт
+        port = int(os.getenv("PORT", "10000"))
+        logger.info(f"🚀 Starting health server on port {port}...")
+        
+        # Запускаем health сервер в отдельном потоке (daemon - умрёт с основным процессом)
+        health_thread = threading.Thread(target=start_health_server, daemon=True)
+        health_thread.start()
+        
+        # Даём серверу время запуститься (Render проверяет порт сразу после старта)
+        time.sleep(1)
+        logger.info(f"✅ Health server listening on 0.0.0.0:{port}")
+    else:
+        logger.info("ℹ️ Health server disabled (ENABLE_HEALTH_SERVER=0) - running as Worker")
     
     # Единая точка входа через asyncio.run
     # НЕ запускаем бота при импортах - только при прямом вызове
