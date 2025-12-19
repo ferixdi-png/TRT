@@ -85,7 +85,8 @@ async def show_price_confirmation(
         if lang == 'ru':
             message_text = (
                 f"📋 <b>Подтверждение генерации</b>\n\n"
-                f"🤖 <b>Модель:</b> {model_name}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🤖 <b>Модель:</b> {model_name}\n\n"
             )
             
             if prompt:
@@ -120,6 +121,15 @@ async def show_price_confirmation(
             except:
                 pass
             
+            message_text += (
+                f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"💡 <b>Что будет дальше:</b>\n"
+                f"• Генерация начнется после подтверждения\n"
+                f"• Результат придет автоматически\n"
+                f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                f"🚀 <b>Готовы начать?</b>"
+            )
+            
             buttons = [
                 [InlineKeyboardButton("✅ Подтвердить и начать", callback_data="confirm_generate")],
                 [InlineKeyboardButton("✏️ Изменить параметры", callback_data="back_to_previous_step")],
@@ -129,7 +139,8 @@ async def show_price_confirmation(
         else:
             message_text = (
                 f"📋 <b>Generation Confirmation</b>\n\n"
-                f"🤖 <b>Model:</b> {model_name}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🤖 <b>Model:</b> {model_name}\n\n"
             )
             
             if prompt:
@@ -151,6 +162,15 @@ async def show_price_confirmation(
             
             message_text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             message_text += f"💵 <b>TO PAY:</b> <b>{final_price:.2f}</b> ₽\n"
+            
+            message_text += (
+                f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"💡 <b>What's next:</b>\n"
+                f"• Generation will start after confirmation\n"
+                f"• Result will come automatically\n"
+                f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                f"🚀 <b>Ready to start?</b>"
+            )
             
             buttons = [
                 [InlineKeyboardButton("✅ Confirm and Start", callback_data="confirm_generate")],

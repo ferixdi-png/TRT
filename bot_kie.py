@@ -3542,16 +3542,34 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 available_count = 0
             
-            # Show model info with price and available generations (same format as select_model)
+            # Show model info with price and available generations (improved format)
             model_name = model_info.get('name', model_id)
             model_emoji = model_info.get('emoji', '🤖')
             model_desc = model_info.get('description', '')
             
+            # Получаем категорию модели для контекста
+            model_category = model_info.get('category', '')
+            gen_type = model_info.get('generation_type', '')
+
             model_info_text = (
                 f"{model_emoji} <b>{model_name}</b>\n\n"
-                f"{model_desc}\n\n"
-                f"💰 <b>Цена генерации:</b> {price_text} ₽\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
+            
+            if model_category:
+                model_info_text += f"📁 <b>Категория:</b> {model_category}\n"
+            if gen_type:
+                gen_type_display = gen_type.replace('_', ' ').replace('-', ' ').title()
+                model_info_text += f"🎯 <b>Тип:</b> {gen_type_display}\n"
+            
+            if model_category or gen_type:
+                model_info_text += "\n"
+            
+            if model_desc:
+                model_info_text += f"ℹ️ <b>Описание:</b>\n{model_desc}\n\n"
+            
+            model_info_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            model_info_text += f"💰 <b>Стоимость генерации:</b> {price_text} ₽\n"
             
             if is_admin:
                 model_info_text += t('msg_unlimited_available', lang=user_lang) + "\n\n"
@@ -4754,11 +4772,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
+                    # Format improved confirmation message
+                    if user_lang == 'ru':
+                        confirm_msg = (
+                            f"📋 <b>Подтверждение генерации</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Модель:</b> {model_name}\n\n"
+                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>Что будет дальше:</b>\n"
+                            f"• Генерация начнется после подтверждения\n"
+                            f"• Результат придет автоматически\n"
+                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                            f"🚀 <b>Готовы начать?</b>"
+                        )
+                    else:
+                        confirm_msg = (
+                            f"📋 <b>Generation Confirmation</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Model:</b> {model_name}\n\n"
+                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>What's next:</b>\n"
+                            f"• Generation will start after confirmation\n"
+                            f"• Result will come automatically\n"
+                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                            f"🚀 <b>Ready to start?</b>"
+                        )
+                    
+                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
                     await query.edit_message_text(
-                        f"📋 <b>Подтверждение:</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n"
-                        f"Параметры:\n{params_text}\n\n"
-                        f"Продолжить генерацию?",
+                        confirm_msg,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
@@ -4836,11 +4880,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
+                    # Format improved confirmation message
+                    if user_lang == 'ru':
+                        confirm_msg = (
+                            f"📋 <b>Подтверждение генерации</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Модель:</b> {model_name}\n\n"
+                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>Что будет дальше:</b>\n"
+                            f"• Генерация начнется после подтверждения\n"
+                            f"• Результат придет автоматически\n"
+                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                            f"🚀 <b>Готовы начать?</b>"
+                        )
+                    else:
+                        confirm_msg = (
+                            f"📋 <b>Generation Confirmation</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Model:</b> {model_name}\n\n"
+                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>What's next:</b>\n"
+                            f"• Generation will start after confirmation\n"
+                            f"• Result will come automatically\n"
+                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                            f"🚀 <b>Ready to start?</b>"
+                        )
+                    
+                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
                     await query.edit_message_text(
-                        f"📋 <b>Подтверждение:</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n"
-                        f"Параметры:\n{params_text}\n\n"
-                        f"Продолжить генерацию?",
+                        confirm_msg,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
@@ -4971,11 +5041,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
+                    # Format improved confirmation message
+                    if user_lang == 'ru':
+                        confirm_msg = (
+                            f"📋 <b>Подтверждение генерации</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Модель:</b> {model_name}\n\n"
+                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>Что будет дальше:</b>\n"
+                            f"• Генерация начнется после подтверждения\n"
+                            f"• Результат придет автоматически\n"
+                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                            f"🚀 <b>Готовы начать?</b>"
+                        )
+                    else:
+                        confirm_msg = (
+                            f"📋 <b>Generation Confirmation</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Model:</b> {model_name}\n\n"
+                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>What's next:</b>\n"
+                            f"• Generation will start after confirmation\n"
+                            f"• Result will come automatically\n"
+                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                            f"🚀 <b>Ready to start?</b>"
+                        )
+                    
+                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
                     await query.edit_message_text(
-                        f"📋 <b>Подтверждение:</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n"
-                        f"Параметры:\n{params_text}\n\n"
-                        f"Продолжить генерацию?",
+                        confirm_msg,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
@@ -5031,11 +5127,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
+                    # Format improved confirmation message
+                    if user_lang == 'ru':
+                        confirm_msg = (
+                            f"📋 <b>Подтверждение генерации</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Модель:</b> {model_name}\n\n"
+                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>Что будет дальше:</b>\n"
+                            f"• Генерация начнется после подтверждения\n"
+                            f"• Результат придет автоматически\n"
+                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                            f"🚀 <b>Готовы начать?</b>"
+                        )
+                    else:
+                        confirm_msg = (
+                            f"📋 <b>Generation Confirmation</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Model:</b> {model_name}\n\n"
+                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💡 <b>What's next:</b>\n"
+                            f"• Generation will start after confirmation\n"
+                            f"• Result will come automatically\n"
+                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                            f"🚀 <b>Ready to start?</b>"
+                        )
+                    
+                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
                     await query.edit_message_text(
-                        f"📋 <b>Подтверждение:</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n"
-                        f"Параметры:\n{params_text}\n\n"
-                        f"Продолжить генерацию?",
+                        confirm_msg,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
@@ -8409,9 +8531,19 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 except ImportError:
                     pass  # Модуль не доступен
                 
+                # Улучшенное сообщение для enum параметров
+                param_display_name = param_name.replace('_', ' ').title()
+                message_text = (
+                    f"📝 <b>Выберите {param_display_name.lower()}:</b>\n\n"
+                    f"{param_desc}{default_info}\n\n"
+                    f"💡 <b>Что делать:</b>\n"
+                    f"• Выберите значение из списка ниже\n"
+                    f"• Или используйте значение по умолчанию"
+                )
+                
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"📝 <b>Выберите {param_name}:</b>\n\n{param_desc}{default_info}",
+                    text=message_text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -8473,7 +8605,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
                 optional_text = "\n\n(Этот параметр опциональный)" if is_optional else ""
                 
-                message_text = f"📝 <b>Введите {param_name}:</b>\n\n{param_desc}{max_text}{default_info}{optional_text}"
+                # Улучшенное сообщение с более понятными подсказками
+                param_display_name = param_name.replace('_', ' ').title()
+                message_text = (
+                    f"📝 <b>Введите {param_display_name.lower()}:</b>\n\n"
+                    f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
+                    f"💡 <b>Что делать:</b>\n"
+                    f"• Введите значение в текстовом сообщении\n"
+                    f"• Или используйте кнопку \"⏭️ Использовать по умолчанию\" ниже"
+                )
                 
                 # If language_code with quick select, modify message
                 if param_name == 'language_code' and default_value == 'ru':
