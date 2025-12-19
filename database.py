@@ -160,16 +160,30 @@ def get_user_balance(user_id: int) -> Decimal:
 
 def update_user_balance(user_id: int, new_balance: Decimal) -> bool:
     """Обновляет баланс пользователя."""
+    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Обновление баланса в БД
+    logger.info(f"💰💰💰 DB UPDATE_BALANCE: user_id={user_id}, new_balance={float(new_balance):.2f} ₽")
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # Получаем старый баланс для логирования
+                cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
+                old_row = cur.fetchone()
+                old_balance = old_row[0] if old_row else Decimal('0')
+                
                 cur.execute(
                     "UPDATE users SET balance = %s WHERE id = %s",
                     (new_balance, user_id)
                 )
-                return cur.rowcount > 0
+                success = cur.rowcount > 0
+                
+                if success:
+                    logger.info(f"✅✅✅ DB BALANCE UPDATED: user_id={user_id}, old={float(old_balance):.2f} ₽, new={float(new_balance):.2f} ₽")
+                else:
+                    logger.error(f"❌❌❌ DB BALANCE UPDATE FAILED: user_id={user_id}, new_balance={float(new_balance):.2f} ₽, rowcount=0")
+                
+                return success
     except Exception as e:
-        logger.error(f"Ошибка обновления баланса: {e}")
+        logger.error(f"❌❌❌ ERROR UPDATING BALANCE IN DB: user_id={user_id}, new_balance={float(new_balance):.2f} ₽, error={e}", exc_info=True)
         return False
 
 

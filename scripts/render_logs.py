@@ -200,11 +200,20 @@ def get_logs(
                 if level.upper() not in log_level:
                     continue
             
-            # Фильтр по тексту
+            # Фильтр по тексту (поддержка regex через --grep)
             if text_filter:
                 message = str(log_entry.get("message", log_entry.get("text", "")))
-                if text_filter.lower() not in message.lower():
-                    continue
+                try:
+                    import re
+                    # Пробуем как regex, если не работает - как обычный поиск
+                    if re.search(text_filter, message, re.IGNORECASE):
+                        pass  # Совпадение найдено
+                    else:
+                        continue
+                except re.error:
+                    # Если не regex - обычный поиск
+                    if text_filter.lower() not in message.lower():
+                        continue
             
             # Фильтр по времени
             if since_time:

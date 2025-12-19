@@ -1,0 +1,3 @@
+"""
+Fake implementations для тестирования
+"""

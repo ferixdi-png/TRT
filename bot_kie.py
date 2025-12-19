@@ -791,9 +791,12 @@ def get_user_balance(user_id: int) -> float:
         try:
             from decimal import Decimal
             balance = db_get_user_balance(user_id)
-            return float(balance)
+            balance_float = float(balance)
+            # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Получение баланса из БД
+            logger.info(f"💰💰💰 GET_BALANCE FROM DB: user_id={user_id}, balance={balance_float:.2f} ₽")
+            return balance_float
         except Exception as e:
-            logger.error(f"Ошибка получения баланса из БД: {e}, используем JSON fallback")
+            logger.error(f"❌❌❌ ERROR GETTING BALANCE FROM DB: user_id={user_id}, error={e}, using JSON fallback", exc_info=True)
             # Fallback to JSON
             pass
     
@@ -814,13 +817,26 @@ def get_user_balance(user_id: int) -> float:
 
 def set_user_balance(user_id: int, amount: float):
     """Set user balance in rubles (save to DB or JSON fallback)."""
+    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Все операции с балансом
+    logger.info(f"💰💰💰 SET_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
+    
     # Try to save to database first
     if DATABASE_AVAILABLE:
         try:
             from decimal import Decimal
+            old_balance = get_user_balance(user_id)
             success = db_update_user_balance(user_id, Decimal(str(amount)))
             if success:
-                logger.debug(f"✅ Balance saved to DB: user_id={user_id}, balance={amount}")
+                # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Успешное сохранение в БД
+                logger.info(f"✅✅✅ BALANCE SAVED TO DB: user_id={user_id}, old={old_balance:.2f} ₽, new={amount:.2f} ₽")
+                
+                # Проверяем, что баланс действительно сохранился
+                verify_balance = db_get_user_balance(user_id)
+                if abs(float(verify_balance) - amount) > 0.01:
+                    logger.error(f"❌❌❌ BALANCE VERIFICATION FAILED IN DB: user_id={user_id}, expected={amount:.2f}, got={float(verify_balance):.2f}")
+                else:
+                    logger.info(f"✅✅✅ BALANCE VERIFIED IN DB: user_id={user_id}, balance={amount:.2f} ₽")
+                
                 # Also update cache
                 user_key = str(user_id)
                 if 'balances' not in _data_cache:
@@ -829,9 +845,9 @@ def set_user_balance(user_id: int, amount: float):
                 _data_cache['cache_timestamps']['balances'] = time.time()
                 return
             else:
-                logger.warning(f"⚠️ Failed to save balance to DB, using JSON fallback")
+                logger.error(f"❌❌❌ FAILED TO SAVE BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, using JSON fallback")
         except Exception as e:
-            logger.error(f"Ошибка сохранения баланса в БД: {e}, используем JSON fallback")
+            logger.error(f"❌❌❌ ERROR SAVING BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, error={e}, using JSON fallback", exc_info=True)
             # Fallback to JSON
             pass
     
@@ -866,41 +882,59 @@ def set_user_balance(user_id: int, amount: float):
         del _last_save_time[BALANCES_FILE]
     save_json_file(BALANCES_FILE, balances, use_cache=True)
     
+    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Сохранение в JSON
+    logger.info(f"💰💰💰 SET_BALANCE JSON: user_id={user_id}, amount={amount:.2f} ₽, file={BALANCES_FILE}")
+    
     # Verify save for critical data
     if os.path.exists(BALANCES_FILE):
         verify_balances = load_json_file(BALANCES_FILE, {})
-        if str(user_id) in verify_balances and verify_balances[str(user_id)] == amount:
-            logger.debug(f"✅ Verified balance save: user_id={user_id}, balance={amount}")
+        if str(user_id) in verify_balances and abs(verify_balances[str(user_id)] - amount) < 0.01:
+            logger.info(f"✅✅✅ BALANCE VERIFIED IN JSON: user_id={user_id}, balance={amount:.2f} ₽")
         else:
-            logger.error(f"❌ Balance verification failed! user_id={user_id}, expected={amount}, got={verify_balances.get(str(user_id))}")
+            logger.error(f"❌❌❌ BALANCE VERIFICATION FAILED IN JSON: user_id={user_id}, expected={amount:.2f}, got={verify_balances.get(str(user_id), 'NOT_FOUND')}")
             # Retry save once
             save_json_file(BALANCES_FILE, balances, use_cache=False)
+            # Проверяем ещё раз
+            verify_balances_retry = load_json_file(BALANCES_FILE, {})
+            if str(user_id) in verify_balances_retry and abs(verify_balances_retry[str(user_id)] - amount) < 0.01:
+                logger.info(f"✅✅✅ BALANCE VERIFIED AFTER RETRY: user_id={user_id}, balance={amount:.2f} ₽")
+            else:
+                logger.error(f"❌❌❌ BALANCE STILL FAILED AFTER RETRY: user_id={user_id}, expected={amount:.2f}, got={verify_balances_retry.get(str(user_id), 'NOT_FOUND')}")
     else:
-        logger.error(f"❌ CRITICAL: Balance file not found after save! Retrying...")
+        logger.error(f"❌❌❌ CRITICAL: Balance file not found after save! Retrying... user_id={user_id}, amount={amount:.2f} ₽")
         save_json_file(BALANCES_FILE, balances, use_cache=False)
+        if os.path.exists(BALANCES_FILE):
+            logger.info(f"✅✅✅ Balance file created after retry: {BALANCES_FILE}")
+        else:
+            logger.error(f"❌❌❌ CRITICAL: Balance file STILL not found after retry! user_id={user_id}, amount={amount:.2f} ₽")
 
 
 def add_user_balance(user_id: int, amount: float) -> float:
     """Add amount to user balance, return new balance."""
+    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Добавление баланса
+    logger.info(f"💰💰💰 ADD_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
+    
     # Try to add to database first
     if DATABASE_AVAILABLE:
         try:
             from decimal import Decimal
+            old_balance = get_user_balance(user_id)
             success = db_add_to_balance(user_id, Decimal(str(amount)))
             if success:
                 new_balance = get_user_balance(user_id)  # Get updated balance
-                logger.debug(f"✅ Balance added in DB: user_id={user_id}, added={amount}, new_balance={new_balance}")
+                logger.info(f"✅✅✅ BALANCE ADDED IN DB: user_id={user_id}, added={amount:.2f} ₽, old={old_balance:.2f} ₽, new={new_balance:.2f} ₽")
                 return new_balance
             else:
-                logger.warning(f"⚠️ Failed to add balance to DB, using JSON fallback")
+                logger.error(f"❌❌❌ FAILED TO ADD BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, using JSON fallback")
         except Exception as e:
-            logger.error(f"Ошибка добавления баланса в БД: {e}, используем JSON fallback")
+            logger.error(f"❌❌❌ ERROR ADDING BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, error={e}, using JSON fallback", exc_info=True)
             # Fallback to JSON
             pass
     
     # Fallback to JSON (original method)
     current = get_user_balance(user_id)
     new_balance = current + amount
+    logger.info(f"💰💰💰 ADD_BALANCE JSON: user_id={user_id}, current={current:.2f} ₽, added={amount:.2f} ₽, new={new_balance:.2f} ₽")
     set_user_balance(user_id, new_balance)
     return new_balance
 
