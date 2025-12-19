@@ -130,6 +130,8 @@ except ImportError:
     warnings.warn("app.config not found, using os.getenv directly. This is deprecated.")
     BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     CONFIG_DATABASE_URL = os.getenv('DATABASE_URL')
+    BOT_MODE = os.getenv('BOT_MODE', 'polling')
+    WEBHOOK_URL = os.getenv('WEBHOOK_URL')
     
     # Fallback для mask_secret
     def mask_secret(value: Optional[str], show_first: int = 4, show_last: int = 4) -> str:
@@ -142,6 +144,56 @@ except ImportError:
         if len(value) <= show_first + show_last:
             return "****"
         return value[:show_first] + "****" + value[-show_last:]
+    
+    # Fallback для bot_mode функций
+    def get_bot_mode() -> str:
+        """Fallback для get_bot_mode"""
+        mode = os.getenv("BOT_MODE", "").lower().strip()
+        if not mode:
+            if os.getenv("PORT") and os.getenv("WEBHOOK_URL"):
+                mode = "webhook"
+            else:
+                mode = "polling"
+        if mode not in ["polling", "webhook"]:
+            mode = "polling"
+        return mode
+    
+    async def ensure_polling_mode(bot):
+        """Fallback для ensure_polling_mode"""
+        try:
+            webhook_info = await bot.get_webhook_info()
+            if webhook_info.url:
+                await bot.delete_webhook(drop_pending_updates=True)
+            return True
+        except Exception:
+            return False
+    
+    async def ensure_webhook_mode(bot, webhook_url: str):
+        """Fallback для ensure_webhook_mode"""
+        if not webhook_url:
+            return False
+        try:
+            await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+            return True
+        except Exception:
+            return False
+    
+    def handle_conflict_gracefully(error, mode: str):
+        """Fallback для handle_conflict_gracefully"""
+        import sys
+        logging.getLogger(__name__).error(f"Conflict detected in {mode} mode: {error}")
+        sys.exit(0)
+    
+    # Fallback для singleton_lock
+    class DummyLock:
+        def acquire(self, timeout=None):
+            return True
+        def release(self):
+            pass
+    
+    def get_singleton_lock(key: str):
+        """Fallback для get_singleton_lock"""
+        return DummyLock()
 
 # Admin user ID (can be set via environment variable)
 try:
