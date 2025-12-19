@@ -71,32 +71,87 @@ def list_services(api_key: str):
         print(f"❌ Ошибка при получении списка сервисов: {e}")
         return None
 
-def get_logs(api_key: str, service_id: str, lines: int = 100):
-    """Получает логи сервиса"""
+def get_owner_id(api_key: str, service_id: str) -> Optional[str]:
+    """Получает Owner ID из информации о сервисе"""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json"
     }
     
     try:
-        # Получаем логи через Render API
-        url = f"{RENDER_API_BASE}/services/{service_id}/logs"
+        # Получаем информацию о сервисе
+        response = requests.get(f"{RENDER_API_BASE}/services/{service_id}", headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        service_data = response.json()
+        service_info = service_data.get("service", {})
+        
+        # Owner ID может быть в разных местах
+        owner_id = service_info.get("ownerId") or service_info.get("owner", {}).get("id")
+        
+        if owner_id:
+            return owner_id
+        
+        # Если не найден, пробуем через список сервисов
+        services_response = requests.get(f"{RENDER_API_BASE}/services", headers=headers, timeout=10)
+        services_response.raise_for_status()
+        services = services_response.json()
+        
+        if isinstance(services, list):
+            for service in services:
+                service_info = service.get("service", {})
+                if service_info.get("id") == service_id:
+                    owner_id = service_info.get("ownerId") or service_info.get("owner", {}).get("id")
+                    if owner_id:
+                        return owner_id
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+def get_logs(api_key: str, service_id: str, lines: int = 100, owner_id: Optional[str] = None):
+    """Получает логи сервиса используя правильный endpoint /v1/logs"""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json"
+    }
+    
+    try:
+        # Получаем Owner ID если не передан
+        if not owner_id:
+            owner_id = get_owner_id(api_key, service_id)
+        
+        # Правильный endpoint для получения логов
+        url = f"{RENDER_API_BASE}/logs"
         params = {
-            "limit": lines,
-            "tail": "true"  # Получаем последние логи
+            "resource": service_id,
+            "limit": lines
         }
+        
+        # Добавляем ownerId если есть
+        if owner_id:
+            params["ownerId"] = owner_id
         
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         
         logs_data = response.json()
         
+        # Обрабатываем разные форматы ответа
         if isinstance(logs_data, list):
             logs = logs_data
-        elif isinstance(logs_data, dict) and "logs" in logs_data:
-            logs = logs_data["logs"]
+        elif isinstance(logs_data, dict):
+            if "logs" in logs_data:
+                logs = logs_data["logs"]
+            elif "data" in logs_data:
+                logs = logs_data["data"]
+            elif "items" in logs_data:
+                logs = logs_data["items"]
+            else:
+                logs = [logs_data]
         else:
-            logs = [logs_data]
+            logs = [logs_data] if logs_data else []
         
         print(f"\n📊 Последние {len(logs)} строк логов:")
         print("=" * 80)
