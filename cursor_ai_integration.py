@@ -78,12 +78,18 @@ class ProjectAnalyzer:
         sys.stdout.flush()
         
         # Специальный анализ для bot_kie.py (может быть долгим из-за размера файла)
-        print("🤖 Специальный анализ bot_kie.py (это может занять время)...", flush=True)
+        print("🤖 Специальный анализ bot_kie.py...", flush=True)
         sys.stdout.flush()
         bot_file = self.project_root / "bot_kie.py"
         if bot_file.exists():
-            self.analyze_bot_structure(bot_file)
-            print("   ✅ Структура бота проанализирована", flush=True)
+            # Упрощённый анализ для больших файлов (только основные паттерны)
+            try:
+                print("   ⚡ Быстрый анализ (основные паттерны)...", flush=True)
+                sys.stdout.flush()
+                self.analyze_bot_structure_fast(bot_file)
+                print("   ✅ Структура бота проанализирована (быстрый режим)", flush=True)
+            except Exception as e:
+                print(f"   ⚠️  Ошибка при анализе: {e}, пропускаю...", flush=True)
         else:
             print("   ⚠️  bot_kie.py не найден", flush=True)
         sys.stdout.flush()
@@ -139,6 +145,69 @@ class ProjectAnalyzer:
                 
         except Exception as e:
             pass
+    
+    def analyze_bot_structure_fast(self, bot_file: Path):
+        """Быстрый анализ структуры бота (только основные паттерны)"""
+        try:
+            print(f"   📖 Чтение {bot_file.name}...", flush=True)
+            sys.stdout.flush()
+            
+            # Читаем файл построчно для экономии памяти
+            callback_count = 0
+            gen_count = 0
+            kie_count = 0
+            
+            with open(bot_file, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    # Быстрый поиск callback_data (только основные паттерны)
+                    if 'callback_data' in line and ('=' in line or ':' in line):
+                        match = re.search(r"callback_data\s*[=:]\s*['\"]([^'\"]+)['\"]", line)
+                        if match:
+                            callback_data = match.group(1)
+                            if callback_data not in self.callbacks_map:
+                                self.callbacks_map[callback_data] = {
+                                    "handler": "button_callback",
+                                    "line": line_num,
+                                    "file": str(bot_file)
+                                }
+                                callback_count += 1
+                    
+                    # Быстрый поиск generation functions (только основные)
+                    if 'async def' in line and ('generation' in line.lower() or 'generate' in line.lower()):
+                        match = re.search(r'async def (\w+)', line)
+                        if match:
+                            func_name = match.group(1)
+                            if func_name not in self.generation_functions:
+                                self.generation_functions[func_name] = {
+                                    "file": str(bot_file),
+                                    "line": line_num,
+                                    "kie_calls": []
+                                }
+                                gen_count += 1
+                    
+                    # Быстрый поиск model_id (только основные)
+                    if 'model_id' in line and ('=' in line):
+                        match = re.search(r"model_id\s*=\s*['\"]([^'\"]+)['\"]", line)
+                        if match:
+                            model_id = match.group(1)
+                            if model_id not in self.kie_api_calls:
+                                self.kie_api_calls[model_id] = {
+                                    "file": str(bot_file),
+                                    "line": line_num
+                                }
+                                kie_count += 1
+                    
+                    # Показываем прогресс каждые 5000 строк
+                    if line_num % 5000 == 0:
+                        print(f"      Обработано {line_num} строк...", flush=True)
+                        sys.stdout.flush()
+            
+            print(f"   ✅ Найдено: {callback_count} callbacks, {gen_count} генераций, {kie_count} KIE API", flush=True)
+            sys.stdout.flush()
+                        
+        except Exception as e:
+            print(f"   ❌ Ошибка при анализе {bot_file.name}: {e}", flush=True)
+            sys.stdout.flush()
     
     def analyze_bot_structure(self, bot_file: Path):
         """Специальный анализ структуры бота"""
