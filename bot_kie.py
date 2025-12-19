@@ -1,3 +1,4 @@
+import get_user_balance
 """
 KIE (Knowledge Is Everything) Telegram Bot
 Enhanced version with KIE AI model selection and generation
