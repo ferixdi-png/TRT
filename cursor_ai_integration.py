@@ -136,8 +136,10 @@ class ProjectAnalyzer:
     def analyze_bot_structure(self, bot_file: Path):
         """Специальный анализ структуры бота"""
         try:
+            print(f"   📖 Чтение {bot_file.name}...", end="\r")
             with open(bot_file, 'r', encoding='utf-8') as f:
                 content = f.read()
+            print(f"   ✅ {bot_file.name} прочитан ({len(content)} символов)")
             
             # Ищем callback handlers
             callback_pattern = r"callback_data\s*[=:]\s*['\"]([^'\"]+)['\"]"
