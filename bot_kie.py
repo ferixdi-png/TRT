@@ -4462,17 +4462,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             remaining_free = get_user_free_generations_remaining(user_id)
             
             models_text = (
-                f"🎨 <b>ВЫБЕРИТЕ ФОРМАТ ГЕНЕРАЦИИ</b>\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"💰 <b>ГЕНЕРАЦИЯ ПО ЦЕНЕ ЖВАЧКИ!</b>\n\n"
-                f"💼 <b>ИДЕАЛЬНО ДЛЯ:</b>\n"
-                f"• Маркетологов • SMM-щиков • Дизайнеров\n"
-                f"• Фрилансеров • Креаторов • Контент-мейкеров\n\n"
+                f"🤖 <b>ВЫБЕРИТЕ НЕЙРОСЕТЬ</b> 🤖\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"💡 <b>КАК ЭТО РАБОТАЕТ:</b>\n"
-                f"1️⃣ Выберите формат генерации\n"
-                f"2️⃣ Выберите одну из предложенных нейросетей\n"
-                f"3️⃣ Создавайте крутой контент! 🚀\n\n"
+                f"1️⃣ Выберите тип генерации (текст→фото, фото→видео и т.д.)\n"
+                f"2️⃣ Выберите нейросеть из списка\n"
+                f"3️⃣ Создавайте контент! 🚀\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
             
@@ -26282,19 +26277,8 @@ async def main():
         if conflict_detected:
             logger.warning("⚠️ Конфликт был обнаружен, но исправлен. Продолжаю запуск...")
         
-        # КРИТИЧНО: Добавляем обработчик для 409 Conflict во время работы
-        async def handle_409_conflict_during_polling(update: object, context: ContextTypes.DEFAULT_TYPE):
-            """Обработчик 409 Conflict во время работы polling - graceful exit"""
-            error = context.error
-            if error and isinstance(error, Exception):
-                from telegram.error import Conflict as TelegramConflict
-                if isinstance(error, TelegramConflict) or "Conflict" in str(error) or "terminated by other getUpdates" in str(error):
-                    handle_conflict_gracefully(error, "polling")
-                    # После handle_conflict_gracefully процесс должен завершиться
-                    return
-        
-        # Регистрируем обработчик для 409 Conflict
-        application.add_error_handler(handle_409_conflict_during_polling)
+        # ПРИМЕЧАНИЕ: Специальный обработчик для 409 Conflict не нужен,
+        # так как глобальный error_handler уже обрабатывает Conflict ошибки первым делом
         
         try:
             await application.updater.start_polling(drop_pending_updates=drop_updates)
