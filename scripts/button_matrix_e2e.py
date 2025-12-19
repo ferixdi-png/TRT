@@ -54,47 +54,69 @@ class ButtonMatrixTester:
     
     async def test_button_scenario(self, callback_data: str, scenario: str) -> Dict:
         """Test a button in a specific scenario"""
-        from app.observability.no_silence_guard import get_no_silence_guard
-        guard = get_no_silence_guard()
-        
-        # Mock update
-        update = MagicMock()
-        update.update_id = 12345
-        update.callback_query = MagicMock()
-        update.callback_query.data = callback_data
-        update.callback_query.from_user.id = 123
-        update.callback_query.message = MagicMock()
-        update.callback_query.message.chat_id = 123
-        
-        context = MagicMock()
-        context.bot = MagicMock()
-        
-        # Track outgoing actions
-        outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
-        
-        try:
-            # Import and call button_callback
-            from bot_kie import button_callback
-            result = await button_callback(update, context)
+        # Mock all dependencies BEFORE importing bot_kie
+        with patch('bot_kie.get_kie_gateway') as mock_gateway, \
+             patch('bot_kie.get_user_balance', return_value=1000.0), \
+             patch('bot_kie.get_user_language', return_value='ru'), \
+             patch('bot_kie.user_sessions', {}), \
+             patch('bot_kie.DATABASE_AVAILABLE', False), \
+             patch('bot_kie.get_user_generations_history', return_value=[]), \
+             patch('bot_kie.get_is_admin', return_value=False), \
+             patch('bot_kie.is_free_generation_available', return_value=True):
             
-            # Check response
-            outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
-            has_response = outgoing_count_after > outgoing_count_before
+            # Setup fake gateway
+            from tests.fakes.fake_kie_api import FakeKieAPI
+            fake_gateway = FakeKieAPI()
+            mock_gateway.return_value = fake_gateway
             
-            return {
-                "callback": callback_data,
-                "scenario": scenario,
-                "passed": has_response,
-                "outgoing_actions": outgoing_count_after - outgoing_count_before,
-                "result": str(result)[:100]
-            }
-        except Exception as e:
-            return {
-                "callback": callback_data,
-                "scenario": scenario,
-                "passed": False,
-                "error": str(e)[:200]
-            }
+            from app.observability.no_silence_guard import get_no_silence_guard
+            guard = get_no_silence_guard()
+            
+            # Mock update
+            update = MagicMock()
+            update.update_id = 12345
+            update.callback_query = MagicMock()
+            update.callback_query.data = callback_data
+            update.callback_query.from_user.id = 123
+            update.callback_query.message = MagicMock()
+            update.callback_query.message.chat_id = 123
+            update.callback_query.answer = AsyncMock()
+            update.callback_query.edit_message_text = AsyncMock()
+            
+            context = MagicMock()
+            context.bot = MagicMock()
+            context.bot.send_message = AsyncMock()
+            
+            # Track outgoing actions
+            outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
+            
+            try:
+                # Import and call button_callback
+                import importlib
+                if 'bot_kie' in sys.modules:
+                    importlib.reload(sys.modules['bot_kie'])
+                from bot_kie import button_callback
+                
+                result = await button_callback(update, context)
+                
+                # Check response
+                outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
+                has_response = outgoing_count_after > outgoing_count_before
+                
+                return {
+                    "callback": callback_data,
+                    "scenario": scenario,
+                    "passed": has_response,
+                    "outgoing_actions": outgoing_count_after - outgoing_count_before,
+                    "result": str(result)[:100]
+                }
+            except Exception as e:
+                return {
+                    "callback": callback_data,
+                    "scenario": scenario,
+                    "passed": False,
+                    "error": str(e)[:200]
+                }
     
     async def run_all_tests(self):
         """Run all button matrix tests"""

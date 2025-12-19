@@ -50,57 +50,82 @@ class InputMatrixTester:
     
     async def test_input_type(self, model_id: str, input_type: str, value: str) -> Dict:
         """Test specific input type for a model"""
-        from app.observability.no_silence_guard import get_no_silence_guard
-        guard = get_no_silence_guard()
-        
-        # Mock update with text
-        update = MagicMock()
-        update.update_id = 12345
-        update.message = MagicMock()
-        update.message.text = value
-        update.message.from_user.id = 123
-        update.message.chat_id = 123
-        update.message.reply_text = AsyncMock()
-        
-        context = MagicMock()
-        context.bot = MagicMock()
-        
-        # Set up session
-        from bot_kie import user_sessions
-        user_sessions[123] = {
-            'model_id': model_id,
-            'waiting_for': 'prompt',
-            'current_param': 'prompt',
-            'params': {},
-            'model_info': {'id': model_id, 'name': model_id}
-        }
-        
-        outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
-        
-        try:
-            from bot_kie import input_parameters
-            result = await input_parameters(update, context)
+        # Mock all dependencies BEFORE importing bot_kie
+        with patch('bot_kie.get_kie_gateway') as mock_gateway, \
+             patch('bot_kie.get_user_balance', return_value=1000.0), \
+             patch('bot_kie.get_user_language', return_value='ru'), \
+             patch('bot_kie.DATABASE_AVAILABLE', False), \
+             patch('bot_kie.get_user_generations_history', return_value=[]), \
+             patch('bot_kie.get_is_admin', return_value=False), \
+             patch('bot_kie.is_free_generation_available', return_value=True):
             
-            outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
-            has_response = outgoing_count_after > outgoing_count_before
+            # Setup fake gateway
+            from tests.fakes.fake_kie_api import FakeKieAPI
+            fake_gateway = FakeKieAPI()
+            mock_gateway.return_value = fake_gateway
             
-            return {
-                "model_id": model_id,
-                "input_type": input_type,
-                "passed": has_response,
-                "outgoing_actions": outgoing_count_after - outgoing_count_before
+            from app.observability.no_silence_guard import get_no_silence_guard
+            guard = get_no_silence_guard()
+            
+            # Mock update with text
+            update = MagicMock()
+            update.update_id = 12345
+            update.message = MagicMock()
+            update.message.text = value
+            update.message.from_user.id = 123
+            update.message.chat_id = 123
+            update.message.reply_text = AsyncMock()
+            update.effective_user = MagicMock()
+            update.effective_user.id = 123
+            
+            context = MagicMock()
+            context.bot = MagicMock()
+            context.bot.send_message = AsyncMock()
+            
+            # Set up session
+            import importlib
+            if 'bot_kie' in sys.modules:
+                importlib.reload(sys.modules['bot_kie'])
+            from bot_kie import user_sessions, get_model_by_id
+            
+            model_info = get_model_by_id(model_id) or {'id': model_id, 'name': model_id, 'input_params': {'prompt': {'required': True}}}
+            
+            user_sessions[123] = {
+                'model_id': model_id,
+                'waiting_for': 'prompt',
+                'current_param': 'prompt',
+                'params': {},
+                'model_info': model_info,
+                'required': ['prompt'],
+                'properties': model_info.get('input_params', {})
             }
-        except Exception as e:
-            return {
-                "model_id": model_id,
-                "input_type": input_type,
-                "passed": False,
-                "error": str(e)[:200]
-            }
-        finally:
-            # Cleanup
-            if 123 in user_sessions:
-                del user_sessions[123]
+            
+            outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
+            
+            try:
+                from bot_kie import input_parameters
+                result = await input_parameters(update, context)
+                
+                outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
+                has_response = outgoing_count_after > outgoing_count_before
+                
+                return {
+                    "model_id": model_id,
+                    "input_type": input_type,
+                    "passed": has_response,
+                    "outgoing_actions": outgoing_count_after - outgoing_count_before
+                }
+            except Exception as e:
+                return {
+                    "model_id": model_id,
+                    "input_type": input_type,
+                    "passed": False,
+                    "error": str(e)[:200]
+                }
+            finally:
+                # Cleanup
+                if 123 in user_sessions:
+                    del user_sessions[123]
     
     async def run_all_tests(self):
         """Run input matrix tests for all models"""
