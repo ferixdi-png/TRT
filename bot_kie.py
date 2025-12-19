@@ -24618,6 +24618,142 @@ async def main():
         # per_message=True requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
     )
     
+    # ==================== PHASE 1: GLOBAL INPUT ROUTERS (BEFORE ConversationHandler) ====================
+    # These routers catch TEXT/PHOTO/AUDIO OUTSIDE conversation and route to input_parameters if waiting_for exists
+    # This ensures NO SILENCE even if ConversationHandler doesn't catch the message
+    
+    async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Global router for TEXT messages - routes to input_parameters if waiting_for exists"""
+        from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+        guard = get_no_silence_guard()
+        update_id = update.update_id
+        user_id = update.effective_user.id if update.effective_user else None
+        
+        # Instant ACK before processing
+        try:
+            await update.message.reply_text("⏳ Принято. Обрабатываю…", parse_mode='HTML')
+            track_outgoing_action(update_id)
+        except Exception as e:
+            logger.warning(f"Could not send instant ACK: {e}")
+        
+        # Check if user has active session with waiting_for
+        if user_id and user_id in user_sessions:
+            session = user_sessions[user_id]
+            waiting_for = session.get('waiting_for')
+            if waiting_for:
+                # Route to input_parameters
+                logger.info(f"🔀 GLOBAL_TEXT_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
+                return await input_parameters(update, context)
+        
+        # No waiting_for - show main menu
+        logger.info(f"🔀 GLOBAL_TEXT_ROUTER: No waiting_for, showing main menu")
+        try:
+            user_lang = get_user_language(user_id) if user_id else 'ru'
+            keyboard = build_main_menu_keyboard(user_id, user_lang)
+            await update.message.reply_text(
+                "❌ <b>Я не жду текст сейчас</b>\n\n"
+                "Пожалуйста:\n"
+                "• Выберите модель из меню\n"
+                "• Или нажмите кнопку для продолжения",
+                reply_markup=keyboard,
+                parse_mode='HTML'
+            )
+            track_outgoing_action(update_id)
+        except Exception as e:
+            logger.error(f"Error in global_text_router fallback: {e}", exc_info=True)
+            await guard.check_and_ensure_response(update, context)
+    
+    async def global_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Global router for PHOTO messages - routes to input_parameters if waiting_for expects image"""
+        from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+        guard = get_no_silence_guard()
+        update_id = update.update_id
+        user_id = update.effective_user.id if update.effective_user else None
+        
+        # Instant ACK before processing
+        try:
+            await update.message.reply_text("⏳ Принято. Обрабатываю фото…", parse_mode='HTML')
+            track_outgoing_action(update_id)
+        except Exception as e:
+            logger.warning(f"Could not send instant ACK: {e}")
+        
+        # Check if user has active session expecting image
+        if user_id and user_id in user_sessions:
+            session = user_sessions[user_id]
+            waiting_for = session.get('waiting_for')
+            current_param = session.get('current_param', waiting_for)
+            # Check if waiting for image-related parameter
+            if waiting_for and current_param in ['image_input', 'image_urls', 'mask_input', 'reference_image_input']:
+                logger.info(f"🔀 GLOBAL_PHOTO_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
+                return await input_parameters(update, context)
+        
+        # Not expecting photo - show guidance
+        logger.info(f"🔀 GLOBAL_PHOTO_ROUTER: Not expecting photo, showing guidance")
+        try:
+            user_lang = get_user_language(user_id) if user_id else 'ru'
+            keyboard = build_main_menu_keyboard(user_id, user_lang)
+            await update.message.reply_text(
+                "❌ <b>Я не жду фото сейчас</b>\n\n"
+                "Пожалуйста:\n"
+                "• Выберите модель из меню\n"
+                "• Или нажмите кнопку для продолжения",
+                reply_markup=keyboard,
+                parse_mode='HTML'
+            )
+            track_outgoing_action(update_id)
+        except Exception as e:
+            logger.error(f"Error in global_photo_router fallback: {e}", exc_info=True)
+            await guard.check_and_ensure_response(update, context)
+    
+    async def global_audio_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Global router for AUDIO/VOICE messages - routes to input_parameters if waiting_for expects audio"""
+        from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+        guard = get_no_silence_guard()
+        update_id = update.update_id
+        user_id = update.effective_user.id if update.effective_user else None
+        
+        # Instant ACK before processing
+        try:
+            await update.message.reply_text("⏳ Принято. Обрабатываю аудио…", parse_mode='HTML')
+            track_outgoing_action(update_id)
+        except Exception as e:
+            logger.warning(f"Could not send instant ACK: {e}")
+        
+        # Check if user has active session expecting audio
+        if user_id and user_id in user_sessions:
+            session = user_sessions[user_id]
+            waiting_for = session.get('waiting_for')
+            current_param = session.get('current_param', waiting_for)
+            # Check if waiting for audio-related parameter
+            if waiting_for and current_param in ['audio_url', 'audio_input']:
+                logger.info(f"🔀 GLOBAL_AUDIO_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
+                return await input_parameters(update, context)
+        
+        # Not expecting audio - show guidance
+        logger.info(f"🔀 GLOBAL_AUDIO_ROUTER: Not expecting audio, showing guidance")
+        try:
+            user_lang = get_user_language(user_id) if user_id else 'ru'
+            keyboard = build_main_menu_keyboard(user_id, user_lang)
+            await update.message.reply_text(
+                "❌ <b>Я не жду аудио сейчас</b>\n\n"
+                "Пожалуйста:\n"
+                "• Выберите модель из меню\n"
+                "• Или нажмите кнопку для продолжения",
+                reply_markup=keyboard,
+                parse_mode='HTML'
+            )
+            track_outgoing_action(update_id)
+        except Exception as e:
+            logger.error(f"Error in global_audio_router fallback: {e}", exc_info=True)
+            await guard.check_and_ensure_response(update, context)
+    
+    # Add global routers BEFORE ConversationHandler (higher priority)
+    # These catch messages even if ConversationHandler doesn't
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_text_router), group=-1)
+    application.add_handler(MessageHandler(filters.PHOTO, global_photo_router), group=-1)
+    application.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | (filters.Document.MimeType("audio/*")), global_audio_router), group=-1)
+    # ==================== END PHASE 1: GLOBAL INPUT ROUTERS ====================
+    
     # Add command handlers separately (not in conversation, as per_message=True requires only CallbackQueryHandler)
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))

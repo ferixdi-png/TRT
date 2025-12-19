@@ -1,0 +1,12 @@
+﻿ app/models/__init__.py                    |   7 +
+ app/models/registry.py                    | 172 +++++++++++
+ artifacts/diag/silence_root_cause.md      | 109 +++++++
+ artifacts/models/source.json              |  19 ++
+ artifacts/proof/entrypoint.md             |  18 ++
+ artifacts/proof/git_status_before.txt     |   1 +
+ artifacts/proof/head_before.txt           |   1 +
+ artifacts/proof/ls.txt                    | 455 ++++++++++++++++++++++++++++++
+ artifacts/proof/pwd.txt                   |   6 +
+ bot_kie.py                                | 136 +++++++++
+ scripts/generate_model_source_artifact.py |  51 ++++
+ 11 files changed, 975 insertions(+)
