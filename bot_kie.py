@@ -5179,7 +5179,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Handle back to previous step
         if data == "back_to_previous_step":
-            await query.answer()
+            await query.answer("◀️ Возвращаюсь назад...")
             user_lang = get_user_language(user_id)
             
             if user_id not in user_sessions:
@@ -5192,6 +5192,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session = user_sessions[user_id]
             current_param = session.get('current_param')
             waiting_for = session.get('waiting_for')
+            
+            # Show helpful message about going back
+            model_name = session.get('model_info', {}).get('name', 'Unknown')
+            if user_lang == 'ru':
+                back_msg = (
+                    f"◀️ <b>Возврат к предыдущему шагу</b>\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n\n"
+                    f"💡 Вы можете изменить параметры или начать заново."
+                )
+            else:
+                back_msg = (
+                    f"◀️ <b>Going back to previous step</b>\n\n"
+                    f"🤖 <b>Model:</b> {model_name}\n\n"
+                    f"💡 You can change parameters or start over."
+                )
             
             # If we're waiting for a parameter, clear it and go back
             if waiting_for:
@@ -11781,17 +11796,56 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 balance_str = f"{user_balance:.2f}".rstrip('0').rstrip('.')
                 remaining_free = get_user_free_generations_remaining(user_id)
                 
-                error_text = (
-                    f"❌ <b>Недостаточно средств</b>\n\n"
-                    f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                    f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n\n"
-                )
+                user_lang = get_user_language(user_id)
+                needed = price - user_balance
+                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
                 
-                if model_id == FREE_MODEL_ID and remaining_free > 0:
-                    error_text += f"🎁 <b>Но у вас есть {remaining_free} бесплатных генераций!</b>\n\n"
-                    error_text += "Попробуйте снова - бесплатная генерация будет использована автоматически."
+                if user_lang == 'ru':
+                    error_text = (
+                        f"❌ <b>Недостаточно средств</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💰 <b>Требуется:</b> {price_str} ₽\n"
+                        f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
+                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    )
+                    
+                    if model_id == FREE_MODEL_ID and remaining_free > 0:
+                        error_text += (
+                            f"🎁 <b>Но у вас есть {remaining_free} бесплатных генераций!</b>\n\n"
+                            f"💡 Попробуйте снова - бесплатная генерация будет использована автоматически."
+                        )
+                    else:
+                        error_text += (
+                            f"💡 <b>Что делать:</b>\n"
+                            f"• Пополните баланс через кнопку «💳 Пополнить баланс»\n"
+                            f"• Используйте бесплатные генерации Z-Image (5 в день)\n"
+                            f"• Пригласите друга и получите бонусы\n\n"
+                            f"🔄 После пополнения попробуйте генерацию снова."
+                        )
                 else:
-                    error_text += "Пополните баланс для продолжения."
+                    error_text = (
+                        f"❌ <b>Insufficient Funds</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💰 <b>Required:</b> {price_str} ₽\n"
+                        f"💳 <b>Your balance:</b> {balance_str} ₽\n"
+                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    )
+                    
+                    if model_id == FREE_MODEL_ID and remaining_free > 0:
+                        error_text += (
+                            f"🎁 <b>But you have {remaining_free} free generations!</b>\n\n"
+                            f"💡 Try again - free generation will be used automatically."
+                        )
+                    else:
+                        error_text += (
+                            f"💡 <b>What to do:</b>\n"
+                            f"• Top up balance via «💳 Top Up Balance» button\n"
+                            f"• Use free Z-Image generations (5 per day)\n"
+                            f"• Invite a friend and get bonuses\n\n"
+                            f"🔄 After topping up, try generation again."
+                        )
                 
                 await send_or_edit_message(error_text)
                 return ConversationHandler.END

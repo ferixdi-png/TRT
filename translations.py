@@ -456,11 +456,13 @@ TRANSLATIONS = {
             '✅ <b>Operation cancelled</b>\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             '💡 <b>What happened:</b>\n'
-            'You cancelled the current operation and returned to the main menu.\n\n'
+            'You cancelled the current operation. All entered data is saved, but generation was not started.\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             '💡 <b>What you can do:</b>\n'
             '• Select a new action from the menu\n'
             '• Start a new generation\n'
-            '• Check balance or history\n\n'
+            '• Check balance or history\n'
+            '• Continue with any other model\n\n'
             '🔄 <b>Tip:</b> You can always return to the main menu with /start'
         ),
         # Messages
