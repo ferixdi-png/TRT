@@ -3197,9 +3197,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f'• <b>Recraft Remove Background</b> - remove background (free and unlimited!)\n'
                             f'• <b>Recraft Crisp Upscale</b> - enhance image quality (free and unlimited!)\n'
                             f'• <b>Z-Image</b> - image generation\n'
-                            f'   📊 <b>Free:</b> <b>{remaining_free}/{FREE_GENERATIONS_PER_DAY}</b> generations today\n'
-                            f'   🎁 <b>Invite friend → get +{REFERRAL_BONUS_GENERATIONS} free generations!</b>\n'
-                            f'   🔗 Referral link: <code>{referral_link}</code>\n\n'
+                            f'   📊 <b>Free:</b> <b>{remaining_free}/{FREE_GENERATIONS_PER_DAY}</b> generations today\n\n'
                             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                             f'📊 <b>STATISTICS:</b>\n'
                             f'• {total_models} top AI models\n'
@@ -10070,9 +10068,18 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text.strip()
     
-    # If waiting for text input (prompt or other text parameter)
-    waiting_for = session.get('waiting_for')
-    if waiting_for:
+    # ==================== TASK 1: Гарантия ответа на каждый ввод ====================
+    # Сразу отправляем подтверждение, чтобы пользователь не думал, что бот завис
+    try:
+        await update.message.reply_text("✅ Принято, обрабатываю...", parse_mode='HTML')
+    except Exception as e:
+        logger.warning(f"Не удалось отправить подтверждение: {e}")
+    
+    # ==================== TASK 1: Try/except вокруг обработки текста ====================
+    try:
+        # If waiting for text input (prompt or other text parameter)
+        waiting_for = session.get('waiting_for')
+        if waiting_for:
         current_param = session.get('current_param', waiting_for)
         param_info = properties.get(current_param, {})
         max_length = param_info.get('max_length')
@@ -10376,12 +10383,123 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return CONFIRMING_GENERATION
     
-    # If we get here and waiting_for is not set, something went wrong
+    # ==================== TASK 1: FALLBACK для waiting_for == None ====================
+    # Если waiting_for не установлен, но пришёл текст - пытаемся понять, что делать
     if not waiting_for:
-        await update.message.reply_text(
-            "❌ Ошибка: не ожидается ввод параметра. Начните заново с /models"
-        )
-        return ConversationHandler.END
+        try:
+            # Сразу отправляем подтверждение, чтобы пользователь не думал, что бот завис
+            await update.message.reply_text(
+                "✅ Принято, обрабатываю...",
+                parse_mode='HTML'
+            )
+            
+            # Проверяем, есть ли у модели prompt в properties/input_params
+            model_id = session.get('model_id')
+            model_info = session.get('model_info', {})
+            properties = session.get('properties', {})
+            input_params = model_info.get('input_params', {})
+            params = session.get('params', {})
+            
+            # Если у модели есть prompt в input_params и prompt ещё не в session['params']
+            if 'prompt' in input_params and 'prompt' not in params:
+                # Трактуем сообщение как prompt и продолжаем пайплайн
+                logger.info(f"🔧 AUTO-FIX: Text received but waiting_for=None, treating as prompt for model {model_id}")
+                
+                # Устанавливаем prompt
+                if 'params' not in session:
+                    session['params'] = {}
+                session['params']['prompt'] = text
+                session['waiting_for'] = None
+                session['current_param'] = None
+                
+                # Продолжаем пайплайн как обычно
+                # Проверяем, есть ли ещё параметры
+                required = session.get('required', [])
+                missing = [p for p in required if p not in params and p != 'prompt']
+                
+                if missing:
+                    # Есть ещё параметры - переходим к следующему
+                    try:
+                        next_param_result = await start_next_parameter(update, context, user_id)
+                        if next_param_result:
+                            return next_param_result
+                    except Exception as e:
+                        logger.error(f"Error starting next parameter after auto-fix prompt: {e}", exc_info=True)
+                        # Продолжаем к подтверждению генерации
+                else:
+                    # Все параметры собраны - показываем подтверждение
+                    try:
+                        model_name = model_info.get('name', 'Unknown')
+                        params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
+                        
+                        is_admin_user = get_is_admin(user_id)
+                        is_free = is_free_generation_available(user_id, model_id)
+                        free_info = ""
+                        if is_free:
+                            remaining = get_user_free_generations_remaining(user_id)
+                            free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
+                            free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                        else:
+                            price = calculate_price_rub(model_id, params, is_admin_user)
+                            price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                            free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
+                        
+                        user_lang = get_user_language(user_id)
+                        keyboard = [
+                            [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                            [
+                                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                            ],
+                            [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+                        ]
+                        
+                        await update.message.reply_text(
+                            f"📋 <b>Подтверждение:</b>\n\n"
+                            f"Модель: <b>{model_name}</b>\n"
+                            f"Параметры:\n{params_text}{free_info}\n\n"
+                            f"Продолжить генерацию?",
+                            reply_markup=InlineKeyboardMarkup(keyboard),
+                            parse_mode='HTML'
+                        )
+                        return CONFIRMING_GENERATION
+                    except Exception as e:
+                        logger.error(f"Error showing confirmation after auto-fix prompt: {e}", exc_info=True)
+            
+            # Если не удалось автоматически определить - отвечаем понятным сообщением
+            user_lang = get_user_language(user_id)
+            keyboard = [
+                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            ]
+            
+            await update.message.reply_text(
+                "❌ <b>Я не жду текст сейчас</b>\n\n"
+                "Пожалуйста:\n"
+                "• Выберите модель из меню\n"
+                "• Или нажмите кнопку для продолжения\n"
+                "• Или отмените операцию",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+            
+        except Exception as e:
+            logger.error(f"❌ Критическая ошибка в fallback обработке текста: {e}", exc_info=True)
+            # В случае ошибки всё равно отвечаем пользователю
+            try:
+                user_lang = get_user_language(user_id)
+                keyboard = [
+                    [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                ]
+                await update.message.reply_text(
+                    "❌ Произошла ошибка. Вернитесь в главное меню.",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+            except:
+                pass
+            return ConversationHandler.END
     
     return INPUTTING_PARAMS
 
