@@ -366,37 +366,67 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
         return balance_text
     else:
         # Regular user
-        free_info = ""
-        if remaining_free > 0:
-            free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день (модель Z-Image)"
-        
-        balance_message = (
-            f'💳 <b>ВАШ БАЛАНС</b> 💳\n\n'
-            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            f'💰 <b>Доступно средств:</b> {balance_str} ₽\n\n'
-        )
-        
-        if free_info:
-            balance_message += f'{free_info}\n'
-        
-        balance_message += (
-            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            f'💡 <b>Что можно сделать:</b>\n'
-            f'• Использовать средства для генерации контента\n'
-            f'• Пополнить баланс через кнопку ниже\n'
-        )
-        
-        if remaining_free > 0:
-            balance_message += f'• Использовать бесплатные генерации Z-Image ({remaining_free} доступно)\n'
-        
-        balance_message += (
-            f'\n💡 <b>Совет:</b> Начните с бесплатных генераций, чтобы оценить возможности бота!'
-        )
-        
-        return balance_message\n'
-            f'• Пригласить друга и получить бонусы\n\n'
-            f'🎁 <b>Не забудьте:</b> У вас есть бесплатные генерации Z-Image каждый день!'
-        )
+        if user_lang == 'en':
+            free_info = ""
+            if remaining_free > 0:
+                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per day (Z-Image model)"
+            
+            balance_message = (
+                f'💳 <b>YOUR BALANCE</b> 💳\n\n'
+                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                f'💰 <b>Available funds:</b> {balance_str} ₽\n'
+            )
+            
+            if free_info:
+                balance_message += free_info + '\n'
+            
+            balance_message += (
+                f'\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                f'💡 <b>What you can do:</b>\n'
+                f'• Use funds for content generation\n'
+                f'• Top up balance via button below\n'
+            )
+            
+            if remaining_free > 0:
+                balance_message += f'• Use free Z-Image generations ({remaining_free} available)\n'
+            
+            balance_message += (
+                f'• Invite a friend and get bonuses\n\n'
+                f'🎁 <b>Tip:</b> Start with free generations to explore bot capabilities!'
+            )
+            
+            return balance_message
+        else:
+            # Russian version
+            free_info = ""
+            if remaining_free > 0:
+                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день (модель Z-Image)"
+            
+            balance_message = (
+                f'💳 <b>ВАШ БАЛАНС</b> 💳\n\n'
+                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                f'💰 <b>Доступно средств:</b> {balance_str} ₽\n'
+            )
+            
+            if free_info:
+                balance_message += free_info + '\n'
+            
+            balance_message += (
+                f'\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                f'💡 <b>Что можно сделать:</b>\n'
+                f'• Использовать средства для генерации контента\n'
+                f'• Пополнить баланс через кнопку ниже\n'
+            )
+            
+            if remaining_free > 0:
+                balance_message += f'• Использовать бесплатные генерации Z-Image ({remaining_free} доступно)\n'
+            
+            balance_message += (
+                f'• Пригласить друга и получить бонусы\n\n'
+                f'🎁 <b>Совет:</b> Начните с бесплатных генераций, чтобы оценить возможности бота!'
+            )
+            
+            return balance_message
 
 
 def get_balance_keyboard(balance_info: Dict[str, Any], user_lang: str = 'ru') -> List[List[InlineKeyboardButton]]:
