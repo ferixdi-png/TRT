@@ -26376,7 +26376,7 @@ async def main():
     await safe_start_polling(application, drop_updates=True)
     
     # Ждём бесконечно (polling работает в фоне)
-    # Advisory lock будет освобожден через atexit handler
+    # Advisory lock будет освобожден через atexit handler при завершении процесса
     try:
         await asyncio.Event().wait()  # Бесконечное ожидание
     except KeyboardInterrupt:
@@ -26390,12 +26390,14 @@ async def main():
             logger.error(f"Error stopping application: {e}")
         
         # Освобождаем advisory lock перед выходом (дополнительно к atexit)
-        if 'lock_conn' in locals() and lock_conn and 'lock_key_int' in locals() and lock_key_int:
+        # lock_conn и lock_key_int должны быть доступны из области видимости main()
+        if lock_conn and lock_key_int:
             try:
                 from render_singleton_lock import release_lock_session
                 from database import get_connection_pool
                 pool = get_connection_pool()
                 release_lock_session(pool, lock_conn, lock_key_int)
+                logger.info("✅ Advisory lock released in finally block")
             except Exception as e:
                 logger.error(f"Error releasing lock in finally: {e}")
 
