@@ -10245,9 +10245,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info = session.get('model_info', {})
                 model_id = session.get('model_id', '')
                 input_params = model_info.get('input_params', {})
+                
+                # CRITICAL: Ensure we always have a response after prompt input
+                # Track that we sent confirmation message (already sent at line 10150)
+                track_outgoing_action(update_id)
             
             # IMPORTANT: z-image does NOT support image input (text-to-image only)
-            if model_id == "z-image":
+            if current_param == 'prompt' and model_id == "z-image":
                 # For z-image, skip image input and go to next parameter
                 session['has_image_input'] = False
             
@@ -10295,8 +10299,11 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     session['waiting_for'] = None
                     session['has_image_input'] = False  # Ensure flag is set correctly
                     # Continue to next parameter (aspect_ratio for z-image)
-                    await start_next_parameter(update, context, user_id)
-                    return INPUTTING_PARAMS
+                    next_param_result = await start_next_parameter(update, context, user_id)
+                    if next_param_result:
+                        return next_param_result
+                    # If start_next_parameter returned None, all parameters are collected - show confirmation
+                    # This will be handled by the code below (line 10344+)
                 
                 if session.get('has_image_input'):
                     image_required = False
@@ -10341,7 +10348,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session['waiting_for'] = None
                         return INPUTTING_PARAMS
                 
-                # Check if there are more parameters
+                # CRITICAL: Check if there are more parameters
+                # This block handles the case when prompt was entered and we need to check for other parameters
                 required = session.get('required', [])
                 params = session.get('params', {})
                 properties = session.get('properties', {})
@@ -10415,12 +10423,17 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await asyncio.sleep(0.5)
                         next_param_result = await start_next_parameter(update, context, user_id)
                         if next_param_result:
+                            # Track outgoing action for start_next_parameter response
+                            track_outgoing_action(update_id)
                             return next_param_result
+                        # If start_next_parameter returned None, all parameters are collected
+                        # Fall through to show confirmation below
                     except Exception as e:
                         logger.error(f"Error starting next parameter: {e}", exc_info=True)
                         await update.message.reply_text(
                             f"❌ Ошибка при переходе к следующему параметру: {str(e)}"
                         )
+                        track_outgoing_action(update_id)
                         return INPUTTING_PARAMS
                 else:
                     # All parameters collected, show confirmation
@@ -10459,6 +10472,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
+                    # Track outgoing action for confirmation message
+                    track_outgoing_action(update_id)
                     return CONFIRMING_GENERATION
         
     except Exception as e:
@@ -10600,6 +10615,29 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
             return ConversationHandler.END
+    
+    # ==================== NO-SILENCE GUARD: Final check ====================
+    # Если мы дошли до конца функции без ответа - это критический баг!
+    # Отправляем fallback ответ
+    try:
+        guard = get_no_silence_guard()
+        outgoing_count = guard.outgoing_actions.get(update_id, 0)
+        if outgoing_count == 0:
+            logger.error(f"⚠️⚠️⚠️ NO-SILENCE VIOLATION: input_parameters reached end without response! update_id={update_id}, user_id={user_id}, waiting_for={waiting_for}")
+            user_lang = get_user_language(user_id)
+            keyboard = [
+                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                [InlineKeyboardButton("🔄 Повторить", callback_data="back_to_menu")]
+            ]
+            await update.message.reply_text(
+                "⚠️ <b>Я не смог обработать ваш ввод.</b>\n\n"
+                "Выберите следующий шаг:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            track_outgoing_action(update_id)
+    except Exception as guard_error:
+        logger.error(f"❌ Failed to send NO-SILENCE fallback: {guard_error}", exc_info=True)
     
     return INPUTTING_PARAMS
 
