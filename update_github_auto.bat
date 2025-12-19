@@ -31,7 +31,7 @@ if not exist ".git" (
     echo.
     
     echo 🔗 Добавление remote репозитория...
-    git remote add origin https://github.com/ferixdi-png/5555555555.git
+    git remote add origin https://github.com/ferixdi-png/5656.git
     echo ✅ Remote добавлен
     echo.
     
@@ -52,7 +52,7 @@ if not exist ".git" (
     git remote get-url origin >nul 2>&1
     if %errorlevel% neq 0 (
         echo 🔗 Добавление remote репозитория...
-        git remote add origin https://github.com/ferixdi-png/5555555555.git
+        git remote add origin https://github.com/ferixdi-png/5656.git
         echo ✅ Remote добавлен
         echo.
     ) else (
@@ -174,7 +174,7 @@ if %PUSH_ERROR% neq 0 (
     echo ✅ УСПЕШНО! Файлы отправлены на GitHub!
     echo.
     echo 🔗 Ваш репозиторий:
-    echo    https://github.com/ferixdi-png/5555555555
+    echo    https://github.com/ferixdi-png/5656
     echo.
     echo 📊 Ветка: %BRANCH%
     echo.

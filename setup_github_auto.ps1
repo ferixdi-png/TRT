@@ -26,7 +26,7 @@ Write-Host ""
 if (-not (Test-Path ".git")) {
     Write-Host "📦 Инициализация Git репозитория..." -ForegroundColor Yellow
     git init
-    git remote add origin https://github.com/ferixdi-png/5555555555.git
+    git remote add origin https://github.com/ferixdi-png/5656.git
     git branch -M main
     Write-Host "✅ Репозиторий инициализирован" -ForegroundColor Green
 } else {
@@ -35,7 +35,7 @@ if (-not (Test-Path ".git")) {
     # Проверка remote
     $remoteUrl = git remote get-url origin 2>$null
     if (-not $remoteUrl) {
-        git remote add origin https://github.com/ferixdi-png/5555555555.git
+        git remote add origin https://github.com/ferixdi-png/5656.git
         Write-Host "✅ Remote репозиторий добавлен" -ForegroundColor Green
     } else {
         Write-Host "✅ Remote репозиторий: $remoteUrl" -ForegroundColor Green

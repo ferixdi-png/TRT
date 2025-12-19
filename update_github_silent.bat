@@ -17,13 +17,13 @@ cd /d "%~dp0"
 REM Инициализация репозитория, если нужно
 if not exist ".git" (
     git init >nul 2>&1
-    git remote add origin https://github.com/ferixdi-png/5555555555.git >nul 2>&1
+    git remote add origin https://github.com/ferixdi-png/5656.git >nul 2>&1
     git branch -M main >nul 2>&1
     set BRANCH=main
 ) else (
     git remote get-url origin >nul 2>&1
     if %errorlevel% neq 0 (
-        git remote add origin https://github.com/ferixdi-png/5555555555.git >nul 2>&1
+        git remote add origin https://github.com/ferixdi-png/5656.git >nul 2>&1
     )
     
     for /f "tokens=2" %%i in ('git branch --show-current 2^>nul') do set BRANCH=%%i
