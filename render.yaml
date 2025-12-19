@@ -2,10 +2,11 @@
 # https://render.com/docs/yaml-spec
 
 services:
-  - type: worker
+  - type: web
     name: kie-ai-bot
     env: python
-    # ВАЖНО: Background Worker не требует открытия HTTP порта
+    # ВАЖНО: Web Service требует открытый HTTP порт для health check
+    # Health server запускается автоматически в bot_kie.py на порту $PORT
     # Бот использует polling (getUpdates), не webhook
     buildCommand: pip install -r requirements.txt
     startCommand: python bot_kie.py

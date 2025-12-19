@@ -25117,7 +25117,7 @@ class HealthHandler(BaseHTTPRequestHandler):
     
     def log_message(self, format, *args):
         # Отключаем логирование HTTP запросов (чтобы не засорять логи)
-        pass
+        return  # silence
 
 def start_health_server():
     """Запускает простой HTTP сервер для health check"""
@@ -25137,13 +25137,17 @@ def start_health_server():
         # Не критично, продолжаем работу бота
 
 if __name__ == '__main__':
+    # КРИТИЧНО: Запускаем health сервер ПЕРЕД ботом, чтобы Render видел открытый порт
+    port = int(os.getenv("PORT", "10000"))
+    logger.info(f"🚀 Starting health server on port {port}...")
+    
     # Запускаем health сервер в отдельном потоке (daemon - умрёт с основным процессом)
     health_thread = threading.Thread(target=start_health_server, daemon=True)
     health_thread.start()
-    logger.info("🚀 Health server thread started")
     
-    # Небольшая задержка, чтобы сервер успел запуститься
-    time.sleep(0.5)
+    # Даём серверу время запуститься (Render проверяет порт сразу после старта)
+    time.sleep(1)
+    logger.info(f"✅ Health server listening on 0.0.0.0:{port}")
     
     # Единая точка входа через asyncio.run
     # НЕ запускаем бота при импортах - только при прямом вызове
