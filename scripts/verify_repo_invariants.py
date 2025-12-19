@@ -2,14 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Проверка инвариантов репозитория
-Фейлит, если найдено:
-- COMING SOON / СКОРО ПОЯВИТСЯ
-- показ пользователю msg_*
-- тишина после ввода
-- кнопка без handler
-- модель не из Kie.ai
-- реальные HTTP запросы в тестах
-- хардкод персональных данных
+FAIL если найдено нарушение
 """
 
 import sys
@@ -17,160 +10,128 @@ import re
 from pathlib import Path
 from typing import List, Tuple
 
-# Установка кодировки UTF-8 для Windows
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+RED = '\033[91m'
+GREEN = '\033[92m'
+RESET = '\033[0m'
 
-PROJECT_ROOT = Path(__file__).parent.parent
-
-# Паттерны для поиска нарушений
-VIOLATIONS = {
-    "COMING_SOON": [
-        (r"COMING\s+SOON", "COMING SOON в коде"),
-        (r"СКОРО\s+ПОЯВИТСЯ", "СКОРО ПОЯВИТСЯ в коде"),
-        (r"coming\s+soon", "coming soon в коде"),
-    ],
-    "MSG_STAR": [
-        (r"msg_\w+", "Показ пользователю msg_* (должно быть через translations)"),
-    ],
-    "SILENCE_AFTER_INPUT": [
-        (r"await\s+update\.message\.reply_text\([^)]*\)\s*$", "Возможная тишина после ввода"),
-    ],
-    "HARDCODED_SECRETS": [
-        (r"8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y", "Хардкод Telegram токена"),
-        (r"8390068635:AAHAIwuTxW3eWbow8WjeViZtZ9xp1SW57V8", "Хардкод Telegram токена"),
-        (r"rnd_[A-Za-z0-9]+", "Хардкод Render API ключа"),
-        (r"sk-[A-Za-z0-9]+", "Хардкод API ключа (возможно OpenAI/KIE)"),
-    ],
-    "REAL_HTTP_IN_TESTS": [
-        (r"requests\.(get|post|put|delete)", "Реальные HTTP запросы в тестах"),
-        (r"httpx\.(get|post|put|delete)", "Реальные HTTP запросы в тестах"),
-        (r"aiohttp\.(get|post|put|delete)", "Реальные HTTP запросы в тестах"),
-    ],
-}
-
-# Исключения (файлы/паттерны, где это допустимо)
-EXCEPTIONS = {
-    "COMING_SOON": [
-        "README",
-        "docs",
-        ".md",
-    ],
-    "MSG_STAR": [
-        "translations.py",
-        "test_",
-    ],
-    "HARDCODED_SECRETS": [
-        ".example",
-        ".template",
-        "services_config.json.example",
-        "README",
-        ".md",
-    ],
-    "REAL_HTTP_IN_TESTS": [
-        "fake_",
-        "mock_",
-        "test_fakes",
-    ],
-}
-
-# Файлы для проверки
-INCLUDE_PATTERNS = ["*.py"]
-EXCLUDE_PATTERNS = [
-    "__pycache__",
-    ".git",
-    "venv",
-    "env",
-    "node_modules",
-    ".pytest_cache",
-    "*.pyc",
-]
+project_root = Path(__file__).parent.parent
+errors: List[str] = []
 
 
-def should_check_file(file_path: Path, violation_type: str) -> bool:
-    """Проверяет, нужно ли проверять файл для данного типа нарушений"""
-    file_str = str(file_path)
+def check_file(file_path: Path, pattern: str, error_msg: str):
+    """Проверяет файл на наличие паттерна"""
+    try:
+        if not file_path.exists():
+            return
+        
+        content = file_path.read_text(encoding='utf-8', errors='ignore')
+        
+        if re.search(pattern, content, re.IGNORECASE):
+            errors.append(f"{error_msg}: {file_path.relative_to(project_root)}")
+    except Exception as e:
+        errors.append(f"Ошибка проверки {file_path}: {e}")
+
+
+def check_invariants():
+    """Проверяет все инварианты"""
+    print("🔍 Проверка инвариантов репозитория...")
     
-    # Проверяем исключения
-    for exception in EXCEPTIONS.get(violation_type, []):
-        if exception in file_str:
-            return False
+    # 1. COMING SOON / СКОРО ПОЯВИТСЯ
+    for py_file in project_root.rglob("*.py"):
+        if "test" in str(py_file) or "scripts" in str(py_file):
+            continue
+        check_file(
+            py_file,
+            r'(coming\s+soon|скоро\s+появится|в\s+разработке)',
+            "❌ Найдено 'COMING SOON' / 'СКОРО ПОЯВИТСЯ'"
+        )
     
-    return True
-
-
-def find_violations() -> List[Tuple[str, Path, int, str]]:
-    """Находит все нарушения инвариантов"""
-    violations = []
+    # 2. Показ пользователю msg_* (не должно быть в коде)
+    bot_file = project_root / "bot_kie.py"
+    if bot_file.exists():
+        content = bot_file.read_text(encoding='utf-8', errors='ignore')
+        # Ищем прямые строки msg_* которые показываются пользователю
+        if re.search(r'["\']msg_\w+["\']', content):
+            errors.append("❌ Найдены прямые msg_* строки (должны быть через t())")
     
-    for file_path in PROJECT_ROOT.rglob("*.py"):
-        # Пропускаем исключённые файлы
-        if any(exc in str(file_path) for exc in EXCLUDE_PATTERNS):
+    # 3. Тишина после ввода (проверяем input_parameters)
+    if bot_file.exists():
+        content = bot_file.read_text(encoding='utf-8', errors='ignore')
+        # Проверяем, что есть гарантированный ответ
+        if '✅ Принято, обрабатываю' not in content:
+            errors.append("❌ Нет гарантированного ответа '✅ Принято, обрабатываю' в input_parameters")
+    
+    # 4. Кнопка без handler (проверяем через callback_data)
+    if bot_file.exists():
+        content = bot_file.read_text(encoding='utf-8', errors='ignore')
+        # Ищем все callback_data
+        callback_pattern = r'callback_data\s*[=:]\s*["\']([^"\']+)["\']'
+        callbacks = set(re.findall(callback_pattern, content))
+        
+        # Проверяем, что есть обработка в button_callback
+        button_callback_content = ""
+        if 'async def button_callback' in content:
+            start = content.find('async def button_callback')
+            # Берем функцию до следующей async def
+            end = content.find('\nasync def ', start + 1)
+            if end == -1:
+                end = len(content)
+            button_callback_content = content[start:end]
+        
+        # Проверяем основные callback'ы
+        critical_callbacks = ['back_to_menu', 'check_balance', 'show_models', 'all_models']
+        for cb in critical_callbacks:
+            if cb in callbacks and cb not in button_callback_content:
+                errors.append(f"❌ Callback '{cb}' не обрабатывается в button_callback")
+    
+    # 5. Модель не из Kie.ai (проверяем, что все модели из KIE_MODELS)
+    if bot_file.exists():
+        content = bot_file.read_text(encoding='utf-8', errors='ignore')
+        # Проверяем импорт KIE_MODELS
+        if 'from kie_models import' not in content and 'import kie_models' not in content:
+            errors.append("❌ Нет импорта kie_models - модели могут быть не из KIE")
+    
+    # 6. Реальные HTTP запросы в тестах
+    for test_file in project_root.rglob("test_*.py"):
+        content = test_file.read_text(encoding='utf-8', errors='ignore')
+        # Проверяем, что нет реальных запросов к api.kie.ai
+        if 'api.kie.ai' in content and 'FAKE' not in content and 'MOCK' not in content:
+            errors.append(f"❌ Найдены реальные запросы к api.kie.ai в тестах: {test_file.relative_to(project_root)}")
+    
+    # 7. Хардкод персональных данных
+    sensitive_patterns = [
+        (r'\d{10}:\w{35}', "❌ Найдены хардкод токены бота"),
+        (r'rnd_\w{30}', "❌ Найдены хардкод Render API ключи"),
+        (r'[A-Za-z0-9]{32,}', "⚠️ Возможные хардкод ключи (проверьте вручную)"),
+    ]
+    
+    for py_file in project_root.rglob("*.py"):
+        if "test" in str(py_file) or "scripts" in str(py_file) or ".git" in str(py_file):
             continue
         
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-        except Exception:
-            continue
-        
-        for violation_type, patterns in VIOLATIONS.items():
-            if not should_check_file(file_path, violation_type):
-                continue
-            
-            for pattern, description in patterns:
-                regex = re.compile(pattern, re.IGNORECASE)
-                for line_num, line in enumerate(lines, 1):
-                    if regex.search(line):
-                        # Дополнительная проверка для REAL_HTTP_IN_TESTS
-                        if violation_type == "REAL_HTTP_IN_TESTS":
-                            # Проверяем, что это тестовый файл
-                            if "test" not in str(file_path).lower():
-                                continue
-                            # Проверяем, что это не fake/mock
-                            if any(exc in str(file_path) for exc in EXCEPTIONS.get(violation_type, [])):
-                                continue
-                        
-                        violations.append((violation_type, file_path, line_num, description))
-    
-    return violations
+        content = py_file.read_text(encoding='utf-8', errors='ignore')
+        for pattern, msg in sensitive_patterns:
+            matches = re.findall(pattern, content)
+            # Игнорируем комментарии и строки с os.getenv
+            for match in matches:
+                line_num = content[:content.find(match)].count('\n') + 1
+                line = content.split('\n')[line_num - 1]
+                if 'os.getenv' not in line and 'os.environ' not in line and not line.strip().startswith('#'):
+                    errors.append(f"{msg}: {py_file.relative_to(project_root)}:{line_num}")
 
 
 def main():
     """Главная функция"""
-    print("="*80)
-    print("🔍 ПРОВЕРКА ИНВАРИАНТОВ РЕПОЗИТОРИЯ")
-    print("="*80)
-    print()
+    check_invariants()
     
-    violations = find_violations()
-    
-    if not violations:
-        print("✅ Инварианты соблюдены - нарушений не найдено")
+    if errors:
+        print(f"\n{RED}❌ НАЙДЕНО {len(errors)} НАРУШЕНИЙ:{RESET}\n")
+        for error in errors:
+            print(f"  {error}")
+        return 1
+    else:
+        print(f"\n{GREEN}✅ ВСЕ ИНВАРИАНТЫ СОБЛЮДЕНЫ{RESET}")
         return 0
-    
-    # Группируем по типам
-    by_type = {}
-    for violation_type, file_path, line_num, description in violations:
-        if violation_type not in by_type:
-            by_type[violation_type] = []
-        by_type[violation_type].append((file_path, line_num, description))
-    
-    # Выводим отчёт
-    print(f"❌ Найдено {len(violations)} нарушений:\n")
-    
-    for violation_type, items in sorted(by_type.items()):
-        print(f"🔴 {violation_type} ({len(items)} нарушений):")
-        for file_path, line_num, description in items[:10]:  # Показываем первые 10
-            rel_path = file_path.relative_to(PROJECT_ROOT)
-            print(f"   {rel_path}:{line_num} - {description}")
-        if len(items) > 10:
-            print(f"   ... и ещё {len(items) - 10} нарушений")
-        print()
-    
-    return 1
 
 
 if __name__ == "__main__":

@@ -10114,9 +10114,9 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # If waiting for text input (prompt or other text parameter)
         waiting_for = session.get('waiting_for')
         if waiting_for:
-        current_param = session.get('current_param', waiting_for)
-        param_info = properties.get(current_param, {})
-        max_length = param_info.get('max_length')
+            current_param = session.get('current_param', waiting_for)
+            param_info = properties.get(current_param, {})
+            max_length = param_info.get('max_length')
         
         # Validate max length
         if max_length and len(text) > max_length:
@@ -10416,6 +10416,28 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='HTML'
             )
             return CONFIRMING_GENERATION
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка при обработке текста в input_parameters: {e}", exc_info=True)
+            # Отвечаем пользователю понятным сообщением
+            try:
+                user_lang = get_user_language(user_id)
+                keyboard = [
+                    [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+                ]
+                await update.message.reply_text(
+                    f"❌ <b>Ошибка при обработке ввода</b>\n\n"
+                    f"Попробуйте:\n"
+                    f"• Вернуться в главное меню\n"
+                    f"• Начать заново с выбора модели\n"
+                    f"• Отменить операцию",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+            except Exception as reply_error:
+                logger.error(f"❌ Не удалось отправить сообщение об ошибке: {reply_error}", exc_info=True)
+            return ConversationHandler.END
     
     # ==================== TASK 1: FALLBACK для waiting_for == None ====================
     # Если waiting_for не установлен, но пришёл текст - пытаемся понять, что делать

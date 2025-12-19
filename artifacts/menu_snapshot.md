@@ -1,214 +1,91 @@
-# Снимок меню
+# 📋 SNAPSHOT МЕНЮ
 
-**Дата:** 1766142427.7498527
+**Дата:** 1766143460.149701
 
-## Callback'ы
+## Главное меню
 
-Всего: 111
-
-- `^add_audio$` (pattern)
-- `^add_image$` (pattern)
-- `^admin_add$` (pattern)
-- `^admin_back_to_admin$` (pattern)
-- `^admin_broadcast$` (pattern)
-- `^admin_broadcast_stats$` (pattern)
-- `^admin_create_broadcast$` (pattern)
-- `^admin_gen_nav:` (pattern)
-- `^admin_gen_view:` (pattern)
-- `^admin_payments_back$` (pattern)
-- `^admin_promocodes$` (pattern)
-- `^admin_search$` (pattern)
-- `^admin_set_currency_rate$` (pattern)
-- `^admin_settings$` (pattern)
-- `^admin_stats$` (pattern)
-- `^admin_test_ocr$` (pattern)
-- `^admin_user_mode$` (pattern)
-- `^admin_view_generations$` (pattern)
-- `^all_models$` (pattern)
-- `^back_to_menu$` (pattern)
-- `^back_to_previous_step$` (pattern)
-- `^cancel$` (pattern)
-- `^category:` (pattern)
-- `^change_language$` (pattern)
-- `^check_balance$` (pattern)
-- `^claim_gift$` (pattern)
-- `^confirm_generate$` (pattern)
-- `^copy_bot$` (pattern)
-- `^free_tools$` (pattern)
-- `^gen_history:` (pattern)
-- `^gen_repeat:` (pattern)
-- `^gen_type:` (pattern)
-- `^gen_view:` (pattern)
-- `^generate_again$` (pattern)
-- `^help_menu$` (pattern)
-- `^image_done$` (pattern)
-- `^language_select:` (pattern)
-- `^my_generations$` (pattern)
-- `^pay_sbp:` (pattern)
-- `^pay_stars:` (pattern)
-- `^payment_screenshot_nav:` (pattern)
-- `^referral_info$` (pattern)
-- `^retry_generate:` (pattern)
-- `^select_model:` (pattern)
-- `^set_param:` (pattern)
-- `^show_all_models_list$` (pattern)
-- `^show_models$` (pattern)
-- `^skip_audio$` (pattern)
-- `^skip_image$` (pattern)
-- `^support_contact$` (pattern)
-- `^topup_amount:` (pattern)
-- `^topup_balance$` (pattern)
-- `^topup_custom$` (pattern)
-- `^tutorial_complete$` (pattern)
-- `^tutorial_start$` (pattern)
-- `^tutorial_step` (pattern)
-- `^view_payment_screenshots$` (pattern)
-- `add_audio` (exact)
-- `add_image` (exact)
-- `admin_add` (exact)
-- `admin_back_to_admin` (exact)
-- `admin_broadcast` (exact)
-- `admin_broadcast_stats` (exact)
-- `admin_create_broadcast` (exact)
-- `admin_gen_nav:next` (f-string)
-- `admin_gen_nav:prev` (f-string)
-- `admin_payments_back` (exact)
-- `admin_promocodes` (exact)
-- `admin_search` (exact)
-- `admin_set_currency_rate` (exact)
-- `admin_settings` (exact)
-- `admin_stats` (exact)
-- `admin_test_ocr` (exact)
-- `admin_user_mode` (exact)
-- `admin_view_generations` (exact)
-- `all_models` (exact)
-- `back_to_menu` (exact)
-- `back_to_previous_step` (exact)
-- `cancel` (exact)
-- `change_language` (exact)
-- `check_balance` (exact)
-- `claim_gift` (exact)
-- `confirm_generate` (exact)
-- `free_tools` (exact)
-- `generate_again` (exact)
-- `help_menu` (exact)
-- `image_done` (exact)
-- `language_select:en` (exact)
-- `language_select:ru` (exact)
-- `my_generations` (exact)
-- `payment_screenshot_nav:next` (exact)
-- `payment_screenshot_nav:prev` (exact)
-- `referral_info` (exact)
-- `select_model:z-image` (exact)
-- `show_all_models_list` (exact)
-- `show_models` (exact)
-- `skip_audio` (exact)
-- `skip_image` (exact)
-- `support_contact` (exact)
-- `topup_amount:100` (exact)
-- `topup_amount:150` (exact)
-- `topup_amount:50` (exact)
-- `topup_balance` (exact)
-- `topup_custom` (exact)
-- `tutorial_complete` (exact)
-- `tutorial_start` (exact)
-- `tutorial_step1` (exact)
-- `tutorial_step2` (exact)
-- `tutorial_step3` (exact)
-- `tutorial_step4` (exact)
-- `view_payment_screenshots` (exact)
-
-## Обработчики
-
-Всего: 63
-
-- `add_audio` → button_callback
-- `add_image` → button_callback
-- `admin_add` → button_callback
-- `admin_back_to_admin` → button_callback
-- `admin_broadcast` → button_callback
-- `admin_broadcast_stats` → button_callback
-- `admin_create_broadcast` → button_callback
-- `admin_gen_nav:` → button_callback
-- `admin_gen_view:` → button_callback
-- `admin_payments_back` → button_callback
-- `admin_promocodes` → button_callback
-- `admin_search` → button_callback
-- `admin_set_currency_rate` → button_callback
-- `admin_settings` → button_callback
-- `admin_stats` → button_callback
-- `admin_test_ocr` → button_callback
-- `admin_user_mode` → button_callback
-- `admin_view_generations` → button_callback
-- `back_to_menu` → button_callback
-- `back_to_previous_step` → button_callback
-- `cancel` → button_callback
-- `category:` → button_callback
-- `change_language` → button_callback
-- `check_balance` → button_callback
-- `claim_gift` → button_callback
-- `confirm_generate` → button_callback
-- `copy_bot` → button_callback
-- `example:` → button_callback
-- `free_tools` → button_callback
-- `gen_history:` → button_callback
-- `gen_repeat:` → button_callback
-- `gen_type:` → button_callback
-- `gen_view:` → button_callback
-- `generate_again` → button_callback
-- `help_menu` → button_callback
-- `image_done` → button_callback
-- `language_select:` → button_callback
-- `model:` → button_callback
-- `my_generations` → button_callback
-- `pay_sbp:` → button_callback
-- `pay_stars:` → button_callback
-- `payment_screenshot_nav:` → button_callback
-- `referral_info` → button_callback
-- `retry_generate:` → button_callback
-- `select_model:` → button_callback
-- `set_language:` → button_callback
-- `set_param:` → button_callback
-- `show_all_models_list` → button_callback
-- `show_models` → button_callback
-- `skip_audio` → button_callback
-- `skip_image` → button_callback
-- `start:` → button_callback
-- `support_contact` → button_callback
-- `topup_amount:` → button_callback
-- `topup_balance` → button_callback
-- `topup_custom` → button_callback
-- `tutorial_complete` → button_callback
-- `tutorial_start` → button_callback
-- `tutorial_step1` → button_callback
-- `tutorial_step2` → button_callback
-- `tutorial_step3` → button_callback
-- `tutorial_step4` → button_callback
-- `view_payment_screenshots` → button_callback
 
 ## Модели
 
-Всего: 72
+Всего моделей: 72
 
-- 🖼️ `z-image` - Z-Image
-- 🍌 `nano-banana-pro` - Nano Banana Pro
-- 🎨 `seedream/4.5-text-to-image` - Seedream 4.5 Text-to-Image
-- ✏️ `seedream/4.5-edit` - Seedream 4.5 Edit
-- 🎬 `sora-2-pro-image-to-video` - Sora 2 Pro Image-to-Video
-- 🎬 `sora-watermark-remover` - Sora 2 Watermark Remover
-- 🎥 `sora-2-text-to-video` - Sora 2 Text-to-Video
-- 🎬 `kling-2.6/image-to-video` - Kling 2.6 Image-to-Video
-- 🎥 `kling-2.6/text-to-video` - Kling 2.6 Text-to-Video
-- 🎨 `flux-2/pro-image-to-image` - Flux 2 Pro Image-to-Image
-- ✨ `flux-2/pro-text-to-image` - Flux 2 Pro Text-to-Image
-- 🎭 `flux-2/flex-image-to-image` - Flux 2 Flex Image-to-Image
-- 🌟 `flux-2/flex-text-to-image` - Flux 2 Flex Text-to-Image
-- 🔍 `topaz/image-upscale` - Topaz Image Upscale
-- ⚡ `kling/v2-5-turbo-text-to-video-pro` - Kling 2.5 Turbo Text-to-Video Pro
-- 🎞️ `kling/v2-5-turbo-image-to-video-pro` - Kling 2.5 Turbo Image-to-Video Pro
-- 🎬 `wan/2-5-image-to-video` - WAN 2.5 Image-to-Video
-- 🎥 `wan/2-5-text-to-video` - WAN 2.5 Text-to-Video
-- 🎭 `wan/2-2-animate-move` - WAN 2.2 Animate Move
-- 🔄 `wan/2-2-animate-replace` - WAN 2.2 Animate Replace
+- `bytedance/seedream`
+- `bytedance/seedream-v4-edit`
+- `bytedance/seedream-v4-text-to-image`
+- `bytedance/v1-pro-fast-image-to-video`
+- `elevenlabs/audio-isolation`
+- `elevenlabs/sound-effect`
+- `elevenlabs/speech-to-text`
+- `elevenlabs/text-to-speech`
+- `flux-2/flex-image-to-image`
+- `flux-2/flex-text-to-image`
+- `flux-2/pro-image-to-image`
+- `flux-2/pro-text-to-image`
+- `flux/kontext`
+- `google/imagen4`
+- `google/imagen4-fast`
+- `google/imagen4-ultra`
+- `google/nano-banana`
+- `google/nano-banana-edit`
+- `google/nanobanana-gemini-2.5-flash`
+- `google/veo-3`
 
 ... и ещё 52 моделей
+
+## Все callback'ы
+
+Всего callback'ов: 53
+
+- `add_audio`
+- `add_image`
+- `admin_add`
+- `admin_back_to_admin`
+- `admin_broadcast`
+- `admin_broadcast_stats`
+- `admin_create_broadcast`
+- `admin_payments_back`
+- `admin_promocodes`
+- `admin_search`
+- `admin_set_currency_rate`
+- `admin_settings`
+- `admin_stats`
+- `admin_test_ocr`
+- `admin_user_mode`
+- `admin_view_generations`
+- `all_models`
+- `back_to_menu`
+- `back_to_previous_step`
+- `cancel`
+- `change_language`
+- `check_balance`
+- `claim_gift`
+- `confirm_generate`
+- `free_tools`
+- `generate_again`
+- `help_menu`
+- `image_done`
+- `language_select:en`
+- `language_select:ru`
+- `my_generations`
+- `payment_screenshot_nav:next`
+- `payment_screenshot_nav:prev`
+- `referral_info`
+- `select_model:z-image`
+- `show_all_models_list`
+- `show_models`
+- `skip_audio`
+- `skip_image`
+- `support_contact`
+- `topup_amount:100`
+- `topup_amount:150`
+- `topup_amount:50`
+- `topup_balance`
+- `topup_custom`
+- `tutorial_complete`
+- `tutorial_start`
+- `tutorial_step1`
+- `tutorial_step2`
+- `tutorial_step3`
+- `tutorial_step4`
+- `view_payment_screenshots`
+- `{data}`

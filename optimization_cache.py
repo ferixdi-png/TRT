@@ -138,8 +138,8 @@ def clear_old_cache():
     current_time = time.time()
     
     # Очистка кеша моделей
+    global _models_cache, _models_cache_time
     if _models_cache is not None and (current_time - _models_cache_time) >= MODELS_CACHE_TTL:
-        global _models_cache, _models_cache_time
         _models_cache = None
         _models_cache_time = 0
     

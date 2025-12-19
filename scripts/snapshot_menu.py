@@ -1,188 +1,124 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Снимок всех меню и подменю
+Snapshot всех меню и подменю
 Сохраняет artifacts/menu_snapshot.json и artifacts/menu_snapshot.md
 """
 
 import sys
 import json
 import re
+import io
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Set
 
 # Установка кодировки UTF-8 для Windows
 if sys.platform == 'win32':
-    import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-PROJECT_ROOT = Path(__file__).parent.parent
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
-ARTIFACTS_DIR.mkdir(exist_ok=True)
+project_root = Path(__file__).parent.parent
+artifacts_dir = project_root / "artifacts"
+artifacts_dir.mkdir(exist_ok=True)
 
-SNAPSHOT_JSON = ARTIFACTS_DIR / "menu_snapshot.json"
-SNAPSHOT_MD = ARTIFACTS_DIR / "menu_snapshot.md"
+bot_file = project_root / "bot_kie.py"
 
 
-def extract_callbacks_from_code() -> Dict[str, Any]:
-    """Извлекает все callback_data из кода"""
-    bot_file = PROJECT_ROOT / "bot_kie.py"
-    callbacks = {}
-    
+def extract_menus() -> Dict:
+    """Извлекает все меню из bot_kie.py"""
     if not bot_file.exists():
-        return callbacks
+        print("❌ bot_kie.py не найден")
+        return {}
     
-    try:
-        with open(bot_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Ищем callback_data в коде
-        patterns = [
-            (r'callback_data\s*=\s*["\']([^"\']+)["\']', "exact"),
-            (r'callback_data\s*=\s*f["\']([^"\']+)["\']', "f-string"),
-            (r'pattern\s*=\s*["\']([^"\']+)["\']', "pattern"),
-        ]
-        
-        for pattern, pattern_type in patterns:
-            for match in re.finditer(pattern, content):
-                callback = match.group(1)
-                # Убираем переменные из f-strings
-                if '{' not in callback and '}' not in callback:
-                    if callback not in callbacks:
-                        callbacks[callback] = {
-                            "type": pattern_type,
-                            "handlers": []
-                        }
-    except Exception as e:
-        print(f"⚠️ Ошибка при извлечении callback'ов: {e}")
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    return callbacks
-
-
-def extract_handlers_from_code() -> Dict[str, List[str]]:
-    """Извлекает обработчики callback'ов"""
-    bot_file = PROJECT_ROOT / "bot_kie.py"
-    handlers = {}
-    
-    if not bot_file.exists():
-        return handlers
-    
-    try:
-        with open(bot_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Ищем обработку callback_data в button_callback
-        # Паттерны: if data == "...", if data.startswith("..."), elif data == "..."
-        patterns = [
-            r'if\s+data\s*==\s*["\']([^"\']+)["\']',
-            r'elif\s+data\s*==\s*["\']([^"\']+)["\']',
-            r'if\s+data\.startswith\(["\']([^"\']+)["\']',
-            r'elif\s+data\.startswith\(["\']([^"\']+)["\']',
-        ]
-        
-        for pattern in patterns:
-            for match in re.finditer(pattern, content):
-                callback = match.group(1)
-                if callback not in handlers:
-                    handlers[callback] = []
-                handlers[callback].append("button_callback")
-    except Exception as e:
-        print(f"⚠️ Ошибка при извлечении обработчиков: {e}")
-    
-    return handlers
-
-
-def extract_models_from_kie_models() -> List[Dict[str, Any]]:
-    """Извлекает модели из kie_models.py"""
-    models = []
-    
-    try:
-        sys.path.insert(0, str(PROJECT_ROOT))
-        from kie_models import KIE_MODELS
-        
-        if isinstance(KIE_MODELS, dict):
-            for model_id, model_data in KIE_MODELS.items():
-                models.append({
-                    "id": model_id,
-                    "name": model_data.get("name", ""),
-                    "emoji": model_data.get("emoji", ""),
-                    "generation_type": model_data.get("generation_type", ""),
-                })
-        elif isinstance(KIE_MODELS, list):
-            for model in KIE_MODELS:
-                models.append({
-                    "id": model.get("id", ""),
-                    "name": model.get("name", ""),
-                    "emoji": model.get("emoji", ""),
-                    "generation_type": model.get("generation_type", ""),
-                })
-    except Exception as e:
-        print(f"⚠️ Ошибка при загрузке моделей: {e}")
-    
-    return models
-
-
-def create_snapshot() -> Dict[str, Any]:
-    """Создаёт снимок всех меню"""
-    import time
-    snapshot = {
-        "timestamp": str(time.time()),
-        "callbacks": extract_callbacks_from_code(),
-        "handlers": extract_handlers_from_code(),
-        "models": extract_models_from_kie_models(),
+    menus = {
+        "main_menu": [],
+        "model_selection": [],
+        "generation_types": [],
+        "admin_menu": [],
+        "payment_menu": [],
+        "callbacks": set(),
     }
     
-    return snapshot
-
-
-def save_snapshot(snapshot: Dict[str, Any]):
-    """Сохраняет снимок в JSON и Markdown"""
-    # JSON
-    with open(SNAPSHOT_JSON, 'w', encoding='utf-8') as f:
-        json.dump(snapshot, f, indent=2, ensure_ascii=False)
+    # Ищем все callback_data
+    callback_pattern = r'callback_data\s*[=:]\s*["\']([^"\']+)["\']'
+    callbacks = re.findall(callback_pattern, content)
+    menus["callbacks"] = sorted(set(callbacks))
     
-    # Markdown
-    with open(SNAPSHOT_MD, 'w', encoding='utf-8') as f:
-        f.write("# Снимок меню\n\n")
-        f.write(f"**Дата:** {snapshot['timestamp']}\n\n")
-        
-        f.write("## Callback'ы\n\n")
-        f.write(f"Всего: {len(snapshot['callbacks'])}\n\n")
-        for callback, info in sorted(snapshot['callbacks'].items()):
-            f.write(f"- `{callback}` ({info['type']})\n")
-        
-        f.write("\n## Обработчики\n\n")
-        f.write(f"Всего: {len(snapshot['handlers'])}\n\n")
-        for callback, handler_list in sorted(snapshot['handlers'].items()):
-            f.write(f"- `{callback}` → {', '.join(handler_list)}\n")
-        
-        f.write("\n## Модели\n\n")
-        f.write(f"Всего: {len(snapshot['models'])}\n\n")
-        for model in snapshot['models'][:20]:  # Первые 20
-            f.write(f"- {model.get('emoji', '')} `{model.get('id', '')}` - {model.get('name', '')}\n")
-        if len(snapshot['models']) > 20:
-            f.write(f"\n... и ещё {len(snapshot['models']) - 20} моделей\n")
+    # Ищем главное меню
+    if 'build_main_menu_keyboard' in content:
+        # Извлекаем кнопки из функции
+        start = content.find('def build_main_menu_keyboard')
+        if start != -1:
+            end = content.find('\ndef ', start + 1)
+            if end == -1:
+                end = len(content)
+            menu_func = content[start:end]
+            menu_callbacks = re.findall(callback_pattern, menu_func)
+            menus["main_menu"] = sorted(set(menu_callbacks))
+    
+    # Ищем модели из KIE_MODELS
+    try:
+        sys.path.insert(0, str(project_root))
+        from kie_models import KIE_MODELS
+        if isinstance(KIE_MODELS, dict):
+            menus["models"] = sorted(KIE_MODELS.keys())
+        elif isinstance(KIE_MODELS, list):
+            menus["models"] = sorted([m.get('id', '') for m in KIE_MODELS if isinstance(m, dict)])
+    except:
+        menus["models"] = []
+    
+    return menus
+
+
+def generate_markdown(menus: Dict) -> str:
+    """Генерирует markdown отчёт"""
+    md = "# 📋 SNAPSHOT МЕНЮ\n\n"
+    md += f"**Дата:** {Path(__file__).stat().st_mtime}\n\n"
+    
+    md += "## Главное меню\n\n"
+    for cb in menus.get("main_menu", []):
+        md += f"- `{cb}`\n"
+    
+    md += "\n## Модели\n\n"
+    md += f"Всего моделей: {len(menus.get('models', []))}\n\n"
+    for model in menus.get("models", [])[:20]:  # Первые 20
+        md += f"- `{model}`\n"
+    if len(menus.get("models", [])) > 20:
+        md += f"\n... и ещё {len(menus.get('models', [])) - 20} моделей\n"
+    
+    md += "\n## Все callback'ы\n\n"
+    md += f"Всего callback'ов: {len(menus.get('callbacks', []))}\n\n"
+    for cb in menus.get("callbacks", []):
+        md += f"- `{cb}`\n"
+    
+    return md
 
 
 def main():
     """Главная функция"""
-    print("="*80)
-    print("📸 СОЗДАНИЕ СНИМКА МЕНЮ")
-    print("="*80)
-    print()
+    print("Creating menu snapshot...")
     
-    snapshot = create_snapshot()
-    save_snapshot(snapshot)
+    menus = extract_menus()
     
-    print(f"✅ Снимок сохранён:")
-    print(f"   JSON: {SNAPSHOT_JSON}")
-    print(f"   Markdown: {SNAPSHOT_MD}")
-    print()
-    print(f"📊 Статистика:")
-    print(f"   Callback'ов: {len(snapshot['callbacks'])}")
-    print(f"   Обработчиков: {len(snapshot['handlers'])}")
-    print(f"   Моделей: {len(snapshot['models'])}")
+    # Сохраняем JSON
+    json_file = artifacts_dir / "menu_snapshot.json"
+    with open(json_file, 'w', encoding='utf-8') as f:
+        json.dump(menus, f, indent=2, ensure_ascii=False)
+    print(f"OK Saved {json_file}")
+    
+    # Сохраняем Markdown
+    md_file = artifacts_dir / "menu_snapshot.md"
+    md_content = generate_markdown(menus)
+    with open(md_file, 'w', encoding='utf-8') as f:
+        f.write(md_content)
+    print(f"OK Saved {md_file}")
+    
+    print(f"\nStatistics:")
+    print(f"  Main menu: {len(menus.get('main_menu', []))} buttons")
+    print(f"  Models: {len(menus.get('models', []))}")
+    print(f"  Total callbacks: {len(menus.get('callbacks', []))}")
     
     return 0
 
