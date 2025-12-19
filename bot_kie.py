@@ -47,6 +47,7 @@ from asyncio import Lock
 from typing import Optional
 import threading
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # Ensure Python can find modules in the same directory (for Render compatibility)
 sys.path.insert(0, str(Path(__file__).parent))
@@ -24743,6 +24744,10 @@ async def main():
     # HTTP server already started at the beginning of main()
     # Run the bot
     logger.info("Bot starting...")
+    
+    # ==================== FILE LOCK (ПЕРЕД СОЗДАНИЕМ APPLICATION) ====================
+    # КРИТИЧНО: Приобретаем lock ДО создания Application, чтобы предотвратить двойной запуск
+    acquire_lock_or_exit()
     
     # Leader election через advisory lock для предотвращения конфликтов при нескольких инстансах
     polling_lock_key = None
