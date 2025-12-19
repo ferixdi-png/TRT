@@ -25125,8 +25125,13 @@ def start_health_server():
         port = int(os.getenv("PORT", "10000"))
         server = HTTPServer(("0.0.0.0", port), HealthHandler)
         logger.info(f"✅ Health server started on 0.0.0.0:{port}")
-        logger.info(f"   Health check: http://0.0.0.0:{port}/health")
+        logger.info(f"   Health check endpoints: /, /health, /healthz")
         server.serve_forever()
+    except OSError as e:
+        if "Address already in use" in str(e):
+            logger.warning(f"⚠️ Port {port} already in use, health server may already be running")
+        else:
+            logger.error(f"❌ Failed to start health server: {e}")
     except Exception as e:
         logger.error(f"❌ Failed to start health server: {e}")
         # Не критично, продолжаем работу бота
