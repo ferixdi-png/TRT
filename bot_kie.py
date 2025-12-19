@@ -25824,7 +25824,11 @@ async def main():
                 logger.error("      2. Check local runs - stop all bot instances")
                 logger.error("      3. Verify singleton lock is working correctly")
                 handle_conflict_gracefully(error, "polling")
-                return  # Exit immediately after graceful handling
+                # КРИТИЧНО: Немедленно завершаем процесс
+                import os
+                import sys
+                logger.error("   Exiting process immediately to prevent repeated conflicts...")
+                os._exit(1)  # Немедленный выход без cleanup (предотвращает повторные ошибки)
             
             # Логируем с полным traceback для отладки (только для не-Conflict ошибок)
             logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
