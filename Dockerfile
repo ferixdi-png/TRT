@@ -22,6 +22,9 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy only necessary application files
 COPY bot_kie.py run_bot.py config.py translations.py kie_models.py kie_client.py kie_gateway.py knowledge_storage.py config_runtime.py helpers.py ./
 
+# Copy app directory (required for app.config, app.bot_mode, etc.)
+COPY app/ ./app/
+
 # Copy validation files if they exist
 COPY validate_*.py ./
 
