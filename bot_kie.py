@@ -26335,7 +26335,9 @@ async def main():
         
         # PostgreSQL advisory lock уже проверен в начале main()
         # Дополнительная проверка через Telegram API не нужна, но оставляем для безопасности
-        logger.info("🔍 Final conflict check (advisory lock should prevent conflicts)...")
+        # PostgreSQL advisory lock уже проверен в начале main()
+        # Дополнительная проверка не нужна, но логируем что проверки пройдены
+        logger.info("✅ All conflict checks passed - advisory lock active")
         
         # ВСЕ проверки пройдены - запускаем polling
         try:
@@ -26374,27 +26376,28 @@ async def main():
     await safe_start_polling(application, drop_updates=True)
     
     # Ждём бесконечно (polling работает в фоне)
+    # Advisory lock будет освобожден через atexit handler
     try:
         await asyncio.Event().wait()  # Бесконечное ожидание
     except KeyboardInterrupt:
-        logger.info("🛑 Shutting down bot...")
+        logger.info("🛑 Shutting down bot (KeyboardInterrupt)...")
     finally:
-        # Освобождаем advisory lock перед shutdown
-        if lock_conn and lock_key_int:
+        # Останавливаем application
+        try:
+            await application.stop()
+            await application.shutdown()
+        except Exception as e:
+            logger.error(f"Error stopping application: {e}")
+        
+        # Освобождаем advisory lock перед выходом (дополнительно к atexit)
+        if 'lock_conn' in locals() and lock_conn and 'lock_key_int' in locals() and lock_key_int:
             try:
                 from render_singleton_lock import release_lock_session
                 from database import get_connection_pool
                 pool = get_connection_pool()
                 release_lock_session(pool, lock_conn, lock_key_int)
             except Exception as e:
-                logger.error(f"Error releasing lock on shutdown: {e}")
-        
-        # Останавливаем application
-        try:
-            await application.stop()
-            await application.shutdown()
-        except:
-            pass
+                logger.error(f"Error releasing lock in finally: {e}")
 
 
 # ==================== HEALTH HTTP SERVER FOR RENDER ====================
