@@ -196,9 +196,20 @@ TRANSLATIONS = {
             '• Получено бонусов: <b>{bonus_total}</b> генераций\n'
             '• Доступно бесплатно: <b>{remaining}</b> генераций в Z-Image'
         ),
-        'msg_referral_important': '⚠️ <b>ВАЖНО:</b> Бесплатные генерации доступны только для модели <b>Z-Image</b>!',
+        'msg_referral_important': (
+            '⚠️ <b>ВАЖНО:</b>\n\n'
+            '• Бесплатные генерации доступны только для модели <b>Z-Image</b>\n'
+            '• Бонусы начисляются автоматически после регистрации друга\n'
+            '• Чем больше друзей пригласите, тем больше бесплатных генераций получите!'
+        ),
         'msg_referral_link_title': '🔗 <b>ВАША РЕФЕРАЛЬНАЯ ССЫЛКА:</b>',
-        'msg_referral_send': '💬 <b>Отправьте эту ссылку другу!</b>\nПосле его регистрации вы получите бонус автоматически.',
+        'msg_referral_send': (
+            '💬 <b>Отправьте эту ссылку другу!</b>\n\n'
+            '💡 <b>После его регистрации:</b>\n'
+            '• Вы получите +{bonus} бесплатных генераций автоматически\n'
+            '• Ваш друг получит стартовый подарок\n'
+            '• Выиграют оба! 🎉'
+        ),
         'gen_type_text_to_image': '✨ Текст в фото',
         'gen_type_image_to_image': '🎨 Фото в фото',
         'gen_type_image_editing': '🖼️ Редактирование фото',
@@ -531,9 +542,20 @@ TRANSLATIONS = {
             '• Bonuses received: <b>{bonus_total}</b> generations\n'
             '• Available free: <b>{remaining}</b> Z-Image generations'
         ),
-        'msg_referral_important': '⚠️ <b>IMPORTANT:</b> Free generations are only available for <b>Z-Image</b> model!',
+        'msg_referral_important': (
+            '⚠️ <b>IMPORTANT:</b>\n\n'
+            '• Free generations are only available for <b>Z-Image</b> model\n'
+            '• Bonuses are added automatically after friend registration\n'
+            '• The more friends you invite, the more free generations you get!'
+        ),
         'msg_referral_link_title': '🔗 <b>YOUR REFERRAL LINK:</b>',
-        'msg_referral_send': '💬 <b>Send this link to a friend!</b>\nAfter they register, you will receive the bonus automatically.',
+        'msg_referral_send': (
+            '💬 <b>Send this link to a friend!</b>\n\n'
+            '💡 <b>After they register:</b>\n'
+            '• You will receive +{bonus} free generations automatically\n'
+            '• Your friend will get a starter gift\n'
+            '• Both win! 🎉'
+        ),
         'gen_type_text_to_image': '✨ Text to Image',
         'gen_type_image_to_image': '🎨 Image to Image',
         'gen_type_image_editing': '🖼️ Image Editing',
