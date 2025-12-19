@@ -37,6 +37,7 @@ CURSOR_DIR = Path(__file__).parent / ".cursor"
 CURSOR_TASKS_FILE = CURSOR_DIR / "auto_fix_tasks.json"
 CURSOR_PROMPT_FILE = CURSOR_DIR / "auto_fix_prompt.md"
 CURSOR_STATE_FILE = CURSOR_DIR / "cursor_state.json"
+SERVICES_CONFIG_FILE = Path(__file__).parent / "services_config.json"
 CURSOR_DIR.mkdir(exist_ok=True)
 
 
@@ -142,8 +143,11 @@ class ProjectAnalyzer:
             print(f"   ✅ {bot_file.name} прочитан ({len(content)} символов)")
             
             # Ищем callback handlers
+            print("   🔍 Поиск callback handlers...", end="\r")
             callback_pattern = r"callback_data\s*[=:]\s*['\"]([^'\"]+)['\"]"
+            callback_count = 0
             for match in re.finditer(callback_pattern, content):
+                callback_count += 1
                 callback_data = match.group(1)
                 line_num = content[:match.start()].count('\n') + 1
                 
@@ -184,8 +188,10 @@ class ProjectAnalyzer:
                         "line": line_num,
                         "kie_calls": kie_calls
                     }
+            print(f"   ✅ Найдено {len(self.generation_functions)} generation functions")
             
             # Ищем KIE API calls
+            print("   🔍 Поиск KIE API calls...", end="\r")
             kie_patterns = [
                 r"createTask\s*\(",
                 r"get_status\s*\(",
@@ -352,10 +358,11 @@ class ProjectAnalyzer:
 class CursorAIIntegration:
     """Интеграция с Cursor AI"""
     
-    def __init__(self, render_api_key: str, service_id: str, telegram_token: str):
+    def __init__(self, render_api_key: str, service_id: str, telegram_token: str, service_name: str = None):
         self.render_api_key = render_api_key
         self.service_id = service_id
         self.telegram_token = telegram_token
+        self.service_name = service_name or f"Service {service_id[:10]}..."
         self.project_root = Path(__file__).parent
         self.headers = {
             "Authorization": f"Bearer {render_api_key}",
@@ -400,13 +407,21 @@ class CursorAIIntegration:
     def get_owner_id(self) -> Optional[str]:
         """Получает Owner ID"""
         try:
+            print("   🔗 Подключение к Render API...", end="\r")
             response = requests.get(f"{RENDER_API_BASE}/services/{self.service_id}", 
                                   headers=self.headers, timeout=10)
             if response.status_code == 200:
                 service_data = response.json()
-                return service_data.get("ownerId") or service_data.get("service", {}).get("ownerId")
-        except:
-            pass
+                owner_id = service_data.get("ownerId") or service_data.get("service", {}).get("ownerId")
+                if owner_id:
+                    print(f"   ✅ Owner ID получен: {owner_id[:20]}...")
+                else:
+                    print("   ⚠️  Owner ID не найден в ответе")
+                return owner_id
+            else:
+                print(f"   ❌ Ошибка API: {response.status_code}")
+        except Exception as e:
+            print(f"   ❌ Ошибка при получении Owner ID: {e}")
         return None
     
     def get_logs(self, lines: int = 500) -> Optional[List[Dict]]:
@@ -700,12 +715,12 @@ class CursorAIIntegration:
                 print("=" * 80)
                 
                 # Получаем логи
-                print("\n📥 Получение логов с Render...")
+                print(f"\n📥 Получение логов с Render ({self.service_name})...")
                 print("   Получение owner_id...", end="\r")
                 logs = self.get_logs(lines=500)
                 if not logs:
                     print("   ❌ Не удалось получить логи")
-                    print("   ⚠️  Проверьте RENDER_API_KEY и RENDER_SERVICE_ID")
+                    print(f"   ⚠️  Проверьте RENDER_API_KEY и Service ID: {self.service_id}")
                     time.sleep(interval)
                     continue
                 
@@ -729,8 +744,9 @@ class CursorAIIntegration:
                 # Сохраняем промпт для Cursor
                 self.save_cursor_prompt(tasks)
                 
-                print("\n💡 Откройте файл .cursor/auto_fix_prompt.md в Cursor")
-                print("   Cursor AI автоматически увидит задачи и исправит ошибки")
+                print(f"\n💡 Откройте файл .cursor/auto_fix_prompt.md в Cursor")
+                print(f"   Cursor AI автоматически увидит задачи и исправит ошибки")
+                print(f"   Сервис: {self.service_name} ({self.service_id})")
                 
                 # Обновляем состояние
                 self.state["last_check"] = datetime.now().isoformat()
@@ -747,19 +763,138 @@ class CursorAIIntegration:
             print("=" * 80)
 
 
+def load_services_config() -> Dict:
+    """Загружает конфигурацию сервисов"""
+    if SERVICES_CONFIG_FILE.exists():
+        try:
+            with open(SERVICES_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️  Ошибка при загрузке конфига: {e}")
+    return {
+        "services": [],
+        "render_api_key": os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw"),
+        "default_service": None
+    }
+
+
+def list_services(config: Dict) -> List[Dict]:
+    """Получает список активных сервисов"""
+    services = config.get("services", [])
+    return [s for s in services if s.get("enabled", True)]
+
+
 def main():
     """Главная функция"""
     print("🚀 Инициализация системы...")
-    render_api_key = os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
-    service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
-    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
     
-    print("✅ Параметры загружены")
-    print("🔧 Создание объекта CursorAIIntegration...")
-    system = CursorAIIntegration(render_api_key, service_id, telegram_token)
-    print("✅ Система готова к работе")
-    print("\n" + "=" * 80)
-    system.run(interval=120)
+    # Загружаем конфигурацию
+    config = load_services_config()
+    render_api_key = config.get("render_api_key") or os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
+    
+    # Получаем список сервисов
+    services_list = list_services(config)
+    
+    if not services_list:
+        # Fallback на старый способ (env vars)
+        print("⚠️  Конфигурация сервисов не найдена, используем переменные окружения")
+        service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
+        
+        print("✅ Параметры загружены из env vars")
+        print("🔧 Создание объекта CursorAIIntegration...")
+        system = CursorAIIntegration(render_api_key, service_id, telegram_token)
+        print("✅ Система готова к работе")
+        print("\n" + "=" * 80)
+        system.run(interval=120)
+        return
+    
+    # Если несколько сервисов - выбираем или мониторим все
+    if len(services_list) == 1:
+        # Один сервис - используем его
+        service = services_list[0]
+        service_id = service["service_id"]
+        telegram_token = service["telegram_token"]
+        service_name = service.get("name", f"Service {service_id[:10]}...")
+        
+        print(f"✅ Найден сервис: {service_name}")
+        print(f"🔧 Создание объекта CursorAIIntegration...")
+        system = CursorAIIntegration(render_api_key, service_id, telegram_token, service_name)
+        print("✅ Система готова к работе")
+        print("\n" + "=" * 80)
+        system.run(interval=120)
+    else:
+        # Несколько сервисов - мониторим все по очереди
+        print(f"✅ Найдено сервисов: {len(services_list)}")
+        print("\n📋 Список сервисов:")
+        for i, service in enumerate(services_list, 1):
+            print(f"   {i}. {service.get('name', 'Без имени')} ({service['service_id']})")
+        
+        print("\n🔄 Мониторинг всех сервисов...")
+        print("=" * 80)
+        
+        iteration = 0
+        try:
+            while True:
+                iteration += 1
+                print(f"\n\n{'=' * 80}")
+                print(f"🔄 ИТЕРАЦИЯ #{iteration} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print("=" * 80)
+                
+                all_errors = []
+                
+                for service in services_list:
+                    service_id = service["service_id"]
+                    telegram_token = service["telegram_token"]
+                    service_name = service.get("name", f"Service {service_id[:10]}...")
+                    
+                    print(f"\n{'─' * 80}")
+                    print(f"📡 Сервис: {service_name} ({service_id})")
+                    print("─" * 80)
+                    
+                    try:
+                        system = CursorAIIntegration(render_api_key, service_id, telegram_token, service_name)
+                        
+                        # Получаем логи
+                        logs = system.get_logs(lines=200)
+                        if not logs:
+                            print(f"   ⚠️  Не удалось получить логи для {service_name}")
+                            continue
+                        
+                        # Анализируем ошибки
+                        errors = system.analyze_errors(logs)
+                        if errors:
+                            print(f"   📊 Найдено ошибок: {len(errors)}")
+                            all_errors.extend(errors)
+                        else:
+                            print(f"   ✅ Ошибок не найдено")
+                    
+                    except Exception as e:
+                        print(f"   ❌ Ошибка при обработке {service_name}: {e}")
+                        continue
+                
+                # Создаём общий промпт для всех ошибок
+                if all_errors:
+                    print(f"\n📝 Создание общего промпта для {len(all_errors)} ошибок...")
+                    # Используем первый сервис для создания промпта
+                    first_service = services_list[0]
+                    system = CursorAIIntegration(
+                        render_api_key,
+                        first_service["service_id"],
+                        first_service["telegram_token"],
+                        "Все сервисы"
+                    )
+                    tasks = system.create_cursor_tasks(all_errors)
+                    system.save_cursor_prompt(tasks)
+                    print("💡 Откройте файл .cursor/auto_fix_prompt.md в Cursor")
+                
+                print(f"\n⏳ Следующая проверка через 120 секунд...")
+                time.sleep(120)
+                
+        except KeyboardInterrupt:
+            print("\n\n" + "=" * 80)
+            print("🛑 СИСТЕМА ОСТАНОВЛЕНА")
+            print("=" * 80)
 
 
 if __name__ == "__main__":

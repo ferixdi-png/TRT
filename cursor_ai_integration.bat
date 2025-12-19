@@ -48,12 +48,15 @@ if %errorlevel% neq 0 (
 echo ✅ Все зависимости установлены
 echo.
 
-REM Установка переменных окружения
+REM Установка переменных окружения (fallback, если нет services_config.json)
 set RENDER_API_KEY=rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
 set RENDER_SERVICE_ID=srv-d4s025er433s73bsf62g
 set TELEGRAM_BOT_TOKEN=8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
 
-echo ✅ Переменные окружения установлены
+echo ✅ Переменные окружения установлены (fallback)
+echo.
+echo 💡 Для работы с несколькими сервисами создайте файл services_config.json
+echo    См. пример в services_config.json
 echo.
 echo 🚀 Запуск интеграции с Cursor AI...
 echo.
