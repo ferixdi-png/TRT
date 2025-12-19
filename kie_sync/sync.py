@@ -11,6 +11,8 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 from playwright.async_api import async_playwright, Page, Request, Response
 
+from kie_sync.validator import validate_pricing_config, validate_catalog_config
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

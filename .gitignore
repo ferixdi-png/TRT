@@ -85,6 +85,7 @@ logs/
 *.tmp
 *.temp
 .cache/
+models/catalog.json
 
 # Старые отчёты и документация (можно удалить)
 *_ОТЧЕТ*.md
