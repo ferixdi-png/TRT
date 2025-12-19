@@ -4815,13 +4815,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
-                    # Format improved confirmation message
+                    # Calculate price for confirmation message
+                    is_free = is_free_generation_available(user_id, model_id)
+                    price = calculate_price_rub(model_id, params, is_admin_user)
+                    if is_free:
+                        price = 0.0
+                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                    
+                    # Prepare price info
+                    if is_free:
+                        remaining = get_user_free_generations_remaining(user_id)
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                    else:
+                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                    
+                    # Format improved confirmation message with price
                     if user_lang == 'ru':
                         confirm_msg = (
                             f"📋 <b>Подтверждение генерации</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Модель:</b> {model_name}\n\n"
                             f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>Что будет дальше:</b>\n"
                             f"• Генерация начнется после подтверждения\n"
@@ -4830,11 +4846,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Model:</b> {model_name}\n\n"
                             f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info_en}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>What's next:</b>\n"
                             f"• Generation will start after confirmation\n"
@@ -4923,13 +4942,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
-                    # Format improved confirmation message
+                    # Calculate price for confirmation message
+                    is_free = is_free_generation_available(user_id, model_id)
+                    price = calculate_price_rub(model_id, params, is_admin_user)
+                    if is_free:
+                        price = 0.0
+                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                    
+                    # Prepare price info
+                    if is_free:
+                        remaining = get_user_free_generations_remaining(user_id)
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                    else:
+                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                    
+                    # Format improved confirmation message with price
                     if user_lang == 'ru':
                         confirm_msg = (
                             f"📋 <b>Подтверждение генерации</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Модель:</b> {model_name}\n\n"
                             f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>Что будет дальше:</b>\n"
                             f"• Генерация начнется после подтверждения\n"
@@ -4938,11 +4973,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Model:</b> {model_name}\n\n"
                             f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info_en}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>What's next:</b>\n"
                             f"• Generation will start after confirmation\n"
@@ -5084,13 +5122,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
-                    # Format improved confirmation message
+                    # Calculate price for confirmation message
+                    is_free = is_free_generation_available(user_id, model_id)
+                    price = calculate_price_rub(model_id, params, is_admin_user)
+                    if is_free:
+                        price = 0.0
+                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                    
+                    # Prepare price info
+                    if is_free:
+                        remaining = get_user_free_generations_remaining(user_id)
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                    else:
+                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                    
+                    # Format improved confirmation message with price
                     if user_lang == 'ru':
                         confirm_msg = (
                             f"📋 <b>Подтверждение генерации</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Модель:</b> {model_name}\n\n"
                             f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>Что будет дальше:</b>\n"
                             f"• Генерация начнется после подтверждения\n"
@@ -5099,11 +5153,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Model:</b> {model_name}\n\n"
                             f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info_en}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>What's next:</b>\n"
                             f"• Generation will start after confirmation\n"
@@ -5170,13 +5227,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
                     
-                    # Format improved confirmation message
+                    # Calculate price for confirmation message
+                    is_free = is_free_generation_available(user_id, model_id)
+                    price = calculate_price_rub(model_id, params, is_admin_user)
+                    if is_free:
+                        price = 0.0
+                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                    
+                    # Prepare price info
+                    if is_free:
+                        remaining = get_user_free_generations_remaining(user_id)
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                    else:
+                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                    
+                    # Format improved confirmation message with price
                     if user_lang == 'ru':
                         confirm_msg = (
                             f"📋 <b>Подтверждение генерации</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Модель:</b> {model_name}\n\n"
                             f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>Что будет дальше:</b>\n"
                             f"• Генерация начнется после подтверждения\n"
@@ -5185,11 +5258,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Model:</b> {model_name}\n\n"
                             f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{price_info_en}\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"💡 <b>What's next:</b>\n"
                             f"• Generation will start after confirmation\n"
@@ -10403,19 +10479,50 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                         ]
                         
+                        # Calculate price for confirmation
+                        is_free = is_free_generation_available(user_id, model_id)
+                        price = calculate_price_rub(model_id, params, is_admin_user)
+                        if is_free:
+                            price = 0.0
+                        price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                        
+                        # Prepare price info
+                        if is_free:
+                            remaining = get_user_free_generations_remaining(user_id)
+                            price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                        else:
+                            price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                        
                         if user_lang == 'en':
+                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                             confirm_text = (
-                                f"📋 <b>Confirmation:</b>\n\n"
-                                f"Model: <b>{model_name}</b>\n"
-                                f"Parameters:\n{params_text}\n\n"
-                                f"Continue generation?"
+                                f"📋 <b>Generation Confirmation</b>\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"🤖 <b>Model:</b> {model_name}\n\n"
+                                f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"{price_info_en}\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"💡 <b>What's next:</b>\n"
+                                f"• Generation will start after confirmation\n"
+                                f"• Result will come automatically\n"
+                                f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                                f"🚀 <b>Ready to start?</b>"
                             )
                         else:
                             confirm_text = (
-                                f"📋 <b>Подтверждение:</b>\n\n"
-                                f"Модель: <b>{model_name}</b>\n"
-                                f"Параметры:\n{params_text}\n\n"
-                                f"Продолжить генерацию?"
+                                f"📋 <b>Подтверждение генерации</b>\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"🤖 <b>Модель:</b> {model_name}\n\n"
+                                f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"{price_info}\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"💡 <b>Что будет дальше:</b>\n"
+                                f"• Генерация начнется после подтверждения\n"
+                                f"• Результат придет автоматически\n"
+                                f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                                f"🚀 <b>Готовы начать?</b>"
                             )
                         
                         # Check if we have update.message or need to use context.bot
@@ -11693,7 +11800,22 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return ConversationHandler.END
     
-    await send_or_edit_message("🔄 Создаю задачу генерации... Пожалуйста, подождите.")
+    model_name = model_info.get('name', model_id) if model_info else model_id
+    user_lang = get_user_language(user_id) if user_id else 'ru'
+    loading_msg = (
+        "🔄 <b>Создаю задачу генерации...</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "⏳ <b>Подождите, обрабатываю ваш запрос</b>\n\n"
+        "🤖 <b>Модель:</b> {model_name}\n\n"
+        "💡 Обычно это занимает несколько секунд..."
+    ).format(model_name=model_name) if user_lang == 'ru' else (
+        "🔄 <b>Creating generation task...</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "⏳ <b>Please wait, processing your request</b>\n\n"
+        "🤖 <b>Model:</b> {model_name}\n\n"
+        "💡 Usually takes a few seconds..."
+    ).format(model_name=model_name)
+    await send_or_edit_message(loading_msg)
     
     try:
         # Prepare params for API (convert image_input to appropriate parameter name if needed)
@@ -23535,12 +23657,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if is_admin_user:
                 message_text = (
                     f"✅ <b>Задача создана!</b>\n\n"
-                    f"Модель: <b>{model_name}</b>\n"
-                    f"Task ID: <code>{task_id}</code>\n\n"
-                    f"⏳ Генерация выполняется в фоновом режиме.\n"
-                    f"📊 Активных генераций: {final_count}/{MAX_CONCURRENT_GENERATIONS_PER_USER}\n\n"
-                    f"💡 Вы можете перейти в меню и попробовать другие модели.\n"
-                    f"Результат придет автоматически, когда генерация завершится."
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n"
+                    f"🆔 <b>Task ID:</b> <code>{task_id}</code>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"⏳ <b>Генерация запущена в фоновом режиме</b>\n\n"
+                    f"📊 <b>Активных генераций:</b> {final_count}/{MAX_CONCURRENT_GENERATIONS_PER_USER}\n\n"
+                    f"💡 <b>Что дальше:</b>\n"
+                    f"• Вы можете перейти в меню и попробовать другие модели\n"
+                    f"• Результат придет автоматически, когда генерация завершится\n"
+                    f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                    f"✨ Не закрывайте бота, процесс идет!"
                 )
             else:
                 if user_lang == 'en':
@@ -23554,10 +23681,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 else:
                     message_text = (
                         f"✅ <b>Задача создана!</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n\n"
-                        f"⏳ Генерация выполняется в фоновом режиме.\n\n"
-                        f"💡 Вы можете перейти в меню и попробовать другие модели.\n"
-                        f"Результат придет автоматически, когда генерация завершится."
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🤖 <b>Модель:</b> {model_name}\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"⏳ <b>Генерация запущена в фоновом режиме</b>\n\n"
+                        f"💡 <b>Что дальше:</b>\n"
+                        f"• Вы можете перейти в меню и попробовать другие модели\n"
+                        f"• Результат придет автоматически, когда генерация завершится\n"
+                        f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                        f"✨ Не закрывайте бота, процесс идет!"
                     )
             
             # Add "Back to menu" button
@@ -23849,14 +23981,23 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                             
                                             # Add buttons only to the last item
                                             is_last = (i == len(result_urls[:5]) - 1)
+                                            # Get model name for caption
+                                            model_name_display = model_name if model_name else model_id
+                                            
                                             caption = (
                                                 "✅ <b>Генерация завершена!</b>\n\n"
+                                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                                                 "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                f"🤖 <b>Модель:</b> {model_name_display}\n"
+                                                f"📊 <b>Результат:</b> {i + 1} из {len(result_urls[:5])}\n\n"
+                                                "💡 Наслаждайтесь созданным контентом!"
                                             ) if i == 0 and user_lang == 'ru' else (
                                                 "✅ <b>Generation Completed!</b>\n\n"
+                                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                                                 "🎉 <b>Your result is ready!</b>\n\n"
-                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                f"🤖 <b>Model:</b> {model_name_display}\n"
+                                                f"📊 <b>Result:</b> {i + 1} of {len(result_urls[:5])}\n\n"
+                                                "💡 Enjoy your generated content!"
                                             ) if i == 0 else None
                                             
                                             if is_video_model:
@@ -23906,7 +24047,15 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                     last_message = await context.bot.send_video(
                                                         chat_id=chat_id,
                                                         video=url,
-                                                        caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                        caption=(
+                                                            "✅ <b>Генерация завершена!</b>\n\n"
+                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                        ) if i == 0 and user_lang == 'ru' else (
+                                                            "✅ <b>Generation Completed!</b>\n\n"
+                                                            "🎉 <b>Your result is ready!</b>\n\n"
+                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                        ) if i == 0 else None,
                                                         reply_markup=reply_markup,
                                                         parse_mode='HTML'
                                                     )
@@ -23914,7 +24063,15 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                     await context.bot.send_video(
                                                         chat_id=chat_id,
                                                         video=url,
-                                                        caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                        caption=(
+                                                            "✅ <b>Генерация завершена!</b>\n\n"
+                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                        ) if i == 0 and user_lang == 'ru' else (
+                                                            "✅ <b>Generation Completed!</b>\n\n"
+                                                            "🎉 <b>Your result is ready!</b>\n\n"
+                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                        ) if i == 0 else None,
                                                         parse_mode='HTML'
                                                     )
                                             else:
@@ -23922,7 +24079,15 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                     last_message = await context.bot.send_photo(
                                                         chat_id=chat_id,
                                                         photo=url,
-                                                        caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                        caption=(
+                                                            "✅ <b>Генерация завершена!</b>\n\n"
+                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                        ) if i == 0 and user_lang == 'ru' else (
+                                                            "✅ <b>Generation Completed!</b>\n\n"
+                                                            "🎉 <b>Your result is ready!</b>\n\n"
+                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                        ) if i == 0 else None,
                                                         reply_markup=reply_markup,
                                                         parse_mode='HTML'
                                                     )
@@ -23930,7 +24095,15 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                     await context.bot.send_photo(
                                                         chat_id=chat_id,
                                                         photo=url,
-                                                        caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                        caption=(
+                                                            "✅ <b>Генерация завершена!</b>\n\n"
+                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                        ) if i == 0 and user_lang == 'ru' else (
+                                                            "✅ <b>Generation Completed!</b>\n\n"
+                                                            "🎉 <b>Your result is ready!</b>\n\n"
+                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                        ) if i == 0 else None,
                                                         parse_mode='HTML'
                                                     )
                             except Exception as e:
