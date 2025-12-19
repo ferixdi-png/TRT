@@ -22,10 +22,11 @@ RENDER_API_BASE = "https://api.render.com/v1"
 TELEGRAM_API_BASE = "https://api.telegram.org/bot"
 
 class RenderBotMonitor:
-    def __init__(self, render_api_key: str, service_id: str, telegram_token: str):
+    def __init__(self, render_api_key: str, service_id: str, telegram_token: str, owner_id: Optional[str] = None):
         self.render_api_key = render_api_key
         self.service_id = service_id
         self.telegram_token = telegram_token
+        self.owner_id = owner_id
         self.headers = {
             "Authorization": f"Bearer {render_api_key}",
             "Accept": "application/json"
@@ -33,91 +34,118 @@ class RenderBotMonitor:
         self.conflicts_detected = 0
         self.webhooks_removed = 0
         
-    def verify_service_id(self) -> bool:
-        """Проверяет, что Service ID существует и доступен"""
+    def get_owner_id(self) -> Optional[str]:
+        """Получает Owner ID из информации о сервисе"""
         try:
-            # Получаем список всех сервисов
-            response = requests.get(f"{RENDER_API_BASE}/services", headers=self.headers, timeout=10)
+            # Получаем информацию о сервисе
+            response = requests.get(f"{RENDER_API_BASE}/services/{self.service_id}", headers=self.headers, timeout=10)
             response.raise_for_status()
             
-            services = response.json()
+            service_data = response.json()
+            service_info = service_data.get("service", {})
+            
+            # Owner ID может быть в разных местах
+            owner_id = service_info.get("ownerId") or service_info.get("owner", {}).get("id")
+            
+            if owner_id:
+                return owner_id
+            
+            # Если не найден, пробуем через список сервисов
+            services_response = requests.get(f"{RENDER_API_BASE}/services", headers=self.headers, timeout=10)
+            services_response.raise_for_status()
+            services = services_response.json()
+            
             if isinstance(services, list):
                 for service in services:
                     service_info = service.get("service", {})
                     if service_info.get("id") == self.service_id:
-                        print(f"✅ Service ID подтверждён: {service_info.get('name', 'N/A')}")
-                        return True
-            elif isinstance(services, dict):
-                # Если ответ - один сервис
-                service_info = services.get("service", {})
-                if service_info.get("id") == self.service_id:
-                    return True
+                        owner_id = service_info.get("ownerId") or service_info.get("owner", {}).get("id")
+                        if owner_id:
+                            return owner_id
             
-            print(f"⚠️  Service ID {self.service_id} не найден в ваших сервисах")
-            print("💡 Используйте: python get_render_logs.py --list-services")
+            return None
+            
+        except Exception as e:
+            print(f"⚠️  Не удалось получить Owner ID: {e}")
+            return None
+    
+    def verify_service_id(self) -> bool:
+        """Проверяет, что Service ID существует и доступен"""
+        try:
+            # Получаем информацию о сервисе
+            response = requests.get(f"{RENDER_API_BASE}/services/{self.service_id}", headers=self.headers, timeout=10)
+            response.raise_for_status()
+            
+            service_data = response.json()
+            service_info = service_data.get("service", {})
+            
+            if service_info.get("id") == self.service_id:
+                service_name = service_info.get("name", "N/A")
+                print(f"✅ Service ID подтверждён: {service_name}")
+                return True
+            
+            print(f"⚠️  Service ID {self.service_id} не найден")
             return False
             
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"❌ Service ID {self.service_id} не найден")
+            else:
+                print(f"⚠️  Ошибка при проверке Service ID: {e}")
+            return False
         except Exception as e:
             print(f"⚠️  Не удалось проверить Service ID: {e}")
             return True  # Продолжаем, возможно проблема временная
     
     def get_logs(self, lines: int = 200) -> Optional[List[Dict]]:
-        """Получает логи с Render"""
+        """Получает логи с Render используя правильный endpoint /v1/logs"""
         try:
-            # Попытка 1: Стандартный endpoint
-            url = f"{RENDER_API_BASE}/services/{self.service_id}/logs"
-            params = {"limit": lines, "tail": "true"}
+            # Получаем Owner ID (если еще не получен)
+            if not hasattr(self, 'owner_id') or not self.owner_id:
+                self.owner_id = self.get_owner_id()
+                if not self.owner_id:
+                    print("⚠️  Не удалось получить Owner ID, пробую без него...")
+            
+            # Правильный endpoint для получения логов
+            url = f"{RENDER_API_BASE}/logs"
+            params = {
+                "resource": self.service_id,
+                "limit": lines
+            }
+            
+            # Добавляем ownerId если есть
+            if self.owner_id:
+                params["ownerId"] = self.owner_id
             
             response = requests.get(url, headers=self.headers, params=params, timeout=30)
-            
-            # Если 404, пробуем альтернативные способы
-            if response.status_code == 404:
-                print("⚠️  Endpoint /logs не найден, пробую альтернативный способ...")
-                
-                # Попытка 2: Через deploys
-                try:
-                    deploys_url = f"{RENDER_API_BASE}/services/{self.service_id}/deploys"
-                    deploys_response = requests.get(deploys_url, headers=self.headers, params={"limit": 1}, timeout=30)
-                    if deploys_response.status_code == 200:
-                        deploys_data = deploys_response.json()
-                        if isinstance(deploys_data, list) and len(deploys_data) > 0:
-                            deploy = deploys_data[0].get("deploy", {})
-                            deploy_id = deploy.get("id", "")
-                            if deploy_id:
-                                # Пробуем получить логи через deploy
-                                deploy_logs_url = f"{RENDER_API_BASE}/deploys/{deploy_id}/logs"
-                                deploy_logs_response = requests.get(deploy_logs_url, headers=self.headers, timeout=30)
-                                if deploy_logs_response.status_code == 200:
-                                    logs_data = deploy_logs_response.json()
-                                    if isinstance(logs_data, list):
-                                        return logs_data
-                                    elif isinstance(logs_data, dict) and "logs" in logs_data:
-                                        return logs_data["logs"]
-                except:
-                    pass
-                
-                # Если ничего не сработало, возвращаем ошибку
-                print(f"❌ Не удалось получить логи. Service ID: {self.service_id}")
-                print("💡 Проверьте:")
-                print("   1. Правильность Service ID")
-                print("   2. Что сервис существует и доступен")
-                print("   3. Что API ключ имеет права на чтение логов")
-                return None
-            
             response.raise_for_status()
+            
             logs_data = response.json()
             
+            # Обрабатываем разные форматы ответа
             if isinstance(logs_data, list):
                 return logs_data
-            elif isinstance(logs_data, dict) and "logs" in logs_data:
-                return logs_data["logs"]
+            elif isinstance(logs_data, dict):
+                # Может быть обёрнут в объект
+                if "logs" in logs_data:
+                    return logs_data["logs"]
+                elif "data" in logs_data:
+                    return logs_data["data"]
+                elif "items" in logs_data:
+                    return logs_data["items"]
+                else:
+                    # Если это один лог-объект
+                    return [logs_data]
             else:
                 return [logs_data] if logs_data else []
                 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
-                print(f"❌ Service ID {self.service_id} не найден или недоступен")
-                print("💡 Проверьте правильность Service ID в Render Dashboard")
+                print(f"❌ Логи не найдены для Service ID: {self.service_id}")
+                print("💡 Проверьте:")
+                print("   1. Правильность Service ID")
+                print("   2. Что сервис существует и запущен")
+                print("   3. Что есть логи для отображения")
             else:
                 print(f"❌ Ошибка HTTP {e.response.status_code}: {e}")
             if hasattr(e, 'response') and e.response is not None:
@@ -319,6 +347,12 @@ class RenderBotMonitor:
         print("Нажмите Ctrl+C для остановки")
         print("=" * 80)
         
+        # Проверяем Service ID перед началом
+        print("\n🔍 Проверка Service ID...")
+        if not self.verify_service_id():
+            print("\n❌ Неверный Service ID. Исправьте и попробуйте снова.")
+            return
+        
         iteration = 0
         
         try:
@@ -332,6 +366,7 @@ class RenderBotMonitor:
                 logs = self.get_logs(lines=200)
                 if not logs:
                     print("⚠️  Не удалось получить логи")
+                    print("💡 Убедитесь, что сервис запущен и есть логи для отображения")
                     time.sleep(interval)
                     continue
                 
@@ -424,8 +459,19 @@ def main():
             print("❌ Bot Token обязателен!")
             sys.exit(1)
     
+    # Получаем Owner ID (опционально)
+    owner_id = os.getenv("RENDER_OWNER_ID")
+    if not owner_id:
+        # Попробуем получить автоматически
+        temp_monitor = RenderBotMonitor(render_api_key, service_id, telegram_token)
+        owner_id = temp_monitor.get_owner_id()
+        if owner_id:
+            print(f"✅ Owner ID получен автоматически: {owner_id}")
+        else:
+            print("⚠️  Owner ID не найден, будет получен автоматически при первом запросе")
+    
     # Создаем монитор
-    monitor = RenderBotMonitor(render_api_key, service_id, telegram_token)
+    monitor = RenderBotMonitor(render_api_key, service_id, telegram_token, owner_id)
     
     # Запускаем мониторинг
     print("\n🚀 Запуск мониторинга...")
