@@ -26283,60 +26283,56 @@ async def main():
         
         logger.info("📡 Запуск polling...")
         
-        # КРИТИЧНО: Проверяем, что нет другого экземпляра перед запуском
-        # Используем временный bot для проверки (не application.bot, чтобы не инициализировать application)
-        logger.info("🔍 Финальная проверка конфликта перед запуском polling...")
-        conflict_detected = False
-        for attempt in range(5):  # 5 попыток с увеличивающейся задержкой
-            try:
-                from telegram import Bot
-                check_bot = Bot(token=BOT_TOKEN)
-                # Пробуем получить updates для проверки конфликта
-                test_updates = await check_bot.get_updates(offset=-1, limit=1, timeout=2)
-                logger.info("✅ Проверка конфликта пройдена")
-                break  # Успешно, выходим из цикла
-            except Exception as test_error:
-                error_msg = str(test_error)
-                if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
-                    conflict_detected = True
-                    logger.error(f"❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка {attempt + 1}/5)!")
-                    logger.error("Другой экземпляр бота уже работает!")
-                    
-                    if attempt < 4:  # Не последняя попытка
-                        wait_time = (attempt + 1) * 5  # Увеличивающаяся задержка: 5, 10, 15, 20 секунд
-                        logger.info(f"🔄 Пытаюсь исправить: удаляю webhook и жду {wait_time} секунд...")
-                        try:
-                            await check_bot.delete_webhook(drop_pending_updates=True)
-                            await asyncio.sleep(wait_time)  # Увеличивающаяся задержка
-                        except:
-                            pass
-                    else:
-                        # Последняя попытка - критическая ошибка
-                        logger.error("❌ Не удалось исправить конфликт после 5 попыток!")
-                        logger.error("💡 ДЕЙСТВИЯ:")
-                        logger.error("   1. Проверьте Render Dashboard - должен быть только ОДИН сервис")
-                        logger.error("   2. Проверьте локальные запуски - все должны быть остановлены")
-                        logger.error("   3. Убедитесь, что нет других сервисов с тем же токеном")
-                        logger.error("   4. Проверьте singleton lock - должен работать корректно")
-                        handle_conflict_gracefully(test_error, "polling")
-                        return  # Выходим без запуска polling
-                else:
-                    # Не критичная ошибка (например, timeout), продолжаем
-                    logger.debug(f"Проверка конфликта (попытка {attempt + 1}): {test_error}")
-                    break  # Не критичная ошибка, продолжаем
+        # КРИТИЧНО: Финальная проверка конфликта через Telegram API
+        # Если другой экземпляр работает - немедленно выходим
+        logger.info("🔍 Финальная проверка конфликта через Telegram API...")
+        from telegram import Bot
+        check_bot = Bot(token=BOT_TOKEN)
+        conflict_confirmed = False
         
-        if conflict_detected:
-            logger.warning("⚠️ Конфликт был обнаружен, но исправлен. Продолжаю запуск...")
+        try:
+            # Пробуем getUpdates с минимальным timeout
+            # Если другой экземпляр polling работает - получим Conflict
+            async with check_bot:
+                test_updates = await check_bot.get_updates(offset=-1, limit=1, timeout=1)
+                logger.info("✅ Проверка конфликта пройдена - нет активного polling")
+        except Conflict as e:
+            conflict_confirmed = True
+            logger.error("❌❌❌ КОНФЛИКТ ПОДТВЕРЖДЕН через Telegram API!")
+            logger.error("   Другой экземпляр бота уже получает updates")
+            logger.error("   НЕМЕДЛЕННЫЙ ВЫХОД для предотвращения повторных ошибок")
+            handle_conflict_gracefully(e, "polling")
+            import os
+            os._exit(1)  # Немедленный выход
+        except Exception as test_error:
+            error_msg = str(test_error)
+            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+                conflict_confirmed = True
+                logger.error("❌❌❌ КОНФЛИКТ ОБНАРУЖЕН!")
+                logger.error(f"   Ошибка: {error_msg}")
+                logger.error("   НЕМЕДЛЕННЫЙ ВЫХОД для предотвращения повторных ошибок")
+                from telegram.error import Conflict as TelegramConflict
+                handle_conflict_gracefully(TelegramConflict(error_msg), "polling")
+                import os
+                os._exit(1)  # Немедленный выход
+            else:
+                # Не критичная ошибка (timeout и т.д.), продолжаем
+                logger.debug(f"Проверка конфликта: {test_error} (не критично)")
         
-        # ПРИМЕЧАНИЕ: Специальный обработчик для 409 Conflict не нужен,
-        # так как глобальный error_handler уже обрабатывает Conflict ошибки первым делом
+        if conflict_confirmed:
+            # Не должны сюда попасть, но на всякий случай
+            import os
+            os._exit(1)
         
+        # ВСЕ проверки пройдены - запускаем polling
         try:
             await application.updater.start_polling(drop_pending_updates=drop_updates)
             logger.info("✅ Polling started successfully!")
         except Conflict as e:
+            logger.error("❌❌❌ Conflict при запуске polling - немедленный выход")
             handle_conflict_gracefully(e, "polling")
-            raise
+            import os
+            os._exit(1)  # Немедленный выход
     
     # Выполняем preflight проверку
     logger.info("🚀 Starting preflight check (webhook removal + conflict detection)...")
