@@ -24938,6 +24938,42 @@ async def main():
                 # Не критичная ошибка (например, timeout), продолжаем
                 logger.debug(f"Проверка конфликта: {test_error}")
         
+        # КРИТИЧНО: Добавляем обработчик для 409 Conflict во время работы
+        async def handle_409_conflict_during_polling(update: object, context: ContextTypes.DEFAULT_TYPE):
+            """Обработчик 409 Conflict во время работы polling"""
+            error = context.error
+            if error and isinstance(error, Exception):
+                error_msg = str(error)
+                if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+                    logger.error("❌❌❌ 409 CONFLICT ОБНАРУЖЕН ВО ВРЕМЯ РАБОТЫ!")
+                    logger.error("Другой экземпляр бота пытается использовать тот же токен!")
+                    
+                    # Пытаемся исправить: удаляем webhook и останавливаем polling
+                    try:
+                        from telegram import Bot
+                        temp_bot = Bot(token=BOT_TOKEN)
+                        await temp_bot.delete_webhook(drop_pending_updates=True)
+                        logger.info("✅ Webhook удалён для исправления конфликта")
+                        
+                        # Проверяем, что мы единственный экземпляр
+                        await asyncio.sleep(2)
+                        webhook_info = await temp_bot.get_webhook_info()
+                        if webhook_info.url:
+                            logger.error(f"❌ Webhook всё ещё установлен: {webhook_info.url}")
+                            logger.error("⚠️ Возможно, есть другой сервис в Render с тем же токеном!")
+                        else:
+                            logger.info("✅ Webhook подтверждён как удалённый")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка при исправлении конфликта: {e}")
+                    
+                    # НЕ перезапускаем polling - это вызовет бесконечный цикл
+                    # Вместо этого логируем и продолжаем (возможно, конфликт временный)
+                    logger.warning("⚠️ Продолжаю работу, но конфликт может повториться")
+                    logger.warning("💡 Проверьте Render Dashboard - должен быть только ОДИН сервис с этим токеном")
+        
+        # Регистрируем обработчик для 409 Conflict
+        application.add_error_handler(handle_409_conflict_during_polling)
+        
         await application.updater.start_polling(drop_pending_updates=drop_updates)
         
         logger.info("✅ Polling started successfully!")
