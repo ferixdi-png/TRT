@@ -1,10 +1,10 @@
 {
-  "last_pass": "2025-12-19T16:56:27.739722",
+  "last_pass": "2025-12-19T16:58:14.491367",
   "checks_passed": 10,
   "total_checks": 11,
   "behavioral_e2e": "PASS",
   "models_responded": "72/72",
   "render_monitor": "ACTIVE",
-  "render_errors_found": 1,
-  "render_errors_fixed": 0
+  "render_conflicts_fixed": 3,
+  "render_webhook_deleted": true
 }
