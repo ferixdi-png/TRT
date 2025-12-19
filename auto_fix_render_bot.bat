@@ -24,6 +24,25 @@ if %errorlevel% neq 0 (
 echo ✅ Python найден
 echo.
 
+REM Проверка и установка зависимостей
+echo 📦 Проверка зависимостей...
+%PYTHON_CMD% -c "import requests" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ⚠️  Библиотека 'requests' не установлена
+    echo 📥 Устанавливаю requests...
+    %PYTHON_CMD% -m pip install requests --quiet
+    if %errorlevel% neq 0 (
+        echo ❌ Ошибка при установке requests
+        echo    Попробуйте вручную: pip install requests
+        pause
+        exit /b 1
+    )
+    echo ✅ requests установлен
+) else (
+    echo ✅ Все зависимости установлены
+)
+echo.
+
 REM Проверка переменных окружения
 if "%RENDER_API_KEY%"=="" (
     echo ⚠️  RENDER_API_KEY не установлен
