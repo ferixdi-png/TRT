@@ -24795,31 +24795,36 @@ async def main():
         """
         Preflight проверка: удаляет webhook и проверяет отсутствие конфликтов.
         Это гарантирует, что polling будет единственным источником апдейтов.
+        ВАЖНО: Используем временный bot, НЕ инициализируем application здесь.
         """
         try:
-            async with application:
+            # Используем временный bot для проверки (без инициализации application)
+            from telegram import Bot
+            temp_bot = Bot(token=BOT_TOKEN)
+            
+            async with temp_bot:
                 # Шаг 1: Получаем информацию о webhook
                 logger.info("🔍 Checking webhook status...")
-                webhook_info = await application.bot.get_webhook_info()
+                webhook_info = await temp_bot.get_webhook_info()
                 
                 if webhook_info.url:
                     logger.warning(f"⚠️ Webhook обнаружен: {webhook_info.url}")
                     logger.info("🗑️ Удаляю webhook с drop_pending_updates=True...")
                     
                     # Удаляем webhook с очисткой очереди
-                    result = await application.bot.delete_webhook(drop_pending_updates=True)
+                    result = await temp_bot.delete_webhook(drop_pending_updates=True)
                     logger.info(f"✅ Webhook удалён: {result}")
                     
                     # Проверяем, что webhook действительно удалён
                     await asyncio.sleep(1)  # Небольшая задержка для Telegram API
-                    webhook_info_after = await application.bot.get_webhook_info()
+                    webhook_info_after = await temp_bot.get_webhook_info()
                     
                     if webhook_info_after.url:
                         logger.error(f"❌ Webhook всё ещё установлен: {webhook_info_after.url}")
                         logger.error("🔄 Повторная попытка удаления...")
-                        await application.bot.delete_webhook(drop_pending_updates=True)
+                        await temp_bot.delete_webhook(drop_pending_updates=True)
                         await asyncio.sleep(1)
-                        webhook_info_final = await application.bot.get_webhook_info()
+                        webhook_info_final = await temp_bot.get_webhook_info()
                         if webhook_info_final.url:
                             logger.error("❌❌❌ Не удалось удалить webhook после 2 попыток!")
                             raise RuntimeError(f"Webhook still active: {webhook_info_final.url}")
@@ -24833,7 +24838,7 @@ async def main():
                 # Шаг 2: Дополнительная проверка на конфликты
                 # Попытка получить webhook info ещё раз для проверки конфликтов
                 try:
-                    final_check = await application.bot.get_webhook_info()
+                    final_check = await temp_bot.get_webhook_info()
                     logger.info("✅ Preflight check passed: no conflicts detected")
                 except Exception as check_error:
                     error_msg = str(check_error)
@@ -24868,6 +24873,7 @@ async def main():
         """
         Единственный безопасный способ запуска polling.
         Гарантирует, что polling запустится только один раз.
+        КРИТИЧНО: Удаляет webhook ПЕРЕД запуском polling.
         """
         global _POLLING_STARTED
         
@@ -24877,14 +24883,41 @@ async def main():
                 return
             _POLLING_STARTED = True
         
-        # Polling mode must not have webhook
+        # КРИТИЧНО: Polling mode must not have webhook
+        # Удаляем webhook ПЕРЕД инициализацией application
+        logger.info("🗑️ Удаляю webhook перед запуском polling...")
         try:
-            await application.bot.delete_webhook(drop_pending_updates=drop_updates)
-        except Exception:
-            logger.exception("delete_webhook failed (non-fatal)")
+            # Создаём временный bot для удаления webhook (без инициализации application)
+            from telegram import Bot
+            temp_bot = Bot(token=BOT_TOKEN)
+            result = await temp_bot.delete_webhook(drop_pending_updates=drop_updates)
+            logger.info(f"✅ Webhook удалён: {result}")
+            
+            # Проверяем, что webhook действительно удалён
+            await asyncio.sleep(1)
+            webhook_info = await temp_bot.get_webhook_info()
+            if webhook_info.url:
+                logger.warning(f"⚠️ Webhook всё ещё установлен: {webhook_info.url}, повторная попытка...")
+                await temp_bot.delete_webhook(drop_pending_updates=True)
+                await asyncio.sleep(1)
+                webhook_info_final = await temp_bot.get_webhook_info()
+                if webhook_info_final.url:
+                    logger.error(f"❌ Не удалось удалить webhook: {webhook_info_final.url}")
+                    raise RuntimeError(f"Webhook still active: {webhook_info_final.url}")
+                else:
+                    logger.info("✅ Webhook удалён после повторной попытки")
+            else:
+                logger.info("✅ Webhook подтверждён как удалённый")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при удалении webhook: {e}")
+            logger.error("⚠️ Продолжаю запуск polling, но возможен конфликт!")
         
+        # Теперь инициализируем и запускаем polling
+        logger.info("🚀 Инициализация application...")
         await application.initialize()
         await application.start()
+        
+        logger.info("📡 Запуск polling...")
         await application.updater.start_polling(drop_pending_updates=drop_updates)
         
         logger.info("✅ Polling started successfully!")
