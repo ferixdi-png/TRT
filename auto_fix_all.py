@@ -43,10 +43,31 @@ class AutoFixer:
                                   headers=self.headers, timeout=10)
             response.raise_for_status()
             service_data = response.json()
-            service_info = service_data.get("service", {})
-            self.owner_id = service_info.get("ownerId") or service_info.get("owner", {}).get("id")
-            return self.owner_id
-        except:
+            
+            # Owner ID может быть напрямую в ответе или в service
+            self.owner_id = service_data.get("ownerId") or service_data.get("service", {}).get("ownerId")
+            
+            if self.owner_id:
+                print(f"✅ Owner ID получен: {self.owner_id}")
+                return self.owner_id
+            
+            # Если не найден, пробуем через список сервисов
+            services_response = requests.get(f"{RENDER_API_BASE}/services", headers=self.headers, timeout=10)
+            services_response.raise_for_status()
+            services = services_response.json()
+            
+            if isinstance(services, list):
+                for service in services:
+                    service_info = service.get("service", {})
+                    if service_info.get("id") == self.service_id:
+                        self.owner_id = service_info.get("ownerId") or service_info.get("owner", {}).get("id")
+                        if self.owner_id:
+                            print(f"✅ Owner ID получен из списка: {self.owner_id}")
+                            return self.owner_id
+            
+            return None
+        except Exception as e:
+            print(f"⚠️  Ошибка при получении Owner ID: {e}")
             return None
     
     def get_logs(self, lines: int = 200) -> Optional[List[Dict]]:
@@ -55,20 +76,71 @@ class AutoFixer:
             owner_id = self.get_owner_id()
             url = f"{RENDER_API_BASE}/logs"
             params = {"resource": self.service_id, "limit": lines}
+            
+            # Owner ID обязателен для получения логов
             if owner_id:
                 params["ownerId"] = owner_id
+            else:
+                print("⚠️  Owner ID не найден, пробую без него...")
             
             response = requests.get(url, headers=self.headers, params=params, timeout=30)
-            response.raise_for_status()
             
+            # Если ошибка, выводим детали
+            if response.status_code != 200:
+                print(f"❌ Ошибка HTTP {response.status_code}")
+                try:
+                    error_detail = response.json()
+                    print(f"   Детали: {error_detail}")
+                except:
+                    print(f"   Ответ: {response.text[:300]}")
+                return None
+            
+            response.raise_for_status()
             logs_data = response.json()
+            
+            # Обрабатываем разные форматы ответа
             if isinstance(logs_data, list):
                 return logs_data
             elif isinstance(logs_data, dict):
-                return logs_data.get("logs") or logs_data.get("data") or logs_data.get("items") or []
+                # Render API возвращает в формате {"logs": [...], "hasMore": bool, ...}
+                if "logs" in logs_data:
+                    logs_list = logs_data["logs"]
+                    # Каждый лог может быть объектом с полем "message"
+                    processed_logs = []
+                    for log in logs_list:
+                        if isinstance(log, dict):
+                            # Извлекаем сообщение из лога
+                            message = log.get("message", log.get("text", str(log)))
+                            processed_logs.append({
+                                "message": message,
+                                "timestamp": log.get("timestamp", log.get("createdAt", "")),
+                                "level": log.get("level", "INFO"),
+                                "raw": log
+                            })
+                        else:
+                            processed_logs.append({"message": str(log), "timestamp": "", "level": "INFO"})
+                    return processed_logs
+                elif "data" in logs_data:
+                    return logs_data["data"]
+                elif "items" in logs_data:
+                    return logs_data["items"]
+                else:
+                    # Если это один лог-объект
+                    return [logs_data]
             return []
+        except requests.exceptions.HTTPError as e:
+            print(f"❌ HTTP ошибка при получении логов: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    print(f"   Детали: {error_detail}")
+                except:
+                    print(f"   Ответ: {e.response.text[:300]}")
+            return None
         except Exception as e:
             print(f"⚠️  Ошибка при получении логов: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def analyze_errors(self, logs: List[Dict]) -> List[Dict]:
