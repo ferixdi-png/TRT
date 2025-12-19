@@ -8,6 +8,7 @@ secrets.*
 config.local.*
 config.prod.*
 config.dev.*
+services_config.json
 
 # Python
 __pycache__/
