@@ -11643,11 +11643,29 @@ async def start_generation_directly(
     # REAL GENERATION: Используем gateway
     gateway = get_kie_gateway()
     
+    # Validate input before sending to KIE
+    try:
+        from kie_schema import validate_input
+        is_valid, validation_errors = validate_input(model_id, api_params)
+        if not is_valid:
+            error_msg = (
+                "❌ <b>Ошибка валидации параметров</b>\n\n"
+                + "\n".join(f"• {err}" for err in validation_errors[:5])
+                + ("\n..." if len(validation_errors) > 5 else "")
+            )
+            user_lang = get_user_language(user_id) if user_id else 'ru'
+            await status_message.edit_text(error_msg, parse_mode='HTML')
+            logger.error(f"event=kie.validation_failed model={model_id} errors={validation_errors}")
+            return ConversationHandler.END
+    except Exception as e:
+        logger.warning(f"Validation skipped due to error: {e}", exc_info=True)
+        # Continue without validation if it fails (don't block generation)
+    
     # Create task
     # CRITICAL: Log exact API parameters being sent (for KIE API compliance)
     import json
-    logger.info(f"🚀🚀🚀 Creating task for model {model_id}, user {user_id}")
-    logger.info(f"📋 API Parameters (KIE API format): model={model_id}, input={json.dumps(api_params, ensure_ascii=False, indent=2)}")
+    logger.info(f"event=kie.create_task_start model={model_id} user_id={user_id}")
+    logger.debug(f"API Parameters: model={model_id}, input_keys={list(api_params.keys())}")
     
     # 🔴 API CALL: KIE API - create_task через gateway
     try:
