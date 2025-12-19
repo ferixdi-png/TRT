@@ -63,17 +63,26 @@ class ProjectAnalyzer:
             "helpers.py", "config.py", "kie_client.py"
         ]
         
-        for file_name in main_files:
+        print(f"📁 Анализ {len(main_files)} файлов...")
+        for i, file_name in enumerate(main_files, 1):
             file_path = self.project_root / file_name
             if file_path.exists():
+                print(f"   [{i}/{len(main_files)}] Анализ {file_name}...", end="\r")
                 self.analyze_file(file_path)
+            else:
+                print(f"   [{i}/{len(main_files)}] ⚠️  {file_name} не найден", end="\r")
+        print()  # Новая строка после прогресса
         
         # Специальный анализ для bot_kie.py
+        print("🤖 Специальный анализ bot_kie.py...")
         bot_file = self.project_root / "bot_kie.py"
         if bot_file.exists():
             self.analyze_bot_structure(bot_file)
+            print("   ✅ Структура бота проанализирована")
+        else:
+            print("   ⚠️  bot_kie.py не найден")
         
-        print(f"✅ Проанализировано:")
+        print(f"\n✅ Проанализировано:")
         print(f"   Файлов: {len(self.imports_graph)}")
         print(f"   Функций: {len(self.functions_map)}")
         print(f"   Классов: {len(self.classes_map)}")
@@ -353,11 +362,16 @@ class CursorAIIntegration:
         self.owner_id = None
         
         # Анализ проекта
+        print("🔍 Инициализация анализатора проекта...")
         self.analyzer = ProjectAnalyzer(self.project_root)
+        print("📊 Запуск анализа проекта...")
         self.analyzer.analyze_project()
+        print("✅ Анализ проекта завершён")
         
         # State
+        print("💾 Загрузка состояния...")
         self.state = self.load_state()
+        print("✅ Состояние загружено")
     
     def load_state(self) -> Dict:
         """Загружает состояние"""
@@ -684,14 +698,16 @@ class CursorAIIntegration:
                 print("=" * 80)
                 
                 # Получаем логи
-                print("\n📥 Получение логов...")
+                print("\n📥 Получение логов с Render...")
+                print("   Получение owner_id...", end="\r")
                 logs = self.get_logs(lines=500)
                 if not logs:
-                    print("⚠️  Не удалось получить логи")
+                    print("   ❌ Не удалось получить логи")
+                    print("   ⚠️  Проверьте RENDER_API_KEY и RENDER_SERVICE_ID")
                     time.sleep(interval)
                     continue
                 
-                print(f"✅ Получено {len(logs)} строк логов")
+                print(f"   ✅ Получено {len(logs)} строк логов")
                 
                 # Анализируем ошибки с контекстом
                 print("\n🔍 Анализ ошибок с контекстом проекта...")
@@ -731,11 +747,16 @@ class CursorAIIntegration:
 
 def main():
     """Главная функция"""
+    print("🚀 Инициализация системы...")
     render_api_key = os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
     service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
     
+    print("✅ Параметры загружены")
+    print("🔧 Создание объекта CursorAIIntegration...")
     system = CursorAIIntegration(render_api_key, service_id, telegram_token)
+    print("✅ Система готова к работе")
+    print("\n" + "=" * 80)
     system.run(interval=120)
 
 
