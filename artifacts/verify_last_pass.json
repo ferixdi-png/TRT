@@ -1,10 +1,13 @@
 {
-  "last_pass": "2025-12-19T16:58:14.491367",
+  "last_pass": "2025-12-19T17:00:10.078951",
   "checks_passed": 10,
   "total_checks": 11,
   "behavioral_e2e": "PASS",
   "models_responded": "72/72",
   "render_monitor": "ACTIVE",
+  "render_conflicts_found": 6,
   "render_conflicts_fixed": 3,
-  "render_webhook_deleted": true
+  "render_webhook_deleted": true,
+  "render_critical_errors": 3,
+  "render_analysis": "Multiple instances detected, webhook deleted, singleton lock should prevent future conflicts"
 }
