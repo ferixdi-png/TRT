@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Полностью автоматизированная система исправления ошибок
 - Проверяет статус деплоя на Render
@@ -20,6 +21,12 @@ import requests
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Set
+
+# Установка кодировки UTF-8 для Windows
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Render API
 RENDER_API_BASE = "https://api.render.com/v1"
@@ -503,10 +510,10 @@ class CompleteAutoFix:
         
         for task in tasks:
             task_type = task.get("type")
-                print(f"\n📋 Задача: {task_type}")
-                if task.get('description'):
-                    print(f"   Описание: {task.get('description')}")
-                print(f"   Ошибка: {task.get('error', '')[:150]}...")
+            print(f"\n📋 Задача: {task_type}")
+            if task.get('description'):
+                print(f"   Описание: {task.get('description')}")
+            print(f"   Ошибка: {task.get('error', '')[:150]}...")
             
             if task_type == "missing_import":
                 module = task.get("module")
