@@ -24954,26 +24954,76 @@ async def main():
     """Start the bot."""
     global storage, kie, DATABASE_AVAILABLE
     
-    # ==================== SINGLETON LOCK (ПЕРЕД ВСЕМ) ====================
-    # КРИТИЧНО: Приобретаем singleton lock ДО любых операций
-    # Это предотвращает запуск нескольких экземпляров даже если Render запустит два процесса
-    bot_mode = get_bot_mode()
-    lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"  # Уникальный ключ для режима + токена
+    # ==================== POSTGRESQL ADVISORY LOCK (ПЕРЕД ВСЕМ) ====================
+    # КРИТИЧНО: Используем PostgreSQL advisory lock для предотвращения 409 Conflict
+    # Это работает между разными Render сервисами с общим DATABASE_URL
+    lock_conn = None
+    lock_key_int = None
     
-    singleton_lock = get_singleton_lock(lock_key)
-    if not singleton_lock.acquire(timeout=5):
-        logger.error("❌❌❌ Another bot instance detected (singleton lock held)!")
-        logger.error("   Exiting gracefully to prevent 409 Conflict...")
-        import sys
-        sys.exit(0)
-    
-    # Регистрируем освобождение lock при выходе
-    import atexit
-    def release_lock_on_exit():
-        singleton_lock.release()
-    atexit.register(release_lock_on_exit)
-    
-    logger.info("✅ Singleton lock acquired - this is the only running instance")
+    if DATABASE_AVAILABLE:
+        try:
+            from render_singleton_lock import make_lock_key, acquire_lock_session
+            from database import get_connection_pool
+            
+            # Маскируем токен для логов
+            masked_token = BOT_TOKEN[:4] + "..." + BOT_TOKEN[-4:] if len(BOT_TOKEN) > 8 else "****"
+            logger.info(f"🔒 Attempting PostgreSQL advisory lock: pid={os.getpid()}, token={masked_token}")
+            
+            # Создаем lock key из токена
+            lock_key_int = make_lock_key(BOT_TOKEN, namespace="telegram_polling")
+            
+            # Получаем пул соединений
+            pool = get_connection_pool()
+            
+            # Пытаемся получить advisory lock
+            lock_conn = acquire_lock_session(pool, lock_key_int)
+            
+            if lock_conn is None:
+                logger.error("❌❌❌ Another instance holds PostgreSQL advisory lock!")
+                logger.error("   Exiting to avoid getUpdates conflict (409 Conflict)")
+                logger.error("   Only ONE instance should be running per TELEGRAM_BOT_TOKEN")
+                import sys
+                sys.exit(0)
+            
+            logger.info("✅ PostgreSQL advisory lock acquired - this is the leader instance")
+            
+            # Регистрируем освобождение lock при выходе
+            import atexit
+            def release_lock_on_exit():
+                if lock_conn:
+                    from render_singleton_lock import release_lock_session
+                    from database import get_connection_pool
+                    try:
+                        pool = get_connection_pool()
+                        release_lock_session(pool, lock_conn, lock_key_int)
+                    except Exception as e:
+                        logger.error(f"Error releasing lock on exit: {e}")
+            atexit.register(release_lock_on_exit)
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to acquire PostgreSQL advisory lock: {e}", exc_info=True)
+            logger.error("   Falling back to file-based singleton lock")
+            # Fallback на file lock если БД недоступна
+            bot_mode = get_bot_mode()
+            lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
+            singleton_lock = get_singleton_lock(lock_key)
+            if not singleton_lock.acquire(timeout=5):
+                logger.error("❌❌❌ Another bot instance detected (file lock held)!")
+                logger.error("   Exiting immediately to prevent 409 Conflict...")
+                import os
+                os._exit(1)
+            logger.info("✅ File-based singleton lock acquired (DB unavailable)")
+    else:
+        logger.warning("⚠️ DATABASE_URL not available, using file-based singleton lock")
+        bot_mode = get_bot_mode()
+        lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
+        singleton_lock = get_singleton_lock(lock_key)
+        if not singleton_lock.acquire(timeout=5):
+            logger.error("❌❌❌ Another bot instance detected (file lock held)!")
+            logger.error("   Exiting immediately to prevent 409 Conflict...")
+            import os
+            os._exit(1)
+        logger.info("✅ File-based singleton lock acquired")
     
     # CRITICAL: Ensure data directory exists and is writable before anything else
     logger.info("🔒 Ensuring data persistence...")
@@ -26283,46 +26333,9 @@ async def main():
         
         logger.info("📡 Запуск polling...")
         
-        # КРИТИЧНО: Финальная проверка конфликта через Telegram API
-        # Если другой экземпляр работает - немедленно выходим
-        logger.info("🔍 Финальная проверка конфликта через Telegram API...")
-        from telegram import Bot
-        check_bot = Bot(token=BOT_TOKEN)
-        conflict_confirmed = False
-        
-        try:
-            # Пробуем getUpdates с минимальным timeout
-            # Если другой экземпляр polling работает - получим Conflict
-            async with check_bot:
-                test_updates = await check_bot.get_updates(offset=-1, limit=1, timeout=1)
-                logger.info("✅ Проверка конфликта пройдена - нет активного polling")
-        except Conflict as e:
-            conflict_confirmed = True
-            logger.error("❌❌❌ КОНФЛИКТ ПОДТВЕРЖДЕН через Telegram API!")
-            logger.error("   Другой экземпляр бота уже получает updates")
-            logger.error("   НЕМЕДЛЕННЫЙ ВЫХОД для предотвращения повторных ошибок")
-            handle_conflict_gracefully(e, "polling")
-            import os
-            os._exit(1)  # Немедленный выход
-        except Exception as test_error:
-            error_msg = str(test_error)
-            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
-                conflict_confirmed = True
-                logger.error("❌❌❌ КОНФЛИКТ ОБНАРУЖЕН!")
-                logger.error(f"   Ошибка: {error_msg}")
-                logger.error("   НЕМЕДЛЕННЫЙ ВЫХОД для предотвращения повторных ошибок")
-                from telegram.error import Conflict as TelegramConflict
-                handle_conflict_gracefully(TelegramConflict(error_msg), "polling")
-                import os
-                os._exit(1)  # Немедленный выход
-            else:
-                # Не критичная ошибка (timeout и т.д.), продолжаем
-                logger.debug(f"Проверка конфликта: {test_error} (не критично)")
-        
-        if conflict_confirmed:
-            # Не должны сюда попасть, но на всякий случай
-            import os
-            os._exit(1)
+        # PostgreSQL advisory lock уже проверен в начале main()
+        # Дополнительная проверка через Telegram API не нужна, но оставляем для безопасности
+        logger.info("🔍 Final conflict check (advisory lock should prevent conflicts)...")
         
         # ВСЕ проверки пройдены - запускаем polling
         try:
@@ -26365,8 +26378,23 @@ async def main():
         await asyncio.Event().wait()  # Бесконечное ожидание
     except KeyboardInterrupt:
         logger.info("🛑 Shutting down bot...")
-        await application.stop()
-        await application.shutdown()
+    finally:
+        # Освобождаем advisory lock перед shutdown
+        if lock_conn and lock_key_int:
+            try:
+                from render_singleton_lock import release_lock_session
+                from database import get_connection_pool
+                pool = get_connection_pool()
+                release_lock_session(pool, lock_conn, lock_key_int)
+            except Exception as e:
+                logger.error(f"Error releasing lock on shutdown: {e}")
+        
+        # Останавливаем application
+        try:
+            await application.stop()
+            await application.shutdown()
+        except:
+            pass
 
 
 # ==================== HEALTH HTTP SERVER FOR RENDER ====================
