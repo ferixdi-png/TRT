@@ -122,7 +122,11 @@ class InputMatrixTester:
             outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
             
             try:
-                result = await input_parameters(update, context)
+                # Test via global router (simpler, tests the actual fix)
+                from bot_kie import global_text_router
+                
+                # Call global router directly (it will route to input_parameters if waiting_for exists)
+                await global_text_router(update, context)
                 
                 outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
                 has_response = outgoing_count_after > outgoing_count_before
