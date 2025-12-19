@@ -1,6 +1,6 @@
 # 🤖 ЗАДАЧИ ДЛЯ CURSOR AI: УМНОЕ ИСПРАВЛЕНИЕ ОШИБОК
 
-**Создано:** 2025-12-19 11:59:52
+**Создано:** 2025-12-19 12:08:42
 
 ## 📋 КОНТЕКСТ ПРОЕКТА
 
@@ -26,7 +26,128 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:55:51,373 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:05:56,106 - __main__ - ERROR - Error in button_callback for data 'language_select:ru': cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)
+```
+
+**КОНТЕКСТ:**
+
+**Связанные функции:**
+- `get_user_balance` в `C:\Users\User\Desktop\5656-main\database.py` (строка 155)
+- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
+
+**Связанные кнопки:**
+- `language_select:ru` → handler: `button_callback` в `C:\Users\User\Desktop\5656-main\bot_kie.py` (строка 6727)
+
+**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
+
+Тип ошибки: general_error
+Файл: None
+
+КОНТЕКСТ ПРОЕКТА:
+Связанные функции:
+  - get_user_balance в C:\Users\User\Desktop\5656-main\database.py (строка 155)
+  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
+
+Связанные кнопки:
+  - callback_data: language_select:ru
+    handler: button_callback в C:\Users\User\Desktop\5656-main\bot_kie.py (строка 6727)
+
+ПРЕДЛОЖЕНИЯ ПО ИСПРАВЛЕНИЮ:
+  - Проверить, что callback_data обработан в button_callback
+  - Убедиться, что query.answer() вызван
+  - Проверить обработчик для: language_select:ru
+
+ВАЖНО:
+  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
+  - Проверить все связанные функции и файлы
+  - Убедиться, что исправление не сломает другие компоненты
+  - Протестировать кнопки и генерации после исправления
+
+---
+
+## 🚨 ЗАДАЧА 2: general_error
+
+**Приоритет:** high
+
+**Ошибка:**
+```
+ImportError: cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)
+```
+
+**КОНТЕКСТ:**
+
+**Связанные функции:**
+- `get_user_balance` в `C:\Users\User\Desktop\5656-main\database.py` (строка 155)
+
+**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
+
+Тип ошибки: general_error
+Файл: None
+
+КОНТЕКСТ ПРОЕКТА:
+Связанные функции:
+  - get_user_balance в C:\Users\User\Desktop\5656-main\database.py (строка 155)
+
+ВАЖНО:
+  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
+  - Проверить все связанные функции и файлы
+  - Убедиться, что исправление не сломает другие компоненты
+  - Протестировать кнопки и генерации после исправления
+
+---
+
+## 🚨 ЗАДАЧА 3: general_error
+
+**Приоритет:** high
+
+**Ошибка:**
+```
+2025-12-19 09:05:56,312 - __main__ - ERROR - Error in button_callback for data 'language_select:ru': cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)
+```
+
+**КОНТЕКСТ:**
+
+**Связанные функции:**
+- `get_user_balance` в `C:\Users\User\Desktop\5656-main\database.py` (строка 155)
+- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
+
+**Связанные кнопки:**
+- `language_select:ru` → handler: `button_callback` в `C:\Users\User\Desktop\5656-main\bot_kie.py` (строка 6727)
+
+**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
+
+Тип ошибки: general_error
+Файл: None
+
+КОНТЕКСТ ПРОЕКТА:
+Связанные функции:
+  - get_user_balance в C:\Users\User\Desktop\5656-main\database.py (строка 155)
+  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
+
+Связанные кнопки:
+  - callback_data: language_select:ru
+    handler: button_callback в C:\Users\User\Desktop\5656-main\bot_kie.py (строка 6727)
+
+ПРЕДЛОЖЕНИЯ ПО ИСПРАВЛЕНИЮ:
+  - Проверить, что callback_data обработан в button_callback
+  - Убедиться, что query.answer() вызван
+  - Проверить обработчик для: language_select:ru
+
+ВАЖНО:
+  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
+  - Проверить все связанные функции и файлы
+  - Убедиться, что исправление не сломает другие компоненты
+  - Протестировать кнопки и генерации после исправления
+
+---
+
+## 🚨 ЗАДАЧА 4: general_error
+
+**Приоритет:** high
+
+**Ошибка:**
+```
+2025-12-19 09:06:00,094 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -45,7 +166,7 @@
 
 ---
 
-## 🚨 ЗАДАЧА 2: telegram_conflict
+## 🚨 ЗАДАЧА 5: telegram_conflict
 
 **Приоритет:** critical
 
@@ -70,106 +191,13 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request; make 
 
 ---
 
-## 🚨 ЗАДАЧА 3: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:55:55,460 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 4: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:55:55,460 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 5: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:57:20,231 - __main__ - ERROR - delete_webhook failed (non-fatal)
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
 ## 🚨 ЗАДАЧА 6: general_error
 
 **Приоритет:** high
 
 **Ошибка:**
 ```
-    raise RuntimeError("This HTTPXRequest is not initialized!")
+2025-12-19 09:06:01,184 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -194,7 +222,7 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request; make 
 
 **Ошибка:**
 ```
-RuntimeError: This HTTPXRequest is not initialized!
+2025-12-19 09:06:05,775 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -219,7 +247,7 @@ RuntimeError: This HTTPXRequest is not initialized!
 
 **Ошибка:**
 ```
-    raise NetworkError(f"Unknown error in HTTP implementation: {exc!r}") from exc
+2025-12-19 09:06:07,364 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -244,7 +272,7 @@ RuntimeError: This HTTPXRequest is not initialized!
 
 **Ошибка:**
 ```
-telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError('This HTTPXRequest is not initialized!')
+2025-12-19 09:06:12,001 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -269,7 +297,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:20,924 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:06:12,706 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 ```
 
 **КОНТЕКСТ:**
@@ -300,7 +328,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:20,924 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:06:12,706 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
 ```
 
 **КОНТЕКСТ:**
@@ -331,7 +359,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:25,014 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:06:14,346 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -356,13 +384,10 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:26,096 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:06:17,813 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
 
 **ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
 
@@ -370,9 +395,6 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 Файл: None
 
 КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
 ВАЖНО:
   - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
   - Проверить все связанные функции и файлы
@@ -387,13 +409,10 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:26,096 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:06:21,278 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
 
 **ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
 
@@ -401,9 +420,6 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 Файл: None
 
 КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
 ВАЖНО:
   - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
   - Проверить все связанные функции и файлы
@@ -418,10 +434,17 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:30,700 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:06:22,201 - __main__ - ERROR - Error in button_callback for data 'language_select:ru': cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)
 ```
 
 **КОНТЕКСТ:**
+
+**Связанные функции:**
+- `get_user_balance` в `C:\Users\User\Desktop\5656-main\database.py` (строка 155)
+- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
+
+**Связанные кнопки:**
+- `language_select:ru` → handler: `button_callback` в `C:\Users\User\Desktop\5656-main\bot_kie.py` (строка 6727)
 
 **ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
 
@@ -429,6 +452,19 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 Файл: None
 
 КОНТЕКСТ ПРОЕКТА:
+Связанные функции:
+  - get_user_balance в C:\Users\User\Desktop\5656-main\database.py (строка 155)
+  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
+
+Связанные кнопки:
+  - callback_data: language_select:ru
+    handler: button_callback в C:\Users\User\Desktop\5656-main\bot_kie.py (строка 6727)
+
+ПРЕДЛОЖЕНИЯ ПО ИСПРАВЛЕНИЮ:
+  - Проверить, что callback_data обработан в button_callback
+  - Убедиться, что query.answer() вызван
+  - Проверить обработчик для: language_select:ru
+
 ВАЖНО:
   - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
   - Проверить все связанные функции и файлы
@@ -443,13 +479,10 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:32,282 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:06:26,617 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
 
 **ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
 
@@ -457,9 +490,6 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 Файл: None
 
 КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
 ВАЖНО:
   - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
   - Проверить все связанные функции и файлы
@@ -474,13 +504,10 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:32,282 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:06:30,707 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
 
 **ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
 
@@ -488,9 +515,6 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 Файл: None
 
 КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
 ВАЖНО:
   - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
   - Проверить все связанные функции и файлы
@@ -505,7 +529,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:37,622 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:06:42,988 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -530,7 +554,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:39,956 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:06:47,077 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 ```
 
 **КОНТЕКСТ:**
@@ -561,7 +585,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:39,956 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:06:47,077 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
 ```
 
 **КОНТЕКСТ:**
@@ -592,7 +616,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:43,420 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:07:17,368 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -617,7 +641,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:46,880 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:07:21,457 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 ```
 
 **КОНТЕКСТ:**
@@ -648,7 +672,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:46,880 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:07:21,458 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
 ```
 
 **КОНТЕКСТ:**
@@ -679,7 +703,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:52,203 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:07:51,747 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -704,7 +728,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:57,533 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:07:55,834 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 ```
 
 **КОНТЕКСТ:**
@@ -735,7 +759,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:57:57,533 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:07:55,834 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
 ```
 
 **КОНТЕКСТ:**
@@ -766,7 +790,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:58:05,385 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+2025-12-19 09:08:26,131 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
 ```
 
 **КОНТЕКСТ:**
@@ -791,7 +815,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:58:13,251 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-19 09:08:30,220 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 ```
 
 **КОНТЕКСТ:**
@@ -822,7 +846,7 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 
 **Ошибка:**
 ```
-2025-12-19 08:58:13,252 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+2025-12-19 09:08:30,220 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
 ```
 
 **КОНТЕКСТ:**
@@ -839,292 +863,6 @@ telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError(
 Связанные функции:
   - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
 
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 30: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:58:24,938 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
-```
-
-**КОНТЕКСТ:**
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 31: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:58:29,027 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 32: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:58:29,027 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 33: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:58:46,382 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
-```
-
-**КОНТЕКСТ:**
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 34: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:58:50,471 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 35: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:58:50,471 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 36: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:59:16,396 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
-```
-
-**КОНТЕКСТ:**
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 37: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:59:20,484 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 38: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:59:20,484 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
-```
-
-**КОНТЕКСТ:**
-
-**Связанные функции:**
-- `main` в `C:\Users\User\Desktop\5656-main\run_bot.py` (строка 22)
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
-Связанные функции:
-  - main в C:\Users\User\Desktop\5656-main\run_bot.py (строка 22)
-
-ВАЖНО:
-  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
-  - Проверить все связанные функции и файлы
-  - Убедиться, что исправление не сломает другие компоненты
-  - Протестировать кнопки и генерации после исправления
-
----
-
-## 🚨 ЗАДАЧА 39: general_error
-
-**Приоритет:** high
-
-**Ошибка:**
-```
-2025-12-19 08:59:50,761 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
-```
-
-**КОНТЕКСТ:**
-
-**ИНСТРУКЦИИ ПО ИСПРАВЛЕНИЮ:**
-
-Тип ошибки: general_error
-Файл: None
-
-КОНТЕКСТ ПРОЕКТА:
 ВАЖНО:
   - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)
   - Проверить все связанные функции и файлы

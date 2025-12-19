@@ -24920,9 +24920,12 @@ async def main():
         logger.info("📡 Запуск polling...")
         
         # КРИТИЧНО: Проверяем, что нет другого экземпляра перед запуском
+        # Используем временный bot для проверки (не application.bot, чтобы не инициализировать application)
         try:
-            # Пробуем получить updates с offset=-1 для проверки конфликта
-            test_updates = await application.bot.get_updates(offset=-1, limit=1, timeout=1)
+            from telegram import Bot
+            check_bot = Bot(token=BOT_TOKEN)
+            # Пробуем получить updates для проверки конфликта
+            test_updates = await check_bot.get_updates(offset=-1, limit=1, timeout=2)
             logger.info("✅ Проверка конфликта пройдена")
         except Exception as test_error:
             error_msg = str(test_error)
@@ -24932,7 +24935,8 @@ async def main():
                 logger.error("Остановите все другие экземпляры и перезапустите сервис")
                 raise RuntimeError("Another bot instance is running")
             else:
-                logger.warning(f"⚠️ Предупреждение при проверке: {test_error}")
+                # Не критичная ошибка (например, timeout), продолжаем
+                logger.debug(f"Проверка конфликта: {test_error}")
         
         await application.updater.start_polling(drop_pending_updates=drop_updates)
         
