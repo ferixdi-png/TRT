@@ -6,17 +6,19 @@ Provides translations for Russian and English
 TRANSLATIONS = {
     'ru': {
         'welcome_new': (
-            '🎉 <b>ПРИВЕТ, {name}!</b> 🎉\n\n'
+            '🎉 <b>Добро пожаловать, {name}!</b> 🎉\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '🔥 <b>У ТЕБЯ ЕСТЬ {free} БЕСПЛАТНЫХ ГЕНЕРАЦИЙ!</b> 🔥\n\n'
-            '✨ <b>ПРЕМИУМ AI MARKETPLACE</b> ✨\n\n'
-            '🚀 <b>Что это за бот?</b>\n'
-            '• 📦 <b>{models} топовых нейросетей</b> в одном месте\n'
+            '🎁 <b>СТАРТОВЫЙ ПОДАРОК: {free} БЕСПЛАТНЫХ ГЕНЕРАЦИЙ</b> 🎁\n\n'
+            '✨ <b>ЛУЧШИЙ AI-БОТ С НЕЙРОСЕТЯМИ</b> ✨\n\n'
+            '💎 <b>Премиум возможности в одном месте:</b>\n'
+            '• 📦 <b>{models} топовых нейросетей</b> для любых задач\n'
             '• 🎯 <b>{types} типов генерации</b> контента\n'
-            '• 🌐 Прямой доступ БЕЗ VPN\n'
-            '• ⚡ Мгновенная генерация\n\n'
+            '• 🌐 Прямой доступ без VPN\n'
+            '• ⚡ Мгновенная обработка запросов\n'
+            '• 🎨 Интеллектуальная обработка и улучшение контента\n'
+            '• 🔒 Надежная и стабильная работа\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '👥 <b>Сейчас в боте:</b> {online} человек онлайн\n\n'
+            '👥 <b>Сейчас активно:</b> {online} пользователей\n\n'
             '🚀 <b>ПОЛНЫЙ ФУНКЦИОНАЛ:</b>\n\n'
             '<b>📸 РАБОТА С ИЗОБРАЖЕНИЯМИ:</b>\n'
             '• ✨ Текст в фото - создание изображений из текста\n'
@@ -39,12 +41,13 @@ TRANSLATIONS = {
             '✨ Kling • Hailuo • Topaz\n'
             '🎨 Recraft • Grok (xAI) • Wan\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '🎁 <b>КАК НАЧАТЬ?</b>\n\n'
-            '1️⃣ <b>Нажми кнопку "🎁 Генерировать бесплатно"</b> ниже\n'
-            '   → Создай свое первое изображение за 30 секунд!\n\n'
-            '2️⃣ <b>Напиши что хочешь увидеть</b> (например: "Кот в космосе")\n'
-            '   → Нейросеть создаст это для тебя!\n\n'
-            '3️⃣ <b>Получи результат и наслаждайся!</b> 🎉\n\n'
+            '🚀 <b>КАК НАЧАТЬ?</b>\n\n'
+            '1️⃣ <b>Нажмите кнопку "🎁 Генерировать бесплатно"</b> ниже\n'
+            '   → Создайте свое первое изображение всего за 30 секунд!\n\n'
+            '2️⃣ <b>Опишите, что хотите увидеть</b> (например: "Кот в космосе")\n'
+            '   → Наша нейросеть создаст это для вас!\n\n'
+            '3️⃣ <b>Получите результат и наслаждайтесь!</b> 🎉\n\n'
+            '💡 <b>Совет:</b> Начните с бесплатной генерации, чтобы попробовать возможности бота.\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             '🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ:</b>\n'
             '• <b>Recraft Remove Background</b> - удаление фона (бесплатно и безлимитно!)\n'
@@ -55,7 +58,8 @@ TRANSLATIONS = {
             '• {models} топовых нейросетей\n'
             '• {types} типов генерации\n'
             '• 🌐 Прямой доступ БЕЗ VPN\n'
-            '• ⚡ Мгновенная генерация\n\n'
+            '• ⚡ Мгновенная генерация\n'
+            '• 🎨 Умная обработка и улучшение контента\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             '💰 <b>ЦЕНЫ:</b>\n'
             'От 0.62 ₽ за изображение • От 3.86 ₽ за видео\n\n'
@@ -63,18 +67,18 @@ TRANSLATIONS = {
             '🔗 <code>{ref_link}</code>'
         ),
         'welcome_returning': (
-            '👋 <b>С возвращением, {name}!</b> 🤖✨\n\n'
+            '👋 <b>С возвращением, {name}!</b> ✨\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '👥 <b>Сейчас в боте:</b> {online} человек онлайн\n\n'
+            '👥 <b>Сейчас активно:</b> {online} пользователей\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '🔥 <b>У ТЕБЯ ЕСТЬ {free} БЕСПЛАТНЫХ ГЕНЕРАЦИЙ!</b> 🔥\n\n'
-            '✨ <b>ПРЕМИУМ AI MARKETPLACE</b> ✨\n\n'
-            '🚀 <b>Что это за бот?</b>\n'
-            '• 📦 <b>{models} топовых нейросетей</b> в одном месте\n'
+            '🎁 <b>ДОСТУПНО: {free} БЕСПЛАТНЫХ ГЕНЕРАЦИЙ</b> 🎁\n\n'
+            '✨ <b>ПРЕМИУМ ВОЗМОЖНОСТИ:</b>\n'
+            '• 📦 <b>{models} топовых нейросетей</b> для любых задач\n'
             '• 🎯 <b>{types} типов генерации</b> контента\n'
-            '• 🌐 Прямой доступ БЕЗ VPN\n'
-            '• ⚡ Мгновенная генерация\n\n'
-            '💡 <b>Нажми кнопку "🎁 Генерировать бесплатно" ниже</b>\n\n'
+            '• 🌐 Прямой доступ без VPN\n'
+            '• ⚡ Мгновенная обработка\n'
+            '• 🎨 Интеллектуальная обработка контента\n\n'
+            '💡 <b>Начните новую генерацию:</b> нажмите кнопку "🎁 Генерировать бесплатно" ниже\n\n'
         ),
         'select_language': (
             '🌍 <b>Выберите язык / Choose language</b>\n\n'
@@ -121,7 +125,17 @@ TRANSLATIONS = {
         'btn_all_models_short': '📋 Все модели',
         'btn_check_balance': '💰 Проверить баланс',
         'btn_confirm_generate': '✅ Генерировать',
-        'msg_operation_cancelled': '❌ Операция отменена.\n\nВы вернулись в главное меню.',
+        'msg_operation_cancelled': (
+            '✅ <b>Операция отменена</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '💡 <b>Что произошло:</b>\n'
+            'Вы отменили текущую операцию и вернулись в главное меню.\n\n'
+            '💡 <b>Что можно сделать:</b>\n'
+            '• Выберите новое действие из меню\n'
+            '• Начните новую генерацию\n'
+            '• Проверьте баланс или историю\n\n'
+            '🔄 <b>Совет:</b> Вы всегда можете вернуться в главное меню командой /start'
+        ),
         # Messages
         'msg_referral_bonus': '\n🎁 <b>Отлично!</b> Ты пригласил <b>{count}</b> друзей\n   → Получено <b>+{bonus} бесплатных генераций</b>! 🎉\n\n',
         'msg_full_functionality': (
@@ -152,7 +166,8 @@ TRANSLATIONS = {
             '• {models} топовых нейросетей\n'
             '• {types} типов генерации\n'
             '• 🌐 Прямой доступ БЕЗ VPN\n'
-            '• ⚡ Мгновенная генерация\n\n'
+            '• ⚡ Мгновенная генерация\n'
+            '• 🎨 Умная обработка и улучшение контента\n\n'
             '💰 <b>ЦЕНЫ:</b>\n'
             'От 0.62 ₽ за изображение • От 3.86 ₽ за видео\n\n'
             '💡 <b>Пригласи друга → получи +{ref_bonus} бесплатных генераций Z-Image!</b>\n'
@@ -201,20 +216,102 @@ TRANSLATIONS = {
         'msg_payment_method': '⭐ <b>Способ:</b> Telegram Stars ({stars} ⭐)',
         'msg_payment_balance': '💳 <b>Ваш баланс:</b> {balance} ₽',
         'msg_payment_use_funds': '🎉 Теперь вы можете использовать средства для генерации контента!',
-        'error_session_empty': '❌ Ошибка: сессия пуста. Пожалуйста, начните заново.',
-        'error_no_data': '❌ Ошибка: нет данных в запросе. Попробуйте еще раз.',
-        'error_invalid_format': '❌ Ошибка: неверный формат запроса. Попробуйте еще раз.',
-        'error_unknown': '❌ Произошла ошибка. Пожалуйста, попробуйте позже или используйте /start',
-        'error_insufficient_balance': '❌ Недостаточно средств на балансе',
-        'error_operation_failed': '❌ Операция не выполнена. Попробуйте еще раз.',
-        'error_timeout': '⏱️ Превышено время ожидания. Попробуйте еще раз.',
-        'error_network': '🌐 Ошибка сети. Проверьте подключение и попробуйте позже.',
-        'error_display_generation': '❌ Ошибка при отображении генерации',
+        'error_session_empty': (
+            '💡 <b>Сессия сброшена</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Ваша текущая сессия была сброшена.\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Вернитесь в главное меню\n'
+            '• Выберите модель заново\n'
+            '• Начните новую генерацию\n\n'
+            '💡 Все ваши предыдущие генерации сохранены в разделе "📚 Мои генерации"'
+        ),
+        'error_no_data': (
+            '⚠️ <b>Данные не получены</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Не удалось получить необходимые данные.\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Попробуйте ещё раз через несколько секунд\n'
+            '• Вернитесь в главное меню и начните заново\n'
+            '• Если проблема сохраняется, обратитесь в поддержку'
+        ),
+        'error_invalid_format': (
+            '⚠️ <b>Неверный формат данных</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Введенные данные не соответствуют требуемому формату.\n\n'
+            '📝 <b>Что проверить:</b>\n'
+            '• Правильность всех введенных параметров\n'
+            '• Формат URL (должен начинаться с http:// или https://)\n'
+            '• Корректность числовых значений\n\n'
+            '💡 Следуйте подсказкам бота на каждом шаге'
+        ),
+        'error_unknown': (
+            '⚠️ <b>Временная проблема</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Возникла временная проблема при обработке запроса.\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Подождите 10-15 секунд и попробуйте ещё раз\n'
+            '• Вернитесь в главное меню и начните заново\n'
+            '• Если проблема сохраняется, попробуйте другую модель\n\n'
+            '💬 Если проблема повторяется, обратитесь в поддержку'
+        ),
+        'error_insufficient_balance': (
+            '💳 <b>Недостаточно средств</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'На вашем балансе недостаточно средств для этой операции.\n\n'
+            '💡 <b>Варианты:</b>\n'
+            '• Пополните баланс через кнопку "💳 Пополнить"\n'
+            '• Используйте бесплатные генерации (кнопка "🎁 Генерировать бесплатно")\n'
+            '• Пригласите друга и получите бонусные генерации'
+        ),
+        'error_operation_failed': (
+            '⚠️ <b>Операция не завершена</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Операция не была завершена успешно.\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Подождите 10-15 секунд и попробуйте ещё раз\n'
+            '• Вернитесь в главное меню и начните заново\n'
+            '• Проверьте ваше интернет-соединение'
+        ),
+        'error_timeout': (
+            '⏱️ <b>Превышено время ожидания</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Генерация заняла больше времени, чем обычно.\n\n'
+            '💡 <b>Возможные причины:</b>\n'
+            '• Сложный запрос требует больше времени обработки\n'
+            '• Временная загрузка системы\n'
+            '• Проблемы с подключением\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Подождите ещё немного - генерация может продолжаться\n'
+            '• Проверьте "📚 Мои генерации" - результат может уже быть готов\n'
+            '• Или попробуйте ещё раз с более простым запросом'
+        ),
+        'error_network': (
+            '🌐 <b>Проблема с подключением</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Обнаружена проблема с интернет-соединением.\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Проверьте ваше интернет-соединение\n'
+            '• Убедитесь, что Wi-Fi или мобильный интернет активен\n'
+            '• Подождите несколько секунд и попробуйте ещё раз\n\n'
+            '💡 После восстановления подключения повторите операцию'
+        ),
+        'error_display_generation': (
+            '⚠️ <b>Не удалось отобразить результат</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Генерация завершена, но возникла проблема с отображением результата.\n\n'
+            '💡 <b>Результат сохранен!</b>\n\n'
+            '🔄 <b>Как посмотреть:</b>\n'
+            '• Перейдите в раздел "📚 Мои генерации"\n'
+            '• Найдите последнюю генерацию в списке\n'
+            '• Результат будет доступен там\n\n'
+            '💬 Если результат не появился, обратитесь в поддержку'
+        ),
         'msg_spinning_wheel': '🎰 Крутим колесо фортуны...',
         'msg_admin_only': 'Эта функция доступна только администратору.',
         'msg_user_mode_enabled': 'Режим пользователя включен',
         'msg_returning_to_admin': 'Возврат в админ-панель',
-        'msg_insufficient_funds': '❌ <b>Недостаточно средств</b>\n💳 <b>Ваш баланс:</b> {balance} ₽\n💵 <b>Требуется:</b> {required} ₽\n\nПополните баланс для генерации.',
+        'msg_insufficient_funds': '💳 <b>Недостаточно средств</b>\n\n💰 <b>Ваш баланс:</b> {balance} ₽\n💵 <b>Требуется:</b> {required} ₽\n\n💡 <b>Пополните баланс</b> для продолжения генерации.\n\nИли используйте бесплатные генерации, если они доступны ✨',
         'msg_available_generations': '✅ <b>Доступно генераций:</b> {count}\n💳 <b>Ваш баланс:</b> {balance} ₽',
         'msg_unlimited_available': '✅ <b>Доступно:</b> Безлимит',
         'btn_check_balance': '💰 Проверить баланс',
@@ -236,17 +333,19 @@ TRANSLATIONS = {
     },
     'en': {
         'welcome_new': (
-            '🎉 <b>HELLO, {name}!</b> 🎉\n\n'
+            '🎉 <b>Welcome, {name}!</b> 🎉\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '🔥 <b>YOU HAVE {free} FREE GENERATIONS!</b> 🔥\n\n'
-            '✨ <b>PREMIUM AI MARKETPLACE</b> ✨\n\n'
-            '🚀 <b>What is this bot?</b>\n'
-            '• 📦 <b>{models} top AI models</b> in one place\n'
+            '🎁 <b>WELCOME GIFT: {free} FREE GENERATIONS</b> 🎁\n\n'
+            '✨ <b>BEST AI BOT WITH NEURAL NETWORKS</b> ✨\n\n'
+            '💎 <b>Premium features in one place:</b>\n'
+            '• 📦 <b>{models} top AI models</b> for any task\n'
             '• 🎯 <b>{types} types of generation</b> content\n'
-            '• 🌐 Direct access WITHOUT VPN\n'
-            '• ⚡ Instant generation\n\n'
+            '• 🌐 Direct access without VPN\n'
+            '• ⚡ Instant request processing\n'
+            '• 🎨 Intelligent content processing and enhancement\n'
+            '• 🔒 Reliable and stable operation\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '👥 <b>Online now:</b> {online} people\n\n'
+            '👥 <b>Active now:</b> {online} users\n\n'
             '🚀 <b>FULL FUNCTIONALITY:</b>\n\n'
             '<b>📸 IMAGE GENERATION:</b>\n'
             '• ✨ Text to Image - create images from text\n'
@@ -269,12 +368,13 @@ TRANSLATIONS = {
             '✨ Kling • Hailuo • Topaz\n'
             '🎨 Recraft • Grok (xAI) • Wan\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '🎁 <b>HOW TO START?</b>\n\n'
-            '1️⃣ <b>Click the "🎁 Generate free" button</b> below\n'
-            '   → Create your first image in 30 seconds!\n\n'
-            '2️⃣ <b>Write what you want to see</b> (e.g., "Cat in space")\n'
-            '   → AI will create it for you!\n\n'
+            '🚀 <b>HOW TO START?</b>\n\n'
+            '1️⃣ <b>Click the "🎁 Generate Free" button</b> below\n'
+            '   → Create your first image in just 30 seconds!\n\n'
+            '2️⃣ <b>Describe what you want to see</b> (e.g., "Cat in space")\n'
+            '   → Our AI will create it for you!\n\n'
             '3️⃣ <b>Get the result and enjoy!</b> 🎉\n\n'
+            '💡 <b>Tip:</b> Start with free generation to explore bot capabilities.\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             '🆓 <b>FREE TOOLS:</b>\n'
             '• <b>Recraft Remove Background</b> - remove background (free and unlimited!)\n'
@@ -285,7 +385,8 @@ TRANSLATIONS = {
             '• {models} top AI models\n'
             '• {types} generation types\n'
             '• 🌐 Direct access WITHOUT VPN\n'
-            '• ⚡ Instant generation\n\n'
+            '• ⚡ Instant generation\n'
+            '• 🎨 Smart content processing and enhancement\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             '💰 <b>PRICING:</b>\n'
             'From 0.62 ₽ per image • From 3.86 ₽ per video\n\n'
@@ -293,18 +394,18 @@ TRANSLATIONS = {
             '🔗 <code>{ref_link}</code>'
         ),
         'welcome_returning': (
-            '👋 <b>Welcome back, {name}!</b> 🤖✨\n\n'
+            '👋 <b>Welcome back, {name}!</b> ✨\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '👥 <b>Online now:</b> {online} people\n\n'
+            '👥 <b>Active now:</b> {online} users\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            '🔥 <b>YOU HAVE {free} FREE GENERATIONS!</b> 🔥\n\n'
-            '✨ <b>PREMIUM AI MARKETPLACE</b> ✨\n\n'
-            '🚀 <b>What is this bot?</b>\n'
-            '• 📦 <b>{models} top AI models</b> in one place\n'
+            '🎁 <b>AVAILABLE: {free} FREE GENERATIONS</b> 🎁\n\n'
+            '✨ <b>PREMIUM FEATURES:</b>\n'
+            '• 📦 <b>{models} top AI models</b> for any task\n'
             '• 🎯 <b>{types} types of generation</b> content\n'
-            '• 🌐 Direct access WITHOUT VPN\n'
-            '• ⚡ Instant generation\n\n'
-            '💡 <b>Click the "🎁 Generate free" button below</b>\n\n'
+            '• 🌐 Direct access without VPN\n'
+            '• ⚡ Instant processing\n'
+            '• 🎨 Intelligent content processing\n\n'
+            '💡 <b>Start new generation:</b> click the "🎁 Generate Free" button below\n\n'
         ),
         'select_language': (
             '🌍 <b>Choose language / Выберите язык</b>\n\n'
@@ -351,7 +452,17 @@ TRANSLATIONS = {
         'btn_all_models_short': '📋 All Models',
         'btn_check_balance': '💰 Check Balance',
         'btn_confirm_generate': '✅ Generate',
-        'msg_operation_cancelled': '❌ Operation cancelled.\n\nYou returned to the main menu.',
+        'msg_operation_cancelled': (
+            '✅ <b>Operation cancelled</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '💡 <b>What happened:</b>\n'
+            'You cancelled the current operation and returned to the main menu.\n\n'
+            '💡 <b>What you can do:</b>\n'
+            '• Select a new action from the menu\n'
+            '• Start a new generation\n'
+            '• Check balance or history\n\n'
+            '🔄 <b>Tip:</b> You can always return to the main menu with /start'
+        ),
         # Messages
         'msg_referral_bonus': '\n🎁 <b>Great!</b> You invited <b>{count}</b> friends\n   → Received <b>+{bonus} free generations</b>! 🎉\n\n',
         'msg_full_functionality': (
@@ -382,7 +493,8 @@ TRANSLATIONS = {
             '• {models} top AI models\n'
             '• {types} generation types\n'
             '• 🌐 Direct access WITHOUT VPN\n'
-            '• ⚡ Instant generation\n\n'
+            '• ⚡ Instant generation\n'
+            '• 🎨 Smart content processing and enhancement\n\n'
             '💰 <b>PRICING:</b>\n'
             'From 0.62 ₽ per image • From 3.86 ₽ per video\n\n'
             '💡 <b>Invite a friend → get +{ref_bonus} free Z-Image generations!</b>\n'
@@ -449,20 +561,102 @@ TRANSLATIONS = {
         'msg_payment_method': '⭐ <b>Method:</b> Telegram Stars ({stars} ⭐)',
         'msg_payment_balance': '💳 <b>Your balance:</b> {balance} ₽',
         'msg_payment_use_funds': '🎉 You can now use funds for content generation!',
-        'error_session_empty': '❌ Error: session is empty. Please start again.',
-        'error_no_data': '❌ Error: no data in request. Please try again.',
-        'error_invalid_format': '❌ Error: invalid request format. Please try again.',
-        'error_unknown': '❌ An error occurred. Please try later or use /start',
-        'error_insufficient_balance': '❌ Insufficient balance',
-        'error_operation_failed': '❌ Operation failed. Please try again.',
-        'error_timeout': '⏱️ Timeout exceeded. Please try again.',
-        'error_network': '🌐 Network error. Check your connection and try later.',
-        'error_display_generation': '❌ Error displaying generation',
+        'error_session_empty': (
+            '💡 <b>Session Reset</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Your current session was reset.\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Return to main menu\n'
+            '• Select a model again\n'
+            '• Start a new generation\n\n'
+            '💡 All your previous generations are saved in "📚 My Generations" section'
+        ),
+        'error_no_data': (
+            '⚠️ <b>Data Not Received</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Failed to receive required data.\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Try again in a few seconds\n'
+            '• Return to main menu and start over\n'
+            '• If problem persists, contact support'
+        ),
+        'error_invalid_format': (
+            '⚠️ <b>Invalid Data Format</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Entered data doesn\'t match required format.\n\n'
+            '📝 <b>What to check:</b>\n'
+            '• Correctness of all entered parameters\n'
+            '• URL format (should start with http:// or https://)\n'
+            '• Correctness of numeric values\n\n'
+            '💡 Follow bot hints at each step'
+        ),
+        'error_unknown': (
+            '⚠️ <b>Temporary Issue</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Temporary issue occurred while processing request.\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Wait 10-15 seconds and try again\n'
+            '• Return to main menu and start over\n'
+            '• If problem persists, try a different model\n\n'
+            '💬 If problem repeats, contact support'
+        ),
+        'error_insufficient_balance': (
+            '💳 <b>Insufficient Balance</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Your balance is insufficient for this operation.\n\n'
+            '💡 <b>Options:</b>\n'
+            '• Top up balance via "💳 Top Up" button\n'
+            '• Use free generations ("🎁 Generate Free" button)\n'
+            '• Invite a friend and get bonus generations'
+        ),
+        'error_operation_failed': (
+            '⚠️ <b>Operation Not Completed</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Operation was not completed successfully.\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Wait 10-15 seconds and try again\n'
+            '• Return to main menu and start over\n'
+            '• Check your internet connection'
+        ),
+        'error_timeout': (
+            '⏱️ <b>Timeout Exceeded</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Generation took longer than usual.\n\n'
+            '💡 <b>Possible reasons:</b>\n'
+            '• Complex request requires more processing time\n'
+            '• Temporary system load\n'
+            '• Connection issues\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Wait a bit more - generation may still be running\n'
+            '• Check "📚 My Generations" - result may already be ready\n'
+            '• Or try again with a simpler request'
+        ),
+        'error_network': (
+            '🌐 <b>Connection Issue</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Internet connection problem detected.\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Check your internet connection\n'
+            '• Make sure Wi-Fi or mobile data is active\n'
+            '• Wait a few seconds and try again\n\n'
+            '💡 After connection is restored, repeat the operation'
+        ),
+        'error_display_generation': (
+            '⚠️ <b>Failed to Display Result</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            'Generation completed, but there was an issue displaying the result.\n\n'
+            '💡 <b>Result is saved!</b>\n\n'
+            '🔄 <b>How to view:</b>\n'
+            '• Go to "📚 My Generations" section\n'
+            '• Find the latest generation in the list\n'
+            '• Result will be available there\n\n'
+            '💬 If result doesn\'t appear, contact support'
+        ),
         'msg_spinning_wheel': '🎰 Spinning the wheel of fortune...',
         'msg_admin_only': 'This function is available only to administrator.',
         'msg_user_mode_enabled': 'User mode enabled',
         'msg_returning_to_admin': 'Returning to admin panel',
-        'msg_insufficient_funds': '❌ <b>Insufficient funds</b>\n💳 <b>Your balance:</b> {balance} ₽\n💵 <b>Required:</b> {required} ₽\n\nTop up your balance to generate.',
+        'msg_insufficient_funds': '💳 <b>Insufficient funds</b>\n\n💰 <b>Your balance:</b> {balance} ₽\n💵 <b>Required:</b> {required} ₽\n\n💡 <b>Top up your balance</b> to continue generation.\n\nOr use free generations if available ✨',
         'msg_available_generations': '✅ <b>Available generations:</b> {count}\n💳 <b>Your balance:</b> {balance} ₽',
         'msg_unlimited_available': '✅ <b>Available:</b> Unlimited',
         'btn_check_balance': '💰 Check Balance',

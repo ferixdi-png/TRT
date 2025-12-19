@@ -84,3 +84,4 @@ if __name__ == "__main__":
     success = auto_commit_and_push(args.message)
     sys.exit(0 if success else 1)
 
+

@@ -62,28 +62,119 @@ class GenerationInterface:
         """Создаёт сообщение о статусе генерации для пользователя"""
         if user_lang == 'ru':
             if result.status == GenerationStatus.PENDING:
-                return "⏳ Генерация поставлена в очередь..."
+                return (
+                    "⏳ <b>Генерация поставлена в очередь</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "✅ <b>Ваш запрос принят!</b>\n\n"
+                    "💡 <b>Что происходит:</b>\n"
+                    "• Ваш запрос добавлен в очередь обработки\n"
+                    "• Нейросеть начнет работу в ближайшее время\n"
+                    "• Обычно ожидание занимает несколько секунд\n\n"
+                    "⏰ <b>Пожалуйста, подождите...</b>\n\n"
+                    "💡 <b>Что будет дальше:</b>\n"
+                    "• Вы получите уведомление, когда генерация начнется\n"
+                    "• Затем будет показан прогресс выполнения\n"
+                    "• Результат появится автоматически по готовности\n\n"
+                    "✨ Не закрывайте бота, процесс идет!"
+                )
             elif result.status == GenerationStatus.PROCESSING:
-                progress_text = f" ({int(progress * 100)}%)" if progress else ""
-                return f"🔄 Генерация выполняется{progress_text}..."
+                progress_text = f"\n\n📊 <b>Прогресс:</b> {int(progress * 100)}%" if progress else ""
+                return (
+                    f"🔄 <b>Генерация выполняется</b>{progress_text}\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "✅ <b>Генерация началась!</b>\n\n"
+                    "💡 <b>Что происходит:</b>\n"
+                    "• Нейросеть анализирует ваш запрос\n"
+                    "• Идет процесс создания контента\n"
+                    "• Обычно это занимает 10-60 секунд\n\n"
+                    "⏰ <b>Пожалуйста, подождите...</b>\n\n"
+                    "💡 <b>Что будет дальше:</b>\n"
+                    "• Результат появится автоматически по готовности\n"
+                    "• Вы сможете сохранить или поделиться им\n"
+                    "• Можете создать новую генерацию\n\n"
+                    "✨ Не закрывайте бота, процесс идет!"
+                )
             elif result.status == GenerationStatus.COMPLETED:
-                return "✅ Генерация завершена!"
+                return (
+                    "🎉 <b>Генерация завершена!</b> 🎉\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "✅ <b>Ваш контент готов!</b>\n\n"
+                    "💡 Результат будет показан ниже.\n"
+                    "Наслаждайтесь! ✨"
+                )
             elif result.status == GenerationStatus.FAILED:
-                return f"❌ Ошибка: {result.error or 'Неизвестная ошибка'}"
+                error_msg = result.error or 'Произошла ошибка при обработке запроса.'
+                return (
+                    f"❌ <b>Генерация не удалась</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 <b>Что произошло:</b>\n{error_msg}\n\n"
+                    "🔧 <b>Что можно сделать:</b>\n"
+                    "• Проверьте параметры запроса\n"
+                    "• Попробуйте еще раз через несколько секунд\n"
+                    "• Выберите другую модель, если проблема повторяется\n"
+                    "• Вернитесь в главное меню и начните заново\n\n"
+                    "💡 <b>Совет:</b> Если ошибка повторяется, попробуйте упростить запрос."
+                )
             else:
-                return "⏸️ Генерация отменена"
+                return (
+                    "⏸️ <b>Генерация отменена</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "💡 Генерация была отменена.\n\n"
+                    "🔄 Вы можете начать новую генерацию из главного меню."
+                )
         else:
             if result.status == GenerationStatus.PENDING:
-                return "⏳ Generation queued..."
+                return (
+                    "⏳ <b>Generation queued</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "✅ <b>Your request has been accepted!</b>\n\n"
+                    "💡 <b>What's happening:</b>\n"
+                    "• Your request has been added to the processing queue\n"
+                    "• The AI will start working soon\n"
+                    "• Usually the wait takes a few seconds\n\n"
+                    "⏰ <b>Please wait...</b>\n\n"
+                    "You'll receive a notification when generation starts!"
+                )
             elif result.status == GenerationStatus.PROCESSING:
-                progress_text = f" ({int(progress * 100)}%)" if progress else ""
-                return f"🔄 Processing{progress_text}..."
+                progress_text = f"\n\n📊 <b>Progress:</b> {int(progress * 100)}%" if progress else ""
+                return (
+                    f"🔄 <b>Processing</b>{progress_text}\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "💡 <b>What's happening:</b>\n"
+                    "• The AI is analyzing your request\n"
+                    "• Content is being created\n"
+                    "• Usually this takes 10-60 seconds\n\n"
+                    "⏰ <b>Please wait...</b>\n\n"
+                    "You'll receive a notification when the result is ready!"
+                )
             elif result.status == GenerationStatus.COMPLETED:
-                return "✅ Generation completed!"
+                return (
+                    "🎉 <b>Generation completed!</b> 🎉\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "✅ <b>Your content is ready!</b>\n\n"
+                    "💡 The result will be shown below.\n"
+                    "Enjoy! ✨"
+                )
             elif result.status == GenerationStatus.FAILED:
-                return f"❌ Error: {result.error or 'Unknown error'}"
+                error_msg = result.error or 'An error occurred while processing your request.'
+                return (
+                    f"❌ <b>Generation failed</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 <b>What happened:</b>\n{error_msg}\n\n"
+                    "🔧 <b>What you can do:</b>\n"
+                    "• Check your request parameters\n"
+                    "• Try again in a few seconds\n"
+                    "• Select a different model if the problem persists\n"
+                    "• Return to the main menu and start over\n\n"
+                    "💡 <b>Tip:</b> If the error repeats, try simplifying your request."
+                )
             else:
-                return "⏸️ Generation cancelled"
+                return (
+                    "⏸️ <b>Generation cancelled</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "💡 Generation was cancelled.\n\n"
+                    "🔄 You can start a new generation from the main menu."
+                )
     
     @staticmethod
     def create_result_message(
@@ -120,6 +211,7 @@ class GenerationInterface:
             message += "• Change parameters"
         
         return message
+
 
 
 

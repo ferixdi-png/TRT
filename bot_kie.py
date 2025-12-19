@@ -7205,11 +7205,42 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             try:
+                # Format parameters for display
+                params = gen.get('params', {})
+                params_preview = "\n".join([f"  • {k}: {str(v)[:50]}{'...' if len(str(v)) > 50 else ''}" for k, v in list(params.items())[:5]])
+                if len(params) > 5:
+                    params_preview += f"\n  ... и еще {len(params) - 5} параметров"
+                
+                if user_lang == 'ru':
+                    repeat_msg = (
+                        "🔄 <b>Повторная генерация</b>\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🤖 <b>Модель:</b> {model_info.get('name', model_id)}\n\n"
+                        f"⚙️ <b>Параметры восстановлены из истории:</b>\n{params_preview if params_preview else '  (нет параметров)'}\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        "💡 <b>Что будет дальше:</b>\n"
+                        "• Параметры уже заполнены\n"
+                        "• Вы можете сразу начать генерацию\n"
+                        "• Или вернуться и изменить параметры\n\n"
+                        "🚀 <b>Подтвердите генерацию:</b>"
+                    )
+                else:
+                    repeat_msg = (
+                        "🔄 <b>Repeat generation</b>\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🤖 <b>Model:</b> {model_info.get('name', model_id)}\n\n"
+                        f"⚙️ <b>Parameters restored from history:</b>\n{params_preview if params_preview else '  (no parameters)'}\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        "💡 <b>What's next:</b>\n"
+                        "• Parameters are already filled\n"
+                        "• You can start generation immediately\n"
+                        "• Or go back and change parameters\n\n"
+                        "🚀 <b>Confirm generation:</b>"
+                    )
+                
+                logger.info(f"✅ [UX IMPROVEMENT] Sending improved repeat generation message to user {user_id}")
                 await query.edit_message_text(
-                    "🔄 <b>Повторная генерация</b>\n\n"
-                    f"Модель: <b>{model_info.get('name', model_id)}</b>\n"
-                    f"Параметры восстановлены из истории.\n\n"
-                    "Подтвердите генерацию:",
+                    repeat_msg,
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(t('btn_confirm_generate_text', lang=user_lang), callback_data="confirm_generate")],
                         [InlineKeyboardButton(t('btn_back_to_history', lang=user_lang), callback_data="my_generations")],
@@ -7220,14 +7251,45 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Error editing message in gen_repeat: {e}", exc_info=True)
                 try:
+                    # Format parameters for display
+                    params = gen.get('params', {})
+                    params_preview = "\n".join([f"  • {k}: {str(v)[:50]}{'...' if len(str(v)) > 50 else ''}" for k, v in list(params.items())[:5]])
+                    if len(params) > 5:
+                        params_preview += f"\n  ... и еще {len(params) - 5} параметров"
+                    
+                    if user_lang == 'ru':
+                        repeat_msg = (
+                            "🔄 <b>Повторная генерация</b>\n\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Модель:</b> {model_info.get('name', model_id)}\n\n"
+                            f"⚙️ <b>Параметры восстановлены из истории:</b>\n{params_preview if params_preview else '  (нет параметров)'}\n\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            "💡 <b>Что будет дальше:</b>\n"
+                            "• Параметры уже заполнены\n"
+                            "• Вы можете сразу начать генерацию\n"
+                            "• Или вернуться и изменить параметры\n\n"
+                            "🚀 <b>Подтвердите генерацию:</b>"
+                        )
+                    else:
+                        repeat_msg = (
+                            "🔄 <b>Repeat generation</b>\n\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🤖 <b>Model:</b> {model_info.get('name', model_id)}\n\n"
+                            f"⚙️ <b>Parameters restored from history:</b>\n{params_preview if params_preview else '  (no parameters)'}\n\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            "💡 <b>What's next:</b>\n"
+                            "• Parameters are already filled\n"
+                            "• You can start generation immediately\n"
+                            "• Or go back and change parameters\n\n"
+                            "🚀 <b>Confirm generation:</b>"
+                        )
+                    
+                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved repeat generation message (fallback) to user {user_id}")
                     await query.message.reply_text(
-                        "🔄 <b>Повторная генерация</b>\n\n"
-                        f"Модель: <b>{model_info.get('name', model_id)}</b>\n"
-                        f"Параметры восстановлены из истории.\n\n"
-                        "Подтвердите генерацию:",
+                        repeat_msg,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("✅ Генерировать", callback_data="confirm_generate")],
-                            [InlineKeyboardButton("◀️ Назад к истории", callback_data="my_generations")],
+                            [InlineKeyboardButton("✅ Генерировать" if user_lang == 'ru' else "✅ Generate", callback_data="confirm_generate")],
+                            [InlineKeyboardButton("◀️ Назад к истории" if user_lang == 'ru' else "◀️ Back to history", callback_data="my_generations")],
                             [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
                         ]),
                         parse_mode='HTML'
@@ -7313,18 +7375,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             price = gen.get('price', 0)
             is_free = gen.get('is_free', False)
             
-            history_text = (
-                f"📚 <b>Мои генерации</b>\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📊 <b>Всего:</b> {len(history)} генераций\n"
-                f"📍 <b>Показана:</b> {new_index + 1} из {len(history)}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"🎨 <b>Генерация #{gen.get('id', 1)}</b>\n"
-                f"📅 <b>Дата:</b> {date_str}\n"
-                f"🤖 <b>Модель:</b> {model_name}\n"
-                f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else f'{price:.2f} ₽'}\n"
-                f"📦 <b>Результатов:</b> {len(result_urls)}\n\n"
-            )
+            if user_lang == 'ru':
+                history_text = (
+                    f"📚 <b>Мои генерации</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📊 <b>Всего генераций:</b> {len(history)}\n"
+                    f"📍 <b>Показана:</b> {new_index + 1} из {len(history)}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🎨 <b>Генерация #{gen.get('id', 1)}</b>\n\n"
+                    f"📅 <b>Дата создания:</b> {date_str}\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n"
+                    f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else f'{price:.2f} ₽'}\n"
+                    f"📦 <b>Результатов:</b> {len(result_urls)}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 <b>Что можно сделать:</b>\n"
+                    f"• Просмотреть результат генерации\n"
+                    f"• Повторить генерацию с теми же параметрами\n"
+                    f"• Перейти к другой генерации\n\n"
+                    f"🔄 <b>Навигация:</b> Используйте кнопки ниже"
+                )
+            else:
+                history_text = (
+                    f"📚 <b>My Generations</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📊 <b>Total generations:</b> {len(history)}\n"
+                    f"📍 <b>Showing:</b> {new_index + 1} of {len(history)}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🎨 <b>Generation #{gen.get('id', 1)}</b>\n\n"
+                    f"📅 <b>Created:</b> {date_str}\n"
+                    f"🤖 <b>Model:</b> {model_name}\n"
+                    f"💰 <b>Cost:</b> {'🎁 Free' if is_free else f'{price:.2f} ₽'}\n"
+                    f"📦 <b>Results:</b> {len(result_urls)}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 <b>What you can do:</b>\n"
+                    f"• View generation result\n"
+                    f"• Repeat generation with same parameters\n"
+                    f"• Navigate to another generation\n\n"
+                    f"🔄 <b>Navigation:</b> Use buttons below"
+                )
+            
+            logger.info(f"✅ [UX IMPROVEMENT] Sending improved generation history view to user {user_id}")
             
             keyboard = []
             
@@ -7389,27 +7479,87 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             help_text = normalized.get('help') or normalized.get('description', '')
             input_schema = normalized.get('input_schema') or normalized.get('input_params', {})
             
-            # Формируем текст карточки
-            model_info_text = f"{emoji} <b>{title}</b>\n\n" if emoji else f"<b>{title}</b>\n\n"
-            model_info_text += f"📋 <b>Тип генерации:</b> {gen_type.replace('_', '-')}\n\n"
-            model_info_text += f"ℹ️ <b>Инструкция:</b>\n{help_text}\n\n"
+            # Формируем улучшенный текст карточки модели
+            if user_lang == 'ru':
+                model_info_text = (
+                    f"{emoji} <b>{title}</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📋 <b>Тип генерации:</b> {gen_type.replace('_', '-')}\n\n"
+                    f"ℹ️ <b>Описание:</b>\n{help_text}\n\n"
+                )
+                
+                # Добавляем информацию о параметрах (без технической схемы)
+                if input_schema:
+                    required_params = [k for k, v in input_schema.items() if v.get('required', False)]
+                    optional_params = [k for k, v in input_schema.items() if not v.get('required', False)]
+                    
+                    model_info_text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    model_info_text += "⚙️ <b>Основные параметры:</b>\n"
+                    if required_params:
+                        model_info_text += f"• Обязательные: {', '.join(required_params[:5])}"
+                        if len(required_params) > 5:
+                            model_info_text += f" и еще {len(required_params) - 5}"
+                        model_info_text += "\n"
+                    if optional_params:
+                        model_info_text += f"• Опциональные: {', '.join(optional_params[:5])}"
+                        if len(optional_params) > 5:
+                            model_info_text += f" и еще {len(optional_params) - 5}"
+                        model_info_text += "\n"
+                    model_info_text += "\n"
+                
+                model_info_text += (
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "💡 <b>Совет:</b> После начала генерации вы сможете настроить все параметры пошагово.\n\n"
+                    "🚀 <b>Готовы начать?</b> Нажмите кнопку ниже!"
+                )
+            else:
+                model_info_text = (
+                    f"{emoji} <b>{title}</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📋 <b>Generation type:</b> {gen_type.replace('_', '-')}\n\n"
+                    f"ℹ️ <b>Description:</b>\n{help_text}\n\n"
+                )
+                
+                # Add parameter info (without technical schema)
+                if input_schema:
+                    required_params = [k for k, v in input_schema.items() if v.get('required', False)]
+                    optional_params = [k for k, v in input_schema.items() if not v.get('required', False)]
+                    
+                    model_info_text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    model_info_text += "⚙️ <b>Main parameters:</b>\n"
+                    if required_params:
+                        model_info_text += f"• Required: {', '.join(required_params[:5])}"
+                        if len(required_params) > 5:
+                            model_info_text += f" and {len(required_params) - 5} more"
+                        model_info_text += "\n"
+                    if optional_params:
+                        model_info_text += f"• Optional: {', '.join(optional_params[:5])}"
+                        if len(optional_params) > 5:
+                            model_info_text += f" and {len(optional_params) - 5} more"
+                        model_info_text += "\n"
+                    model_info_text += "\n"
+                
+                model_info_text += (
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "💡 <b>Tip:</b> After starting generation, you'll be able to configure all parameters step by step.\n\n"
+                    "🚀 <b>Ready to start?</b> Click the button below!"
+                )
             
-            # Добавляем параметры
-            if input_schema:
-                model_info_text += f"⚙️ <b>Параметры:</b>\n"
-                import json
-                # Форматируем схему для читаемости
-                schema_text = json.dumps(input_schema, indent=2, ensure_ascii=False)
-                if len(schema_text) > 500:
-                    schema_text = schema_text[:500] + "..."
-                model_info_text += f"<code>{schema_text}</code>\n\n"
+            logger.info(f"✅ [UX IMPROVEMENT] Sending improved model card to user {user_id} for model {model_id}")
             
             # Кнопки
-            keyboard = [
-                [InlineKeyboardButton("✅ Начать генерацию", callback_data=f"start:{model_id}")],
-                [InlineKeyboardButton("ℹ️ Пример запроса", callback_data=f"example:{model_id}")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]
-            ]
+            if user_lang == 'ru':
+                keyboard = [
+                    [InlineKeyboardButton("✅ Начать генерацию", callback_data=f"start:{model_id}")],
+                    [InlineKeyboardButton("ℹ️ Пример запроса", callback_data=f"example:{model_id}")],
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]
+                ]
+            else:
+                keyboard = [
+                    [InlineKeyboardButton("✅ Start generation", callback_data=f"start:{model_id}")],
+                    [InlineKeyboardButton("ℹ️ Example request", callback_data=f"example:{model_id}")],
+                    [InlineKeyboardButton("⬅️ Back", callback_data="back_to_menu")]
+                ]
             
             await query.edit_message_text(
                 text=model_info_text,
@@ -9741,9 +9891,29 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Show "Generation started" message
                     if user_lang == 'en':
-                        start_msg = f"🚀 <b>Generation started!</b>\n\nProcessing your image with <b>{model_name}</b>...\n\nPlease wait, this may take a moment."
+                        start_msg = (
+                            f"🚀 <b>Generation Started!</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"✅ <b>Processing your image</b>\n\n"
+                            f"🤖 <b>Model:</b> {model_name}\n\n"
+                            f"⏳ <b>What's happening:</b>\n"
+                            f"• AI is analyzing your image\n"
+                            f"• Content generation in progress\n"
+                            f"• Usually takes 10-60 seconds\n\n"
+                            f"💡 Result will come automatically when ready!"
+                        )
                     else:
-                        start_msg = f"🚀 <b>Генерация началась!</b>\n\nОбрабатываю ваше изображение с помощью <b>{model_name}</b>...\n\nПожалуйста, подождите, это может занять некоторое время."
+                        start_msg = (
+                            f"🚀 <b>Генерация началась!</b>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"✅ <b>Обрабатываю ваше изображение</b>\n\n"
+                            f"🤖 <b>Модель:</b> {model_name}\n\n"
+                            f"⏳ <b>Что происходит:</b>\n"
+                            f"• Нейросеть анализирует ваше изображение\n"
+                            f"• Идет процесс генерации контента\n"
+                            f"• Обычно занимает 10-60 секунд\n\n"
+                            f"💡 Результат придет автоматически по готовности!"
+                        )
                     
                     try:
                         if update.message:
@@ -10808,16 +10978,31 @@ async def start_generation_directly(
     
     # Отправляем уведомление о начале генерации
     user_lang = get_user_language(user_id) if user_id else 'ru'
+    model_name = model_info.get('name', model_id)
     notification_text = (
         "🚀 <b>Генерация запущена!</b>\n\n"
-        "⏳ Ожидайте результат...\n\n"
-        f"Модель: <b>{model_info.get('name', model_id)}</b>\n"
-        f"💰 Стоимость: <b>{price:.2f}</b> ₽"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "✅ <b>Ваш запрос принят и обрабатывается</b>\n\n"
+        f"🤖 <b>Модель:</b> {model_name}\n"
+        f"💰 <b>Стоимость:</b> {price:.2f} ₽\n\n"
+        "⏳ <b>Что происходит:</b>\n"
+        "• Нейросеть анализирует ваш запрос\n"
+        "• Идет процесс создания контента\n"
+        "• Обычно это занимает от 10 секунд до 2 минут\n\n"
+        "💡 Результат придет автоматически по готовности!\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     ) if user_lang == 'ru' else (
-        "🚀 <b>Generation started!</b>\n\n"
-        "⏳ Please wait for the result...\n\n"
-        f"Model: <b>{model_info.get('name', model_id)}</b>\n"
-        f"💰 Cost: <b>{price:.2f}</b> ₽"
+        "🚀 <b>Generation Started!</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "✅ <b>Your request is accepted and processing</b>\n\n"
+        f"🤖 <b>Model:</b> {model_name}\n"
+        f"💰 <b>Cost:</b> {price:.2f} ₽\n\n"
+        "⏳ <b>What's happening:</b>\n"
+        "• AI is analyzing your request\n"
+        "• Content creation in progress\n"
+        "• Usually takes from 10 seconds to 2 minutes\n\n"
+        "💡 Result will come automatically when ready!\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     await status_message.edit_text(notification_text, parse_mode='HTML')
     
@@ -23327,7 +23512,19 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 try:
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text="✅ <b>Генерация завершена!</b>\n\n⏳ Загружаю результат...",
+                        text=(
+                            "✅ <b>Генерация завершена!</b>\n\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            "🎉 <b>Результат готов!</b>\n\n"
+                            "⏳ Загружаю результат...\n\n"
+                            "💡 Скоро вы увидите созданный контент!"
+                        ) if user_lang == 'ru' else (
+                            "✅ <b>Generation Completed!</b>\n\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            "🎉 <b>Result is ready!</b>\n\n"
+                            "⏳ Loading result...\n\n"
+                            "💡 You'll see the created content shortly!"
+                        ),
                         parse_mode='HTML'
                     )
                 except Exception as e:
@@ -23469,7 +23666,15 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                             
                                             # Add buttons only to the last item
                                             is_last = (i == len(result_urls[:5]) - 1)
-                                            caption = "✅ <b>Генерация завершена!</b>" if i == 0 else None
+                                            caption = (
+                                                "✅ <b>Генерация завершена!</b>\n\n"
+                                                "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                            ) if i == 0 and user_lang == 'ru' else (
+                                                "✅ <b>Generation Completed!</b>\n\n"
+                                                "🎉 <b>Your result is ready!</b>\n\n"
+                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                            ) if i == 0 else None
                                             
                                             if is_video_model:
                                                 # Send as video

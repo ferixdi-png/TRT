@@ -125,3 +125,4 @@ if __name__ == "__main__":
     
     auto_push(args.branch, args.message)
 
+

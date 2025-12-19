@@ -91,9 +91,9 @@ class ProviderErrorHandler:
         elif status_code in [500, 502, 503, 504]:
             error_type = ErrorType.SERVER_ERROR
             user_message = (
-                "❌ <b>Простите, возникла ошибка на сервере Kie.ai</b>\n\n"
+                "❌ <b>Простите, возникла временная проблема на сервере</b>\n\n"
                 "Пожалуйста, попробуйте позже.\n\n"
-                "Это техническая проблема на стороне сервера, мы уже работаем над её решением."
+                "Это техническая проблема, мы уже работаем над её решением."
             )
         elif status_code == 400:
             error_type = ErrorType.VALIDATION_ERROR
