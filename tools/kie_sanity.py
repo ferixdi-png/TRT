@@ -29,8 +29,12 @@ def post(path, payload):
         data=json.dumps(payload),
         timeout=60,
     )
-    r.raise_for_status()
-    return r.json()
+    # Don't raise on 4xx/5xx - return JSON response for inspection
+    try:
+        return r.json()
+    except:
+        r.raise_for_status()
+        return {"error": r.text, "status_code": r.status_code}
 
 def get(path):
     r = requests.get(
