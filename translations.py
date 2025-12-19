@@ -215,7 +215,13 @@ TRANSLATIONS = {
         'msg_payment_added': '💰 <b>Зачислено:</b> {amount:.2f} ₽',
         'msg_payment_method': '⭐ <b>Способ:</b> Telegram Stars ({stars} ⭐)',
         'msg_payment_balance': '💳 <b>Ваш баланс:</b> {balance} ₽',
-        'msg_payment_use_funds': '🎉 Теперь вы можете использовать средства для генерации контента!',
+        'msg_payment_use_funds': (
+            '🎉 <b>Отлично! Баланс пополнен!</b>\n\n'
+            '💡 <b>Что дальше:</b>\n'
+            '• Начните генерацию контента прямо сейчас\n'
+            '• Используйте любую модель из каталога\n'
+            '• Наслаждайтесь премиум возможностями!'
+        ),
         'error_session_empty': (
             '💡 <b>Сессия сброшена</b>\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -562,7 +568,13 @@ TRANSLATIONS = {
         'msg_payment_added': '💰 <b>Added:</b> {amount:.2f} ₽',
         'msg_payment_method': '⭐ <b>Method:</b> Telegram Stars ({stars} ⭐)',
         'msg_payment_balance': '💳 <b>Your balance:</b> {balance} ₽',
-        'msg_payment_use_funds': '🎉 You can now use funds for content generation!',
+        'msg_payment_use_funds': (
+            '🎉 <b>Great! Balance topped up!</b>\n\n'
+            '💡 <b>What\'s next:</b>\n'
+            '• Start content generation right now\n'
+            '• Use any model from the catalog\n'
+            '• Enjoy premium features!'
+        ),
         'error_session_empty': (
             '💡 <b>Session Reset</b>\n\n'
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'

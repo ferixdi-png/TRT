@@ -2946,7 +2946,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'💰 <b>{amount:.2f} ₽</b>\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'✅ <b>Сумма автоматически зачислена на ваш баланс!</b>\n\n'
-                    f'💡 Теперь вы можете использовать эти средства для генерации контента.'
+                    f'💡 <b>Что дальше:</b>\n'
+                    f'• Начните генерацию контента прямо сейчас\n'
+                    f'• Используйте любую модель из каталога\n'
+                    f'• Наслаждайтесь премиум возможностями!\n\n'
+                    f'✨ <b>Удачи в создании контента!</b>'
                 )
             else:
                 gift_text = (
@@ -2957,7 +2961,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'💰 <b>{amount:.2f} ₽</b>\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'✅ <b>Amount automatically added to your balance!</b>\n\n'
-                    f'💡 Now you can use these funds for content generation.'
+                    f'💡 <b>What\'s next:</b>\n'
+                    f'• Start content generation right now\n'
+                    f'• Use any model from the catalog\n'
+                    f'• Enjoy premium features!\n\n'
+                    f'✨ <b>Good luck creating content!</b>'
                 )
             
             keyboard = [
@@ -3604,11 +3612,51 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
                 ]
                 
+                needed = min_price - user_balance
+                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                remaining_free = get_user_free_generations_remaining(user_id)
+                
+                if user_lang == 'ru':
+                    insufficient_msg = (
+                        f"❌ <b>Недостаточно средств для генерации</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
+                        f"💵 <b>Требуется минимум:</b> {price_text} ₽\n"
+                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>Что делать:</b>\n"
+                        f"• Пополните баланс через кнопку ниже\n"
+                    )
+                    
+                    if remaining_free > 0:
+                        insufficient_msg += f"• Используйте бесплатные генерации Z-Image ({remaining_free} доступно)\n"
+                    
+                    insufficient_msg += (
+                        f"• Пригласите друга и получите бонусы\n\n"
+                        f"🔄 После пополнения попробуйте генерацию снова."
+                    )
+                else:
+                    insufficient_msg = (
+                        f"❌ <b>Insufficient Funds for Generation</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
+                        f"💵 <b>Minimum required:</b> {price_text} ₽\n"
+                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>What to do:</b>\n"
+                        f"• Top up balance via button below\n"
+                    )
+                    
+                    if remaining_free > 0:
+                        insufficient_msg += f"• Use free Z-Image generations ({remaining_free} available)\n"
+                    
+                    insufficient_msg += (
+                        f"• Invite a friend and get bonuses\n\n"
+                        f"🔄 After topping up, try generation again."
+                    )
+                
                 await query.edit_message_text(
-                    f"❌ <b>Недостаточно средств для генерации</b>\n\n"
-                    f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                    f"💵 <b>Требуется минимум:</b> {price_text} ₽\n\n"
-                    f"Пополните баланс, чтобы начать генерацию.",
+                    insufficient_msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -8110,11 +8158,51 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
                 ]
                 
+                needed = min_price - user_balance
+                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                remaining_free = get_user_free_generations_remaining(user_id)
+                
+                if user_lang == 'ru':
+                    insufficient_msg = (
+                        f"❌ <b>Недостаточно средств для генерации</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
+                        f"💵 <b>Требуется минимум:</b> {price_text} ₽\n"
+                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>Что делать:</b>\n"
+                        f"• Пополните баланс через кнопку ниже\n"
+                    )
+                    
+                    if remaining_free > 0:
+                        insufficient_msg += f"• Используйте бесплатные генерации Z-Image ({remaining_free} доступно)\n"
+                    
+                    insufficient_msg += (
+                        f"• Пригласите друга и получите бонусы\n\n"
+                        f"🔄 После пополнения попробуйте генерацию снова."
+                    )
+                else:
+                    insufficient_msg = (
+                        f"❌ <b>Insufficient Funds for Generation</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
+                        f"💵 <b>Minimum required:</b> {price_text} ₽\n"
+                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>What to do:</b>\n"
+                        f"• Top up balance via button below\n"
+                    )
+                    
+                    if remaining_free > 0:
+                        insufficient_msg += f"• Use free Z-Image generations ({remaining_free} available)\n"
+                    
+                    insufficient_msg += (
+                        f"• Invite a friend and get bonuses\n\n"
+                        f"🔄 After topping up, try generation again."
+                    )
+                
                 await query.edit_message_text(
-                    f"❌ <b>Недостаточно средств для генерации</b>\n\n"
-                    f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                    f"💵 <b>Требуется минимум:</b> {price_text} ₽\n\n"
-                    f"Пополните баланс, чтобы начать генерацию.",
+                    insufficient_msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -9254,11 +9342,39 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 
+                user_lang = get_user_language(user_id)
+                
+                if user_lang == 'ru':
+                    payment_success_msg = (
+                        f"✅ <b>ОПЛАТА ПОЛУЧЕНА!</b> ✅\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💵 <b>Сумма:</b> {amount:.2f} ₽\n"
+                        f"💰 <b>Новый баланс:</b> {balance_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🎉 <b>Отлично! Баланс пополнен!</b>\n\n"
+                        f"💡 <b>Что дальше:</b>\n"
+                        f"• Начните генерацию контента прямо сейчас\n"
+                        f"• Используйте любую модель из каталога\n"
+                        f"• Наслаждайтесь премиум возможностями!\n\n"
+                        f"✨ <b>Спасибо за доверие!</b>"
+                    )
+                else:
+                    payment_success_msg = (
+                        f"✅ <b>PAYMENT RECEIVED!</b> ✅\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💵 <b>Amount:</b> {amount:.2f} ₽\n"
+                        f"💰 <b>New balance:</b> {balance_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🎉 <b>Great! Balance topped up!</b>\n\n"
+                        f"💡 <b>What's next:</b>\n"
+                        f"• Start content generation right now\n"
+                        f"• Use any model from the catalog\n"
+                        f"• Enjoy premium features!\n\n"
+                        f"✨ <b>Thank you for your trust!</b>"
+                    )
+                
                 await update.message.reply_text(
-                    f"✅ <b>Оплата получена!</b>\n\n"
-                    f"💵 <b>Сумма:</b> {amount:.2f} ₽\n"
-                    f"💰 <b>Новый баланс:</b> {balance_str} ₽\n\n"
-                    f"Спасибо за пополнение! Теперь вы можете использовать баланс для генерации контента.",
+                    payment_success_msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -11276,11 +11392,39 @@ async def start_generation_directly(
             if user_balance < price:
                 price_str = f"{price:.2f}".rstrip('0').rstrip('.')
                 balance_str = f"{user_balance:.2f}".rstrip('0').rstrip('.')
+                user_lang_check = get_user_language(user_id)
+                needed = price - user_balance
+                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                
+                if user_lang_check == 'ru':
+                    insufficient_msg = (
+                        f"❌ <b>Недостаточно средств</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💰 <b>Требуется:</b> {price_str} ₽\n"
+                        f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
+                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>Что делать:</b>\n"
+                        f"• Пополните баланс через главное меню\n"
+                        f"• Используйте бесплатные генерации Z-Image\n\n"
+                        f"🔄 После пополнения попробуйте генерацию снова."
+                    )
+                else:
+                    insufficient_msg = (
+                        f"❌ <b>Insufficient Funds</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💰 <b>Required:</b> {price_str} ₽\n"
+                        f"💳 <b>Your balance:</b> {balance_str} ₽\n"
+                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>What to do:</b>\n"
+                        f"• Top up balance via main menu\n"
+                        f"• Use free Z-Image generations\n\n"
+                        f"🔄 After topping up, try generation again."
+                    )
+                
                 await status_message.edit_text(
-                    f"❌ <b>Недостаточно средств</b>\n\n"
-                    f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                    f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n\n"
-                    f"Пополните баланс для продолжения.",
+                    insufficient_msg,
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
@@ -24618,15 +24762,28 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     # Send confirmation message
     balance_str = f"{await get_user_balance_async(user_id):.2f}".rstrip('0').rstrip('.')
     
-    success_text = (
-        f'{t("msg_payment_success", lang=user_lang)}\n\n'
-        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-        f'{t("msg_payment_added", lang=user_lang, amount=amount_rubles)}\n'
-        f'{t("msg_payment_method", lang=user_lang, stars=amount_stars)}\n\n'
-        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-        f'{t("msg_payment_balance", lang=user_lang, balance=balance_str)}\n\n'
-        f'{t("msg_payment_use_funds", lang=user_lang)}'
-    )
+    if user_lang == 'ru':
+        success_text = (
+            f'{t("msg_payment_success", lang=user_lang)}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{t("msg_payment_added", lang=user_lang, amount=amount_rubles)}\n'
+            f'{t("msg_payment_method", lang=user_lang, stars=amount_stars)}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{t("msg_payment_balance", lang=user_lang, balance=balance_str)}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{t("msg_payment_use_funds", lang=user_lang)}'
+        )
+    else:
+        success_text = (
+            f'{t("msg_payment_success", lang=user_lang)}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{t("msg_payment_added", lang=user_lang, amount=amount_rubles)}\n'
+            f'{t("msg_payment_method", lang=user_lang, stars=amount_stars)}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{t("msg_payment_balance", lang=user_lang, balance=balance_str)}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{t("msg_payment_use_funds", lang=user_lang)}'
+        )
     
     keyboard = [
         [InlineKeyboardButton(t('btn_check_balance', lang=user_lang), callback_data="check_balance")],
