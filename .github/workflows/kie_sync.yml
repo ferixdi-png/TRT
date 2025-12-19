@@ -37,7 +37,8 @@ jobs:
         env:
           KIE_COOKIE_HEADER: ${{ secrets.KIE_COOKIE_HEADER }}
         run: |
-          python tools/kie_sync/run_all.py --sync
+          # Don't echo cookie header (security)
+          python tools/kie_sync/run_all.py --sync 2>&1 | grep -v "KIE_COOKIE" || true
         continue-on-error: true
 
       - name: Check for changes
