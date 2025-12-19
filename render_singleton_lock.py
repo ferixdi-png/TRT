@@ -30,14 +30,19 @@ def make_lock_key(token: str, namespace: str = "telegram_polling") -> int:
     # Используем SHA256 и берем первые 8 байт (64 бита) для bigint
     hash_bytes = hashlib.sha256(combined).digest()[:8]
     
-    # Конвертируем в signed int64 (PostgreSQL bigint)
+    # Конвертируем в unsigned int64, затем приводим к signed bigint
     # PostgreSQL advisory lock использует signed bigint (-2^63 to 2^63-1)
-    lock_key = int.from_bytes(hash_bytes, byteorder='big', signed=True)
+    unsigned_key = int.from_bytes(hash_bytes, byteorder='big', signed=False)
     
-    # Убеждаемся что ключ в допустимом диапазоне для PostgreSQL bigint
-    # PostgreSQL bigint: -9223372036854775808 to 9223372036854775807
-    if lock_key > 9223372036854775807:
-        lock_key = lock_key - 18446744073709551616  # Приводим к signed range
+    # Приводим к signed bigint: используем модуль для гарантии положительного значения
+    # MAX_BIGINT = 9223372036854775807 (2^63 - 1)
+    MAX_BIGINT = 9223372036854775807
+    lock_key = unsigned_key % (MAX_BIGINT + 1)
+    
+    # Убеждаемся что ключ в допустимом диапазоне (должно быть автоматически)
+    if lock_key > MAX_BIGINT or lock_key < 0:
+        # Fallback: используем только младшие 63 бита
+        lock_key = unsigned_key & 0x7FFFFFFFFFFFFFFF
     
     # Маскируем токен для логов
     masked_token = token[:4] + "..." + token[-4:] if len(token) > 8 else "****"
