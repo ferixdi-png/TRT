@@ -2630,6 +2630,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = None
     user_lang = 'ru'
     
+    # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+    guard = get_no_silence_guard()
+    update_id = update.update_id
+    # ==================== END NO-SILENCE GUARD ====================
+    
     # 🔥 MAXIMUM LOGGING: Log entry point
     try:
         query = update.callback_query
@@ -2654,6 +2660,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # This is critical - if we don't answer, button will hang
         try:
             await query.answer()
+            # NO-SILENCE GUARD: Track outgoing action
+            track_outgoing_action(update_id)
         except Exception as answer_error:
             logger.warning(f"Could not answer callback query: {answer_error}")
             # Continue anyway - better to process than to fail completely
@@ -8299,6 +8307,12 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     start_time = time.time()
     user_id = update.effective_user.id
     
+    # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+    guard = get_no_silence_guard()
+    update_id = update.update_id
+    # ==================== END NO-SILENCE GUARD ====================
+    
     # CRITICAL: Log function entry IMMEDIATELY
     logger.info(f"🚨🚨🚨 INPUT_PARAMETERS FUNCTION CALLED: user_id={user_id}, update_type={type(update).__name__}")
     
@@ -10082,6 +10096,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сразу отправляем подтверждение, чтобы пользователь не думал, что бот завис
     try:
         await update.message.reply_text("✅ Принято, обрабатываю...", parse_mode='HTML')
+        # NO-SILENCE GUARD: Track outgoing action
+        track_outgoing_action(update_id)
     except Exception as e:
         logger.warning(f"Не удалось отправить подтверждение: {e}")
     
@@ -24141,13 +24157,17 @@ async def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
     # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
-    # Гарантирует ответ на каждый входящий update через улучшенный error_handler
+    # Гарантирует ответ на каждый входящий update
     # NO-SILENCE GUARD реализован через:
-    # 1. Улучшенный error_handler (уже есть ниже) - отправляет fallback при ошибках
-    # 2. Гарантия ответа в button_callback (уже есть - всегда вызывает query.answer())
-    # 3. Гарантия ответа в input_parameters (уже есть - отправляет "✅ Принято, обрабатываю...")
-    # 4. Гарантия ответа в error_handler (уже есть - отправляет сообщение при ошибке)
-    logger.info("✅ NO-SILENCE GUARD: All handlers guarantee response (button_callback, input_parameters, error_handler)")
+    # 1. app/observability/no_silence_guard.py - middleware для отслеживания outgoing actions
+    # 2. Интеграция в button_callback - отслеживает query.answer() и все send/edit
+    # 3. Интеграция в input_parameters - отслеживает reply_text и все send/edit
+    # 4. Улучшенный error_handler - отправляет fallback при ошибках
+    # 5. Гарантия ответа в button_callback (всегда вызывает query.answer())
+    # 6. Гарантия ответа в input_parameters (отправляет "✅ Принято, обрабатываю...")
+    from app.observability.no_silence_guard import get_no_silence_guard
+    no_silence_guard = get_no_silence_guard()
+    logger.info("✅ NO-SILENCE GUARD: Integrated in button_callback, input_parameters, error_handler")
     # ==================== END NO-SILENCE GUARD ====================
     
     # Create conversation handler for generation
@@ -24756,11 +24776,18 @@ async def main():
             }
             logger.error(f"Error details: {error_details}")
             
+            # ==================== NO-SILENCE GUARD: Ensure response on error ====================
+            from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+            guard = get_no_silence_guard()
+            update_id = update.update_id if isinstance(update, Update) else None
+            
             # Для callback ошибок отвечаем безопасно
             if isinstance(update, Update) and update.callback_query:
                 try:
                     error_text = "⚠️ Ошибка. Откройте /start" if user_lang == 'ru' else "⚠️ Error. Open /start"
                     await update.callback_query.answer(error_text, show_alert=True)
+                    if update_id:
+                        track_outgoing_action(update_id)
                 except Exception as e:
                     logger.warning(f"Could not answer callback in error handler: {e}")
             
@@ -24781,8 +24808,15 @@ async def main():
                         text=error_text,
                         parse_mode='HTML'
                     )
+                    if update_id:
+                        track_outgoing_action(update_id)
                 except Exception as e:
                     logger.warning(f"Could not send error message: {e}")
+            
+            # NO-SILENCE GUARD: Проверяем что был ответ
+            if update_id:
+                await guard.check_and_ensure_response(update, context)
+            # ==================== END NO-SILENCE GUARD ====================
         except Exception as e:
             # Если сам error handler упал, логируем критическую ошибку
             logger.critical(f"❌❌❌ CRITICAL: Error handler itself failed: {e}", exc_info=True)

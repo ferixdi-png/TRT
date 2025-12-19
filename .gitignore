@@ -10,6 +10,7 @@ config.prod.*
 config.dev.*
 services_config.json
 render.yaml
+.github_token
 
 # Python
 __pycache__/
