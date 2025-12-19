@@ -50,11 +50,15 @@ class InputMatrixTester:
     
     async def test_input_type(self, model_id: str, input_type: str, value: str) -> Dict:
         """Test specific input type for a model"""
+        # Use same approach as behavioral_e2e - mock BEFORE import
+        import importlib
+        
         # Mock all dependencies BEFORE importing bot_kie
         with patch('bot_kie.get_kie_gateway') as mock_gateway, \
              patch('bot_kie.get_user_balance', return_value=1000.0), \
              patch('bot_kie.get_user_balance_async', new_callable=AsyncMock, return_value=1000.0), \
              patch('bot_kie.get_user_language', return_value='ru'), \
+             patch('bot_kie.user_sessions', {}), \
              patch('bot_kie.DATABASE_AVAILABLE', False), \
              patch('bot_kie.get_user_generations_history', return_value=[]), \
              patch('bot_kie.get_is_admin', return_value=False), \
@@ -66,38 +70,28 @@ class InputMatrixTester:
             fake_gateway = FakeKieAPI()
             mock_gateway.return_value = fake_gateway
             
+            # Import AFTER mocks
+            if 'bot_kie' in sys.modules:
+                importlib.reload(sys.modules['bot_kie'])
+            from bot_kie import input_parameters, user_sessions, get_model_by_id
             from app.observability.no_silence_guard import get_no_silence_guard
             guard = get_no_silence_guard()
             
-            # Mock update with text
-            update = MagicMock()
-            update.update_id = 12345
-            update.message = MagicMock()
-            update.message.text = value
-            update.message.from_user.id = 123
-            update.message.chat_id = 123
-            update.message.reply_text = AsyncMock()
-            update.effective_user = MagicMock()
-            update.effective_user.id = 123
+            # Get model info
+            model_info = get_model_by_id(model_id) or {
+                'id': model_id, 
+                'name': model_id, 
+                'input_params': {
+                    'prompt': {
+                        'required': True, 
+                        'type': 'string', 
+                        'max_length': 1000,
+                        'description': 'Test prompt'
+                    }
+                }
+            }
             
-            context = MagicMock()
-            context.bot = MagicMock()
-            context.bot.send_message = AsyncMock(return_value=MagicMock())
-            context.bot.get_file = AsyncMock(return_value=MagicMock())
-            
-            # Set up session
-            import importlib
-            if 'bot_kie' in sys.modules:
-                importlib.reload(sys.modules['bot_kie'])
-            from bot_kie import user_sessions, get_model_by_id
-            
-            model_info = get_model_by_id(model_id) or {'id': model_id, 'name': model_id, 'input_params': {'prompt': {'required': True, 'type': 'string', 'max_length': 1000}}}
-            
-            # Ensure user_sessions is a dict (not mocked)
-            if not isinstance(user_sessions, dict):
-                import bot_kie
-                bot_kie.user_sessions = {}
-            
+            # Set up session (user_sessions is now a real dict from patch)
             user_sessions[123] = {
                 'model_id': model_id,
                 'waiting_for': 'prompt',
@@ -108,13 +102,27 @@ class InputMatrixTester:
                 'properties': model_info.get('input_params', {})
             }
             
+            # Mock update with text
+            update = MagicMock()
+            update.update_id = 12345
+            update.message = MagicMock()
+            update.message.text = value
+            update.message.from_user = MagicMock()
+            update.message.from_user.id = 123
+            update.message.chat_id = 123
+            update.message.reply_text = AsyncMock()
+            update.effective_user = MagicMock()
+            update.effective_user.id = 123
+            
+            context = MagicMock()
+            context.bot = MagicMock()
+            context.bot.send_message = AsyncMock(return_value=MagicMock(message_id=1))
+            context.bot.get_file = AsyncMock(return_value=MagicMock())
+            
             outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
             
             try:
-                from bot_kie import input_parameters, start_next_parameter
-                # Mock start_next_parameter to avoid async issues
-                with patch('bot_kie.start_next_parameter', new_callable=AsyncMock, return_value=None):
-                    result = await input_parameters(update, context)
+                result = await input_parameters(update, context)
                 
                 outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
                 has_response = outgoing_count_after > outgoing_count_before
@@ -126,11 +134,14 @@ class InputMatrixTester:
                     "outgoing_actions": outgoing_count_after - outgoing_count_before
                 }
             except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()[:500]
                 return {
                     "model_id": model_id,
                     "input_type": input_type,
                     "passed": False,
-                    "error": str(e)[:200]
+                    "error": str(e)[:200],
+                    "traceback": error_trace
                 }
             finally:
                 # Cleanup
