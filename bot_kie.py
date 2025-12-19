@@ -4635,7 +4635,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             categories = get_categories()
             
             models_text = (
-                f"🤖 <b>ВСЕ МОДЕЛИ ({len(KIE_MODELS)})</b>\n\n"
+                f"🤖 <b>ВСЕ НЕЙРОСЕТИ ({len(KIE_MODELS)})</b> 🤖\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
             
@@ -4645,8 +4645,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             
             models_text += (
-                f"💡 <b>Выберите модель из списка ниже</b>\n"
+                f"💡 <b>Выберите нейросеть из списка ниже</b>\n"
                 f"Модели сгруппированы по категориям для удобства\n\n"
+                f"💰 <b>Все модели работают!</b> Выберите любую и начните генерацию.\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
             
@@ -10859,7 +10860,52 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # For z-image, skip image input and go to next parameter
                 session['has_image_input'] = False
             
-                # Check for audio_url requirement
+                # IMPORTANT: z-image does NOT support image input (text-to-image only)
+                # Skip image input check for z-image - it's text-to-image only
+                if model_id == "z-image":
+                    # z-image is text-to-image only, skip image input step completely
+                    session['waiting_for'] = None
+                    session['has_image_input'] = False  # Ensure flag is set correctly
+                    
+                    # Check for audio_url requirement (unlikely for z-image, but check anyway)
+                    if 'audio_url' in input_params or 'audio_input' in input_params:
+                        audio_param_name = 'audio_url' if 'audio_url' in input_params else 'audio_input'
+                        audio_required = input_params.get(audio_param_name, {}).get('required', False)
+                        
+                        if audio_required:
+                            # Audio is required
+                            keyboard = [
+                                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                            ]
+                            await update.message.reply_text(
+                                "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
+                                "Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
+                                "Максимальный размер: 200 MB",
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                                parse_mode='HTML'
+                            )
+                            session['waiting_for'] = audio_param_name
+                            session['current_param'] = audio_param_name
+                            return INPUTTING_PARAMS
+                    
+                    # Continue to next parameter (aspect_ratio for z-image)
+                    try:
+                        next_param_result = await start_next_parameter(update, context, user_id)
+                        if next_param_result:
+                            return next_param_result
+                        # Если start_next_parameter вернул None, но не отправил сообщение - отправляем fallback
+                        # Проверяем, было ли отправлено сообщение через NO-SILENCE GUARD
+                        await guard.check_and_ensure_response(update, context)
+                    except Exception as e:
+                        logger.error(f"Error in start_next_parameter for z-image: {e}", exc_info=True)
+                        await update.message.reply_text(
+                            "❌ Ошибка при переходе к следующему параметру. Попробуйте снова.",
+                            parse_mode='HTML'
+                        )
+                        track_outgoing_action(update_id)
+                    return INPUTTING_PARAMS
+                
+                # Check for audio_url requirement (for non-z-image models)
                 if 'audio_url' in input_params or 'audio_input' in input_params:
                     audio_param_name = 'audio_url' if 'audio_url' in input_params else 'audio_input'
                     audio_required = input_params.get(audio_param_name, {}).get('required', False)
@@ -10876,47 +10922,24 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
-                    session['waiting_for'] = audio_param_name
-                    session['current_param'] = audio_param_name
-                    return INPUTTING_PARAMS
-                else:
-                    # Audio is optional - show buttons
-                    keyboard = [
-                        [InlineKeyboardButton("🎤 Загрузить аудио (опционально)", callback_data="add_audio")],
-                        [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_audio")],
-                        [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
-                    ]
-                    await update.message.reply_text(
-                        "🎤 <b>Вы можете загрузить аудио-файл (опционально)</b>\n\n"
-                        "Отправьте аудио-файл или нажмите 'Пропустить', чтобы продолжить.",
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                    session['waiting_for'] = None  # Will be set when user clicks button or sends audio
-                    return INPUTTING_PARAMS
-                
-                # Check if image is required (for image_urls or image_input)
-                # IMPORTANT: z-image does NOT support image input (text-to-image only)
-                # Skip image input check for z-image - it's text-to-image only
-                if model_id == "z-image":
-                    # z-image is text-to-image only, skip image input step completely
-                    session['waiting_for'] = None
-                    session['has_image_input'] = False  # Ensure flag is set correctly
-                    # Continue to next parameter (aspect_ratio for z-image)
-                    try:
-                        next_param_result = await start_next_parameter(update, context, user_id)
-                        if next_param_result:
-                            return next_param_result
-                        # Если start_next_parameter вернул None, но не отправил сообщение - отправляем fallback
-                        # Проверяем, было ли отправлено сообщение через NO-SILENCE GUARD
-                        await guard.check_and_ensure_response(update, context)
-                    except Exception as e:
-                        logger.error(f"Error in start_next_parameter for z-image: {e}", exc_info=True)
+                        session['waiting_for'] = audio_param_name
+                        session['current_param'] = audio_param_name
+                        return INPUTTING_PARAMS
+                    else:
+                        # Audio is optional - show buttons
+                        keyboard = [
+                            [InlineKeyboardButton("🎤 Загрузить аудио (опционально)", callback_data="add_audio")],
+                            [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_audio")],
+                            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                        ]
                         await update.message.reply_text(
-                            "❌ Ошибка при переходе к следующему параметру. Попробуйте снова.",
+                            "🎤 <b>Вы можете загрузить аудио-файл (опционально)</b>\n\n"
+                            "Отправьте аудио-файл или нажмите 'Пропустить', чтобы продолжить.",
+                            reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
-                    return INPUTTING_PARAMS
+                        session['waiting_for'] = None  # Will be set when user clicks button or sends audio
+                        return INPUTTING_PARAMS
                 
                 if session.get('has_image_input'):
                     image_required = False
