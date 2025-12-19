@@ -53,11 +53,13 @@ class InputMatrixTester:
         # Mock all dependencies BEFORE importing bot_kie
         with patch('bot_kie.get_kie_gateway') as mock_gateway, \
              patch('bot_kie.get_user_balance', return_value=1000.0), \
+             patch('bot_kie.get_user_balance_async', new_callable=AsyncMock, return_value=1000.0), \
              patch('bot_kie.get_user_language', return_value='ru'), \
              patch('bot_kie.DATABASE_AVAILABLE', False), \
              patch('bot_kie.get_user_generations_history', return_value=[]), \
              patch('bot_kie.get_is_admin', return_value=False), \
-             patch('bot_kie.is_free_generation_available', return_value=True):
+             patch('bot_kie.is_free_generation_available', return_value=True), \
+             patch('bot_kie.calculate_price_rub', return_value=1.0):
             
             # Setup fake gateway
             from tests.fakes.fake_kie_api import FakeKieAPI
@@ -80,7 +82,8 @@ class InputMatrixTester:
             
             context = MagicMock()
             context.bot = MagicMock()
-            context.bot.send_message = AsyncMock()
+            context.bot.send_message = AsyncMock(return_value=MagicMock())
+            context.bot.get_file = AsyncMock(return_value=MagicMock())
             
             # Set up session
             import importlib
@@ -88,7 +91,12 @@ class InputMatrixTester:
                 importlib.reload(sys.modules['bot_kie'])
             from bot_kie import user_sessions, get_model_by_id
             
-            model_info = get_model_by_id(model_id) or {'id': model_id, 'name': model_id, 'input_params': {'prompt': {'required': True}}}
+            model_info = get_model_by_id(model_id) or {'id': model_id, 'name': model_id, 'input_params': {'prompt': {'required': True, 'type': 'string', 'max_length': 1000}}}
+            
+            # Ensure user_sessions is a dict (not mocked)
+            if not isinstance(user_sessions, dict):
+                import bot_kie
+                bot_kie.user_sessions = {}
             
             user_sessions[123] = {
                 'model_id': model_id,
@@ -103,8 +111,10 @@ class InputMatrixTester:
             outgoing_count_before = guard.outgoing_actions.get(update.update_id, 0)
             
             try:
-                from bot_kie import input_parameters
-                result = await input_parameters(update, context)
+                from bot_kie import input_parameters, start_next_parameter
+                # Mock start_next_parameter to avoid async issues
+                with patch('bot_kie.start_next_parameter', new_callable=AsyncMock, return_value=None):
+                    result = await input_parameters(update, context)
                 
                 outgoing_count_after = guard.outgoing_actions.get(update.update_id, 0)
                 has_response = outgoing_count_after > outgoing_count_before
