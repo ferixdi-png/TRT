@@ -246,3 +246,4 @@ class ErrorGuard:
             **self.stats,
             "incidents_dir": str(self.incidents_dir)
         }
+

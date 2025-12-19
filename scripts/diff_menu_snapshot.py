@@ -27,7 +27,7 @@ def load_snapshot(file_path: Path) -> Dict:
 
 def diff_snapshots(current: Dict, previous: Dict) -> str:
     """Сравнивает snapshot'ы и возвращает diff"""
-    md = "# 🔄 DIFF МЕНЮ\n\n"
+    md = "# DIFF MENU\n\n"
     
     # Сравниваем callback'ы
     current_callbacks = set(current.get("callbacks", []))
@@ -37,19 +37,19 @@ def diff_snapshots(current: Dict, previous: Dict) -> str:
     removed = previous_callbacks - current_callbacks
     
     if added:
-        md += "## ➕ Добавлены callback'ы\n\n"
+        md += "## Added callbacks\n\n"
         for cb in sorted(added):
             md += f"- `{cb}`\n"
         md += "\n"
     
     if removed:
-        md += "## ➖ Удалены callback'ы\n\n"
+        md += "## Removed callbacks\n\n"
         for cb in sorted(removed):
             md += f"- `{cb}`\n"
         md += "\n"
     
     if not added and not removed:
-        md += "## ✅ Изменений нет\n\n"
+        md += "## No changes\n\n"
     
     # Сравниваем модели
     current_models = set(current.get("models", []))
@@ -59,13 +59,13 @@ def diff_snapshots(current: Dict, previous: Dict) -> str:
     removed_models = previous_models - current_models
     
     if added_models:
-        md += "## ➕ Добавлены модели\n\n"
+        md += "## Added models\n\n"
         for model in sorted(added_models):
             md += f"- `{model}`\n"
         md += "\n"
     
     if removed_models:
-        md += "## ➖ Удалены модели\n\n"
+        md += "## Removed models\n\n"
         for model in sorted(removed_models):
             md += f"- `{model}`\n"
         md += "\n"
@@ -75,14 +75,14 @@ def diff_snapshots(current: Dict, previous: Dict) -> str:
 
 def main():
     """Главная функция"""
-    print("🔄 Сравнение snapshot'ов меню...")
+    print("Comparing menu snapshots...")
     
     current = load_snapshot(current_file)
     previous = load_snapshot(previous_file)
     
     if not previous:
-        print("⚠️ Предыдущий snapshot не найден, создаю первый diff")
-        diff_content = "# 🔄 DIFF МЕНЮ\n\n## Первый snapshot\n\nНет предыдущего snapshot для сравнения.\n"
+        print("WARN Previous snapshot not found, creating first diff")
+        diff_content = "# DIFF MENU\n\n## First snapshot\n\nNo previous snapshot for comparison.\n"
     else:
         diff_content = diff_snapshots(current, previous)
     
@@ -90,13 +90,13 @@ def main():
     diff_file = artifacts_dir / "menu_diff.md"
     with open(diff_file, 'w', encoding='utf-8') as f:
         f.write(diff_content)
-    print(f"✅ Сохранён {diff_file}")
+    print(f"OK Saved {diff_file}")
     
     # Сохраняем текущий как previous для следующего раза
     if current_file.exists():
         import shutil
         shutil.copy(current_file, previous_file)
-        print(f"✅ Сохранён {previous_file} для следующего сравнения")
+        print(f"OK Saved {previous_file} for next comparison")
     
     return 0
 

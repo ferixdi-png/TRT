@@ -180,3 +180,4 @@ class CallbackRouter:
     def get_stats(self) -> Dict[str, int]:
         """Возвращает статистику обработки"""
         return self._stats.copy()
+

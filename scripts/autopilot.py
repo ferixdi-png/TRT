@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-АВТОПИЛОТ - Автономный цикл улучшений
-Сканирует репозиторий, находит проблемы, чинит, проверяет
-Завершается ТОЛЬКО НА ЗЕЛЁНОМ
+AUTOPILOT — АВТОНОМНО ДО ИДЕАЛА
+Полный цикл: логи → инциденты → фиксы → тесты → verify → повтор
 """
 
 import sys
@@ -11,72 +10,82 @@ import subprocess
 import os
 from pathlib import Path
 
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+GREEN = '\033[92m'
+RED = '\033[91m'
+YELLOW = '\033[93m'
+RESET = '\033[0m'
 
-PROJECT_ROOT = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent
+os.chdir(project_root)
 
 
-def run_verify() -> int:
-    """Запускает verify_project.py и возвращает код выхода"""
-    env = os.environ.copy()
-    env['PYTHONIOENCODING'] = 'utf-8'
-    
-    result = subprocess.run(
-        [sys.executable, "scripts/verify_project.py"],
-        cwd=PROJECT_ROOT,
-        env=env,
-        errors='replace'
-    )
-    return result.returncode
+def run_command(cmd: list) -> tuple[int, str, str]:
+    """Запускает команду"""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return 1, "", "Timeout"
+    except Exception as e:
+        return 1, "", str(e)
 
 
 def main():
-    """Главная функция - цикл автопилота"""
+    """Главный цикл автопилота"""
+    print("\n" + "="*80)
+    print("AUTOPILOT - Автономное исправление до идеала")
     print("="*80)
-    print("🤖 АВТОПИЛОТ - АВТОНОМНЫЙ ЦИКЛ УЛУЧШЕНИЙ")
-    print("="*80)
-    print()
-    print("Цикл: Сканирование → Проверка → Исправление → Повтор")
-    print("Завершается ТОЛЬКО когда все проверки зелёные")
-    print()
     
-    max_iterations = 10
+    max_iterations = 20
     iteration = 0
     
     while iteration < max_iterations:
         iteration += 1
         print(f"\n{'='*80}")
-        print(f"🔄 ИТЕРАЦИЯ {iteration}/{max_iterations}")
-        print(f"{'='*80}\n")
+        print(f"Iteration {iteration}/{max_iterations}")
+        print(f"{'='*80}")
         
-        # Запускаем проверку
-        exit_code = run_verify()
+        # 1. Читаем логи Render
+        print("\n[1/6] Reading Render logs...")
+        code, stdout, stderr = run_command([
+            "python", "scripts/read_logs.py", "--since", "60m", "--grep", "ERROR|Traceback"
+        ])
+        if code != 0:
+            print(f"{YELLOW}WARN Failed to read logs: {stderr}{RESET}")
         
-        if exit_code == 0:
-            print("\n" + "="*80)
-            print("✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ - АВТОПИЛОТ ЗАВЕРШЁН")
-            print("="*80)
+        # 2. Парсим инциденты
+        print("\n[2/6] Parsing incidents...")
+        code, stdout, stderr = run_command(["python", "scripts/parse_logs.py"])
+        if code != 0:
+            print(f"{YELLOW}WARN Failed to parse logs: {stderr}{RESET}")
+        
+        # 3. Применяем безопасные фиксы
+        print("\n[3/6] Applying safe fixes...")
+        code, stdout, stderr = run_command(["python", "scripts/autofix.py"])
+        if stdout:
+            print(stdout)
+        
+        # 4. Создаём snapshot меню
+        print("\n[4/6] Creating menu snapshot...")
+        code, stdout, stderr = run_command(["python", "scripts/snapshot_menu.py"])
+        if code != 0:
+            print(f"{YELLOW}WARN Failed to snapshot menu: {stderr}{RESET}")
+        
+        # 5. Запускаем verify
+        print("\n[5/6] Running verify_project...")
+        code, stdout, stderr = run_command(["python", "scripts/verify_project.py"])
+        
+        if code == 0:
+            print(f"\n{GREEN}ALL CHECKS PASSED!{RESET}")
+            print(f"\nFinal output:")
+            print(stdout)
             return 0
         
-        print(f"\n⚠️ Итерация {iteration}: Найдены проблемы")
-        print("💡 Автопилот требует ручного исправления проблем")
-        print("   Запустите: python scripts/verify_project.py")
-        print("   Исправьте все FAILED проверки")
-        print("   Повторите: python scripts/autopilot.py")
-        
-        if iteration < max_iterations:
-            print(f"\n⏸️ Ожидание исправлений... (итерация {iteration}/{max_iterations})")
-            # В реальном автопилоте здесь была бы автоматическая попытка исправления
-            # Пока просто сообщаем о необходимости ручного исправления
-            break
+        print(f"\n{RED}Checks failed, continuing...{RESET}")
+        if stdout:
+            print(stdout[:500])  # Первые 500 символов
     
-    print("\n" + "="*80)
-    print("❌ АВТОПИЛОТ НЕ СМОГ ЗАВЕРШИТЬ ЦИКЛ")
-    print("="*80)
-    print("Требуется ручное исправление проблем")
+    print(f"\n{RED}Max iterations reached{RESET}")
     return 1
 
 

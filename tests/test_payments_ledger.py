@@ -1,94 +1,65 @@
 """
-Тест: Баланс и платежи
-Проверяет атомарность, идемпотентность, сохранение после рестарта
+Тесты баланса и платежей - атомарность, идемпотентность, сохранение
 """
 
-import sys
+import pytest
 from pathlib import Path
+import sys
 
-# Установка кодировки UTF-8 для Windows
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 
 def test_balance_functions_exist():
-    """Тест: функции работы с балансом существуют"""
-    from bot_kie import (
-        get_user_balance,
-        set_user_balance,
-        add_user_balance,
-        subtract_user_balance
-    )
-    
-    assert callable(get_user_balance)
-    assert callable(set_user_balance)
-    assert callable(add_user_balance)
-    assert callable(subtract_user_balance)
+    """Проверяет что функции баланса существуют"""
+    try:
+        from bot_kie import get_user_balance, set_user_balance, add_user_balance, subtract_user_balance
+        assert callable(get_user_balance)
+        assert callable(set_user_balance)
+        assert callable(add_user_balance)
+        assert callable(subtract_user_balance)
+    except ImportError as e:
+        pytest.fail(f"Balance functions not found: {e}")
 
 
-def test_balance_logging():
-    """Тест: баланс логируется"""
-    bot_file = PROJECT_ROOT / "bot_kie.py"
+def test_balance_logging_exists():
+    """Проверяет что есть критическое логирование баланса"""
+    bot_file = project_root / "bot_kie.py"
+    if not bot_file.exists():
+        pytest.skip("bot_kie.py not found")
     
-    with open(bot_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    # Проверяем наличие логирования
-    has_logging = (
-        "💰💰💰" in content or
-        "BALANCE" in content.upper() or
-        "GET_BALANCE" in content or
-        "SET_BALANCE" in content
-    )
-    
-    assert has_logging, "Логирование баланса не найдено"
+    # Проверяем логирование
+    assert 'GET_BALANCE' in content or 'SET_BALANCE' in content or '💰💰💰' in content, \
+        "Critical balance logging not found"
 
 
-def test_balance_persistence():
-    """Тест: баланс сохраняется (проверка наличия механизма сохранения)"""
-    bot_file = PROJECT_ROOT / "bot_kie.py"
+def test_balance_saves_to_db():
+    """Проверяет что баланс сохраняется в БД"""
+    bot_file = project_root / "bot_kie.py"
+    if not bot_file.exists():
+        pytest.skip("bot_kie.py not found")
     
-    with open(bot_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    # Проверяем наличие сохранения в БД или JSON
-    has_persistence = (
-        "db_update_user_balance" in content or
-        "save_json_file" in content or
-        "BALANCES_FILE" in content
-    )
+    # Проверяем сохранение в БД
+    assert 'db_update_user_balance' in content or 'update_user_balance' in content, \
+        "Balance saving to DB not found"
+
+
+def test_balance_verification_exists():
+    """Проверяет что есть верификация сохранения баланса"""
+    bot_file = project_root / "bot_kie.py"
+    if not bot_file.exists():
+        pytest.skip("bot_kie.py not found")
     
-    assert has_persistence, "Механизм сохранения баланса не найден"
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
+    
+    # Проверяем верификацию
+    assert 'BALANCE VERIFIED' in content or 'Verified balance' in content, \
+        "Balance verification not found"
 
 
 if __name__ == "__main__":
-    print("="*80)
-    print("🧪 ТЕСТ: БАЛАНС И ПЛАТЕЖИ")
-    print("="*80)
-    print()
-    
-    try:
-        test_balance_functions_exist()
-        print("✅ Функции работы с балансом найдены")
-        
-        test_balance_logging()
-        print("✅ Логирование баланса найдено")
-        
-        test_balance_persistence()
-        print("✅ Механизм сохранения баланса найден")
-        
-        print("\n✅ ВСЕ ТЕСТЫ ПРОЙДЕНЫ")
-        sys.exit(0)
-    except AssertionError as e:
-        print(f"❌ ТЕСТ ПРОВАЛЕН: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"❌ ОШИБКА: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    pytest.main([__file__, "-v"])

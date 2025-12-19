@@ -54,3 +54,4 @@ echo.
 %PYTHON_CMD% check_duplicate_services.py
 
 pause
+

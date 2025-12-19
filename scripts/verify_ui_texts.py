@@ -1,88 +1,48 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Проверка UI текстов
-Убеждается, что нет хардкода текстов, всё через translations
-"""
+"""Проверка UI текстов - нет COMING SOON, все переводы есть"""
 
 import sys
 import re
 from pathlib import Path
 
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
-PROJECT_ROOT = Path(__file__).parent.parent
-
-# Паттерны хардкода текстов (которые должны быть в translations)
-HARDCODED_TEXT_PATTERNS = [
-    (r'["\'](Главное меню|Main menu)["\']', "Хардкод 'Главное меню'"),
-    (r'["\'](Баланс|Balance)["\']', "Хардкод 'Баланс'"),
-    (r'["\'](Ошибка|Error)["\']', "Хардкод 'Ошибка'"),
-]
-
-# Исключения
-EXCEPTIONS = [
-    "translations.py",
-    "test_",
-    ".md",
-    "README",
-]
-
-
-def should_check_file(file_path: Path) -> bool:
-    """Проверяет, нужно ли проверять файл"""
-    file_str = str(file_path)
-    return not any(exc in file_str for exc in EXCEPTIONS)
-
-
-def find_hardcoded_texts() -> list:
-    """Находит хардкод текстов"""
-    violations = []
-    
-    for file_path in PROJECT_ROOT.rglob("*.py"):
-        if not should_check_file(file_path):
-            continue
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception:
-            continue
-        
-        for pattern, description in HARDCODED_TEXT_PATTERNS:
-            for match in re.finditer(pattern, content):
-                violations.append((file_path, match.group(0), description))
-    
-    return violations
-
+project_root = Path(__file__).parent.parent
+errors = []
 
 def main():
-    """Главная функция"""
-    print("="*80)
-    print("🔍 ПРОВЕРКА UI ТЕКСТОВ")
-    print("="*80)
-    print()
-    
-    violations = find_hardcoded_texts()
-    
-    if not violations:
-        print("✅ Хардкод текстов не найден")
+    bot_file = project_root / "bot_kie.py"
+    if not bot_file.exists():
+        print("OK bot_kie.py not found, skipping")
         return 0
     
-    print(f"⚠️ Найдено {len(violations)} потенциальных хардкодов:")
-    for file_path, text, description in violations[:20]:
-        rel_path = file_path.relative_to(PROJECT_ROOT)
-        print(f"   {rel_path}: {text} - {description}")
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    if len(violations) > 20:
-        print(f"   ... и ещё {len(violations) - 20}")
+    # Проверяем COMING SOON (только в коде, который выполняется, не в комментариях)
+    # Игнорируем комментарии и строки, которые не показываются пользователю
+    lines = content.split('\n')
+    for i, line in enumerate(lines, 1):
+        # Пропускаем комментарии
+        stripped = line.strip()
+        if stripped.startswith('#') or '"""' in stripped or "'''" in stripped:
+            continue
+        # Проверяем только строки, которые могут показываться пользователю
+        if re.search(r'(coming\s+soon|скоро\s+появится)', line, re.IGNORECASE):
+            # Проверяем что это не в комментарии и не в закомментированном коде
+            if 'coming_soon' in line.lower() and ('get(' in line or 'if' in line):
+                # Это проверка флага, не показ пользователю - пропускаем
+                continue
+            # Если это текст для пользователя - ошибка
+            if 'edit_message_text' in lines[max(0, i-5):i+5] or 'reply_text' in lines[max(0, i-5):i+5]:
+                errors.append(f"Found COMING SOON shown to user in bot_kie.py line {i}")
     
-    # Не фейлим, только предупреждаем
+    if errors:
+        print("FAIL Found issues:")
+        for e in errors:
+            print(f"  - {e}")
+        return 1
+    
+    print("OK UI texts verified")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

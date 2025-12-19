@@ -88,3 +88,4 @@ echo.
 %PYTHON_CMD% auto_fix_all.py
 
 pause
+

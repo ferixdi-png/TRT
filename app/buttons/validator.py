@@ -132,3 +132,4 @@ class ButtonValidator:
             logger.warning(f"⚠️ Найдено {len(issues['duplicates'])} дубликатов")
         
         logger.info("=" * 80)
+

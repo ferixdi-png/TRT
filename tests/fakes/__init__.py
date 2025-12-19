@@ -1,3 +1,1 @@
-"""
-Fake implementations для тестирования
-"""
+# Fake implementations for testing

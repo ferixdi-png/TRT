@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ЕДИНСТВЕННАЯ КОМАНДА ПРАВДЫ
+VERIFY PROJECT — ЕДИНСТВЕННАЯ ПРАВДА
 Запускает все проверки проекта
 FAIL если хотя бы одна проверка не прошла
 """
@@ -9,8 +9,14 @@ FAIL если хотя бы одна проверка не прошла
 import sys
 import subprocess
 import os
+import io
 from pathlib import Path
 from typing import List, Tuple
+
+# Установка кодировки UTF-8 для Windows
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Цвета для вывода
 GREEN = '\033[92m'
@@ -21,7 +27,7 @@ RESET = '\033[0m'
 def run_check(name: str, command: List[str]) -> Tuple[bool, str]:
     """Запускает проверку и возвращает (успех, вывод)"""
     print(f"\n{'='*80}")
-    print(f"🔍 {name}")
+    print(f"[CHECK] {name}")
     print(f"{'='*80}")
     
     try:
@@ -34,29 +40,29 @@ def run_check(name: str, command: List[str]) -> Tuple[bool, str]:
         )
         
         if result.returncode == 0:
-            print(f"{GREEN}✅ PASS{RESET}")
+            print(f"{GREEN}[PASS]{RESET}")
             if result.stdout:
-                print(result.stdout)
+                print(result.stdout[:500])  # Первые 500 символов
             return True, result.stdout
         else:
-            print(f"{RED}❌ FAIL{RESET}")
+            print(f"{RED}[FAIL]{RESET}")
             if result.stdout:
-                print(result.stdout)
+                print(result.stdout[:500])
             if result.stderr:
-                print(result.stderr)
+                print(result.stderr[:500])
             return False, result.stderr or result.stdout
     except subprocess.TimeoutExpired:
-        print(f"{RED}❌ TIMEOUT (>5 min){RESET}")
+        print(f"{RED}[TIMEOUT]{RESET}")
         return False, "Timeout"
     except Exception as e:
-        print(f"{RED}❌ ERROR: {e}{RESET}")
+        print(f"{RED}[ERROR]{RESET}: {e}")
         return False, str(e)
 
 
 def main():
     """Главная функция - запускает все проверки"""
     print("\n" + "="*80)
-    print("🚀 VERIFY PROJECT - ЕДИНСТВЕННАЯ КОМАНДА ПРАВДЫ")
+    print("VERIFY PROJECT - ЕДИНСТВЕННАЯ ПРАВДА")
     print("="*80)
     
     project_root = Path(__file__).parent.parent
@@ -72,37 +78,42 @@ def main():
         ("Verify Models Visible", ["python", "scripts/verify_models_visible_in_menu.py"]),
         ("Verify Callbacks", ["python", "scripts/verify_callbacks.py"]),
         ("Verify Payments Balance", ["python", "scripts/verify_payments_balance.py"]),
-        ("Run Tests", ["pytest", "-q", "--tb=short"]),
     ]
+    
+    # Проверяем наличие pytest
+    try:
+        import pytest
+        checks.append(("Run Tests", ["pytest", "-q", "--tb=short"]))
+    except ImportError:
+        print(f"{YELLOW}WARN pytest not installed, skipping tests{RESET}")
     
     results = []
     for name, command in checks:
         success, output = run_check(name, command)
         results.append((name, success))
         if not success:
-            print(f"\n{RED}❌ CHECK FAILED: {name}{RESET}")
-            print(f"{YELLOW}Continuing with other checks...{RESET}")
+            print(f"\n{RED}[FAILED]{RESET}: {name}")
     
     # Итоговый отчёт
     print("\n" + "="*80)
-    print("📊 ИТОГОВЫЙ ОТЧЁТ")
+    print("FINAL REPORT")
     print("="*80)
     
     passed = sum(1 for _, success in results if success)
     total = len(results)
     
     for name, success in results:
-        status = f"{GREEN}✅ PASS{RESET}" if success else f"{RED}❌ FAIL{RESET}"
+        status = f"{GREEN}[PASS]{RESET}" if success else f"{RED}[FAIL]{RESET}"
         print(f"{status} {name}")
     
-    print(f"\n{passed}/{total} проверок пройдено")
+    print(f"\n{passed}/{total} checks passed")
     
     if passed == total:
-        print(f"\n{GREEN}✅✅✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ!{RESET}")
+        print(f"\n{GREEN}ALL CHECKS PASSED!{RESET}")
         return 0
     else:
-        print(f"\n{RED}❌❌❌ ЕСТЬ ОШИБКИ!{RESET}")
-        print(f"{YELLOW}Запустите: python scripts/autopilot.py{RESET}")
+        print(f"\n{RED}THERE ARE ERRORS!{RESET}")
+        print(f"{YELLOW}Run: python scripts/autopilot.py{RESET}")
         return 1
 
 

@@ -132,3 +132,4 @@ python scripts/render_logs.py --service-id srv-xxxxx --level ERROR --lines 50
 2. Улучшить меню с группировкой по типам генераций (TASK 3)
 3. Добавить парсинг Market docs для автосинка (TASK 4)
 4. Добавить режимы в `auto_fix_render_bot.py` (TASK 5)
+

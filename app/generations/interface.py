@@ -120,3 +120,4 @@ class GenerationInterface:
             message += "• Change parameters"
         
         return message
+

@@ -79,3 +79,4 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request
 - Структуру проекта (кнопки → handlers → генерации → KIE API)
 - Асинхронность (async/await)
 - Работу всех компонентов бота
+

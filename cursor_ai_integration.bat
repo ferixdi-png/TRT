@@ -64,3 +64,4 @@ echo.
 %PYTHON_CMD% cursor_ai_integration.py
 
 pause
+

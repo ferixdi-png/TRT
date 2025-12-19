@@ -67,3 +67,4 @@ echo.
 %PYTHON_CMD% auto_fix_complete_safe.py
 
 pause
+

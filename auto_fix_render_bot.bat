@@ -94,3 +94,4 @@ echo.
 %PYTHON_CMD% auto_fix_render_bot.py
 
 pause
+

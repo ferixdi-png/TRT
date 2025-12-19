@@ -141,3 +141,4 @@ TELEGRAM_BOT_TOKEN=8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
 - ✅ Работает с несколькими сервисами из одного GitHub проекта
 
 **ВСЁ ГОТОВО! Настройте каждый сервис в Render Dashboard с нужными переменными окружения.**
+

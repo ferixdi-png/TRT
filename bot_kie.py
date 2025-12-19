@@ -7485,42 +7485,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 return ConversationHandler.END
             
-            # Check if model is coming soon
+            # Check if model is coming soon - НЕ показываем пользователю, просто возвращаем в меню
             if model_info.get('coming_soon', False):
                 user_lang = get_user_language(user_id)
-                model_name = model_info.get('name', model_id)
-                model_emoji = model_info.get('emoji', '🤖')
-                model_description = model_info.get('description', '')
-                
-                if user_lang == 'ru':
-                    coming_soon_text = (
-                        f"⏳ <b>{model_emoji} {model_name}</b>\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"📝 <b>Описание:</b>\n"
-                        f"{model_description}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"🚀 <b>СКОРО ПОЯВИТСЯ!</b>\n\n"
-                        f"Эта модель находится в разработке и скоро будет доступна в боте.\n"
-                        f"Следите за обновлениями! 🔔"
-                    )
-                else:
-                    coming_soon_text = (
-                        f"⏳ <b>{model_emoji} {model_name}</b>\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"📝 <b>Description:</b>\n"
-                        f"{model_description}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"🚀 <b>COMING SOON!</b>\n\n"
-                        f"This model is under development and will be available soon.\n"
-                        f"Stay tuned for updates! 🔔"
-                    )
-                
+                # Не показываем "COMING SOON" - просто возвращаем в меню
                 keyboard = [
                     [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
                 ]
                 
                 await query.edit_message_text(
-                    coming_soon_text,
+                    t('error_model_unavailable', lang=user_lang) or "Модель временно недоступна",
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -10117,113 +10091,113 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current_param = session.get('current_param', waiting_for)
             param_info = properties.get(current_param, {})
             max_length = param_info.get('max_length')
-        
-        # Validate max length
-        if max_length and len(text) > max_length:
-            await update.message.reply_text(
-                f"❌ Текст слишком длинный (макс. {max_length} символов). Попробуйте снова."
-            )
-            return INPUTTING_PARAMS
-        
-        # For language_code, convert common language names to codes
-        if current_param == 'language_code':
-            lang_lower = text.lower()
-            lang_map = {
-                'русский': 'ru',
-                'russian': 'ru',
-                'английский': 'en',
-                'english': 'en',
-                'eng': 'en',
-                'немецкий': 'de',
-                'german': 'de',
-                'французский': 'fr',
-                'french': 'fr',
-                'испанский': 'es',
-                'spanish': 'es',
-                'итальянский': 'it',
-                'italian': 'it',
-                'китайский': 'zh',
-                'chinese': 'zh',
-                'японский': 'ja',
-                'japanese': 'ja',
-                'корейский': 'ko',
-                'korean': 'ko'
-            }
-            if lang_lower in lang_map:
-                text = lang_map[lang_lower]
-            # If it's already a code (2-3 letters), convert to lowercase
-            elif len(text) <= 5 and text.replace('-', '').replace('_', '').isalpha():
-                text = text.lower()
-        
-        # For video_url in sora-watermark-remover, validate URL format
-        model_id = session.get('model_id', '')
-        if current_param == 'video_url' and model_id == 'sora-watermark-remover':
-            # Validate URL format (should contain sora.chatgpt.com)
-            if 'sora.chatgpt.com' not in text:
-                await update.message.reply_text(
-                    f"❌ <b>Неверный формат URL</b>\n\n"
-                    f"URL видео должен быть от OpenAI Sora 2 (должен содержать sora.chatgpt.com).\n\n"
-                    f"Пример: https://sora.chatgpt.com/p/s_...\n\n"
-                    f"Попробуйте снова.",
-                    parse_mode='HTML'
-                )
-                return INPUTTING_PARAMS
             
-            # Additional validation: check if URL starts with http:// or https://
-            if not (text.startswith('http://') or text.startswith('https://')):
+            # Validate max length
+            if max_length and len(text) > max_length:
                 await update.message.reply_text(
-                    f"❌ <b>Неверный формат URL</b>\n\n"
-                    f"URL должен начинаться с http:// или https://\n\n"
-                    f"Попробуйте снова.",
-                    parse_mode='HTML'
+                    f"❌ Текст слишком длинный (макс. {max_length} символов). Попробуйте снова."
                 )
                 return INPUTTING_PARAMS
         
-        # Set parameter value
-        if 'params' not in session:
-            session['params'] = {}
-        session['params'][current_param] = text
-        session['waiting_for'] = None
-        session['current_param'] = None
-        session['language_code_custom'] = False
-        
-        # Confirm parameter was set
-        display_value = text[:100] + '...' if len(text) > 100 else text
-        await update.message.reply_text(
-            f"✅ <b>{current_param}</b> установлен!\n\n"
-            f"Значение: {display_value}",
-            parse_mode='HTML'
-        )
-        
-        # If prompt was entered and model supports image input, offer to add image
-        # Or if prompt was entered and model supports audio input, offer to add audio
-        if current_param == 'prompt':
-            model_info = session.get('model_info', {})
+            # For language_code, convert common language names to codes
+            if current_param == 'language_code':
+                lang_lower = text.lower()
+                lang_map = {
+                    'русский': 'ru',
+                    'russian': 'ru',
+                    'английский': 'en',
+                    'english': 'en',
+                    'eng': 'en',
+                    'немецкий': 'de',
+                    'german': 'de',
+                    'французский': 'fr',
+                    'french': 'fr',
+                    'испанский': 'es',
+                    'spanish': 'es',
+                    'итальянский': 'it',
+                    'italian': 'it',
+                    'китайский': 'zh',
+                    'chinese': 'zh',
+                    'японский': 'ja',
+                    'japanese': 'ja',
+                    'корейский': 'ko',
+                    'korean': 'ko'
+                }
+                if lang_lower in lang_map:
+                    text = lang_map[lang_lower]
+                # If it's already a code (2-3 letters), convert to lowercase
+                elif len(text) <= 5 and text.replace('-', '').replace('_', '').isalpha():
+                    text = text.lower()
+            
+            # For video_url in sora-watermark-remover, validate URL format
             model_id = session.get('model_id', '')
-            input_params = model_info.get('input_params', {})
+            if current_param == 'video_url' and model_id == 'sora-watermark-remover':
+                # Validate URL format (should contain sora.chatgpt.com)
+                if 'sora.chatgpt.com' not in text:
+                    await update.message.reply_text(
+                        f"❌ <b>Неверный формат URL</b>\n\n"
+                        f"URL видео должен быть от OpenAI Sora 2 (должен содержать sora.chatgpt.com).\n\n"
+                        f"Пример: https://sora.chatgpt.com/p/s_...\n\n"
+                        f"Попробуйте снова.",
+                        parse_mode='HTML'
+                    )
+                    return INPUTTING_PARAMS
+                
+                # Additional validation: check if URL starts with http:// or https://
+                if not (text.startswith('http://') or text.startswith('https://')):
+                    await update.message.reply_text(
+                        f"❌ <b>Неверный формат URL</b>\n\n"
+                        f"URL должен начинаться с http:// или https://\n\n"
+                        f"Попробуйте снова.",
+                        parse_mode='HTML'
+                    )
+                    return INPUTTING_PARAMS
+            
+            # Set parameter value
+            if 'params' not in session:
+                session['params'] = {}
+            session['params'][current_param] = text
+            session['waiting_for'] = None
+            session['current_param'] = None
+            session['language_code_custom'] = False
+            
+            # Confirm parameter was set
+            display_value = text[:100] + '...' if len(text) > 100 else text
+            await update.message.reply_text(
+                f"✅ <b>{current_param}</b> установлен!\n\n"
+                f"Значение: {display_value}",
+                parse_mode='HTML'
+            )
+            
+            # If prompt was entered and model supports image input, offer to add image
+            # Or if prompt was entered and model supports audio input, offer to add audio
+            if current_param == 'prompt':
+                model_info = session.get('model_info', {})
+                model_id = session.get('model_id', '')
+                input_params = model_info.get('input_params', {})
             
             # IMPORTANT: z-image does NOT support image input (text-to-image only)
             if model_id == "z-image":
                 # For z-image, skip image input and go to next parameter
                 session['has_image_input'] = False
             
-            # Check for audio_url requirement
-            if 'audio_url' in input_params or 'audio_input' in input_params:
-                audio_param_name = 'audio_url' if 'audio_url' in input_params else 'audio_input'
-                audio_required = input_params.get(audio_param_name, {}).get('required', False)
-                
-                if audio_required:
-                    # Audio is required
-                    keyboard = [
-                        [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
-                    ]
-                    await update.message.reply_text(
-                        "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
-                        "Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
-                        "Максимальный размер: 200 MB",
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
+                # Check for audio_url requirement
+                if 'audio_url' in input_params or 'audio_input' in input_params:
+                    audio_param_name = 'audio_url' if 'audio_url' in input_params else 'audio_input'
+                    audio_required = input_params.get(audio_param_name, {}).get('required', False)
+                    
+                    if audio_required:
+                        # Audio is required
+                        keyboard = [
+                            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                        ]
+                        await update.message.reply_text(
+                            "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
+                            "Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
+                            "Максимальный размер: 200 MB",
+                            reply_markup=InlineKeyboardMarkup(keyboard),
+                            parse_mode='HTML'
+                        )
                     session['waiting_for'] = audio_param_name
                     session['current_param'] = audio_param_name
                     return INPUTTING_PARAMS
@@ -10242,202 +10216,202 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     session['waiting_for'] = None  # Will be set when user clicks button or sends audio
                     return INPUTTING_PARAMS
-            
-            # Check if image is required (for image_urls or image_input)
-            # IMPORTANT: z-image does NOT support image input (text-to-image only)
-            # Skip image input check for z-image - it's text-to-image only
-            if model_id == "z-image":
-                # z-image is text-to-image only, skip image input step completely
-                session['waiting_for'] = None
-                session['has_image_input'] = False  # Ensure flag is set correctly
-                # Continue to next parameter (aspect_ratio for z-image)
-                await start_next_parameter(update, context, user_id)
-                return INPUTTING_PARAMS
-            
-            if session.get('has_image_input'):
-                image_required = False
-                if 'image_urls' in input_params:
-                    image_required = input_params['image_urls'].get('required', False)
-                elif 'image_input' in input_params:
-                    image_required = input_params['image_input'].get('required', False)
                 
-                if image_required:
-                    # Image is required - show button without skip option
+                # Check if image is required (for image_urls or image_input)
+                # IMPORTANT: z-image does NOT support image input (text-to-image only)
+                # Skip image input check for z-image - it's text-to-image only
+                if model_id == "z-image":
+                    # z-image is text-to-image only, skip image input step completely
+                    session['waiting_for'] = None
+                    session['has_image_input'] = False  # Ensure flag is set correctly
+                    # Continue to next parameter (aspect_ratio for z-image)
+                    await start_next_parameter(update, context, user_id)
+                    return INPUTTING_PARAMS
+                
+                if session.get('has_image_input'):
+                    image_required = False
+                    if 'image_urls' in input_params:
+                        image_required = input_params['image_urls'].get('required', False)
+                    elif 'image_input' in input_params:
+                        image_required = input_params['image_input'].get('required', False)
+                    
+                    if image_required:
+                        # Image is required - show button without skip option
+                        keyboard = [
+                            [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")]
+                        ]
+                        await update.message.reply_text(
+                            "📷 <b>Загрузите изображение для редактирования</b>\n\n"
+                            "Отправьте фото, которое хотите отредактировать.",
+                            reply_markup=InlineKeyboardMarkup(keyboard),
+                            parse_mode='HTML'
+                        )
+                        # Determine which parameter name to use (image_input or image_urls)
+                        if 'image_urls' in input_params:
+                            image_param_name = 'image_urls'
+                        else:
+                            image_param_name = 'image_input'
+                        session['waiting_for'] = image_param_name
+                        session['current_param'] = image_param_name
+                        return INPUTTING_PARAMS
+                    else:
+                        # Image is optional - show button with skip option
+                        # Note: z-image is already handled above (line 7672), so it won't reach here
+                        keyboard = [
+                            [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
+                            [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")]
+                        ]
+                        await update.message.reply_text(
+                            "📷 <b>Хотите добавить изображение?</b>\n\n"
+                            "Вы можете загрузить изображение для использования как референс или для трансформации.\n"
+                            "Или пропустите этот шаг.",
+                            reply_markup=InlineKeyboardMarkup(keyboard),
+                            parse_mode='HTML'
+                        )
+                        session['waiting_for'] = None
+                        return INPUTTING_PARAMS
+                
+                # Check if there are more parameters
+                required = session.get('required', [])
+                params = session.get('params', {})
+                properties = session.get('properties', {})
+                model_info = session.get('model_info', {})
+                input_params = model_info.get('input_params', {})
+                
+                # CRITICAL: Apply default values BEFORE checking missing parameters
+                # This ensures parameters with default values are automatically applied
+                for param_name, param_info in input_params.items():
+                    if param_name not in params:
+                        default_value = param_info.get('default')
+                        if default_value is not None:
+                            params[param_name] = default_value
+                            logger.info(f"✅ Applied default value for {param_name}={default_value} for {model_id}")
+                
+                # Don't exclude image_input/image_urls/audio_url/audio_input from missing if they're required but not yet provided
+                # Only exclude them if they're already in params (uploaded)
+                excluded_params = ['prompt']  # Always exclude prompt as it's already processed
+                # Only exclude image/audio params if they're already set in params
+                if 'image_input' in params or (session.get('image_input') and len(session.get('image_input', [])) > 0):
+                    excluded_params.append('image_input')
+                if 'image_urls' in params or (session.get('image_urls') and len(session.get('image_urls', [])) > 0):
+                    excluded_params.append('image_urls')
+                if 'mask_input' in params or (session.get('mask_input') and len(session.get('mask_input', [])) > 0):
+                    excluded_params.append('mask_input')
+                if 'reference_image_input' in params or (session.get('reference_image_input') and len(session.get('reference_image_input', [])) > 0):
+                    excluded_params.append('reference_image_input')
+                if 'audio_url' in params or session.get('audio_url'):
+                    excluded_params.append('audio_url')
+                if 'audio_input' in params or session.get('audio_input'):
+                    excluded_params.append('audio_input')
+                missing = [p for p in required if p not in params and p not in excluded_params]
+                
+                # CRITICAL: Ensure image_input/image_urls/mask_input/reference_image_input are considered missing if required and not in params
+                # Also check if they're in session but not in params (auto-fix)
+                for image_param in ['image_input', 'image_urls', 'mask_input', 'reference_image_input']:
+                    if image_param in input_params and input_params[image_param].get('required', False):
+                        if image_param not in params:
+                            # Check if it's in session but not in params (auto-fix)
+                            if image_param in session and session.get(image_param):
+                                logger.info(f"⚠️ {image_param} in session but not in params for {model_id}. Auto-fixing...")
+                                if isinstance(session[image_param], list):
+                                    session['params'][image_param] = session[image_param].copy()
+                                else:
+                                    session['params'][image_param] = [session[image_param]]
+                                logger.info(f"✅ Fixed: {image_param} added to params")
+                            else:
+                                # Truly missing
+                                if image_param not in excluded_params:
+                                    missing.append(image_param)
+                                    logger.warning(f"⚠️ Required {image_param} missing for {model_id}")
+                        else:
+                            # Already in params, verify it's not empty
+                            if not params.get(image_param):
+                                logger.warning(f"⚠️ {image_param} in params but empty for {model_id}")
+                                if image_param not in excluded_params:
+                                    missing.append(image_param)
+                
+                # For elevenlabs/speech-to-text, also check optional parameters
+                model_id = session.get('model_id', '')
+                if model_id == "elevenlabs/speech-to-text":
+                    # Check optional parameters that haven't been set yet
+                    for opt_param in ['language_code', 'tag_audio_events', 'diarize']:
+                        if opt_param in properties and opt_param not in params:
+                            missing.append(opt_param)
+                
+                if missing:
+                    # Move to next parameter
+                    try:
+                        # Small delay to show confirmation
+                        await asyncio.sleep(0.5)
+                        next_param_result = await start_next_parameter(update, context, user_id)
+                        if next_param_result:
+                            return next_param_result
+                    except Exception as e:
+                        logger.error(f"Error starting next parameter: {e}", exc_info=True)
+                        await update.message.reply_text(
+                            f"❌ Ошибка при переходе к следующему параметру: {str(e)}"
+                        )
+                        return INPUTTING_PARAMS
+                else:
+                    # All parameters collected, show confirmation
+                    model_name = session.get('model_info', {}).get('name', 'Unknown')
+                    model_id = session.get('model_id', '')
+                    params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
+                    
+                    # Check for free generation
+                    is_admin_user = get_is_admin(user_id)
+                    is_free = is_free_generation_available(user_id, model_id)
+                    free_info = ""
+                    if is_free:
+                        remaining = get_user_free_generations_remaining(user_id)
+                        free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
+                        free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                    else:
+                        price = calculate_price_rub(model_id, params, is_admin_user)
+                        price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                        free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
+                    
+                    user_lang = get_user_language(user_id)
                     keyboard = [
-                        [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")]
+                        [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                        [
+                            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                        ],
+                        [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                     ]
+                    
                     await update.message.reply_text(
-                        "📷 <b>Загрузите изображение для редактирования</b>\n\n"
-                        "Отправьте фото, которое хотите отредактировать.",
+                        f"📋 <b>Подтверждение:</b>\n\n"
+                        f"Модель: <b>{model_name}</b>\n"
+                        f"Параметры:\n{params_text}{free_info}\n\n"
+                        f"Продолжить генерацию?",
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
-                    # Determine which parameter name to use (image_input or image_urls)
-                    if 'image_urls' in input_params:
-                        image_param_name = 'image_urls'
-                    else:
-                        image_param_name = 'image_input'
-                    session['waiting_for'] = image_param_name
-                    session['current_param'] = image_param_name
-                    return INPUTTING_PARAMS
-            else:
-                # Image is optional - show button with skip option
-                # Note: z-image is already handled above (line 7672), so it won't reach here
-                keyboard = [
-                    [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
-                    [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")]
-                ]
-                await update.message.reply_text(
-                    "📷 <b>Хотите добавить изображение?</b>\n\n"
-                    "Вы можете загрузить изображение для использования как референс или для трансформации.\n"
-                    "Или пропустите этот шаг.",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                session['waiting_for'] = None
-                return INPUTTING_PARAMS
+                    return CONFIRMING_GENERATION
         
-        # Check if there are more parameters
-        required = session.get('required', [])
-        params = session.get('params', {})
-        properties = session.get('properties', {})
-        model_info = session.get('model_info', {})
-        input_params = model_info.get('input_params', {})
-        
-        # CRITICAL: Apply default values BEFORE checking missing parameters
-        # This ensures parameters with default values are automatically applied
-        for param_name, param_info in input_params.items():
-            if param_name not in params:
-                default_value = param_info.get('default')
-                if default_value is not None:
-                    params[param_name] = default_value
-                    logger.info(f"✅ Applied default value for {param_name}={default_value} for {model_id}")
-        
-        # Don't exclude image_input/image_urls/audio_url/audio_input from missing if they're required but not yet provided
-        # Only exclude them if they're already in params (uploaded)
-        excluded_params = ['prompt']  # Always exclude prompt as it's already processed
-        # Only exclude image/audio params if they're already set in params
-        if 'image_input' in params or (session.get('image_input') and len(session.get('image_input', [])) > 0):
-            excluded_params.append('image_input')
-        if 'image_urls' in params or (session.get('image_urls') and len(session.get('image_urls', [])) > 0):
-            excluded_params.append('image_urls')
-        if 'mask_input' in params or (session.get('mask_input') and len(session.get('mask_input', [])) > 0):
-            excluded_params.append('mask_input')
-        if 'reference_image_input' in params or (session.get('reference_image_input') and len(session.get('reference_image_input', [])) > 0):
-            excluded_params.append('reference_image_input')
-        if 'audio_url' in params or session.get('audio_url'):
-            excluded_params.append('audio_url')
-        if 'audio_input' in params or session.get('audio_input'):
-            excluded_params.append('audio_input')
-        missing = [p for p in required if p not in params and p not in excluded_params]
-        
-        # CRITICAL: Ensure image_input/image_urls/mask_input/reference_image_input are considered missing if required and not in params
-        # Also check if they're in session but not in params (auto-fix)
-        for image_param in ['image_input', 'image_urls', 'mask_input', 'reference_image_input']:
-            if image_param in input_params and input_params[image_param].get('required', False):
-                if image_param not in params:
-                    # Check if it's in session but not in params (auto-fix)
-                    if image_param in session and session.get(image_param):
-                        logger.info(f"⚠️ {image_param} in session but not in params for {model_id}. Auto-fixing...")
-                        if isinstance(session[image_param], list):
-                            session['params'][image_param] = session[image_param].copy()
-                        else:
-                            session['params'][image_param] = [session[image_param]]
-                        logger.info(f"✅ Fixed: {image_param} added to params")
-                    else:
-                        # Truly missing
-                        if image_param not in excluded_params:
-                            missing.append(image_param)
-                            logger.warning(f"⚠️ Required {image_param} missing for {model_id}")
-                else:
-                    # Already in params, verify it's not empty
-                    if not params.get(image_param):
-                        logger.warning(f"⚠️ {image_param} in params but empty for {model_id}")
-                        if image_param not in excluded_params:
-                            missing.append(image_param)
-        
-        # For elevenlabs/speech-to-text, also check optional parameters
-        model_id = session.get('model_id', '')
-        if model_id == "elevenlabs/speech-to-text":
-            # Check optional parameters that haven't been set yet
-            for opt_param in ['language_code', 'tag_audio_events', 'diarize']:
-                if opt_param in properties and opt_param not in params:
-                    missing.append(opt_param)
-        
-        if missing:
-            # Move to next parameter
-            try:
-                # Small delay to show confirmation
-                await asyncio.sleep(0.5)
-                next_param_result = await start_next_parameter(update, context, user_id)
-                if next_param_result:
-                    return next_param_result
-            except Exception as e:
-                logger.error(f"Error starting next parameter: {e}", exc_info=True)
-                await update.message.reply_text(
-                    f"❌ Ошибка при переходе к следующему параметру: {str(e)}"
-                )
-                return INPUTTING_PARAMS
-        else:
-            # All parameters collected, show confirmation
-            model_name = session.get('model_info', {}).get('name', 'Unknown')
-            model_id = session.get('model_id', '')
-            params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
-            
-            # Check for free generation
-            is_admin_user = get_is_admin(user_id)
-            is_free = is_free_generation_available(user_id, model_id)
-            free_info = ""
-            if is_free:
-                remaining = get_user_free_generations_remaining(user_id)
-                free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
-                free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
-            else:
-                price = calculate_price_rub(model_id, params, is_admin_user)
-                price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
-            
+    except Exception as e:
+        logger.error(f"❌ Ошибка при обработке текста в input_parameters: {e}", exc_info=True)
+        # Отвечаем пользователю понятным сообщением
+        try:
             user_lang = get_user_language(user_id)
             keyboard = [
-                [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
-                [
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ],
+                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
                 [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
             ]
-            
             await update.message.reply_text(
-                f"📋 <b>Подтверждение:</b>\n\n"
-                f"Модель: <b>{model_name}</b>\n"
-                f"Параметры:\n{params_text}{free_info}\n\n"
-                f"Продолжить генерацию?",
+                f"❌ <b>Ошибка при обработке ввода</b>\n\n"
+                f"Попробуйте:\n"
+                f"• Вернуться в главное меню\n"
+                f"• Начать заново с выбора модели\n"
+                f"• Отменить операцию",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
-            return CONFIRMING_GENERATION
-        
-        except Exception as e:
-            logger.error(f"❌ Ошибка при обработке текста в input_parameters: {e}", exc_info=True)
-            # Отвечаем пользователю понятным сообщением
-            try:
-                user_lang = get_user_language(user_id)
-                keyboard = [
-                    [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                await update.message.reply_text(
-                    f"❌ <b>Ошибка при обработке ввода</b>\n\n"
-                    f"Попробуйте:\n"
-                    f"• Вернуться в главное меню\n"
-                    f"• Начать заново с выбора модели\n"
-                    f"• Отменить операцию",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except Exception as reply_error:
-                logger.error(f"❌ Не удалось отправить сообщение об ошибке: {reply_error}", exc_info=True)
-            return ConversationHandler.END
+        except Exception as reply_error:
+            logger.error(f"❌ Не удалось отправить сообщение об ошибке: {reply_error}", exc_info=True)
+        return ConversationHandler.END
     
     # ==================== TASK 1: FALLBACK для waiting_for == None ====================
     # Если waiting_for не установлен, но пришёл текст - пытаемся понять, что делать

@@ -155,3 +155,4 @@ rg -n "Attempt|retry|restart|while True|create_task|Application\.run" bot_kie.py
 ✅ Код закоммичен и запушен  
 
 **ВСЁ ГОТОВО! ДОЖДИТЕСЬ ДЕПЛОЯ НА RENDER И ПРОВЕРЬТЕ ЛОГИ.**
+

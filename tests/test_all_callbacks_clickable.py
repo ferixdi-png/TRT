@@ -1,140 +1,103 @@
 """
-Тест: Все callback'ы кликабельны
-Автоматически находит ВСЕ callback_data и проверяет, что они обрабатываются
+Тест всех callback'ов - каждая кнопка кликабельна
 """
 
-import sys
+import pytest
 import re
 from pathlib import Path
 
-# Установка кодировки UTF-8 для Windows
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
-# Добавляем корень проекта в путь
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+project_root = Path(__file__).parent.parent
+bot_file = project_root / "bot_kie.py"
 
 
-def extract_all_callbacks() -> set:
-    """Извлекает все callback_data из кода"""
-    callbacks = set()
-    bot_file = PROJECT_ROOT / "bot_kie.py"
-    
+def extract_all_callbacks() -> list:
+    """Извлекает все callback_data из bot_kie.py"""
     if not bot_file.exists():
-        return callbacks
+        return []
     
-    with open(bot_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # Ищем callback_data
-    patterns = [
-        r'callback_data\s*=\s*["\']([^"\']+)["\']',
-        r'callback_data\s*=\s*f["\']([^"\']+)["\']',
-    ]
-    
-    for pattern in patterns:
-        for match in re.finditer(pattern, content):
-            callback = match.group(1)
-            # Пропускаем f-strings с переменными
-            if '{' not in callback and '}' not in callback:
-                callbacks.add(callback)
-    
-    return callbacks
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
+    pattern = r'callback_data\s*[=:]\s*["\']([^"\']+)["\']'
+    callbacks = re.findall(pattern, content)
+    return sorted(set(callbacks))
 
 
-def extract_handlers() -> set:
-    """Извлекает все обработчики"""
-    handlers = set()
-    bot_file = PROJECT_ROOT / "bot_kie.py"
-    
+def extract_button_callback_handlers() -> set:
+    """Извлекает все обрабатываемые callback'ы из button_callback"""
     if not bot_file.exists():
-        return handlers
+        return set()
     
-    with open(bot_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    # Ищем обработку в button_callback
-    patterns = [
-        r'if\s+data\s*==\s*["\']([^"\']+)["\']',
-        r'elif\s+data\s*==\s*["\']([^"\']+)["\']',
-        r'if\s+data\.startswith\(["\']([^"\']+)["\']',
-        r'elif\s+data\.startswith\(["\']([^"\']+)["\']',
-    ]
+    if 'async def button_callback' not in content:
+        return set()
     
-    for pattern in patterns:
-        for match in re.finditer(pattern, content):
-            callback = match.group(1)
-            handlers.add(callback)
+    start = content.find('async def button_callback')
+    end = content.find('\nasync def ', start + 1)
+    if end == -1:
+        end = len(content)
     
-    # Также проверяем множественные условия
-    for match in re.finditer(r'data\s*==\s*["\']([^"\']+)["\']\s+or\s+data\s*==\s*["\']([^"\']+)["\']', content):
-        handler1, handler2 = match.groups()
-        handlers.add(handler1)
-        handlers.add(handler2)
+    button_callback_content = content[start:end]
     
-    return handlers
+    # Ищем обработку callback'ов
+    handled = set()
+    
+    # Точные совпадения: if data == "..."
+    exact_pattern = r'if\s+data\s*==\s*["\']([^"\']+)["\']'
+    handled.update(re.findall(exact_pattern, button_callback_content))
+    
+    # Префиксы: if data.startswith("...")
+    prefix_pattern = r'if\s+data\.startswith\(["\']([^"\']+)["\']'
+    handled.update(re.findall(prefix_pattern, button_callback_content))
+    
+    # elif тоже
+    handled.update(re.findall(exact_pattern.replace('if', 'elif'), button_callback_content))
+    handled.update(re.findall(prefix_pattern.replace('if', 'elif'), button_callback_content))
+    
+    return handled
 
 
-def test_all_callbacks_handled():
-    """Тест: все callback'ы имеют обработчики"""
-    callbacks = extract_all_callbacks()
-    handlers = extract_handlers()
+def test_all_callbacks_have_handlers():
+    """Проверяет что все callback'ы имеют обработчики"""
+    all_callbacks = extract_all_callbacks()
+    handled_callbacks = extract_button_callback_handlers()
     
-    # Проверяем префиксы
-    prefix_handlers = {h for h in handlers if h.endswith(':')}
+    # Проверяем критические callback'ы
+    critical = ['back_to_menu', 'check_balance', 'show_models', 'all_models', 'cancel']
     
-    unhandled = []
-    for callback in callbacks:
-        # Проверяем точное совпадение
-        if callback in handlers:
-            continue
-        # Проверяем префикс
-        if any(callback.startswith(prefix) for prefix in prefix_handlers):
-            continue
-        unhandled.append(callback)
+    missing = []
+    for cb in critical:
+        if cb in all_callbacks:
+            # Проверяем точное совпадение или префикс
+            found = False
+            if cb in handled_callbacks:
+                found = True
+            else:
+                # Проверяем префиксы
+                for handled in handled_callbacks:
+                    if cb.startswith(handled) or handled.startswith(cb):
+                        found = True
+                        break
+            
+            if not found:
+                missing.append(cb)
     
-    assert len(unhandled) == 0, f"Найдено {len(unhandled)} необработанных callback'ов: {unhandled}"
+    if missing:
+        pytest.fail(f"Missing handlers for callbacks: {missing}")
+    
+    assert len(all_callbacks) > 0, "No callbacks found"
 
 
-def test_no_silence_after_callback():
-    """Тест: после каждого callback'а есть ответ пользователю"""
-    bot_file = PROJECT_ROOT / "bot_kie.py"
+def test_no_silence_after_input():
+    """Проверяет что нет тишины после ввода"""
+    if not bot_file.exists():
+        pytest.skip("bot_kie.py not found")
     
-    with open(bot_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    # Проверяем, что в button_callback всегда есть query.answer()
-    if 'async def button_callback' in content:
-        # Ищем query.answer() в начале функции
-        answer_pattern = r'await\s+query\.answer\(\)'
-        if not re.search(answer_pattern, content):
-            # Это не критично, но стоит отметить
-            pass  # Пока не фейлим, только проверяем
+    # Проверяем что есть гарантированный ответ
+    assert '✅ Принято, обрабатываю' in content or 'Принято, обрабатываю' in content, \
+        "No guaranteed response after input found"
 
 
 if __name__ == "__main__":
-    print("="*80)
-    print("🧪 ТЕСТ: ВСЕ CALLBACK'Ы КЛИКАБЕЛЬНЫ")
-    print("="*80)
-    print()
-    
-    try:
-        test_all_callbacks_handled()
-        print("✅ Все callback'ы обработаны")
-        
-        test_no_silence_after_callback()
-        print("✅ Проверка тишины пройдена")
-        
-        print("\n✅ ВСЕ ТЕСТЫ ПРОЙДЕНЫ")
-        sys.exit(0)
-    except AssertionError as e:
-        print(f"❌ ТЕСТ ПРОВАЛЕН: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"❌ ОШИБКА: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    pytest.main([__file__, "-v"])

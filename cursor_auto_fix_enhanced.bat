@@ -58,3 +58,4 @@ echo.
 %PYTHON_CMD% cursor_auto_fix_enhanced.py
 
 pause
+

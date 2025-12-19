@@ -308,3 +308,4 @@ def get_unified_gateway():
     from kie_gateway import get_kie_gateway
     base_gateway = get_kie_gateway()
     return UnifiedKieGateway(base_gateway)
+
