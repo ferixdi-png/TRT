@@ -12,6 +12,7 @@ invoke model. If no API key is present, methods return helpful messages
 instead of raising.
 """
 import os
+import time
 import aiohttp
 import asyncio
 import logging
