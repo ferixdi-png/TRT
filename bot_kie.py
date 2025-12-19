@@ -11686,7 +11686,7 @@ async def start_generation_directly(
         
         logger.info(f"📋 Task creation result: ok={result.get('ok')}, taskId={result.get('taskId')}, error={result.get('error')}")
     except Exception as e:
-        logger.error(f"❌❌❌ KIE API ERROR in create_task: {e}", exc_info=True)
+        logger.error(f"event=kie.create_task_exception model={model_id} error={str(e)}", exc_info=True)
         try:
             user_lang = get_user_language(user_id) if user_id else 'ru'
             error_msg = "Ошибка сервера, попробуйте позже" if user_lang == 'ru' else "Server error, please try later"

@@ -37,9 +37,9 @@ try:
     
     task_id = resp_json.get("data", {}).get("taskId")
     if task_id:
-        print(f"\n✅ SUCCESS: taskId = {task_id}")
+        print(f"\nSUCCESS: taskId = {task_id}")
     else:
-        print(f"\n⚠️  No taskId in response")
+        print(f"\nWARNING: No taskId in response")
 except Exception as e:
     print(f"Error parsing JSON: {e}")
     print(f"Response text: {r.text}")

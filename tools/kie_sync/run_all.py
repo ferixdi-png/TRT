@@ -21,7 +21,7 @@ from tools.kie_sync.export_market import (
 )
 
 def create_context_with_cookie(browser, cookie_header: str):
-    """Create browser context with cookie header"""
+    """Create browser context with cookie header (for CI)"""
     # Parse cookie header (format: "name1=value1; name2=value2")
     cookies = []
     for part in cookie_header.split(";"):
@@ -37,7 +37,19 @@ def create_context_with_cookie(browser, cookie_header: str):
     
     context = browser.new_context()
     if cookies:
-        context.add_cookies(cookies)
+        # Set cookies for main domain and subdomains
+        for cookie in cookies:
+            try:
+                context.add_cookies([cookie])
+            except:
+                # Try with different domain variations
+                for domain in [".kie.ai", "kie.ai", "www.kie.ai"]:
+                    try:
+                        cookie["domain"] = domain
+                        context.add_cookies([cookie])
+                        break
+                    except:
+                        pass
     return context
 
 def main():
