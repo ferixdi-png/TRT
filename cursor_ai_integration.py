@@ -55,7 +55,8 @@ class ProjectAnalyzer:
         
     def analyze_project(self):
         """Полный анализ проекта"""
-        print("🔍 Глубокий анализ структуры проекта...")
+        print("🔍 Глубокий анализ структуры проекта...", flush=True)
+        sys.stdout.flush()
         
         # Анализируем основные файлы
         main_files = [
@@ -64,32 +65,37 @@ class ProjectAnalyzer:
             "helpers.py", "config.py", "kie_client.py"
         ]
         
-        print(f"📁 Анализ {len(main_files)} файлов...")
+        print(f"📁 Анализ {len(main_files)} файлов...", flush=True)
+        sys.stdout.flush()
         for i, file_name in enumerate(main_files, 1):
             file_path = self.project_root / file_name
             if file_path.exists():
-                print(f"   [{i}/{len(main_files)}] Анализ {file_name}...", end="\r")
+                print(f"   [{i}/{len(main_files)}] Анализ {file_name}...", end="\r", flush=True)
                 self.analyze_file(file_path)
             else:
-                print(f"   [{i}/{len(main_files)}] ⚠️  {file_name} не найден", end="\r")
+                print(f"   [{i}/{len(main_files)}] ⚠️  {file_name} не найден", end="\r", flush=True)
         print()  # Новая строка после прогресса
+        sys.stdout.flush()
         
-        # Специальный анализ для bot_kie.py
-        print("🤖 Специальный анализ bot_kie.py...")
+        # Специальный анализ для bot_kie.py (может быть долгим из-за размера файла)
+        print("🤖 Специальный анализ bot_kie.py (это может занять время)...", flush=True)
+        sys.stdout.flush()
         bot_file = self.project_root / "bot_kie.py"
         if bot_file.exists():
             self.analyze_bot_structure(bot_file)
-            print("   ✅ Структура бота проанализирована")
+            print("   ✅ Структура бота проанализирована", flush=True)
         else:
-            print("   ⚠️  bot_kie.py не найден")
+            print("   ⚠️  bot_kie.py не найден", flush=True)
+        sys.stdout.flush()
         
-        print(f"\n✅ Проанализировано:")
-        print(f"   Файлов: {len(self.imports_graph)}")
-        print(f"   Функций: {len(self.functions_map)}")
-        print(f"   Классов: {len(self.classes_map)}")
-        print(f"   Callback handlers: {len(self.callbacks_map)}")
-        print(f"   Generation functions: {len(self.generation_functions)}")
-        print(f"   KIE API calls: {len(self.kie_api_calls)}")
+        print(f"\n✅ Проанализировано:", flush=True)
+        print(f"   Файлов: {len(self.imports_graph)}", flush=True)
+        print(f"   Функций: {len(self.functions_map)}", flush=True)
+        print(f"   Классов: {len(self.classes_map)}", flush=True)
+        print(f"   Callback handlers: {len(self.callbacks_map)}", flush=True)
+        print(f"   Generation functions: {len(self.generation_functions)}", flush=True)
+        print(f"   KIE API calls: {len(self.kie_api_calls)}", flush=True)
+        sys.stdout.flush()
     
     def analyze_file(self, file_path: Path):
         """Анализирует один файл"""
@@ -137,17 +143,24 @@ class ProjectAnalyzer:
     def analyze_bot_structure(self, bot_file: Path):
         """Специальный анализ структуры бота"""
         try:
-            print(f"   📖 Чтение {bot_file.name}...", end="\r")
+            print(f"   📖 Чтение {bot_file.name} (это может занять время для больших файлов)...", flush=True)
+            sys.stdout.flush()
             with open(bot_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-            print(f"   ✅ {bot_file.name} прочитан ({len(content)} символов)")
+            print(f"   ✅ {bot_file.name} прочитан ({len(content)} символов)", flush=True)
+            sys.stdout.flush()
             
             # Ищем callback handlers
-            print("   🔍 Поиск callback handlers...", end="\r")
+            print("   🔍 Поиск callback handlers...", flush=True)
+            sys.stdout.flush()
             callback_pattern = r"callback_data\s*[=:]\s*['\"]([^'\"]+)['\"]"
             callback_count = 0
             for match in re.finditer(callback_pattern, content):
                 callback_count += 1
+                # Показываем прогресс каждые 50 найденных
+                if callback_count % 50 == 0:
+                    print(f"      Найдено {callback_count} callback handlers...", flush=True)
+                    sys.stdout.flush()
                 callback_data = match.group(1)
                 line_num = content[:match.start()].count('\n') + 1
                 
@@ -188,10 +201,12 @@ class ProjectAnalyzer:
                         "line": line_num,
                         "kie_calls": kie_calls
                     }
-            print(f"   ✅ Найдено {len(self.generation_functions)} generation functions")
+            print(f"   ✅ Найдено {len(self.generation_functions)} generation functions", flush=True)
+            sys.stdout.flush()
             
             # Ищем KIE API calls
-            print("   🔍 Поиск KIE API calls...", end="\r")
+            print("   🔍 Поиск KIE API calls...", flush=True)
+            sys.stdout.flush()
             kie_patterns = [
                 r"createTask\s*\(",
                 r"get_status\s*\(",
@@ -371,16 +386,21 @@ class CursorAIIntegration:
         self.owner_id = None
         
         # Анализ проекта
-        print("🔍 Инициализация анализатора проекта...")
+        print("🔍 Инициализация анализатора проекта...", flush=True)
+        sys.stdout.flush()
         self.analyzer = ProjectAnalyzer(self.project_root)
-        print("📊 Запуск анализа проекта...")
+        print("📊 Запуск анализа проекта...", flush=True)
+        sys.stdout.flush()
         self.analyzer.analyze_project()
-        print("✅ Анализ проекта завершён")
+        print("✅ Анализ проекта завершён", flush=True)
+        sys.stdout.flush()
         
         # State
-        print("💾 Загрузка состояния...")
+        print("💾 Загрузка состояния...", flush=True)
+        sys.stdout.flush()
         self.state = self.load_state()
-        print("✅ Состояние загружено")
+        print("✅ Состояние загружено", flush=True)
+        sys.stdout.flush()
     
     def load_state(self) -> Dict:
         """Загружает состояние"""
@@ -786,26 +806,35 @@ def list_services(config: Dict) -> List[Dict]:
 
 def main():
     """Главная функция"""
-    print("🚀 Инициализация системы...")
+    print("🚀 Инициализация системы...", flush=True)
+    sys.stdout.flush()
     
     # Загружаем конфигурацию
     config = load_services_config()
     render_api_key = config.get("render_api_key") or os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
+    print(f"✅ API ключ загружен: {render_api_key[:20]}...", flush=True)
+    sys.stdout.flush()
     
     # Получаем список сервисов
     services_list = list_services(config)
     
     if not services_list:
         # Fallback на старый способ (env vars)
-        print("⚠️  Конфигурация сервисов не найдена, используем переменные окружения")
+        print("⚠️  Конфигурация сервисов не найдена, используем переменные окружения", flush=True)
+        sys.stdout.flush()
         service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
         telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
         
-        print("✅ Параметры загружены из env vars")
-        print("🔧 Создание объекта CursorAIIntegration...")
+        print("✅ Параметры загружены из env vars", flush=True)
+        print(f"   Service ID: {service_id}", flush=True)
+        print(f"   Token: {telegram_token[:20]}...", flush=True)
+        sys.stdout.flush()
+        print("🔧 Создание объекта CursorAIIntegration...", flush=True)
+        sys.stdout.flush()
         system = CursorAIIntegration(render_api_key, service_id, telegram_token)
-        print("✅ Система готова к работе")
-        print("\n" + "=" * 80)
+        print("✅ Система готова к работе", flush=True)
+        print("\n" + "=" * 80, flush=True)
+        sys.stdout.flush()
         system.run(interval=120)
         return
     
