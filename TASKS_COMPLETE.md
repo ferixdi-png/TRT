@@ -134,3 +134,4 @@ python scripts/render_logs.py --service-id srv-xxxxx --level ERROR --lines 50
 4. Добавить режимы в `auto_fix_render_bot.py` (TASK 5)
 
 
+

@@ -51,3 +51,4 @@ NameError: name 'get_bot_mode' is not defined
 **✅ ПРОБЛЕМА ИСПРАВЛЕНА!**
 
 Render деплой должен запускаться без ошибки `NameError: name 'get_bot_mode' is not defined`.
+

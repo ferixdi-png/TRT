@@ -66,3 +66,4 @@ REDIS_URL=redis://... BOT_MODE=polling python bot_kie.py
 
 **ГОТОВО К ДЕПЛОЮ! 🚀**
 
+

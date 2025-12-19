@@ -173,3 +173,4 @@ def track_outgoing_action(update_id: int):
     """Удобная функция для отслеживания исходящего действия"""
     guard = get_no_silence_guard()
     guard.track_outgoing_action(update_id)
+

@@ -209,3 +209,4 @@ python scripts/read_logs.py --since 60m --grep "ERROR"
 
 После добавления GitHub Secrets всё работает автоматически!
 
+

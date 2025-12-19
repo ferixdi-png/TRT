@@ -124,3 +124,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     auto_push(args.branch, args.message)
+

@@ -205,3 +205,4 @@ def get_singleton_lock(lock_key: str = "telegram_bot_polling") -> SingletonLock:
         _lock_instance = SingletonLock(lock_key)
     return _lock_instance
 
+

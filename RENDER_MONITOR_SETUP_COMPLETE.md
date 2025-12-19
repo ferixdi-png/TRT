@@ -99,3 +99,4 @@ python scripts/render_autopilot_monitor.py --interval 30
 **✅ RENDER AUTOPILOT MONITOR ГОТОВ К РАБОТЕ!**
 
 Теперь каждый запрос пользователя будет автоматически отслеживать логи Render и исправлять найденные проблемы.
+

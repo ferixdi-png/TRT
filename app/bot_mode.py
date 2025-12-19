@@ -122,3 +122,4 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     import sys
     sys.exit(0)
 
+

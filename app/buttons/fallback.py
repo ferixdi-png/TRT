@@ -88,3 +88,4 @@ async def fallback_callback_handler(
         logger.error(f"❌ Ошибка в fallback handler: {e}", exc_info=True)
 
 
+

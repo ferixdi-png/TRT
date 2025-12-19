@@ -161,3 +161,4 @@ python scripts/render_autopilot_monitor.py --once --fix
 - ✅ Menu: 72 модели видны, 53 callbacks обработаны (menu_snapshot.md)
 - ✅ Verify: 10/11 проверок проходят (verify_last_pass.json)
 - ✅ Render Monitor: логи получаются, ошибки обнаруживаются (render_autopilot_monitor.py)
+

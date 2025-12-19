@@ -155,3 +155,4 @@
 **Артефакт:** `artifacts/behavioral/behavioral_e2e_results.json`
 
 **Доказательство:** behavioral_e2e показывает 72/72 моделей с `passed: true` и `responses_after_input > 0`. Код содержит обработку всех типов ввода и edge cases с немедленным ответом (строка 10150) и NO-SILENCE GUARD.
+

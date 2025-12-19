@@ -10132,8 +10132,16 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 next_param_result = await start_next_parameter(update, context, user_id)
                 if next_param_result:
                     return next_param_result
+                # КРИТИЧНО: Если start_next_parameter вернул None, проверяем что было отправлено сообщение
+                await guard.check_and_ensure_response(update, context)
             except Exception as e:
                 logger.error(f"Error after image input: {e}")
+                # Отправляем сообщение об ошибке
+                await update.message.reply_text(
+                    f"❌ Ошибка при переходе к следующему параметру: {str(e)}",
+                    parse_mode='HTML'
+                )
+                track_outgoing_action(update_id)
         
         return INPUTTING_PARAMS
     
@@ -10231,13 +10239,14 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['current_param'] = None
             session['language_code_custom'] = False
             
-            # Confirm parameter was set
+            # Confirm parameter was set (КРИТИЧНО: это второй ответ после "✅ Принято, обрабатываю...")
             display_value = text[:100] + '...' if len(text) > 100 else text
             await update.message.reply_text(
                 f"✅ <b>{current_param}</b> установлен!\n\n"
                 f"Значение: {display_value}",
                 parse_mode='HTML'
             )
+            track_outgoing_action(update_id)  # Отслеживаем второй ответ
             
             # If prompt was entered and model supports image input, offer to add image
             # Or if prompt was entered and model supports audio input, offer to add audio
@@ -10245,13 +10254,9 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info = session.get('model_info', {})
                 model_id = session.get('model_id', '')
                 input_params = model_info.get('input_params', {})
-                
-                # CRITICAL: Ensure we always have a response after prompt input
-                # Track that we sent confirmation message (already sent at line 10150)
-                track_outgoing_action(update_id)
             
             # IMPORTANT: z-image does NOT support image input (text-to-image only)
-            if current_param == 'prompt' and model_id == "z-image":
+            if model_id == "z-image":
                 # For z-image, skip image input and go to next parameter
                 session['has_image_input'] = False
             
@@ -10299,11 +10304,20 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     session['waiting_for'] = None
                     session['has_image_input'] = False  # Ensure flag is set correctly
                     # Continue to next parameter (aspect_ratio for z-image)
-                    next_param_result = await start_next_parameter(update, context, user_id)
-                    if next_param_result:
-                        return next_param_result
-                    # If start_next_parameter returned None, all parameters are collected - show confirmation
-                    # This will be handled by the code below (line 10344+)
+                    try:
+                        next_param_result = await start_next_parameter(update, context, user_id)
+                        if next_param_result:
+                            return next_param_result
+                        # Если start_next_parameter вернул None, но не отправил сообщение - отправляем fallback
+                        # Проверяем, было ли отправлено сообщение через NO-SILENCE GUARD
+                        await guard.check_and_ensure_response(update, context)
+                    except Exception as e:
+                        logger.error(f"Error in start_next_parameter for z-image: {e}", exc_info=True)
+                        await update.message.reply_text(
+                            "❌ Ошибка при переходе к следующему параметру. Попробуйте снова.",
+                            parse_mode='HTML'
+                        )
+                    return INPUTTING_PARAMS
                 
                 if session.get('has_image_input'):
                     image_required = False
@@ -10348,8 +10362,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session['waiting_for'] = None
                         return INPUTTING_PARAMS
                 
-                # CRITICAL: Check if there are more parameters
-                # This block handles the case when prompt was entered and we need to check for other parameters
+                # Check if there are more parameters
                 required = session.get('required', [])
                 params = session.get('params', {})
                 properties = session.get('properties', {})
@@ -10423,15 +10436,15 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await asyncio.sleep(0.5)
                         next_param_result = await start_next_parameter(update, context, user_id)
                         if next_param_result:
-                            # Track outgoing action for start_next_parameter response
-                            track_outgoing_action(update_id)
                             return next_param_result
-                        # If start_next_parameter returned None, all parameters are collected
-                        # Fall through to show confirmation below
+                        # КРИТИЧНО: Если start_next_parameter вернул None, проверяем что было отправлено сообщение
+                        # Если нет - отправляем fallback через NO-SILENCE GUARD
+                        await guard.check_and_ensure_response(update, context)
                     except Exception as e:
                         logger.error(f"Error starting next parameter: {e}", exc_info=True)
                         await update.message.reply_text(
-                            f"❌ Ошибка при переходе к следующему параметру: {str(e)}"
+                            f"❌ Ошибка при переходе к следующему параметру: {str(e)}",
+                            parse_mode='HTML'
                         )
                         track_outgoing_action(update_id)
                         return INPUTTING_PARAMS
@@ -10472,8 +10485,6 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
-                    # Track outgoing action for confirmation message
-                    track_outgoing_action(update_id)
                     return CONFIRMING_GENERATION
         
     except Exception as e:
@@ -10496,6 +10507,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as reply_error:
             logger.error(f"❌ Не удалось отправить сообщение об ошибке: {reply_error}", exc_info=True)
+        track_outgoing_action(update_id)  # Отслеживаем ответ об ошибке
         return ConversationHandler.END
     
     # ==================== TASK 1: FALLBACK для waiting_for == None ====================
@@ -10538,9 +10550,17 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         next_param_result = await start_next_parameter(update, context, user_id)
                         if next_param_result:
                             return next_param_result
+                        # КРИТИЧНО: Если start_next_parameter вернул None, проверяем что было отправлено сообщение
+                        await guard.check_and_ensure_response(update, context)
                     except Exception as e:
                         logger.error(f"Error starting next parameter after auto-fix prompt: {e}", exc_info=True)
-                        # Продолжаем к подтверждению генерации
+                        # Отправляем сообщение об ошибке
+                        await update.message.reply_text(
+                            f"❌ Ошибка при переходе к следующему параметру: {str(e)}",
+                            parse_mode='HTML'
+                        )
+                        track_outgoing_action(update_id)
+                        return INPUTTING_PARAMS
                 else:
                     # Все параметры собраны - показываем подтверждение
                     try:
@@ -10597,6 +10617,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
+            track_outgoing_action(update_id)  # Отслеживаем fallback ответ
             return ConversationHandler.END
             
         except Exception as e:
@@ -10612,32 +10633,31 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
+                track_outgoing_action(update_id)  # Отслеживаем ответ об ошибке
             except:
                 pass
             return ConversationHandler.END
     
-    # ==================== NO-SILENCE GUARD: Final check ====================
-    # Если мы дошли до конца функции без ответа - это критический баг!
-    # Отправляем fallback ответ
+    # ==================== NO-SILENCE GUARD: КРИТИЧЕСКАЯ ПРОВЕРКА ====================
+    # Если мы дошли сюда без отправки сообщения - это КРИТИЧЕСКИЙ БАГ
+    # ОБЯЗАТЕЛЬНО отправляем fallback
     try:
-        guard = get_no_silence_guard()
-        outgoing_count = guard.outgoing_actions.get(update_id, 0)
-        if outgoing_count == 0:
-            logger.error(f"⚠️⚠️⚠️ NO-SILENCE VIOLATION: input_parameters reached end without response! update_id={update_id}, user_id={user_id}, waiting_for={waiting_for}")
-            user_lang = get_user_language(user_id)
-            keyboard = [
-                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                [InlineKeyboardButton("🔄 Повторить", callback_data="back_to_menu")]
-            ]
-            await update.message.reply_text(
-                "⚠️ <b>Я не смог обработать ваш ввод.</b>\n\n"
-                "Выберите следующий шаг:",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
-            )
-            track_outgoing_action(update_id)
-    except Exception as guard_error:
-        logger.error(f"❌ Failed to send NO-SILENCE fallback: {guard_error}", exc_info=True)
+        logger.warning(f"⚠️⚠️⚠️ NO-SILENCE VIOLATION: input_parameters reached end without response for user {user_id}")
+        user_lang = get_user_language(user_id) if user_id else 'ru'
+        keyboard = [
+            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+            [InlineKeyboardButton("🔄 Повторить", callback_data="back_to_menu")]
+        ]
+        await update.message.reply_text(
+            "⚠️ <b>Я не смог обработать ваш ввод.</b>\n\n"
+            "Вернитесь в главное меню и попробуйте снова.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        track_outgoing_action(update_id)
+    except Exception as e:
+        logger.error(f"❌ CRITICAL: Failed to send NO-SILENCE fallback in input_parameters: {e}", exc_info=True)
+    # ==================== END NO-SILENCE GUARD ====================
     
     return INPUTTING_PARAMS
 

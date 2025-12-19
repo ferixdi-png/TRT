@@ -117,3 +117,4 @@ python scripts/render_logs.py --service-id srv-xxxxx --text "ImportError" --sinc
 **ГОТОВО! Теперь вы можете легко получать логи Render одной командой.**
 
 
+
