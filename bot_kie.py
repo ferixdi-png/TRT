@@ -24518,6 +24518,7 @@ async def main():
         Глобальный обработчик ошибок для всех исключений в боте.
         Логирует коротко (без секретов), отвечает пользователю безопасно.
         Ошибка не должна валить polling.
+        КРИТИЧНО: НЕ перезапускает polling, НЕ делает retry - только логирует!
         """
         try:
             error = context.error
@@ -24525,7 +24526,7 @@ async def main():
             error_msg = str(error)
             
             # Логируем с полным traceback для отладки
-            logger.error(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}", exc_info=True)
+            logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
             
             # Пытаемся получить user_id из update
             user_id = None
