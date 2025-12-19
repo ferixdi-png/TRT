@@ -202,10 +202,16 @@ class ProjectContext:
 class AutoFixer:
     """Автоматически исправляет ошибки"""
     
-    def __init__(self, project_root: Path, context: ProjectContext):
+    def __init__(self, project_root: Path, context: ProjectContext, render_api_key: str, service_id: str):
         self.project_root = project_root
         self.context = context
         self.fixes_applied = []
+        self.render_api_key = render_api_key
+        self.service_id = service_id
+        self.headers = {
+            "Authorization": f"Bearer {render_api_key}",
+            "Accept": "application/json"
+        }
     
     def fix_missing_import(self, module_name: str, file_path: Optional[str] = None) -> bool:
         """Исправляет отсутствующий импорт"""
@@ -290,17 +296,67 @@ class AutoFixer:
             return False
     
     def fix_telegram_conflict(self, telegram_token: str) -> bool:
-        """Исправляет конфликт Telegram (удаляет webhook)"""
+        """Исправляет конфликт Telegram (удаляет webhook и перезапускает сервис)"""
+        fixed = False
+        
+        # Шаг 1: Удаляем webhook
+        print("   🔧 Шаг 1: Удаление webhook Telegram...")
         try:
             url = f"{TELEGRAM_API_BASE}{telegram_token}/deleteWebhook"
             response = requests.post(url, params={"drop_pending_updates": True}, timeout=10)
             if response.status_code == 200:
-                self.fixes_applied.append("Удалён webhook Telegram")
-                print("✅ Исправлено: удалён webhook Telegram")
-                return True
-            return False
+                result = response.json()
+                if result.get("ok"):
+                    self.fixes_applied.append("Удалён webhook Telegram")
+                    print("   ✅ Webhook удалён успешно")
+                    fixed = True
+                else:
+                    print(f"   ⚠️  Webhook не был установлен или уже удалён")
+            else:
+                print(f"   ⚠️  Ошибка HTTP {response.status_code} при удалении webhook")
         except Exception as e:
-            print(f"❌ Ошибка при удалении webhook: {e}")
+            print(f"   ⚠️  Ошибка при удалении webhook: {e}")
+        
+        # Шаг 2: Перезапускаем сервис на Render
+        print("   🔧 Шаг 2: Перезапуск сервиса на Render...")
+        if self.restart_render_service():
+            self.fixes_applied.append("Перезапущен сервис на Render")
+            print("   ✅ Сервис перезапущен")
+            fixed = True
+        else:
+            print("   ⚠️  Не удалось перезапустить сервис (возможно, уже перезапускается)")
+        
+        if fixed:
+            print("✅ Исправлено: конфликт Telegram обработан")
+            return True
+        return False
+    
+    def restart_render_service(self) -> bool:
+        """Перезапускает сервис на Render через API"""
+        try:
+            # Создаём новый деплой (это перезапустит сервис)
+            url = f"{RENDER_API_BASE}/services/{self.service_id}/deploys"
+            data = {"clearBuildCache": False}
+            
+            response = requests.post(url, headers=self.headers, json=data, timeout=30)
+            
+            if response.status_code in [200, 201]:
+                deploy = response.json()
+                deploy_id = deploy.get("deploy", {}).get("id") or deploy.get("id")
+                if deploy_id:
+                    print(f"   📊 Deploy ID: {deploy_id}")
+                    return True
+                return True  # Даже если ID не получен, деплой мог начаться
+            elif response.status_code == 409:
+                # Конфликт - возможно, деплой уже идёт
+                print("   ℹ️  Деплой уже в процессе")
+                return True
+            else:
+                print(f"   ⚠️  Ошибка HTTP {response.status_code}: {response.text[:200]}")
+                return False
+                
+        except Exception as e:
+            print(f"   ⚠️  Ошибка при перезапуске: {e}")
             return False
 
 
@@ -320,7 +376,7 @@ class CompleteAutoFix:
         
         self.deploy_checker = DeploymentChecker(render_api_key, service_id)
         self.context = ProjectContext(self.project_root)
-        self.fixer = AutoFixer(self.project_root, self.context)
+        self.fixer = AutoFixer(self.project_root, self.context, render_api_key, service_id)
         
         self.context.analyze_project()
     
@@ -427,11 +483,12 @@ class CompleteAutoFix:
                     "priority": "critical"
                 })
             
-            elif "409" in message or "conflict" in message_lower or "terminated by other getUpdates" in message_lower:
+            elif "409" in message or "conflict" in message_lower or "terminated by other getUpdates" in message_lower or "telegram.error.Conflict" in message:
                 tasks.append({
                     "type": "telegram_conflict",
                     "error": message,
-                    "priority": "critical"
+                    "priority": "critical",
+                    "description": "Конфликт Telegram: запущено несколько экземпляров бота"
                 })
         
         return tasks
@@ -446,8 +503,10 @@ class CompleteAutoFix:
         
         for task in tasks:
             task_type = task.get("type")
-            print(f"\n📋 Задача: {task_type}")
-            print(f"   Ошибка: {task.get('error', '')[:100]}...")
+                print(f"\n📋 Задача: {task_type}")
+                if task.get('description'):
+                    print(f"   Описание: {task.get('description')}")
+                print(f"   Ошибка: {task.get('error', '')[:150]}...")
             
             if task_type == "missing_import":
                 module = task.get("module")
