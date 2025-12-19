@@ -1,6 +1,6 @@
 # 🤖 Автоматические задачи для исправления
 
-**Создано:** 2025-12-19 11:18:38
+**Создано:** 2025-12-19 11:19:39
 
 ## 🚨 КРИТИЧЕСКИЕ ОШИБКИ
 
@@ -8,7 +8,7 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:10:12,915 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...
+2025-12-19 08:18:46,010 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...
 ```
 
 **Исправление:** Удалить webhook и перезапустить сервис
@@ -19,7 +19,29 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:10:17,915 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...
+2025-12-19 08:18:51,011 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 3: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:18:56,586 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 4: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:19:01,586 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...
 ```
 
 **Исправление:** Удалить webhook и перезапустить сервис
