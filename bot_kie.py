@@ -23791,6 +23791,49 @@ def initialize_data_files():
         logger.error(f"❌ Failed to initialize knowledge store: {e}")
 
 
+# ==================== FILE LOCK FOR SINGLE INSTANCE ====================
+# Жёсткая защита от двойного запуска (даже если код кривой)
+LOCK_PATH = Path("/tmp/telegram_polling.lock")
+
+def acquire_lock_or_exit():
+    """Приобретает file lock или завершает процесс, если другой экземпляр уже запущен"""
+    try:
+        # Для Windows используем временную директорию
+        if sys.platform == 'win32':
+            lock_dir = Path(os.getenv('TEMP', os.getenv('TMP', '.')))
+            lock_file = lock_dir / "telegram_polling.lock"
+        else:
+            lock_file = LOCK_PATH
+        
+        # Пытаемся создать lock файл (exclusive)
+        fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        
+        logger.info(f"✅ File lock acquired: {lock_file}")
+        
+        # Регистрируем очистку при выходе
+        import atexit
+        def cleanup_lock():
+            try:
+                if lock_file.exists():
+                    os.remove(str(lock_file))
+                    logger.info("🔓 File lock released")
+            except:
+                pass
+        atexit.register(cleanup_lock)
+        
+        return True
+    except FileExistsError:
+        logger.error("❌❌❌ Another bot instance detected (lock file exists)!")
+        logger.error(f"   Lock file: {lock_file}")
+        logger.error("   Exiting to prevent 409 Conflict...")
+        sys.exit(0)
+    except Exception as e:
+        logger.warning(f"⚠️ Could not acquire file lock: {e}")
+        logger.warning("   Continuing anyway, but 409 Conflict may occur if another instance is running")
+        return False
+
 async def main():
     """Start the bot."""
     global storage, kie, DATABASE_AVAILABLE
@@ -24917,26 +24960,68 @@ async def main():
         await application.initialize()
         await application.start()
         
+        # КРИТИЧНО: Удаляем webhook ПЕРЕД start_polling (на всякий случай, если что-то пропустили)
+        logger.info("🗑️ Финальная проверка webhook перед polling...")
+        try:
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            webhook_info = await application.bot.get_webhook_info()
+            if webhook_info.url:
+                logger.warning(f"⚠️ Webhook всё ещё установлен: {webhook_info.url}, повторная попытка...")
+                await application.bot.delete_webhook(drop_pending_updates=True)
+                await asyncio.sleep(1)
+                webhook_info_final = await application.bot.get_webhook_info()
+                if webhook_info_final.url:
+                    logger.error(f"❌ Не удалось удалить webhook: {webhook_info_final.url}")
+                else:
+                    logger.info("✅ Webhook удалён после повторной попытки")
+            else:
+                logger.info("✅ Webhook подтверждён как удалённый")
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка при финальной проверке webhook: {e}")
+        
         logger.info("📡 Запуск polling...")
         
         # КРИТИЧНО: Проверяем, что нет другого экземпляра перед запуском
         # Используем временный bot для проверки (не application.bot, чтобы не инициализировать application)
-        try:
-            from telegram import Bot
-            check_bot = Bot(token=BOT_TOKEN)
-            # Пробуем получить updates для проверки конфликта
-            test_updates = await check_bot.get_updates(offset=-1, limit=1, timeout=2)
-            logger.info("✅ Проверка конфликта пройдена")
-        except Exception as test_error:
-            error_msg = str(test_error)
-            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
-                logger.error("❌❌❌ КОНФЛИКТ ОБНАРУЖЕН ПЕРЕД ЗАПУСКОМ POLLING!")
-                logger.error("Другой экземпляр бота уже работает!")
-                logger.error("Остановите все другие экземпляры и перезапустите сервис")
-                raise RuntimeError("Another bot instance is running")
-            else:
-                # Не критичная ошибка (например, timeout), продолжаем
-                logger.debug(f"Проверка конфликта: {test_error}")
+        logger.info("🔍 Финальная проверка конфликта перед запуском polling...")
+        conflict_detected = False
+        for attempt in range(3):  # 3 попытки
+            try:
+                from telegram import Bot
+                check_bot = Bot(token=BOT_TOKEN)
+                # Пробуем получить updates для проверки конфликта
+                test_updates = await check_bot.get_updates(offset=-1, limit=1, timeout=2)
+                logger.info("✅ Проверка конфликта пройдена")
+                break  # Успешно, выходим из цикла
+            except Exception as test_error:
+                error_msg = str(test_error)
+                if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+                    conflict_detected = True
+                    logger.error(f"❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка {attempt + 1}/3)!")
+                    logger.error("Другой экземпляр бота уже работает!")
+                    
+                    if attempt < 2:  # Не последняя попытка
+                        logger.info("🔄 Пытаюсь исправить: удаляю webhook и жду...")
+                        try:
+                            await check_bot.delete_webhook(drop_pending_updates=True)
+                            await asyncio.sleep(3)  # Ждём больше времени
+                        except:
+                            pass
+                    else:
+                        # Последняя попытка - критическая ошибка
+                        logger.error("❌ Не удалось исправить конфликт после 3 попыток!")
+                        logger.error("💡 ДЕЙСТВИЯ:")
+                        logger.error("   1. Проверьте Render Dashboard - должен быть только ОДИН сервис")
+                        logger.error("   2. Проверьте локальные запуски - все должны быть остановлены")
+                        logger.error("   3. Убедитесь, что нет других сервисов с тем же токеном")
+                        raise RuntimeError("Another bot instance is running - conflict not resolved")
+                else:
+                    # Не критичная ошибка (например, timeout), продолжаем
+                    logger.debug(f"Проверка конфликта (попытка {attempt + 1}): {test_error}")
+                    break  # Не критичная ошибка, продолжаем
+        
+        if conflict_detected:
+            logger.warning("⚠️ Конфликт был обнаружен, но исправлен. Продолжаю запуск...")
         
         # КРИТИЧНО: Добавляем обработчик для 409 Conflict во время работы
         async def handle_409_conflict_during_polling(update: object, context: ContextTypes.DEFAULT_TYPE):
