@@ -24892,7 +24892,7 @@ async def main():
     # Выполняем preflight проверку
     logger.info("🚀 Starting preflight check (webhook removal + conflict detection)...")
     try:
-        asyncio.run(preflight_telegram())
+        await preflight_telegram()
         logger.info("✅ Preflight check passed: ready to start bot")
     except RuntimeError as e:
         if "Another bot instance" in str(e) or "Conflict" in str(e):
