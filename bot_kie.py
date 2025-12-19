@@ -8106,12 +8106,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Просто опишите, что хотите создать, и нажмите \"Генерировать\"!\n\n"
                 )
             
+            # КРИТИЧНО: Всегда показываем цену для всех пользователей
             if is_admin:
                 model_info_text += (
                     f"✅ <b>Доступ:</b> <b>Безлимит</b>\n"
                     f"👑 <b>Статус:</b> Администратор\n\n"
                 )
             else:
+                # Для обычных пользователей всегда показываем цену и баланс
                 if is_free_available:
                     model_info_text += (
                         f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день\n"
@@ -11076,7 +11078,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     model_id = session.get('model_id', '')
                     params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
                     
-                    # Check for free generation
+                    # КРИТИЧНО: Всегда показываем цену или информацию о бесплатной генерации
                     is_admin_user = get_is_admin(user_id)
                     is_free = is_free_generation_available(user_id, model_id)
                     free_info = ""
@@ -11085,9 +11087,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
                         free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
                     else:
+                        # КРИТИЧНО: Всегда показываем цену
                         price = calculate_price_rub(model_id, params, is_admin_user)
                         price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                        free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
+                        if is_admin_user:
+                            free_info = f"\n\n💰 <b>Стоимость:</b> Безлимит (цена: {price_str} ₽)"
+                        else:
+                            free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
                     
                     user_lang = get_user_language(user_id)
                     keyboard = [
