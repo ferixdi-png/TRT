@@ -386,7 +386,7 @@ class KIEClient:
             poll_s: Poll interval in seconds (default 3)
         
         Returns:
-            Final task status dict with state, resultUrls, etc.
+            Final task status dict with state, resultUrls (parsed from resultJson), etc.
         
         Raises:
             TimeoutError: If task doesn't complete in timeout
@@ -411,11 +411,26 @@ class KIEClient:
                 
                 if state in ('success', 'fail'):
                     if state == 'success':
+                        # Parse resultUrls from resultJson if needed
                         result_urls = result.get('resultUrls', [])
+                        if not result_urls and result.get('resultJson'):
+                            try:
+                                import json
+                                result_json_str = result.get('resultJson')
+                                if isinstance(result_json_str, str):
+                                    result_json = json.loads(result_json_str)
+                                    result_urls = result_json.get('resultUrls', [])
+                                    result['resultUrls'] = result_urls  # Update in-place
+                            except Exception as e:
+                                logger.warning(f"event=kie.wait_task task_id={task_id} failed to parse resultJson: {e}")
+                        
                         logger.info(f"event=kie.wait_task task_id={task_id} status=success result_urls_count={len(result_urls)}")
                         return result
                     else:
                         error_msg = result.get('failMsg') or result.get('errorMessage', 'Unknown error')
+                        fail_code = result.get('failCode')
+                        if fail_code:
+                            error_msg = f"[{fail_code}] {error_msg}"
                         logger.error(f"event=kie.wait_task task_id={task_id} status=fail error={error_msg}")
                         raise ValueError(f"Task failed: {error_msg}")
                 
