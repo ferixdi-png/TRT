@@ -24952,7 +24952,7 @@ def acquire_lock_or_exit():
 
 async def main():
     """Start the bot."""
-    global storage, kie, DATABASE_AVAILABLE
+    global storage, kie, DATABASE_AVAILABLE, lock_conn, lock_key_int
     
     # ==================== POSTGRESQL ADVISORY LOCK (ПЕРЕД ВСЕМ) ====================
     # КРИТИЧНО: Используем PostgreSQL advisory lock для предотвращения 409 Conflict
