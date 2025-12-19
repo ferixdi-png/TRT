@@ -52,5 +52,275 @@
     "priority": "critical",
     "created_at": "2025-12-19T11:19:39.983313",
     "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:19:51,069 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:19:51.069580637Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392403",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:19:56,069 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:19:56.069912575Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392410",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:20:02,710 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:20:02.710738657Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392411",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:20:07,710 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:20:07.711040914Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392412",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:06,127 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:06.127304974Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596532",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:06,127 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:06.128045732Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596542",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:06,127 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:06.128063012Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596545",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:10,215 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:10.215774341Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596547",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:10,216 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:10.217204423Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596549",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:10.217280584Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596551",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:11,300 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:11.300993451Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596553",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:11,301 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:11.301654417Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596555",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:11,301 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:11.301669478Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596557",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:15,889 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:15.889731441Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596559",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:15,890 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:15.891295616Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596560",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:17,485 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:17.486070175Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596562",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:17,486 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:17.486770142Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596563",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:17,486 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:17.486807033Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596565",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:22,831 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:22.831903322Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596567",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:22,832 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:22.833385715Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596568",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:25,169 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:25.169566154Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596570",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:25,170 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:25.170266181Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596572",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:25,170 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:25.170285571Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596574",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:28,632 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:28.632404517Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596576",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:28,632 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:28.633381159Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596577",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:32,094 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:32.09462822Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596579",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:32,095 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:32.095534662Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596581",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:32,095 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:32.095560493Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596583",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:37,412 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:37.413114506Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596584",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:37,413 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:37.414448475Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596586",
+    "status": "pending"
   }
 ]

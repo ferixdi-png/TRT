@@ -1,6 +1,6 @@
 # 🤖 Автоматические задачи для исправления
 
-**Создано:** 2025-12-19 11:19:39
+**Создано:** 2025-12-19 11:21:42
 
 ## 🚨 КРИТИЧЕСКИЕ ОШИБКИ
 
@@ -8,7 +8,7 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:18:46,010 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...
+2025-12-19 08:21:06,127 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
 ```
 
 **Исправление:** Удалить webhook и перезапустить сервис
@@ -19,7 +19,7 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:18:51,011 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...
+2025-12-19 08:21:06,127 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 ```
 
 **Исправление:** Удалить webhook и перезапустить сервис
@@ -30,7 +30,7 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:18:56,586 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...
+2025-12-19 08:21:06,127 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
 ```
 
 **Исправление:** Удалить webhook и перезапустить сервис
@@ -41,7 +41,194 @@
 
 **Ошибка:**
 ```
-2025-12-19 08:19:01,586 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...
+2025-12-19 08:21:10,215 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 5: telegram_conflict
+
+**Ошибка:**
+```
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 6: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:11,300 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 7: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:11,301 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 8: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:11,301 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 9: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:15,889 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 10: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:17,485 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 11: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:17,486 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 12: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:17,486 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 13: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:22,831 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 14: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:25,169 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 15: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:25,170 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 16: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:25,170 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 17: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:28,632 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 18: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:32,094 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 19: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:32,095 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 20: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:32,095 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}
+```
+
+**Исправление:** Удалить webhook и перезапустить сервис
+
+---
+
+### Задача 21: telegram_conflict
+
+**Ошибка:**
+```
+2025-12-19 08:21:37,412 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates "HTTP/1.1 409 Conflict"
 ```
 
 **Исправление:** Удалить webhook и перезапустить сервис
@@ -51,4 +238,51 @@
 ## ⚠️ ВЫСОКИЙ ПРИОРИТЕТ
 
 Ошибок высокого приоритета не найдено.
+
+## 📋 ДРУГИЕ ОШИБКИ
+
+### Задача 1: general_error
+
+**Ошибка:**
+```
+2025-12-19 08:21:10,216 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+```
+
+---
+
+### Задача 2: general_error
+
+**Ошибка:**
+```
+2025-12-19 08:21:15,890 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+```
+
+---
+
+### Задача 3: general_error
+
+**Ошибка:**
+```
+2025-12-19 08:21:22,832 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+```
+
+---
+
+### Задача 4: general_error
+
+**Ошибка:**
+```
+2025-12-19 08:21:28,632 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+```
+
+---
+
+### Задача 5: general_error
+
+**Ошибка:**
+```
+2025-12-19 08:21:37,413 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.
+```
+
+---
 
