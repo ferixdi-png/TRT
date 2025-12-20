@@ -1,5 +1,10 @@
 """
-KIE Input Validator - validates input parameters against model schema
+KIE Input Validator - validates input parameters against model schema.
+
+This module provides validation for KIE AI model inputs based on the schema
+defined in models/kie_models.yaml. It ensures that all required parameters
+are present, types are correct, enum values are valid, and constraints
+(min/max length, array sizes) are satisfied before sending requests to KIE API.
 """
 
 import logging
@@ -62,7 +67,7 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
         param_value = input_dict.get(param_name)
         
         if is_required and (param_value is None or param_value == ""):
-            errors.append(f"Parameter '{param_name}' is required")
+            errors.append(f"Параметр '{param_name}' обязателен для заполнения")
             continue
         
         if param_value is None:
@@ -70,38 +75,39 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
         
         param_type = param_schema.get('type', 'string')
         
-        # Type validation
+            # Type validation
         if param_type == 'string':
             if not isinstance(param_value, str):
-                errors.append(f"Parameter '{param_name}' must be a string")
+                errors.append(f"Параметр '{param_name}' должен быть текстом")
                 continue
             
             # Length validation
             if 'min' in param_schema:
                 if len(param_value) < param_schema['min']:
-                    errors.append(f"Parameter '{param_name}' must be at least {param_schema['min']} characters")
+                    errors.append(f"Параметр '{param_name}' должен содержать минимум {param_schema['min']} символов")
             if 'max' in param_schema:
                 if len(param_value) > param_schema['max']:
-                    errors.append(f"Parameter '{param_name}' must be at most {param_schema['max']} characters")
+                    errors.append(f"Параметр '{param_name}' не должен превышать {param_schema['max']} символов")
         
         elif param_type == 'enum':
             valid_values = param_schema.get('values', [])
             if param_value not in valid_values:
-                errors.append(f"Parameter '{param_name}' must be one of {valid_values} (got '{param_value}')")
+                valid_str = ', '.join(map(str, valid_values))
+                errors.append(f"Параметр '{param_name}' должен быть одним из: {valid_str} (указано: '{param_value}')")
         
         elif param_type == 'array':
             if not isinstance(param_value, list):
-                errors.append(f"Parameter '{param_name}' must be a list/array")
+                errors.append(f"Параметр '{param_name}' должен быть списком")
                 continue
             
             # Check array length (usually max 1 for image_urls/video_urls)
             if 'max_items' in param_schema or param_name in ('image_urls', 'video_urls', 'video_url', 'image_url'):
                 max_items = param_schema.get('max_items', 1)
                 if len(param_value) > max_items:
-                    errors.append(f"Parameter '{param_name}' must have at most {max_items} item(s) (got {len(param_value)})")
+                    errors.append(f"Параметр '{param_name}' может содержать максимум {max_items} элемент(ов) (указано: {len(param_value)})")
             
             if len(param_value) == 0 and is_required:
-                errors.append(f"Parameter '{param_name}' is required and must not be empty")
+                errors.append(f"Параметр '{param_name}' обязателен и не может быть пустым")
                 continue
             
             # Validate array items
@@ -109,18 +115,18 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
             if item_type == 'string':
                 for idx, item in enumerate(param_value):
                     if not isinstance(item, str):
-                        errors.append(f"Parameter '{param_name}[{idx}]' must be a string")
+                        errors.append(f"Элемент {idx+1} параметра '{param_name}' должен быть текстом")
                         continue
                     
                     # URL validation for image/video URLs
                     if 'url' in param_name.lower():
                         if not item.startswith('http://') and not item.startswith('https://'):
-                            errors.append(f"Parameter '{param_name}[{idx}]' must be a valid URL (starting with http:// or https://)")
+                            errors.append(f"Элемент {idx+1} параметра '{param_name}' должен быть валидным URL (начинаться с http:// или https://)")
         
         elif param_type in ('number', 'integer', 'float'):
             try:
                 float(param_value)
             except (ValueError, TypeError):
-                errors.append(f"Parameter '{param_name}' must be a number")
+                errors.append(f"Параметр '{param_name}' должен быть числом")
     
     return len(errors) == 0, errors

@@ -1,5 +1,15 @@
 """
-KIE Sanity Test - tests one model of each model_type
+KIE Sanity Test - tests one model of each model_type.
+
+This script:
+1. Loads models from models/kie_models.yaml
+2. Groups models by model_type
+3. Selects one model per type for testing
+4. Generates minimal valid input based on schema
+5. Tests createTask + waitTask for each model type
+6. Outputs results table: model | model_type | state | ok/fail | time
+
+If any model_type fails, the script exits with error code 1.
 """
 
 import os

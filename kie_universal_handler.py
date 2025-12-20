@@ -1,6 +1,15 @@
 """
-Universal KIE Generation Handler
-Single handler for all models using registry and validator
+Universal KIE Generation Handler.
+
+Single unified handler for all KIE AI models using the model registry
+and validator. This handler:
+1. Validates input against model schema
+2. Creates generation task via KIE API
+3. Waits for task completion
+4. Parses result URLs from response
+5. Returns structured result with error handling
+
+This eliminates the need for individual handlers for each of the 72+ models.
 """
 
 import logging

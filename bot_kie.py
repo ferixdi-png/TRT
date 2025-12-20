@@ -11643,22 +11643,37 @@ async def start_generation_directly(
     # REAL GENERATION: Используем gateway
     gateway = get_kie_gateway()
     
-    # Validate input before sending to KIE
+    # Validate input before sending to KIE using universal validator
     try:
         from kie_validator import validate
         is_valid, validation_errors = validate(model_id, api_params)
         if not is_valid:
-            error_msg = (
-                "❌ <b>Ошибка валидации параметров</b>\n\n"
-                + "\n".join(f"• {err}" for err in validation_errors[:5])
-                + ("\n..." if len(validation_errors) > 5 else "")
-            )
             user_lang = get_user_language(user_id) if user_id else 'ru'
+            
+            # Format user-friendly error message
+            if user_lang == 'ru':
+                error_msg = (
+                    "❌ <b>Ошибка валидации параметров</b>\n\n"
+                    + "\n".join(f"• {err}" for err in validation_errors[:5])
+                    + ("\n..." if len(validation_errors) > 5 else "")
+                    + "\n\n💡 <b>Исправьте параметры и попробуйте снова.</b>"
+                )
+            else:
+                error_msg = (
+                    "❌ <b>Parameter validation error</b>\n\n"
+                    + "\n".join(f"• {err}" for err in validation_errors[:5])
+                    + ("\n..." if len(validation_errors) > 5 else "")
+                    + "\n\n💡 <b>Please fix the parameters and try again.</b>"
+                )
+            
             await status_message.edit_text(error_msg, parse_mode='HTML')
-            logger.error(f"event=kie.validation_failed model={model_id} errors={validation_errors}")
+            logger.error(f"event=kie.validation_failed model={model_id} user_id={user_id} errors={validation_errors}")
             return ConversationHandler.END
+    except ImportError:
+        logger.warning(f"kie_validator not available, skipping validation for model={model_id}")
+        # Continue without validation if module not available
     except Exception as e:
-        logger.warning(f"Validation skipped due to error: {e}", exc_info=True)
+        logger.warning(f"Validation error for model={model_id}: {e}", exc_info=True)
         # Continue without validation if it fails (don't block generation)
     
     # Create task
