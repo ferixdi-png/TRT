@@ -11645,8 +11645,8 @@ async def start_generation_directly(
     
     # Validate input before sending to KIE
     try:
-        from kie_schema import validate_input
-        is_valid, validation_errors = validate_input(model_id, api_params)
+        from kie_validator import validate
+        is_valid, validation_errors = validate(model_id, api_params)
         if not is_valid:
             error_msg = (
                 "❌ <b>Ошибка валидации параметров</b>\n\n"
