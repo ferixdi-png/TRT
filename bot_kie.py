@@ -8015,7 +8015,111 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return ConversationHandler.END
         
-        if data.startswith("select_model:"):
+        # Handle model: callback - shows model card with "Start" button (canonical format for tests)
+        if data.startswith("model:"):
+            try:
+                await query.answer()
+            except:
+                pass
+            
+            parts = data.split(":", 1)
+            if len(parts) < 2:
+                user_lang = get_user_language(user_id)
+                await query.answer(t('error_invalid_model', lang=user_lang, default="❌ Ошибка: неверный формат запроса"), show_alert=True)
+                return ConversationHandler.END
+            
+            model_id = parts[1]
+            logger.info(f"Model card requested: model_id={model_id}, user_id={user_id}")
+            
+            # Get model from registry
+            model_info = get_model_by_id_from_registry(model_id)
+            if not model_info:
+                user_lang = get_user_language(user_id)
+                await query.answer(t('error_model_not_found', lang=user_lang, default=f"❌ Модель {model_id} не найдена"), show_alert=True)
+                return ConversationHandler.END
+            
+            # Check if model is coming soon
+            if model_info.get('coming_soon', False):
+                user_lang = get_user_language(user_id)
+                keyboard = [
+                    [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
+                ]
+                await query.edit_message_text(
+                    t('error_model_unavailable', lang=user_lang) or "Модель временно недоступна",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+                return ConversationHandler.END
+            
+            # Show model card with info and "Start" button
+            user_balance = await get_user_balance_async(user_id)
+            is_admin = get_is_admin(user_id)
+            user_lang = get_user_language(user_id)
+            
+            # Calculate price
+            default_params = {}
+            if model_id == "nano-banana-pro":
+                default_params = {"resolution": "1K"}
+            elif model_id in ["seedream/4.5-text-to-image", "seedream/4.5-edit"]:
+                default_params = {"quality": "basic"}
+            elif model_id == "topaz/image-upscale":
+                default_params = {"upscale_factor": "1"}
+            
+            is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
+            min_price = calculate_price_rub(model_id, default_params, is_admin_check, user_id)
+            price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
+            
+            # Format model card
+            model_name = model_info.get('name', model_id)
+            model_emoji = model_info.get('emoji', '🤖')
+            model_desc = model_info.get('description', '')
+            model_category = model_info.get('category', 'Общее')
+            
+            model_info_text = (
+                f"{model_emoji} <b>{model_name}</b>\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            )
+            
+            if model_category:
+                model_info_text += f"📁 <b>Категория:</b> {model_category}\n"
+            
+            if model_desc:
+                model_info_text += f"\n📝 <b>Описание:</b>\n{model_desc}\n\n"
+            
+            model_info_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            model_info_text += f"💰 <b>Стоимость:</b> {price_text}\n\n"
+            
+            # Build keyboard with "Start" button
+            keyboard = [
+                [InlineKeyboardButton("🚀 Старт", callback_data=f"select_model:{model_id}")],
+                [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
+            ]
+            
+            await query.edit_message_text(
+                model_info_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+        
+        # Handle select_model: callback - starts generation flow directly (legacy, still supported)
+        # Also handles start: callback (redirects to select_model:)
+        if data.startswith("select_model:") or data.startswith("sel:"):
+            # Handle short format sel: -> select_model:
+            if data.startswith("sel:"):
+                parts = data.split(":", 1)
+                if len(parts) >= 2:
+                    model_id = parts[1]
+                    # Try to find full model_id by prefix (for backward compatibility)
+                    # In most cases, sel: prefix means it was truncated, so we need to search
+                    models = get_models_sync()
+                    matching_models = [m for m in models if m.get('id', '').startswith(model_id)]
+                    if matching_models:
+                        model_id = matching_models[0].get('id')
+                        data = f"select_model:{model_id}"
+                    else:
+                        data = f"select_model:{model_id}"
+            
             # 🔥 MAXIMUM LOGGING: select_model entry
             logger.info(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
             

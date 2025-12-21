@@ -440,7 +440,8 @@ async def check_duplicate_task(user_id: int, model_id: str, params: dict) -> Opt
 def build_model_keyboard(models: list = None, user_lang: str = 'ru') -> InlineKeyboardMarkup:
     """
     Автоматически строит клавиатуру с кнопками для каждой модели.
-    Каждая кнопка имеет callback_data в формате select_model:<model_id> (ограничен до 64 байт).
+    Каждая кнопка имеет callback_data в формате model:<model_id> (ограничен до 64 байт).
+    Canonical формат для тестов и меню.
     """
     _init_imports()
     
@@ -462,12 +463,17 @@ def build_model_keyboard(models: list = None, user_lang: str = 'ru') -> InlineKe
             max_name_len = 64 - len(emoji.encode('utf-8')) - 2  # -2 для пробела и эмодзи
             button_text = f"{emoji} {name[:max_name_len]}..."
         
-        # Создаем callback_data (ограничение Telegram: 64 байта)
-        callback_data = f"select_model:{model_id}"
+        # Создаем callback_data в формате model:<model_id> (canonical для тестов)
+        # Ограничение Telegram: 64 байта
+        callback_data = f"model:{model_id}"
         callback_bytes = callback_data.encode('utf-8')
         if len(callback_bytes) > 64:
             # Если слишком длинный, используем короткий формат
-            callback_data = f"sel:{model_id[:50]}"
+            callback_data = f"m:{model_id[:55]}"
+            # Проверяем еще раз
+            if len(callback_data.encode('utf-8')) > 64:
+                # Последний fallback - максимально обрезаем
+                callback_data = f"m:{model_id[:50]}"
         
         button = InlineKeyboardButton(
             text=button_text,
