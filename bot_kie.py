@@ -25938,10 +25938,27 @@ async def main():
                 logger.error("      2. Check local runs - stop all bot instances")
                 logger.error("      3. Verify singleton lock is working correctly")
                 logger.error("      4. Ensure webhook is deleted: curl https://api.telegram.org/bot<TOKEN>/deleteWebhook?drop_pending_updates=true")
+                
+                # CRITICAL: Stop polling/application before exit to prevent retry loops
+                try:
+                    # Try to stop the application if it's running
+                    # context.application доступен в telegram.ext.ContextTypes
+                    if hasattr(context, 'application') and context.application:
+                        try:
+                            if context.application.running:
+                                logger.info("   Stopping application before exit...")
+                                await context.application.stop()
+                                await context.application.shutdown()
+                        except Exception as stop_error:
+                            logger.warning(f"   Could not stop application: {stop_error}")
+                except Exception as e:
+                    logger.warning(f"   Error stopping application: {e}")
+                
                 try:
                     handle_conflict_gracefully(error, "polling")
                 except Exception as e:
                     logger.error(f"   Error in handle_conflict_gracefully: {e}")
+                
                 # Graceful shutdown при конфликте
                 logger.error("   Exiting gracefully to prevent repeated conflicts...")
                 try:
@@ -25949,7 +25966,14 @@ async def main():
                     release_single_instance_lock()
                 except:
                     pass
-                sys.exit(1)  # Выход с освобождением lock
+                
+                # CRITICAL: Use os._exit(0) for immediate termination without cleanup
+                # This prevents Render from restarting and stops polling loop immediately
+                # os._exit() terminates the process immediately, bypassing cleanup handlers
+                # Exit code 0 = success, Render won't restart the service
+                import os
+                logger.info("   Exiting with code 0 (immediate termination, no restart needed)")
+                os._exit(0)  # Immediate exit - stops polling loop, Render won't restart
             
             # Логируем с полным traceback для отладки (только для не-Conflict ошибок)
             logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
@@ -26398,9 +26422,46 @@ async def main():
         
         logger.info("📡 Starting polling...")
         
-        # Запускаем polling
-        await application.updater.start_polling(drop_pending_updates=drop_updates)
-        logger.info("✅ Polling started successfully!")
+        # Запускаем polling с обработкой Conflict
+        try:
+            await application.updater.start_polling(drop_pending_updates=drop_updates)
+            logger.info("✅ Polling started successfully!")
+        except Conflict as e:
+            logger.error(f"❌❌❌ Conflict during polling start: {e}")
+            logger.error("   Another bot instance is already polling")
+            try:
+                await application.stop()
+                await application.shutdown()
+            except:
+                pass
+            try:
+                from app.locking.single_instance import release_single_instance_lock
+                release_single_instance_lock()
+            except:
+                pass
+            handle_conflict_gracefully(e, "polling")
+            import os
+            os._exit(0)  # Immediate exit
+        except Exception as e:
+            error_msg = str(e)
+            if "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "409" in error_msg:
+                logger.error(f"❌❌❌ Conflict detected during polling start: {error_msg}")
+                try:
+                    await application.stop()
+                    await application.shutdown()
+                except:
+                    pass
+                try:
+                    from app.locking.single_instance import release_single_instance_lock
+                    release_single_instance_lock()
+                except:
+                    pass
+                from telegram.error import Conflict as TelegramConflict
+                handle_conflict_gracefully(TelegramConflict(error_msg), "polling")
+                import os
+                os._exit(0)  # Immediate exit
+            else:
+                raise  # Re-raise non-Conflict errors
     
     # Выполняем preflight проверку
     logger.info("🚀 Starting preflight check (webhook removal + conflict detection)...")
