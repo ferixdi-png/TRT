@@ -5207,6 +5207,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         return INPUTTING_PARAMS
                 else:
                     # All parameters collected
+                    # Get model_id from session (CRITICAL: must be defined before use)
+                    model_id = session.get('model_id', '')
+                    if not model_id:
+                        logger.error(f"❌ model_id not found in session for user_id={user_id}")
+                        await query.edit_message_text("❌ Ошибка: модель не найдена в сессии.")
+                        return ConversationHandler.END
+                    
                     model_name = session.get('model_info', {}).get('name', 'Unknown')
                     params_text = "\n".join([f"  • {k}: {v}" for k, v in params.items()])
                     
