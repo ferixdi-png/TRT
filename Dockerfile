@@ -20,7 +20,7 @@ RUN pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
 
 # Copy only necessary application files
-COPY bot_kie.py run_bot.py config.py translations.py kie_models.py kie_client.py kie_gateway.py knowledge_storage.py config_runtime.py helpers.py ./
+COPY bot_kie.py run_bot.py main_render.py config.py translations.py kie_models.py kie_client.py kie_gateway.py knowledge_storage.py config_runtime.py helpers.py ./
 
 # Copy app directory (required for app.config, app.bot_mode, etc.)
 COPY app/ ./app/
@@ -50,5 +50,5 @@ EXPOSE 10000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:10000/health').read()" || exit 1
 
-# Start the bot using Python (NOT npm!)
-CMD ["python3", "bot_kie.py"]
+# Start the bot using Render-first entrypoint
+CMD ["python3", "main_render.py"]

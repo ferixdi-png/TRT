@@ -237,7 +237,7 @@ async def main():
     if not models:
         print("ERROR: No models found in registry")
         sys.exit(1)
-    
+
     print(f"Loaded {len(models)} models from registry")
     print()
     

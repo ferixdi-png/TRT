@@ -87,6 +87,9 @@ logs/
 .cache/
 models/catalog.json
 
+# Watchdog artifacts (создаются при проверках)
+artifacts/verify_last_pass.json
+
 # Старые отчёты и документация (можно удалить)
 *_ОТЧЕТ*.md
 *_REPORT*.md

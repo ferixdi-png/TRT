@@ -163,3 +163,6 @@ python scripts/render_autopilot_monitor.py --once --fix
 - ✅ Render Monitor: логи получаются, ошибки обнаруживаются (render_autopilot_monitor.py)
 
 
+
+
+

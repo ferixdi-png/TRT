@@ -107,7 +107,7 @@ try:
             tesseract_found = False
     
     if not tesseract_found:
-        logger.info("ℹ️ Tesseract not found. OCR analysis will be disabled. Install tesseract-ocr package if needed.")
+        logger.info("[INFO] Tesseract not found. OCR analysis will be disabled. Install tesseract-ocr package if needed.")
         OCR_AVAILABLE = False
     else:
         # Don't test Tesseract at import time - it can hang or timeout
@@ -212,18 +212,27 @@ CREDIT_TO_USD = 0.005  # 1 credit = $0.005 ($0.09 / 18)
 USD_TO_RUB_DEFAULT = 6.95 / 0.09  # 1 USD = 77.2222... RUB (calculated from 6.95 ₽ / $0.09) - default value
 
 def get_usd_to_rub_rate() -> float:
-    """Get USD to RUB exchange rate from file, or return default if not set."""
+    """
+    Get USD to RUB exchange rate from file, or return default if not set.
+    DEPRECATED: Use app.services.payments_service.get_usd_to_rub_rate() instead
+    """
+    # Импортируем из app/services/payments_service (БЕЗ circular import)
     try:
-        rate_data = load_json_file(CURRENCY_RATE_FILE, {})
-        rate = rate_data.get('usd_to_rub', USD_TO_RUB_DEFAULT)
-        if isinstance(rate, (int, float)) and rate > 0:
-            return float(rate)
-        else:
-            logger.warning(f"Invalid currency rate in file: {rate}, using default: {USD_TO_RUB_DEFAULT}")
+        from app.services.payments_service import get_usd_to_rub_rate as _get_rate
+        return _get_rate()
+    except ImportError:
+        # Fallback на старую логику
+        try:
+            rate_data = load_json_file(CURRENCY_RATE_FILE, {})
+            rate = rate_data.get('usd_to_rub', USD_TO_RUB_DEFAULT)
+            if isinstance(rate, (int, float)) and rate > 0:
+                return float(rate)
+            else:
+                logger.warning(f"Invalid currency rate in file: {rate}, using default: {USD_TO_RUB_DEFAULT}")
+                return USD_TO_RUB_DEFAULT
+        except Exception as e:
+            logger.error(f"Error loading currency rate: {e}, using default: {USD_TO_RUB_DEFAULT}")
             return USD_TO_RUB_DEFAULT
-    except Exception as e:
-        logger.error(f"Error loading currency rate: {e}, using default: {USD_TO_RUB_DEFAULT}")
-        return USD_TO_RUB_DEFAULT
 
 def set_usd_to_rub_rate(rate: float) -> bool:
     """Set USD to RUB exchange rate and save to file."""
@@ -252,52 +261,32 @@ except ImportError as e:
     logger.debug(f"ℹ️ Новые сервисы не доступны, используется стандартная реализация (это нормально): {e}")
 
 # Импорт модуля БД для сохранения баланса и истории
+# Storage is now handled by app.storage.factory - no need for DATABASE_AVAILABLE flag
+# Old database.py functions are deprecated in favor of storage layer
 try:
     from database import (
-        init_database,
-        get_user_balance as db_get_user_balance,
-        update_user_balance as db_update_user_balance,
-        add_to_balance as db_add_to_balance,
-        create_operation,
-        get_user_operations,
-        log_kie_operation,
-        get_or_create_user,
-        acquire_advisory_lock,
-        release_advisory_lock,
-        make_lock_key
+        log_kie_operation,  # Still used for logging
+        create_operation,  # Still used for operation logging
+        get_user_operations,  # Still used for operations history
     )
-    DATABASE_AVAILABLE = True
-    logger.info("✅ Модуль БД загружен успешно")
-except ImportError as e:
-    DATABASE_AVAILABLE = False
-    # Это нормально, если psycopg2 не установлен или database.py отсутствует
-    # Проверяем, что именно не найдено
-    error_msg = str(e)
-    if 'database' in error_msg.lower():
-        logger.info(f"ℹ️ Модуль database.py не найден, используется JSON хранилище (это нормально, если БД не настроена)")
-    elif 'psycopg2' in error_msg.lower():
-        logger.info(f"ℹ️ psycopg2 не установлен, используется JSON хранилище (это нормально, если БД не используется)")
-    else:
-        logger.info(f"ℹ️ Модуль БД не доступен, используется JSON хранилище: {e}")
-    # Устанавливаем заглушки для advisory lock функций
-    acquire_advisory_lock = None
-    release_advisory_lock = None
-    make_lock_key = None
+    logger.info("[OK] Database module loaded (legacy functions for logging)")
+except ImportError:
+    logger.info("ℹ️ Database module not available (logging functions will be skipped)")
+    log_kie_operation = None
+    create_operation = None
+    get_user_operations = None
 except Exception as e:
-    DATABASE_AVAILABLE = False
-    logger.warning(f"⚠️ Ошибка при загрузке модуля БД, используется JSON хранилище: {e}")
-    # Устанавливаем заглушки для advisory lock функций
-    acquire_advisory_lock = None
-    release_advisory_lock = None
-    make_lock_key = None
+    logger.warning(f"⚠️ Error loading database module: {e}")
+    log_kie_operation = None
+    create_operation = None
+    get_user_operations = None
 
 # Initialize knowledge storage and KIE client (will be initialized in main() to avoid blocking import)
 storage = None
 kie = None
 
 # PostgreSQL advisory lock connection (global для keep-alive задачи)
-lock_conn = None
-lock_key_int = None
+# lock_conn и lock_key_int удалены - используется app.locking.single_instance
 
 # Store user sessions
 user_sessions = {}
@@ -843,230 +832,119 @@ def update_session_activity(user_id: int):
 
 
 def get_user_balance(user_id: int) -> float:
-    """Get user balance in rubles (from DB or JSON fallback)."""
-    # Try to get from database first
-    if DATABASE_AVAILABLE:
-        try:
-            from decimal import Decimal
-            balance = db_get_user_balance(user_id)
-            balance_float = float(balance)
-            # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Получение баланса из БД
-            logger.info(f"💰💰💰 GET_BALANCE FROM DB: user_id={user_id}, balance={balance_float:.2f} ₽")
-            return balance_float
-        except Exception as e:
-            logger.error(f"❌❌❌ ERROR GETTING BALANCE FROM DB: user_id={user_id}, error={e}, using JSON fallback", exc_info=True)
-            # Fallback to JSON
-            pass
-    
-    # Fallback to JSON (original method)
-    user_key = str(user_id)
-    
-    # Check cache first
-    current_time = time.time()
-    if 'balances' in _data_cache['cache_timestamps']:
-        cache_time = _data_cache['cache_timestamps']['balances']
-        if current_time - cache_time < CACHE_TTL and user_key in _data_cache.get('balances', {}):
-            return _data_cache['balances'][user_key]
-    
-    # Load from file if not in cache
-    balances = load_json_file(BALANCES_FILE, {})
-    return balances.get(user_key, 0.0)
+    """Get user balance in rubles (synchronous wrapper for storage)."""
+    # Use storage layer through async wrapper (blocking call)
+    import asyncio
+    from app.services.user_service import get_user_balance as get_balance_async
+    try:
+        # Try to get current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is running, we can't use run_until_complete
+            # Fall back to thread pool
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, get_balance_async(user_id))
+                return future.result(timeout=5.0)
+        else:
+            return loop.run_until_complete(get_balance_async(user_id))
+    except RuntimeError:
+        # No event loop, create new one
+        return asyncio.run(get_balance_async(user_id))
+    except Exception as e:
+        logger.error(f"❌ Error getting user balance: {e}", exc_info=True)
+        return 0.0
 
 
 def set_user_balance(user_id: int, amount: float):
-    """Set user balance in rubles (save to DB or JSON fallback)."""
-    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Все операции с балансом
+    """Set user balance in rubles (synchronous wrapper for storage)."""
+    # Use storage layer through async wrapper (blocking call)
+    import asyncio
+    from app.services.user_service import set_user_balance as set_balance_async
     logger.info(f"💰💰💰 SET_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
-    
-    # Try to save to database first
-    if DATABASE_AVAILABLE:
-        try:
-            from decimal import Decimal
-            old_balance = get_user_balance(user_id)
-            success = db_update_user_balance(user_id, Decimal(str(amount)))
-            if success:
-                # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Успешное сохранение в БД
-                logger.info(f"✅✅✅ BALANCE SAVED TO DB: user_id={user_id}, old={old_balance:.2f} ₽, new={amount:.2f} ₽")
-                
-                # Проверяем, что баланс действительно сохранился
-                verify_balance = db_get_user_balance(user_id)
-                if abs(float(verify_balance) - amount) > 0.01:
-                    logger.error(f"❌❌❌ BALANCE VERIFICATION FAILED IN DB: user_id={user_id}, expected={amount:.2f}, got={float(verify_balance):.2f}")
-                else:
-                    logger.info(f"✅✅✅ BALANCE VERIFIED IN DB: user_id={user_id}, balance={amount:.2f} ₽")
-                
-                # Also update cache
-                user_key = str(user_id)
-                if 'balances' not in _data_cache:
-                    _data_cache['balances'] = {}
-                _data_cache['balances'][user_key] = amount
-                _data_cache['cache_timestamps']['balances'] = time.time()
-                return
-            else:
-                logger.error(f"❌❌❌ FAILED TO SAVE BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, using JSON fallback")
-        except Exception as e:
-            logger.error(f"❌❌❌ ERROR SAVING BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, error={e}, using JSON fallback", exc_info=True)
-            # Fallback to JSON
-            pass
-    
-    # Fallback to JSON (original method)
-    # Ensure balances file exists
-    if not os.path.exists(BALANCES_FILE):
-        try:
-            with open(BALANCES_FILE, 'w', encoding='utf-8') as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-            logger.info(f"Created balances file {BALANCES_FILE}")
-        except Exception as e:
-            logger.error(f"Error creating balances file {BALANCES_FILE}: {e}")
-    
-    user_key = str(user_id)
-    balances = load_json_file(BALANCES_FILE, {})
-    balances[user_key] = amount
-    
-    # Update cache immediately
-    if 'balances' not in _data_cache:
-        _data_cache['balances'] = {}
-    _data_cache['balances'][user_key] = amount
-    _data_cache['cache_timestamps']['balances'] = time.time()
-    
-    # Ensure directory exists
-    dir_path = os.path.dirname(BALANCES_FILE)
-    if dir_path and not os.path.exists(dir_path):
-        os.makedirs(dir_path, exist_ok=True)
-        logger.info(f"✅ Created directory for balances file: {dir_path}")
-    
-    # Force immediate save for balances (critical data)
-    if BALANCES_FILE in _last_save_time:
-        del _last_save_time[BALANCES_FILE]
-    save_json_file(BALANCES_FILE, balances, use_cache=True)
-    
-    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Сохранение в JSON
-    logger.info(f"💰💰💰 SET_BALANCE JSON: user_id={user_id}, amount={amount:.2f} ₽, file={BALANCES_FILE}")
-    
-    # Verify save for critical data
-    if os.path.exists(BALANCES_FILE):
-        verify_balances = load_json_file(BALANCES_FILE, {})
-        if str(user_id) in verify_balances and abs(verify_balances[str(user_id)] - amount) < 0.01:
-            logger.info(f"✅✅✅ BALANCE VERIFIED IN JSON: user_id={user_id}, balance={amount:.2f} ₽")
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, set_balance_async(user_id, amount))
+                future.result(timeout=5.0)
         else:
-            logger.error(f"❌❌❌ BALANCE VERIFICATION FAILED IN JSON: user_id={user_id}, expected={amount:.2f}, got={verify_balances.get(str(user_id), 'NOT_FOUND')}")
-            # Retry save once
-            save_json_file(BALANCES_FILE, balances, use_cache=False)
-            # Проверяем ещё раз
-            verify_balances_retry = load_json_file(BALANCES_FILE, {})
-            if str(user_id) in verify_balances_retry and abs(verify_balances_retry[str(user_id)] - amount) < 0.01:
-                logger.info(f"✅✅✅ BALANCE VERIFIED AFTER RETRY: user_id={user_id}, balance={amount:.2f} ₽")
-            else:
-                logger.error(f"❌❌❌ BALANCE STILL FAILED AFTER RETRY: user_id={user_id}, expected={amount:.2f}, got={verify_balances_retry.get(str(user_id), 'NOT_FOUND')}")
-    else:
-        logger.error(f"❌❌❌ CRITICAL: Balance file not found after save! Retrying... user_id={user_id}, amount={amount:.2f} ₽")
-        save_json_file(BALANCES_FILE, balances, use_cache=False)
-        if os.path.exists(BALANCES_FILE):
-            logger.info(f"✅✅✅ Balance file created after retry: {BALANCES_FILE}")
-        else:
-            logger.error(f"❌❌❌ CRITICAL: Balance file STILL not found after retry! user_id={user_id}, amount={amount:.2f} ₽")
+            loop.run_until_complete(set_balance_async(user_id, amount))
+    except RuntimeError:
+        asyncio.run(set_balance_async(user_id, amount))
+    except Exception as e:
+        logger.error(f"❌ Error setting user balance: {e}", exc_info=True)
 
 
 def add_user_balance(user_id: int, amount: float) -> float:
-    """Add amount to user balance, return new balance."""
-    # 🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Добавление баланса
+    """Add amount to user balance, return new balance (synchronous wrapper for storage)."""
+    # Use storage layer through async wrapper (blocking call)
+    import asyncio
+    from app.services.user_service import add_user_balance as add_balance_async
     logger.info(f"💰💰💰 ADD_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
-    
-    # Try to add to database first
-    if DATABASE_AVAILABLE:
-        try:
-            from decimal import Decimal
-            old_balance = get_user_balance(user_id)
-            success = db_add_to_balance(user_id, Decimal(str(amount)))
-            if success:
-                new_balance = get_user_balance(user_id)  # Get updated balance
-                logger.info(f"✅✅✅ BALANCE ADDED IN DB: user_id={user_id}, added={amount:.2f} ₽, old={old_balance:.2f} ₽, new={new_balance:.2f} ₽")
-                return new_balance
-            else:
-                logger.error(f"❌❌❌ FAILED TO ADD BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, using JSON fallback")
-        except Exception as e:
-            logger.error(f"❌❌❌ ERROR ADDING BALANCE TO DB: user_id={user_id}, amount={amount:.2f} ₽, error={e}, using JSON fallback", exc_info=True)
-            # Fallback to JSON
-            pass
-    
-    # Fallback to JSON (original method)
-    current = get_user_balance(user_id)
-    new_balance = current + amount
-    logger.info(f"💰💰💰 ADD_BALANCE JSON: user_id={user_id}, current={current:.2f} ₽, added={amount:.2f} ₽, new={new_balance:.2f} ₽")
-    set_user_balance(user_id, new_balance)
-    return new_balance
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, add_balance_async(user_id, amount))
+                return future.result(timeout=5.0)
+        else:
+            return loop.run_until_complete(add_balance_async(user_id, amount))
+    except RuntimeError:
+        return asyncio.run(add_balance_async(user_id, amount))
+    except Exception as e:
+        logger.error(f"❌ Error adding user balance: {e}", exc_info=True)
+        return get_user_balance(user_id)  # Return current balance on error
 
 
 def subtract_user_balance(user_id: int, amount: float) -> bool:
-    """Subtract amount from user balance. Returns True if successful, False if insufficient funds."""
-    current = get_user_balance(user_id)
-    if current >= amount:
-        set_user_balance(user_id, current - amount)
-        return True
-    return False
+    """Subtract amount from user balance. Returns True if successful, False if insufficient funds (synchronous wrapper for storage)."""
+    # Use storage layer through async wrapper (blocking call)
+    import asyncio
+    from app.services.user_service import subtract_user_balance as subtract_balance_async
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, subtract_balance_async(user_id, amount))
+                return future.result(timeout=5.0)
+        else:
+            return loop.run_until_complete(subtract_balance_async(user_id, amount))
+    except RuntimeError:
+        return asyncio.run(subtract_balance_async(user_id, amount))
+    except Exception as e:
+        logger.error(f"❌ Error subtracting user balance: {e}", exc_info=True)
+        return False
 
 
 # ==================== Async wrappers for database operations ====================
-# These prevent blocking the event loop when calling synchronous DB functions
+# These use storage layer (async) - no blocking operations
 
 async def get_user_balance_async(user_id: int) -> float:
-    """Async wrapper for get_user_balance to prevent blocking event loop."""
-    if DATABASE_AVAILABLE:
-        # Run synchronous DB call in thread pool to avoid blocking
-        try:
-            return await asyncio.to_thread(get_user_balance, user_id)
-        except Exception as e:
-            logger.error(f"Error in async get_user_balance: {e}")
-            # Fallback to synchronous call (should be fast for JSON)
-            return get_user_balance(user_id)
-    else:
-        # For JSON fallback, can run synchronously (file I/O is fast)
-        return get_user_balance(user_id)
+    """Async get user balance using storage layer."""
+    from app.services.user_service import get_user_balance as get_balance_async
+    return await get_balance_async(user_id)
 
 
 async def set_user_balance_async(user_id: int, amount: float):
-    """Async wrapper for set_user_balance to prevent blocking event loop."""
-    if DATABASE_AVAILABLE:
-        # Run synchronous DB call in thread pool to avoid blocking
-        try:
-            await asyncio.to_thread(set_user_balance, user_id, amount)
-        except Exception as e:
-            logger.error(f"Error in async set_user_balance: {e}")
-            # Fallback to synchronous call
-            set_user_balance(user_id, amount)
-    else:
-        # For JSON fallback, can run synchronously
-        set_user_balance(user_id, amount)
+    """Async set user balance using storage layer."""
+    from app.services.user_service import set_user_balance as set_balance_async
+    await set_balance_async(user_id, amount)
 
 
 async def add_user_balance_async(user_id: int, amount: float) -> float:
-    """Async wrapper for add_user_balance to prevent blocking event loop."""
-    if DATABASE_AVAILABLE:
-        # Run synchronous DB call in thread pool to avoid blocking
-        try:
-            return await asyncio.to_thread(add_user_balance, user_id, amount)
-        except Exception as e:
-            logger.error(f"Error in async add_user_balance: {e}")
-            # Fallback to synchronous call
-            return add_user_balance(user_id, amount)
-    else:
-        # For JSON fallback, can run synchronously
-        return add_user_balance(user_id, amount)
+    """Async add to user balance using storage layer."""
+    from app.services.user_service import add_user_balance as add_balance_async
+    return await add_balance_async(user_id, amount)
 
 
 async def subtract_user_balance_async(user_id: int, amount: float) -> bool:
-    """Async wrapper for subtract_user_balance to prevent blocking event loop."""
-    if DATABASE_AVAILABLE:
-        # Run synchronous DB call in thread pool to avoid blocking
-        try:
-            return await asyncio.to_thread(subtract_user_balance, user_id, amount)
-        except Exception as e:
-            logger.error(f"Error in async subtract_user_balance: {e}")
-            # Fallback to synchronous call
-            return subtract_user_balance(user_id, amount)
-    else:
-        # For JSON fallback, can run synchronously
-        return subtract_user_balance(user_id, amount)
+    """Async subtract from user balance using storage layer."""
+    from app.services.user_service import subtract_user_balance as subtract_balance_async
+    return await subtract_balance_async(user_id, amount)
 
 
 # ==================== User Language System ====================
@@ -1424,8 +1302,8 @@ def save_generation_to_history(user_id: int, model_id: str, model_name: str, par
     """Save generation to user history (save to DB or JSON fallback)."""
     import time
     
-    # Try to save to database first
-    if DATABASE_AVAILABLE:
+    # Log operation (if create_operation is available)
+    if create_operation:
         try:
             from decimal import Decimal
             # Get first result URL (if available)
@@ -11692,7 +11570,7 @@ async def start_generation_directly(
         # НЕ списываем баланс в DRY-RUN
         # НЕ создаем реальную операцию, только логируем
         logger.info(f"🔧 DRY-RUN: Would deduct {price} from user {user_id} (NOT DEDUCTED)")
-        if DATABASE_AVAILABLE:
+        if create_operation:
             try:
                 # Создаем операцию с пометкой dry_run (если таблица поддерживает)
                 create_operation(user_id, "dry_run_generation", Decimal('0.00'), model_id, mock_url, None)
@@ -23861,7 +23739,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
             # НЕ списываем баланс в DRY-RUN
             logger.info(f"🔧 DRY-RUN: Would deduct {price} from user {user_id} (NOT DEDUCTED)")
-            if DATABASE_AVAILABLE:
+            if create_operation:
                 try:
                     create_operation(user_id, "dry_run_generation", Decimal('0.00'), model_id, mock_url, None)
                 except:
@@ -24803,8 +24681,8 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     # Add balance to user
     await add_user_balance_async(user_id, amount_rubles)
     
-    # Save payment operation to database
-    if DATABASE_AVAILABLE:
+    # Save payment operation to database (if create_operation is available)
+    if create_operation:
         try:
             from decimal import Decimal
             create_operation(
@@ -24983,52 +24861,35 @@ def initialize_data_files():
         logger.error(f"❌ Failed to initialize knowledge store: {e}")
 
 
-# ==================== FILE LOCK FOR SINGLE INSTANCE ====================
-# Жёсткая защита от двойного запуска (даже если код кривой)
-LOCK_PATH = Path("/tmp/telegram_polling.lock")
-
-def acquire_lock_or_exit():
-    """Приобретает file lock или завершает процесс, если другой экземпляр уже запущен"""
-    try:
-        # Для Windows используем временную директорию
-        if sys.platform == 'win32':
-            lock_dir = Path(os.getenv('TEMP', os.getenv('TMP', '.')))
-            lock_file = lock_dir / "telegram_polling.lock"
-        else:
-            lock_file = LOCK_PATH
-        
-        # Пытаемся создать lock файл (exclusive)
-        fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
-        
-        logger.info(f"✅ File lock acquired: {lock_file}")
-        
-        # Регистрируем очистку при выходе
-        import atexit
-        def cleanup_lock():
-            try:
-                if lock_file.exists():
-                    os.remove(str(lock_file))
-                    logger.info("🔓 File lock released")
-            except:
-                pass
-        atexit.register(cleanup_lock)
-        
-        return True
-    except FileExistsError:
-        logger.error("❌❌❌ Another bot instance detected (lock file exists)!")
-        logger.error(f"   Lock file: {lock_file}")
-        logger.error("   Exiting to prevent 409 Conflict...")
+    # ==================== SINGLE INSTANCE LOCK ====================
+    # Используем единый модуль блокировки для предотвращения 409 Conflict
+    from app.locking.single_instance import (
+        acquire_single_instance_lock,
+        release_single_instance_lock,
+        is_lock_held,
+    )
+    
+    logger.info("🔒 Acquiring single instance lock...")
+    if not acquire_single_instance_lock():
+        logger.error("❌❌❌ Failed to acquire single instance lock!")
+        logger.error("   Another bot instance is already running")
+        logger.error("   Exiting gracefully (exit code 0) to prevent restart loop")
         sys.exit(0)
-    except Exception as e:
-        logger.warning(f"⚠️ Could not acquire file lock: {e}")
-        logger.warning("   Continuing anyway, but 409 Conflict may occur if another instance is running")
-        return False
+    
+    logger.info("✅ Single instance lock acquired - this is the leader instance")
+    
+    # Регистрируем освобождение lock при выходе
+    import atexit
+    def release_lock_on_exit():
+        try:
+            release_single_instance_lock()
+        except Exception as e:
+            logger.error(f"Error releasing lock on exit: {e}")
+    atexit.register(release_lock_on_exit)
 
 async def main():
     """Start the bot."""
-    global storage, kie, DATABASE_AVAILABLE, lock_conn, lock_key_int
+    global storage, kie
     
     # ==================== НАЧАЛЬНАЯ ДИАГНОСТИКА ====================
     logger.info("=" * 60)
@@ -25059,139 +24920,17 @@ async def main():
     
     logger.info("=" * 60)
     
-    # ==================== POSTGRESQL ADVISORY LOCK (ПЕРЕД ВСЕМ) ====================
-    # КРИТИЧНО: Используем PostgreSQL advisory lock для предотвращения 409 Conflict
-    # Это работает между разными Render сервисами с общим DATABASE_URL
-    lock_conn = None
-    lock_key_int = None
+    # ==================== SINGLE INSTANCE LOCK ====================
+    # Lock уже получен в начале файла через app.locking.single_instance
+    # Проверяем, что lock действительно удерживается
+    from app.locking.single_instance import is_lock_held
+    if not is_lock_held():
+        logger.error("❌❌❌ CRITICAL: Single instance lock is not held!")
+        logger.error("   This should not happen - lock should be acquired at module level")
+        logger.error("   Exiting to prevent 409 Conflict...")
+        sys.exit(1)
     
-    if DATABASE_AVAILABLE:
-        try:
-            from render_singleton_lock import make_lock_key, acquire_lock_session
-            from database import get_connection_pool
-            
-            # Маскируем токен для логов
-            masked_token = BOT_TOKEN[:4] + "..." + BOT_TOKEN[-4:] if len(BOT_TOKEN) > 8 else "****"
-            logger.info(f"🔒 Attempting PostgreSQL advisory lock: pid={os.getpid()}, token={masked_token}")
-            
-            # Создаем lock key из токена
-            lock_key_int = make_lock_key(BOT_TOKEN, namespace="telegram_polling")
-            
-            # Получаем пул соединений
-            pool = get_connection_pool()
-            
-            # Пытаемся получить advisory lock
-            lock_conn = acquire_lock_session(pool, lock_key_int)
-            
-            if lock_conn is None:
-                logger.error("❌❌❌ Another instance holds PostgreSQL advisory lock!")
-                logger.error("   Exiting to avoid getUpdates conflict (409 Conflict)")
-                logger.error("   Only ONE instance should be running per TELEGRAM_BOT_TOKEN")
-                # Используем os._exit для немедленного завершения без cleanup
-                os._exit(1)
-            
-            logger.info("✅ PostgreSQL advisory lock acquired - this is the leader instance")
-            
-            # Регистрируем освобождение lock при выходе
-            import atexit
-            def release_lock_on_exit():
-                if lock_conn:
-                    from render_singleton_lock import release_lock_session
-                    from database import get_connection_pool
-                    try:
-                        pool = get_connection_pool()
-                        release_lock_session(pool, lock_conn, lock_key_int)
-                    except Exception as e:
-                        logger.error(f"Error releasing lock on exit: {e}")
-            atexit.register(release_lock_on_exit)
-            
-        except ImportError as e:
-            logger.error(f"❌ Failed to import lock modules: {e}", exc_info=True)
-            logger.error("   Module 'render_singleton_lock' or 'database' not found")
-            logger.error("   Falling back to file-based singleton lock")
-            # Fallback на file lock если модули недоступны
-            try:
-                try:
-                    bot_mode = get_bot_mode()
-                except Exception as mode_error:
-                    logger.warning(f"⚠️ Failed to get bot mode: {mode_error}, using 'polling' as default")
-                    bot_mode = 'polling'
-                
-                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10] if BOT_TOKEN else 'unknown'}"
-                
-                try:
-                    singleton_lock = get_singleton_lock(lock_key)
-                except Exception as lock_init_error:
-                    logger.error(f"❌ Failed to initialize singleton lock: {lock_init_error}", exc_info=True)
-                    logger.error("   Exiting to prevent conflicts...")
-                    os._exit(1)
-                
-                if not singleton_lock.acquire(timeout=5):
-                    logger.error("❌❌❌ Another bot instance detected (file lock held)!")
-                    logger.error("   Exiting immediately to prevent 409 Conflict...")
-                    os._exit(1)
-                logger.info("✅ File-based singleton lock acquired (modules unavailable)")
-            except Exception as fallback_error:
-                logger.error(f"❌ Failed to acquire file lock: {fallback_error}", exc_info=True)
-                logger.error("   Error details:", exc_info=True)
-                logger.error("   Exiting to prevent conflicts...")
-                os._exit(1)
-        except Exception as e:
-            logger.error(f"❌ Failed to acquire PostgreSQL advisory lock: {e}", exc_info=True)
-            logger.error("   Falling back to file-based singleton lock")
-            # Fallback на file lock если БД недоступна
-            try:
-                try:
-                    bot_mode = get_bot_mode()
-                except Exception as mode_error:
-                    logger.warning(f"⚠️ Failed to get bot mode: {mode_error}, using 'polling' as default")
-                    bot_mode = 'polling'
-                
-                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10] if BOT_TOKEN else 'unknown'}"
-                
-                try:
-                    singleton_lock = get_singleton_lock(lock_key)
-                except Exception as lock_init_error:
-                    logger.error(f"❌ Failed to initialize singleton lock: {lock_init_error}", exc_info=True)
-                    logger.error("   Exiting to prevent conflicts...")
-                    os._exit(1)
-                
-                if not singleton_lock.acquire(timeout=5):
-                    logger.error("❌❌❌ Another bot instance detected (file lock held)!")
-                    logger.error("   Exiting immediately to prevent 409 Conflict...")
-                    os._exit(1)
-                logger.info("✅ File-based singleton lock acquired (DB unavailable)")
-            except Exception as fallback_error:
-                logger.error(f"❌ Failed to acquire file lock: {fallback_error}", exc_info=True)
-                logger.error("   Exiting to prevent conflicts...")
-                os._exit(1)
-    else:
-        logger.warning("⚠️ DATABASE_URL not available, using file-based singleton lock")
-        try:
-            try:
-                bot_mode = get_bot_mode()
-            except Exception as mode_error:
-                logger.warning(f"⚠️ Failed to get bot mode: {mode_error}, using 'polling' as default")
-                bot_mode = 'polling'
-            
-            lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10] if BOT_TOKEN else 'unknown'}"
-            
-            try:
-                singleton_lock = get_singleton_lock(lock_key)
-            except Exception as lock_init_error:
-                logger.error(f"❌ Failed to initialize singleton lock: {lock_init_error}", exc_info=True)
-                logger.error("   Exiting to prevent conflicts...")
-                os._exit(1)
-            
-            if not singleton_lock.acquire(timeout=5):
-                logger.error("❌❌❌ Another bot instance detected (file lock held)!")
-                logger.error("   Exiting immediately to prevent 409 Conflict...")
-                os._exit(1)
-            logger.info("✅ File-based singleton lock acquired")
-        except Exception as e:
-            logger.error(f"❌ Failed to acquire file lock: {e}", exc_info=True)
-            logger.error("   Exiting to prevent conflicts...")
-            os._exit(1)
+    logger.info("✅ Single instance lock verified - proceeding with bot initialization")
     
     # CRITICAL: Ensure data directory exists and is writable before anything else
     logger.info("🔒 Ensuring data persistence...")
@@ -25210,33 +24949,7 @@ async def main():
     else:
         logger.info(f"✅ Data directory {DATA_DIR} is writable")
     
-    # Initialize database if available
-    # Используем DATABASE_URL из app.config (если доступен) или fallback на os.getenv
-    try:
-        database_url = CONFIG_DATABASE_URL
-    except NameError:
-        database_url = os.getenv('DATABASE_URL')
-    if DATABASE_AVAILABLE and database_url:
-        try:
-            logger.info("🗄️ Initializing database...")
-            init_database()
-            logger.info("✅ Database initialized successfully (schema ok)")
-            logger.info("✅ Data will be saved to PostgreSQL")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize database: {e}", exc_info=True)
-            logger.error(f"   Error type: {type(e).__name__}")
-            logger.error(f"   Error message: {str(e)}")
-            logger.warning("⚠️ Bot will continue with JSON fallback storage")
-            # Set DATABASE_AVAILABLE to False to use JSON fallback
-            DATABASE_AVAILABLE = False
-    else:
-        if not database_url:
-            logger.info("ℹ️ DATABASE_URL not set, using JSON storage")
-        else:
-            database_url_masked = mask_secret(os.getenv('DATABASE_URL', ''))
-            logger.debug(f"DATABASE_URL: {database_url_masked}")
-        logger.info("ℹ️ Database not available, using JSON storage")
-        logger.info("ℹ️ To enable database, install psycopg2-binary and set DATABASE_URL")
+    # Storage initialization is handled by app.storage.factory (already initialized above)
     
     # Initialize all data files first (for JSON fallback)
     logger.info("🔧 Initializing data files...")
@@ -25258,9 +24971,7 @@ async def main():
             logger.warning(f"⚠️ Critical file missing: {critical_file}")
             all_critical_ok = False
     
-    if DATABASE_AVAILABLE:
-        logger.info("✅ Database is ready, data will be saved to PostgreSQL")
-    elif all_critical_ok:
+    if all_critical_ok:
         logger.info("✅ All critical data files verified and ready (JSON storage)")
     else:
         logger.warning("⚠️ Some critical files need attention, but bot will continue")
@@ -25304,15 +25015,14 @@ async def main():
     
     logger.info("✅ Bot initialization complete (Python only, no Node.js needed)")
     
-    # Initialize storage and KIE client here (not at import time to avoid blocking)
-    if storage is None:
-        storage = KnowledgeStorage()
-    if kie is None:
-        kie = get_client()
+    # Инициализация через bootstrap (dependency container)
+    # НЕ инициализируем storage/kie как глобальные - используем dependency container
+    from app.config import get_settings
     
-    if not BOT_TOKEN:
+    settings = get_settings()
+    
+    if not settings.telegram_bot_token:
         logger.error("No TELEGRAM_BOT_TOKEN found in environment variables!")
-        logger.error(f"BOT_TOKEN: {mask_secret(BOT_TOKEN) if BOT_TOKEN else 'NOT SET'}")
         return
     
     # Verify models are loaded correctly
@@ -25320,12 +25030,20 @@ async def main():
     sora_models = [m for m in KIE_MODELS if m['id'] == 'sora-watermark-remover']
     logger.info(f"Bot starting with {len(KIE_MODELS)} models in {len(categories)} categories: {categories}")
     if sora_models:
-        logger.info(f"✅ Sora model loaded: {sora_models[0]['name']} ({sora_models[0]['category']})")
+        logger.info(f"[OK] Sora model loaded: {sora_models[0]['name']} ({sora_models[0]['category']})")
     else:
-        logger.warning(f"⚠️  Sora model NOT found! Available models: {[m['id'] for m in KIE_MODELS]}")
+        logger.warning(f"[WARN] Sora model NOT found! Available models: {[m['id'] for m in KIE_MODELS]}")
     
-    # Create the Application
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Create the Application через bootstrap (с dependency container)
+    from app.bootstrap import create_application
+    application = await create_application(settings)
+    
+    # Для обратной совместимости: сохраняем в глобальные переменные
+    # TODO: Удалить после полного рефакторинга handlers
+    global storage, kie
+    deps = application.bot_data["deps"]
+    storage = deps.get_storage()
+    kie = deps.get_kie_client()
     
     # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
     # Гарантирует ответ на каждый входящий update
@@ -26048,9 +25766,14 @@ async def main():
                     handle_conflict_gracefully(error, "polling")
                 except Exception as e:
                     logger.error(f"   Error in handle_conflict_gracefully: {e}")
-                # КРИТИЧНО: Немедленно завершаем процесс
-                logger.error("   Exiting process immediately to prevent repeated conflicts...")
-                os._exit(1)  # Немедленный выход без cleanup (предотвращает повторные ошибки)
+                # Graceful shutdown при конфликте
+                logger.error("   Exiting gracefully to prevent repeated conflicts...")
+                try:
+                    from app.locking.single_instance import release_single_instance_lock
+                    release_single_instance_lock()
+                except:
+                    pass
+                sys.exit(1)  # Выход с освобождением lock
             
             # Логируем с полным traceback для отладки (только для не-Conflict ошибок)
             logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
@@ -26204,18 +25927,18 @@ async def main():
         else:
             gateway_type = f"{type(gateway).__name__}"
         
-        # Проверяем БД
-        db_status = "❌ недоступна"
-        if DATABASE_AVAILABLE:
-            try:
-                from database import get_connection_pool
-                pool = get_connection_pool()
-                if pool:
-                    db_status = "✅ доступна"
-                else:
-                    db_status = "⚠️ пул не создан"
-            except Exception as e:
-                db_status = f"❌ ошибка: {str(e)[:50]}"
+        # Проверяем storage
+        storage_status = "❌ недоступно"
+        try:
+            from app.storage.factory import get_storage
+            storage = get_storage()
+            if storage.test_connection():
+                storage_status = "✅ доступно"
+            else:
+                storage_status = "⚠️ тест соединения не прошел"
+        except Exception as e:
+            storage_status = f"❌ ошибка: {str(e)[:50]}"
+        db_status = storage_status  # For compatibility with existing code
         
         # Собираем callback_data из клавиатур
         try:
@@ -26464,142 +26187,44 @@ async def main():
                 return
             _POLLING_STARTED = True
         
+        # КРИТИЧНО: Проверяем, что single instance lock все еще активен перед запуском polling
+        from app.locking.single_instance import is_lock_held
+        if not is_lock_held():
+            logger.error("❌❌❌ Single instance lock не удерживается! Невозможно запустить polling.")
+            logger.error("   This should not happen - lock should be acquired at startup")
+            raise RuntimeError("Single instance lock not held - cannot start polling")
+        
+        logger.info("✅ Single instance lock verified - proceeding with polling start")
+        
         # КРИТИЧНО: Polling mode must not have webhook
-        # Используем bot_mode helper для гарантии polling режима
-        logger.info("🗑️ Ensuring polling mode (removing webhook if any)...")
+        # Используем temp Bot для удаления webhook ПЕРЕД инициализацией application
+        logger.info("🗑️ Removing webhook before polling start...")
         try:
             from telegram import Bot
-            temp_bot = Bot(token=BOT_TOKEN)
-            if not await ensure_polling_mode(temp_bot):
-                raise RuntimeError("Failed to ensure polling mode")
+            async with Bot(token=BOT_TOKEN) as temp_bot:
+                await temp_bot.delete_webhook(drop_pending_updates=drop_updates)
+                webhook_info = await temp_bot.get_webhook_info()
+                if webhook_info.url:
+                    logger.warning(f"⚠️ Webhook still present after delete: {webhook_info.url}")
+                else:
+                    logger.info("✅ Webhook removed successfully")
         except Conflict as e:
             handle_conflict_gracefully(e, "polling")
             raise
         except Exception as e:
-            logger.error(f"❌ Ошибка при обеспечении polling режима: {e}")
-            raise
+            logger.warning(f"⚠️ Error removing webhook: {e}")
+            # Не критично - продолжим
         
-        # Теперь инициализируем и запускаем polling
-        logger.info("🚀 Инициализация application...")
+        # Инициализируем и запускаем polling
+        logger.info("🚀 Initializing application...")
         await application.initialize()
         await application.start()
         
-        # КРИТИЧНО: Удаляем webhook ПЕРЕД start_polling (на всякий случай, если что-то пропустили)
-        logger.info("🗑️ Финальная проверка webhook перед polling...")
-        try:
-            await application.bot.delete_webhook(drop_pending_updates=True)
-            webhook_info = await application.bot.get_webhook_info()
-            if webhook_info.url:
-                logger.warning(f"⚠️ Webhook всё ещё установлен: {webhook_info.url}, повторная попытка...")
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                await asyncio.sleep(1)
-                webhook_info_final = await application.bot.get_webhook_info()
-                if webhook_info_final.url:
-                    logger.error(f"❌ Не удалось удалить webhook: {webhook_info_final.url}")
-                else:
-                    logger.info("✅ Webhook удалён после повторной попытки")
-            else:
-                logger.info("✅ Webhook подтверждён как удалённый")
-        except Exception as e:
-            logger.warning(f"⚠️ Ошибка при финальной проверке webhook: {e}", exc_info=True)
-            logger.warning(f"   Error type: {type(e).__name__}")
+        logger.info("📡 Starting polling...")
         
-        logger.info("📡 Запуск polling...")
-        logger.info("   This may take a few seconds...")
-        
-        # КРИТИЧНО: Проверяем, что advisory lock все еще активен перед запуском polling
-        if DATABASE_AVAILABLE and lock_conn is None:
-            logger.error("❌❌❌ Advisory lock не получен! Невозможно запустить polling.")
-            logger.error("   DATABASE_AVAILABLE=True but lock_conn is None")
-            logger.error("   This should not happen - lock should be acquired at startup")
-            logger.error("   Exiting to prevent 409 Conflict...")
-            os._exit(1)
-        
-        # Дополнительная проверка lock перед запуском polling
-        if DATABASE_AVAILABLE and lock_conn:
-            try:
-                # Проверяем, что соединение с lock живое (не пытаемся получить lock дважды!)
-                with lock_conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                    cur.fetchone()
-                logger.info("✅ Advisory lock verified - connection alive")
-            except Exception as e:
-                logger.error(f"❌ Advisory lock connection check failed: {e}")
-                logger.error("   Exiting to prevent 409 Conflict...")
-                os._exit(1)
-        
-        logger.info("✅ All conflict checks passed - advisory lock active")
-        
-        # Запускаем keep-alive задачу для advisory lock (после инициализации application)
-        if lock_conn and lock_key_int:
-            async def keep_lock_alive_task():
-                """Периодически проверяет, что advisory lock активен"""
-                global lock_conn, lock_key_int
-                while True:
-                    try:
-                        await asyncio.sleep(30)  # Проверка каждые 30 секунд
-                        if lock_conn and not lock_conn.closed:
-                            # Простая проверка соединения
-                            try:
-                                with lock_conn.cursor() as cur:
-                                    cur.execute("SELECT 1")
-                                    cur.fetchone()
-                                logger.debug("✅ Advisory lock connection alive")
-                            except Exception as conn_e:
-                                logger.warning(f"⚠️ Connection check failed: {conn_e}, attempting reconnect...")
-                                # Обновляем глобальную переменную модуля
-                                import bot_kie
-                                bot_kie.lock_conn = None
-                                lock_conn = None  # Помечаем как потерянное
-                        else:
-                            logger.error("❌ Advisory lock connection lost! Lock may be released.")
-                            # Попытка переподключения
-                            try:
-                                from database import get_connection_pool
-                                from render_singleton_lock import acquire_lock_session
-                                pool = get_connection_pool()
-                                new_lock_conn = acquire_lock_session(pool, lock_key_int)
-                                if new_lock_conn:
-                                    logger.info("✅ Advisory lock reacquired")
-                                    # Обновляем глобальную переменную модуля
-                                    import bot_kie
-                                    bot_kie.lock_conn = new_lock_conn
-                                    lock_conn = new_lock_conn  # Также обновляем локальную ссылку
-                                else:
-                                    logger.error("❌ Failed to reacquire lock - another instance may be running")
-                                    logger.error("❌ Exiting to prevent 409 Conflict...")
-                                    os._exit(1)
-                            except Exception as e:
-                                logger.error(f"❌ Error reacquiring lock: {e}", exc_info=True)
-                                # Если не удалось переподключиться - выходим
-                                logger.error("❌ Exiting to prevent 409 Conflict...")
-                                os._exit(1)
-                    except Exception as e:
-                        logger.warning(f"⚠️ Error in keep_lock_alive: {e}")
-            
-            asyncio.create_task(keep_lock_alive_task())
-            logger.info("✅ Advisory lock keep-alive task started")
-        
-        # ВСЕ проверки пройдены - запускаем polling
-        try:
-            await application.updater.start_polling(drop_pending_updates=drop_updates)
-            logger.info("✅ Polling started successfully!")
-        except Conflict as e:
-            logger.error("❌❌❌ Conflict при запуске polling - немедленный выход")
-            logger.error(f"   Conflict details: {e}")
-            handle_conflict_gracefully(e, "polling")
-            os._exit(1)  # Немедленный выход
-        except Exception as e:
-            error_msg = str(e)
-            if "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
-                logger.error("❌❌❌ Conflict detected in exception handler - немедленный выход")
-                logger.error(f"   Error: {error_msg}")
-                from telegram.error import Conflict as TelegramConflict
-                handle_conflict_gracefully(TelegramConflict(error_msg), "polling")
-                os._exit(1)
-            else:
-                logger.error(f"❌ Unexpected error starting polling: {e}", exc_info=True)
-                raise
+        # Запускаем polling
+        await application.updater.start_polling(drop_pending_updates=drop_updates)
+        logger.info("✅ Polling started successfully!")
     
     # Выполняем preflight проверку
     logger.info("🚀 Starting preflight check (webhook removal + conflict detection)...")
@@ -26641,17 +26266,13 @@ async def main():
         except Exception as e:
             logger.error(f"Error stopping application: {e}")
         
-        # Освобождаем advisory lock перед выходом (дополнительно к atexit)
-        # lock_conn и lock_key_int должны быть доступны из области видимости main()
-        if lock_conn and lock_key_int:
-            try:
-                from render_singleton_lock import release_lock_session
-                from database import get_connection_pool
-                pool = get_connection_pool()
-                release_lock_session(pool, lock_conn, lock_key_int)
-                logger.info("✅ Advisory lock released in finally block")
-            except Exception as e:
-                logger.error(f"Error releasing lock in finally: {e}")
+        # Освобождаем single instance lock перед выходом (дополнительно к atexit)
+        try:
+            from app.locking.single_instance import release_single_instance_lock
+            release_single_instance_lock()
+            logger.info("✅ Single instance lock released in finally block")
+        except Exception as e:
+            logger.error(f"Error releasing lock in finally: {e}")
 
 
 # ==================== HEALTH HTTP SERVER FOR RENDER ====================

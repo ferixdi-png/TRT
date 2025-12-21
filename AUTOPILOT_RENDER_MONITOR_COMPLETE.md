@@ -169,3 +169,6 @@ COPY app/ ./app/
 - ✅ Render Monitor: логи получаются, ошибки исправляются (render_autopilot_monitor.py)
 
 
+
+
+

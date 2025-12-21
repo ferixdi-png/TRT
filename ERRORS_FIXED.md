@@ -74,3 +74,6 @@ await context.bot.send_message(
 
 **Бот готов к запуску с улучшенным UX!**
 
+
+
+

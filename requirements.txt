@@ -1,5 +1,5 @@
-# Telegram Bot
-python-telegram-bot>=20.0
+# Telegram Bot (фиксированная версия для стабильности)
+python-telegram-bot==20.8
 
 # HTTP Client
 aiohttp>=3.8.0
@@ -13,17 +13,20 @@ python-dotenv>=1.0.0
 # Type hints (for Python < 3.9)
 typing-extensions>=4.5.0
 
-# Image processing (optional, but recommended for payment screenshot analysis)
-Pillow>=10.0.0
-pytesseract>=0.3.10
+# Image processing (optional, graceful degradation if not available)
+# Pillow>=10.0.0  # Optional - импортируется лениво
+# pytesseract>=0.3.10  # Optional - импортируется лениво
 
 # PostgreSQL database
 psycopg2-binary>=2.9.0  # Для синхронных операций
 asyncpg>=0.29.0  # Для async операций (рекомендуется для Telegram ботов)
 
-# Testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
+# Testing (опционально, для локальной разработки)
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
 
-# Redis (optional, for distributed locking)
-redis>=5.0.0
+# Redis (optional, for distributed locking - не используется)
+# redis>=5.0.0
+
+# File locking
+filelock>=3.13.0

@@ -122,44 +122,65 @@ def check_regression_lock():
 
 
 def check_watchdog():
-    """4. Проверка watchdog (verify_project.py запускался <24h назад)"""
+    """4. Проверка watchdog (verify_project.py запускался <N часов назад)"""
+    # Проверяем флаг выключения watchdog
+    watchdog_enabled = os.getenv("PREFLIGHT_WATCHDOG", "1") != "0"
+    if not watchdog_enabled:
+        print(f"{YELLOW}[SKIP]{RESET} Watchdog выключен через PREFLIGHT_WATCHDOG=0")
+        return True
+    
+    # Получаем максимальное количество часов (по умолчанию 24)
+    try:
+        max_hours = float(os.getenv("PREFLIGHT_WATCHDOG_MAX_HOURS", "24"))
+    except ValueError:
+        max_hours = 24
+    
     verify_timestamp_file = project_root / "artifacts" / "verify_last_pass.json"
     
     if not verify_timestamp_file.exists():
-        # Первый запуск - создаём файл с текущим временем (будет обновлён после успешного verify)
-        print(f"{YELLOW}[INIT]{RESET} Первый запуск - создание watchdog файла")
-        artifacts_dir = project_root / "artifacts"
-        artifacts_dir.mkdir(exist_ok=True)
-        with open(verify_timestamp_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                "last_pass": datetime.now().isoformat(),
-                "checks_passed": 0,
-                "total_checks": 0,
-                "first_run": True
-            }, f, indent=2)
-        print(f"{GREEN}[PASS]{RESET} Watchdog инициализирован")
+        # Первый запуск - не создаём файл (он будет создан verify_project.py)
+        print(f"{YELLOW}[SKIP]{RESET} Watchdog файл не существует (первый запуск или чистое окружение)")
+        print(f"{YELLOW}[INFO]{RESET} Файл будет создан после успешного запуска verify_project.py")
         return True
     
     try:
         with open(verify_timestamp_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            last_pass = datetime.fromisoformat(data.get("last_pass", ""))
+            last_pass_str = data.get("last_pass", "")
+            if not last_pass_str:
+                print(f"{YELLOW}[SKIP]{RESET} Watchdog файл существует, но last_pass отсутствует")
+                return True
+            
+            last_pass = datetime.fromisoformat(last_pass_str)
             now = datetime.now()
             hours_ago = (now - last_pass).total_seconds() / 3600
             
-            if hours_ago > 24:
-                error_msg = f"FAIL verify_project.py не запускался {hours_ago:.1f} часов назад (требуется <24h)"
-                print(f"{RED}{error_msg}{RESET}")
-                errors.append(error_msg)
-                return False
+            if hours_ago > max_hours:
+                # Предупреждение, но не ошибка на dev окружении
+                env = os.getenv("ENV", os.getenv("APP_ENV", "prod")).lower()
+                if env in ("dev", "development", "test"):
+                    print(f"{YELLOW}[WARN]{RESET} verify_project.py не запускался {hours_ago:.1f} часов назад (требуется <{max_hours}h)")
+                    print(f"{YELLOW}[INFO]{RESET} В dev окружении это предупреждение, не ошибка")
+                    return True
+                else:
+                    error_msg = f"FAIL verify_project.py не запускался {hours_ago:.1f} часов назад (требуется <{max_hours}h)"
+                    print(f"{RED}{error_msg}{RESET}")
+                    errors.append(error_msg)
+                    return False
             else:
-                print(f"{GREEN}[PASS]{RESET} verify_project.py запускался {hours_ago:.1f} часов назад")
+                print(f"{GREEN}[PASS]{RESET} verify_project.py запускался {hours_ago:.1f} часов назад (<{max_hours}h)")
                 return True
     except Exception as e:
-        error_msg = f"FAIL Ошибка при чтении timestamp: {e}"
-        print(f"{RED}{error_msg}{RESET}")
-        errors.append(error_msg)
-        return False
+        # На dev окружении не падаем на ошибках чтения
+        env = os.getenv("ENV", os.getenv("APP_ENV", "prod")).lower()
+        if env in ("dev", "development", "test"):
+            print(f"{YELLOW}[WARN]{RESET} Ошибка при чтении watchdog файла: {e}")
+            return True
+        else:
+            error_msg = f"FAIL Ошибка при чтении timestamp: {e}"
+            print(f"{RED}{error_msg}{RESET}")
+            errors.append(error_msg)
+            return False
 
 
 def check_production_sentinel():

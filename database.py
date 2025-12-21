@@ -406,6 +406,11 @@ def make_lock_key(namespace: str, token: str) -> int:
 
 def acquire_advisory_lock(lock_key: int) -> bool:
     """
+    DEPRECATED: Не используйте эту функцию для session-level lock!
+    Она логически неверна - lock освобождается при выходе из context manager.
+    
+    Используйте app.locking.single_instance.acquire_single_instance_lock() вместо этого.
+    
     Пытается получить advisory lock.
     Возвращает True если лок получен, False если уже занят.
     """
@@ -427,6 +432,9 @@ def acquire_advisory_lock(lock_key: int) -> bool:
 
 def release_advisory_lock(lock_key: int) -> None:
     """
+    DEPRECATED: Не используйте эту функцию для session-level lock!
+    Используйте app.locking.single_instance.release_single_instance_lock() вместо этого.
+    
     Освобождает advisory lock (best-effort).
     Не бросает исключения, даже если лок не был получен.
     """

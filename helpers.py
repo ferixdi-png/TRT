@@ -10,16 +10,20 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-# Импорты будут выполнены при первом использовании
+# Импорты для user state (БЕЗ bot_kie!)
+from app.state.user_state import (
+    get_user_balance,
+    get_user_language,
+    get_is_admin,
+    get_user_free_generations_remaining,
+    has_claimed_gift,
+    get_admin_limit,
+    get_admin_spent,
+    get_admin_remaining,
+)
+
+# Ленивые импорты для остальных модулей (не user state)
 _t = None
-_get_user_balance = None
-_get_is_admin = None
-_get_user_language = None
-_get_user_free_generations_remaining = None
-_has_claimed_gift = None
-_get_admin_limit = None
-_get_admin_spent = None
-_get_admin_remaining = None
 _KIE_MODELS = None
 _get_generation_types = None
 _get_models_by_generation_type = None
@@ -43,77 +47,45 @@ def set_constants(free_gen_per_day: int, ref_bonus: int, admin_id: int):
 
 
 def _init_imports():
-    """Ленивая инициализация импортов для избежания circular imports"""
-    global _t, _get_user_balance, _get_is_admin, _get_user_language
-    global _get_user_free_generations_remaining, _has_claimed_gift
-    global _get_admin_limit, _get_admin_spent, _get_admin_remaining
-    global _KIE_MODELS, _get_generation_types, _get_models_by_generation_type
+    """Ленивая инициализация импортов для остальных модулей (не user state)"""
+    global _t, _KIE_MODELS, _get_generation_types, _get_models_by_generation_type
     global _get_generation_type_info, _get_client, _get_usd_to_rub_rate
     
     if _t is None:
         from translations import t as _t_func
-        # Импортируем функции из bot_kie.py (не из knowledge_storage)
-        try:
-            from bot_kie import (
-                get_user_balance as _get_user_balance_func,
-                get_is_admin as _get_is_admin_func,
-                get_user_language as _get_user_language_func,
-                get_user_free_generations_remaining as _get_user_free_generations_remaining_func,
-                has_claimed_gift as _has_claimed_gift_func,
-                get_admin_limit as _get_admin_limit_func,
-                get_admin_spent as _get_admin_spent_func,
-                get_admin_remaining as _get_admin_remaining_func
-            )
-        except ImportError:
-            # Fallback: если bot_kie не импортируется, используем database
-            try:
-                from database import get_user_balance as _get_user_balance_func
-                # Остальные функции должны быть в bot_kie
-                logger.warning("⚠️ Используется fallback импорт из database для get_user_balance")
-                # Для остальных функций используем заглушки или пробуем импортировать из bot_kie
-                from bot_kie import (
-                    get_is_admin as _get_is_admin_func,
-                    get_user_language as _get_user_language_func,
-                    get_user_free_generations_remaining as _get_user_free_generations_remaining_func,
-                    has_claimed_gift as _has_claimed_gift_func,
-                    get_admin_limit as _get_admin_limit_func,
-                    get_admin_spent as _get_admin_spent_func,
-                    get_admin_remaining as _get_admin_remaining_func
-                )
-            except ImportError as e:
-                logger.error(f"❌ Не удалось импортировать функции: {e}")
-                raise
-        from kie_models import (
-            KIE_MODELS as _KIE_MODELS_obj,
+        
+        # Используем registry как единый источник моделей
+        from app.models.registry import (
+            get_models_sync,
             get_generation_types as _get_generation_types_func,
             get_models_by_generation_type as _get_models_by_generation_type_func,
-            get_generation_type_info as _get_generation_type_info_func
         )
+        # Для обратной совместимости с get_generation_type_info
+        try:
+            from kie_models import get_generation_type_info as _get_generation_type_info_func
+        except ImportError:
+            def _get_generation_type_info_func(gen_type: str):
+                return {'name': gen_type.replace('-', ' ').title()}
+            _get_generation_type_info_func = _get_generation_type_info_func
+        
         from kie_client import get_client as _get_client_func
         
         _t = _t_func
-        _get_user_balance = _get_user_balance_func
-        _get_is_admin = _get_is_admin_func
-        _get_user_language = _get_user_language_func
-        _get_user_free_generations_remaining = _get_user_free_generations_remaining_func
-        _has_claimed_gift = _has_claimed_gift_func
-        _get_admin_limit = _get_admin_limit_func
-        _get_admin_spent = _get_admin_spent_func
-        _get_admin_remaining = _get_admin_remaining_func
-        _KIE_MODELS = _KIE_MODELS_obj
+        _KIE_MODELS = get_models_sync()  # Используем registry
         _get_generation_types = _get_generation_types_func
         _get_models_by_generation_type = _get_models_by_generation_type_func
         _get_generation_type_info = _get_generation_type_info_func
         _get_client = _get_client_func
         
-        # Импортируем get_usd_to_rub_rate из bot_kie
+        # Импортируем get_usd_to_rub_rate из app/services/payments_service (БЕЗ bot_kie!)
         try:
-            import bot_kie
-            _get_usd_to_rub_rate = bot_kie.get_usd_to_rub_rate
-        except:
+            from app.services.payments_service import get_usd_to_rub_rate as _get_usd_to_rub_rate_func
+            _get_usd_to_rub_rate = _get_usd_to_rub_rate_func
+        except ImportError:
             def _default_rate():
                 return 77.22
             _get_usd_to_rub_rate = _default_rate
+            logger.warning("⚠️ app.services.payments_service not found, using default rate")
 
 
 async def build_main_menu_keyboard(
@@ -131,8 +103,8 @@ async def build_main_menu_keyboard(
     # Получаем данные
     generation_types = _get_generation_types()
     total_models = len(_KIE_MODELS)
-    remaining_free = _get_user_free_generations_remaining(user_id)
-    is_admin = _get_is_admin(user_id)
+    remaining_free = get_user_free_generations_remaining(user_id)
+    is_admin = get_is_admin(user_id)
     
     # Free generation button (ALWAYS prominent)
     if remaining_free > 0:
@@ -221,7 +193,7 @@ async def build_main_menu_keyboard(
     keyboard.append([])  # Empty row for spacing
     
     # Add "Claim Gift" button for users who haven't claimed yet
-    if not _has_claimed_gift(user_id):
+    if not has_claimed_gift(user_id):
         keyboard.append([
             InlineKeyboardButton(_t('btn_claim_gift', lang=user_lang), callback_data="claim_gift")
         ])
@@ -290,11 +262,11 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
     """
     _init_imports()
     if user_lang is None:
-        user_lang = _get_user_language(user_id)
+        user_lang = get_user_language(user_id)
     
-    user_balance = _get_user_balance(user_id)
+    user_balance = get_user_balance(user_id)
     balance_str = f"{user_balance:.2f}".rstrip('0').rstrip('.')
-    is_admin_user = _get_is_admin(user_id)
+    is_admin_user = get_is_admin(user_id)
     is_main_admin = (user_id == ADMIN_ID)
     is_limited_admin = is_admin_user and not is_main_admin
     
@@ -304,15 +276,15 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
         'is_admin': is_admin_user,
         'is_main_admin': is_main_admin,
         'is_limited_admin': is_limited_admin,
-        'remaining_free': _get_user_free_generations_remaining(user_id),
+        'remaining_free': get_user_free_generations_remaining(user_id),
         'kie_credits': None,
         'kie_credits_rub': None
     }
     
     if is_limited_admin:
-        result['limit'] = _get_admin_limit(user_id)
-        result['spent'] = _get_admin_spent(user_id)
-        result['remaining'] = _get_admin_remaining(user_id)
+        result['limit'] = get_admin_limit(user_id)
+        result['spent'] = get_admin_spent(user_id)
+        result['remaining'] = get_admin_remaining(user_id)
     
     # Get KIE credits for main admin
     if is_main_admin:
@@ -468,7 +440,7 @@ async def check_duplicate_task(user_id: int, model_id: str, params: dict) -> Opt
 def build_model_keyboard(models: list = None, user_lang: str = 'ru') -> InlineKeyboardMarkup:
     """
     Автоматически строит клавиатуру с кнопками для каждой модели.
-    Каждая кнопка имеет callback_data в формате model:<model_id>.
+    Каждая кнопка имеет callback_data в формате select_model:<model_id> (ограничен до 64 байт).
     """
     _init_imports()
     
@@ -478,24 +450,28 @@ def build_model_keyboard(models: list = None, user_lang: str = 'ru') -> InlineKe
     keyboard = []
     
     for model in models:
-        # Используем нормализованную модель
-        try:
-            from kie_models import normalize_model_for_api
-            normalized = normalize_model_for_api(model)
-        except:
-            normalized = model
+        # Модели уже нормализованы из registry
+        model_id = model.get('id', '')
+        name = model.get('name', model_id)
+        emoji = model.get('emoji', '🤖')
         
-        # Получаем название модели
-        title = normalized.get('title') or normalized.get('name') or normalized.get('id', 'Unknown')
-        emoji = normalized.get('emoji', '')
+        # Формируем текст кнопки (ограничение Telegram: ~64 символа)
+        button_text = f"{emoji} {name}"
+        if len(button_text.encode('utf-8')) > 64:
+            # Обрезаем имя если слишком длинное
+            max_name_len = 64 - len(emoji.encode('utf-8')) - 2  # -2 для пробела и эмодзи
+            button_text = f"{emoji} {name[:max_name_len]}..."
         
-        # Формируем текст кнопки
-        button_text = f"{emoji} {title}" if emoji else title
+        # Создаем callback_data (ограничение Telegram: 64 байта)
+        callback_data = f"select_model:{model_id}"
+        callback_bytes = callback_data.encode('utf-8')
+        if len(callback_bytes) > 64:
+            # Если слишком длинный, используем короткий формат
+            callback_data = f"sel:{model_id[:50]}"
         
-        # Создаем кнопку с callback_data в формате model:<model_id>
         button = InlineKeyboardButton(
             text=button_text,
-            callback_data=f"model:{normalized['id']}"
+            callback_data=callback_data
         )
         keyboard.append([button])
     

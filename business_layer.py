@@ -27,7 +27,7 @@ def check_balance_before_generation(
             from db_optimization import get_user_balance_optimized
             main_balance = get_user_balance_optimized(user_id)
         except ImportError:
-            from bot_kie import get_user_balance
+            from app.state.user_state import get_user_balance
             main_balance = get_user_balance(user_id)
         
         try:
@@ -75,11 +75,25 @@ def apply_bonuses_if_available(
             main_balance = get_user_balance_optimized(user_id)
             invalidate_cache = invalidate_balance_cache
         except ImportError:
-            from bot_kie import get_user_balance
+            from app.state.user_state import get_user_balance
             main_balance = get_user_balance(user_id)
             invalidate_cache = lambda uid: None
         
-        from bot_kie import set_user_balance
+        from app.services.user_service import set_user_balance as set_user_balance_async
+        # Синхронная обертка для set_user_balance
+        import asyncio
+        def set_user_balance(user_id: int, amount: float):
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, set_user_balance_async(user_id, amount))
+                        future.result()
+                else:
+                    loop.run_until_complete(set_user_balance_async(user_id, amount))
+            except RuntimeError:
+                asyncio.run(set_user_balance_async(user_id, amount))
         
         try:
             from bonus_system import get_user_bonuses, use_bonus

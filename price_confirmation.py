@@ -111,7 +111,7 @@ async def show_price_confirmation(
             
             # Получаем баланс пользователя
             try:
-                from bot_kie import get_user_balance
+                from app.state.user_state import get_user_balance
                 user_balance = get_user_balance(user_id)
                 message_text += f"💳 <b>Ваш баланс:</b> {user_balance:.2f} ₽\n"
                 

@@ -89,7 +89,7 @@ class NoSilenceGuard:
             # Определяем язык пользователя (если доступно)
             user_lang = 'ru'  # Default
             try:
-                from bot_kie import get_user_language
+                from app.state.user_state import get_user_language
                 if user_id:
                     user_lang = get_user_language(user_id)
             except:
@@ -176,5 +176,9 @@ def track_outgoing_action(update_id: int):
     """Удобная функция для отслеживания исходящего действия"""
     guard = get_no_silence_guard()
     guard.track_outgoing_action(update_id)
+
+
+
+
 
 

@@ -43,3 +43,6 @@ try:
 except Exception as e:
     print(f"Error parsing JSON: {e}")
     print(f"Response text: {r.text}")
+
+
+

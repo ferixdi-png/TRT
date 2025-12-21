@@ -26,3 +26,6 @@ echo или
 echo   python scripts/auto_push.py --message "Your commit message"
 
 
+
+
+

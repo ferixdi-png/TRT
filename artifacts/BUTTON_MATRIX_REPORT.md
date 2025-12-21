@@ -122,3 +122,6 @@
 **Доказательство:** behavioral_e2e показывает 72/72 моделей с `passed: true` и `total_responses > 0`. Код содержит обработку всех edge cases с проверками сессии и NO-SILENCE GUARD.
 
 
+
+
+
