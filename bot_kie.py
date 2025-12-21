@@ -6,13 +6,112 @@ Enhanced version with KIE AI model selection and generation
 import logging
 import asyncio
 import sys
+import os
+from pathlib import Path
+
+# Enable logging FIRST (before any other imports that might log)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+logger = logging.getLogger(__name__)
+
+# ==================== SELF-CHECK: ENV SUMMARY AND VALIDATION ====================
+def log_env_summary():
+    """Логирует summary ENV переменных без секретов"""
+    env_vars = {
+        "PORT": os.getenv("PORT", "not set"),
+        "RENDER": os.getenv("RENDER", "not set"),
+        "ENV": os.getenv("ENV", "not set"),
+        "BOT_MODE": os.getenv("BOT_MODE", "not set"),
+        "STORAGE_MODE": os.getenv("STORAGE_MODE", "not set"),
+        "DATABASE_URL": "[SET]" if os.getenv("DATABASE_URL") else "[NOT SET]",
+        "TELEGRAM_BOT_TOKEN": "[SET]" if os.getenv("TELEGRAM_BOT_TOKEN") else "[NOT SET]",
+        "KIE_API_KEY": "[SET]" if os.getenv("KIE_API_KEY") else "[NOT SET]",
+        "KIE_API_URL": os.getenv("KIE_API_URL", "not set"),
+        "TEST_MODE": os.getenv("TEST_MODE", "not set"),
+        "DRY_RUN": os.getenv("DRY_RUN", "not set"),
+        "ALLOW_REAL_GENERATION": os.getenv("ALLOW_REAL_GENERATION", "not set"),
+        "KIE_STUB": os.getenv("KIE_STUB", "not set"),
+    }
+    
+    logger.info("=" * 60)
+    logger.info("ENVIRONMENT VARIABLES SUMMARY")
+    logger.info("=" * 60)
+    for key, value in sorted(env_vars.items()):
+        logger.info(f"{key}={value}")
+    logger.info("=" * 60)
+
+
+def validate_required_env():
+    """Проверяет обязательные переменные окружения"""
+    errors = []
+    warnings = []
+    
+    # TELEGRAM_BOT_TOKEN - обязателен всегда
+    if not os.getenv("TELEGRAM_BOT_TOKEN"):
+        errors.append("TELEGRAM_BOT_TOKEN is required but not set")
+    
+    # KIE_API_KEY - обязателен если real generation
+    allow_real = os.getenv("ALLOW_REAL_GENERATION", "1") != "0"
+    test_mode = os.getenv("TEST_MODE", "0") == "1"
+    kie_stub = os.getenv("KIE_STUB", "0") == "1"
+    
+    if allow_real and not test_mode and not kie_stub:
+        if not os.getenv("KIE_API_KEY"):
+            errors.append("KIE_API_KEY is required for real generation (set ALLOW_REAL_GENERATION=0 or TEST_MODE=1 to disable)")
+    
+    # DATABASE_URL - опционален, но предупреждаем если нет
+    if not os.getenv("DATABASE_URL"):
+        warnings.append("DATABASE_URL not set - will use JSON storage fallback")
+    
+    # Проверяем наличие критических файлов (warning, не error - может быть опциональным)
+    models_yaml = Path(__file__).parent / "models" / "kie_models.yaml"
+    if not models_yaml.exists():
+        warnings.append(f"models/kie_models.yaml not found at {models_yaml} - model registry may not work")
+    
+    # Проверяем PyYAML (warning, не error - может быть опциональным в некоторых режимах)
+    try:
+        import yaml
+    except ImportError:
+        warnings.append("PyYAML not installed - model registry from YAML will not work (install with: pip install PyYAML)")
+    
+    # Выводим предупреждения
+    if warnings:
+        logger.warning("=" * 60)
+        logger.warning("ENVIRONMENT WARNINGS")
+        logger.warning("=" * 60)
+        for warning in warnings:
+            logger.warning(f"⚠️  {warning}")
+        logger.warning("=" * 60)
+    
+    # Выводим ошибки и выходим
+    if errors:
+        logger.error("=" * 60)
+        logger.error("ENVIRONMENT VALIDATION FAILED")
+        logger.error("=" * 60)
+        for error in errors:
+            logger.error(f"❌ {error}")
+        logger.error("=" * 60)
+        logger.error("Please fix the errors above and restart the bot")
+        sys.exit(1)
+    
+    logger.info("✅ Environment validation passed")
+
+
+# Выполняем self-check ПЕРЕД импортом других модулей
+log_env_summary()
+validate_required_env()
+
+# ==================== IMPORTS AFTER SELF-CHECK ====================
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     ConversationHandler, CallbackQueryHandler
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-import os
+
 # Убрано: from dotenv import load_dotenv
 # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard)
 
@@ -29,10 +128,35 @@ from helpers import (
     build_main_menu_keyboard, get_balance_info, format_balance_message,
     get_balance_keyboard, set_constants
 )
+# Используем registry как единый источник моделей
+from app.models.registry import get_models_sync
 from kie_models import (
-    KIE_MODELS, get_model_by_id, get_models_by_category, get_categories,
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
+
+# Вспомогательные функции для работы с реестром моделей
+def get_model_by_id_from_registry(model_id: str) -> Optional[Dict[str, Any]]:
+    """Получает модель из реестра по ID"""
+    models = get_models_sync()
+    for model in models:
+        if model.get('id') == model_id:
+            return model
+    return None
+
+def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
+    """Получает модели из реестра по категории"""
+    models = get_models_sync()
+    return [m for m in models if m.get('category') == category]
+
+def get_categories_from_registry() -> List[str]:
+    """Получает список категорий из реестра"""
+    models = get_models_sync()
+    categories = set()
+    for model in models:
+        cat = model.get('category')
+        if cat:
+            categories.add(cat)
+    return sorted(list(categories))
 import json
 import aiohttp
 import aiofiles
@@ -46,7 +170,6 @@ import time
 from asyncio import Lock
 from typing import Optional
 import threading
-from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # Ensure Python can find modules in the same directory (for Render compatibility)
@@ -55,14 +178,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Убрано: load_dotenv()
 # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard)
 # Для локальной разработки используйте системные ENV переменные
-
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-logger = logging.getLogger(__name__)
 
 # Try to import PIL/Pillow
 try:
@@ -2245,7 +2360,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Get generation types and models count
         generation_types = get_generation_types()
-        total_models = len(KIE_MODELS)
+        total_models = len(get_models_sync())
         
         # Both admin and regular users see the same menu, but admin gets additional "Admin Panel" button
         # Common menu for both admin and regular users
@@ -2369,12 +2484,12 @@ async def list_models(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     # Get models grouped by category
-    categories = get_categories()
+    categories = get_categories_from_registry()
     
     # Create category selection keyboard
     keyboard = []
     for category in categories:
-        models_in_category = get_models_by_category(category)
+        models_in_category = get_models_by_category_from_registry(category)
         emoji = models_in_category[0]["emoji"] if models_in_category else "📦"
         keyboard.append([InlineKeyboardButton(
             f"{emoji} {category} ({len(models_in_category)})",
@@ -2394,7 +2509,7 @@ async def list_models(update: Update, context: ContextTypes.DEFAULT_TYPE):
     models_text = "📋 <b>Доступные модели:</b>\n\n"
     models_text += "Выберите категорию или просмотрите все модели:\n\n"
     for category in categories:
-        models_in_category = get_models_by_category(category)
+        models_in_category = get_models_by_category_from_registry(category)
         models_text += f"<b>{category}</b>: {len(models_in_category)} моделей\n"
     
     await update.message.reply_text(
@@ -2723,7 +2838,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Get generation types and models count
                 generation_types = get_generation_types()
-                total_models = len(KIE_MODELS)
+                total_models = len(get_models_sync())
                 
                 # Common menu for both admin and regular users
                 remaining_free = get_user_free_generations_remaining(user_id)
@@ -2930,8 +3045,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_lang = get_user_language(user_id)
                 await query.answer(t('msg_user_mode_enabled', lang=user_lang))
                 user = update.effective_user
-                categories = get_categories()
-                total_models = len(KIE_MODELS)
+                categories = get_categories_from_registry()
+                total_models = len(get_models_sync())
                 
                 remaining_free = get_user_free_generations_remaining(user_id)
                 free_info = ""
@@ -2960,7 +3075,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard.append([])
                 for category in categories:
-                    models_in_category = get_models_by_category(category)
+                    models_in_category = get_models_by_category_from_registry(category)
                     emoji = models_in_category[0]["emoji"] if models_in_category else "📦"
                     keyboard.append([InlineKeyboardButton(
                         f"{emoji} {category} ({len(models_in_category)})",
@@ -2991,7 +3106,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer(t('msg_returning_to_admin', lang=user_lang))
                 user = update.effective_user
                 generation_types = get_generation_types()
-                total_models = len(KIE_MODELS)
+                total_models = len(get_models_sync())
                 
                 welcome_text = (
                     f'👑 ✨ <b>ПАНЕЛЬ АДМИНИСТРАТОРА</b> ✨\n\n'
@@ -3032,7 +3147,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard.append([])
                 for category in categories:
-                    models_in_category = get_models_by_category(category)
+                    models_in_category = get_models_by_category_from_registry(category)
                     emoji = models_in_category[0]["emoji"] if models_in_category else "📦"
                     keyboard.append([InlineKeyboardButton(
                         f"{emoji} {category} ({len(models_in_category)})",
@@ -3075,7 +3190,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_sessions[user_id]['admin_user_mode'] = False
             await query.answer("Возврат в админ-панель")
             user = update.effective_user
-            categories = get_categories()
+            categories = get_categories_from_registry()
             total_models = len(KIE_MODELS)
             
             welcome_text = (
@@ -3097,7 +3212,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             keyboard.append([])
             for category in categories:
-                models_in_category = get_models_by_category(category)
+                models_in_category = get_models_by_category_from_registry(category)
                 emoji = models_in_category[0]["emoji"] if models_in_category else "📦"
                 keyboard.append([InlineKeyboardButton(
                     f"{emoji} {category} ({len(models_in_category)})",
@@ -3142,7 +3257,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 is_admin = (user_id == ADMIN_ID)
                 
                 generation_types = get_generation_types()
-                total_models = len(KIE_MODELS)
+                total_models = len(get_models_sync())
                 remaining_free = get_user_free_generations_remaining(user_id)
                 is_new = is_new_user(user_id)
                 referral_link = get_user_referral_link(user_id)
@@ -4143,7 +4258,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 return ConversationHandler.END
             category = parts[1]
-            models = get_models_by_category(category)
+            models = get_models_by_category_from_registry(category)
             
             if not models:
                 try:
@@ -4275,7 +4390,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Get free tools (models with price = 0)
             free_models = []
-            for model in KIE_MODELS:
+            for model in get_models_sync():
                 model_id = model.get('id')
                 # Check if model is free (price = 0)
                 price = calculate_price_rub(model_id, {}, False, user_id)  # Use user price (x2)
@@ -4411,7 +4526,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             models_text += (
                 f"📦 <b>Доступно:</b> {len(generation_types)} типов генерации\n"
-                f"🤖 <b>Моделей:</b> {len(KIE_MODELS)} топовых нейросетей"
+                f"🤖 <b>Моделей:</b> {len(get_models_sync())} топовых нейросетей"
             )
             
             keyboard = []
@@ -4515,11 +4630,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([])  # Empty row for spacing
             if user_lang == 'ru':
                 keyboard.append([
-                    InlineKeyboardButton(f"📋 Показать все {len(KIE_MODELS)} моделей", callback_data="show_all_models_list")
+                    InlineKeyboardButton(f"📋 Показать все {len(get_models_sync())} моделей", callback_data="show_all_models_list")
                 ])
             else:
                 keyboard.append([
-                    InlineKeyboardButton(f"📋 Show all {len(KIE_MODELS)} models", callback_data="show_all_models_list")
+                    InlineKeyboardButton(f"📋 Show all {len(get_models_sync())} models", callback_data="show_all_models_list")
                 ])
             
             user_lang = get_user_language(user_id)
@@ -4562,12 +4677,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_admin = get_is_admin(user_id)
             remaining_free = get_user_free_generations_remaining(user_id)
             
-            # Group models by category
-            from kie_models import get_categories, get_models_by_category
-            categories = get_categories()
+            # Group models by category (using registry)
+            categories = get_categories_from_registry()
             
             models_text = (
-                f"🤖 <b>ВСЕ НЕЙРОСЕТИ ({len(KIE_MODELS)})</b> 🤖\n\n"
+                f"🤖 <b>ВСЕ НЕЙРОСЕТИ ({len(get_models_sync())})</b> 🤖\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
             
@@ -4608,9 +4722,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             keyboard.append([])  # Empty row
             
-            # Show models grouped by category
+            # Show models grouped by category (using registry)
             for category in categories:
-                category_models = get_models_by_category(category)
+                category_models = get_models_by_category_from_registry(category)
                 if not category_models:
                     continue
                 
@@ -5701,7 +5815,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Show full admin panel menu with extended statistics
                 generation_types = get_generation_types()
-                total_models = len(KIE_MODELS)
+                total_models = len(get_models_sync())
                 
                 # Get extended statistics
                 stats = get_extended_admin_stats()
@@ -6548,8 +6662,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             try:
-                categories = get_categories()
-                total_models = len(KIE_MODELS)
+                categories = get_categories_from_registry()
+                total_models = len(get_models_sync())
                 tutorial_text = (
                     f'📖 <b>ШАГ 2: Как выбрать модель?</b>\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -7921,8 +8035,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             model_id = parts[1]
             logger.info(f"🔥🔥🔥 SELECT_MODEL: Parsed model_id={model_id}, user_id={user_id}")
             
-            # Get model from static list
-            model_info = get_model_by_id(model_id)
+            # Get model from registry
+            model_info = get_model_by_id_from_registry(model_id)
             logger.info(f"🔥🔥🔥 SELECT_MODEL: Model lookup result: found={bool(model_info)}, model_name={model_info.get('name', 'N/A') if model_info else 'N/A'}, user_id={user_id}")
             
             if not model_info:
@@ -8153,9 +8267,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_sessions[user_id]['model_info'] = model_info
             logger.info(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(user_sessions[user_id].keys())}")
             
-            # Get input parameters from static definition
-            input_params = model_info.get('input_params', {})
-            logger.info(f"🔥🔥🔥 SELECT_MODEL: Input params: count={len(input_params)}, keys={list(input_params.keys())}, user_id={user_id}")
+            # Get input parameters from YAML schema (registry)
+            from kie_input_adapter import get_schema
+            schema = get_schema(model_id)
+            if schema:
+                input_params = schema
+                logger.info(f"✅ SELECT_MODEL: Using YAML schema: count={len(input_params)}, keys={list(input_params.keys())}, user_id={user_id}")
+            else:
+                # Fallback to model_info input_params if YAML schema not found
+                input_params = model_info.get('input_params', {})
+                logger.warning(f"⚠️ SELECT_MODEL: YAML schema not found, using fallback: count={len(input_params)}, keys={list(input_params.keys())}, user_id={user_id}")
             
             if not input_params:
                 # If no params defined, ask for simple text input
@@ -8179,10 +8300,49 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Store session data
             user_sessions[user_id]['params'] = {}
             user_sessions[user_id]['properties'] = input_params
+            # Get required parameters from schema (required=True)
             user_sessions[user_id]['required'] = [p for p, info in input_params.items() if info.get('required', False)]
             user_sessions[user_id]['current_param'] = None
             
-            # Start with prompt parameter first (or image_input/image_urls first for image-to-video models)
+            # Determine parameter order: image/video/audio input → prompt/text → optional
+            # Priority: media inputs first, then prompt/text, then optional
+            param_order = []
+            media_params = []  # image_input, video_input, audio_input, image_urls, etc.
+            text_params = []   # prompt, text, etc.
+            other_required = []  # other required params
+            optional_params = []  # optional params
+            
+            for param_name, param_info in input_params.items():
+                is_required = param_info.get('required', False)
+                param_type = param_info.get('type', 'string')
+                param_name_lower = param_name.lower()
+                
+                # Media inputs first
+                if any(keyword in param_name_lower for keyword in ['image', 'video', 'audio', 'url']):
+                    if is_required:
+                        media_params.append(param_name)
+                    else:
+                        optional_params.append(param_name)
+                # Text/prompt params second
+                elif any(keyword in param_name_lower for keyword in ['prompt', 'text']):
+                    if is_required:
+                        text_params.append(param_name)
+                    else:
+                        optional_params.append(param_name)
+                # Other required params
+                elif is_required:
+                    other_required.append(param_name)
+                # Optional params last
+                else:
+                    optional_params.append(param_name)
+            
+            # Build final order: media → text → other required → optional
+            param_order = media_params + text_params + other_required + optional_params
+            user_sessions[user_id]['param_order'] = param_order
+            logger.info(f"✅ SELECT_MODEL: Parameter order determined: {param_order}, user_id={user_id}")
+            
+            # Start with first required parameter (or first in order if no required)
+            # Priority: media inputs first, then prompt/text, then optional
             # Special case: nano-banana-pro starts with image_input first
             if model_id == "nano-banana-pro" and 'image_input' in input_params and input_params['image_input'].get('required', False):
                 # Start with image_input first for nano-banana-pro
@@ -11582,38 +11742,9 @@ async def start_generation_directly(
     # REAL GENERATION: Используем gateway
     gateway = get_kie_gateway()
     
-    # Validate input before sending to KIE using universal validator
-    try:
-        from kie_validator import validate
-        is_valid, validation_errors = validate(model_id, api_params)
-        if not is_valid:
-            user_lang = get_user_language(user_id) if user_id else 'ru'
-            
-            # Format user-friendly error message
-            if user_lang == 'ru':
-                error_msg = (
-                    "❌ <b>Ошибка валидации параметров</b>\n\n"
-                    + "\n".join(f"• {err}" for err in validation_errors[:5])
-                    + ("\n..." if len(validation_errors) > 5 else "")
-                    + "\n\n💡 <b>Исправьте параметры и попробуйте снова.</b>"
-                )
-            else:
-                error_msg = (
-                    "❌ <b>Parameter validation error</b>\n\n"
-                    + "\n".join(f"• {err}" for err in validation_errors[:5])
-                    + ("\n..." if len(validation_errors) > 5 else "")
-                    + "\n\n💡 <b>Please fix the parameters and try again.</b>"
-                )
-            
-            await status_message.edit_text(error_msg, parse_mode='HTML')
-            logger.error(f"event=kie.validation_failed model={model_id} user_id={user_id} errors={validation_errors}")
-            return ConversationHandler.END
-    except ImportError:
-        logger.warning(f"kie_validator not available, skipping validation for model={model_id}")
-        # Continue without validation if module not available
-    except Exception as e:
-        logger.warning(f"Validation error for model={model_id}: {e}", exc_info=True)
-        # Continue without validation if it fails (don't block generation)
+    # Валидация уже выполнена в normalize_for_generation выше
+    # Дополнительная валидация через kie_validator не нужна, т.к. она валидирует по YAML,
+    # а параметры уже адаптированы к API формату
     
     # Create task
     # CRITICAL: Log exact API parameters being sent (for KIE API compliance)
@@ -11896,25 +12027,31 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         )
                         return ConversationHandler.END
     
-    # Apply default values for parameters that are not set
-    input_params = model_info.get('input_params', {})
-    for param_name, param_info in input_params.items():
-        if param_name not in params:
-            default_value = param_info.get('default')
-            if default_value is not None:
-                # Apply default for both optional and required parameters (if they have default)
-                params[param_name] = default_value
+    # Используем адаптер для нормализации параметров
+    from kie_input_adapter import normalize_for_generation
     
-    # Convert string boolean values to actual booleans
-    for param_name, param_value in params.items():
-        if param_name in input_params:
-            param_info = input_params[param_name]
-            if param_info.get('type') == 'boolean':
-                if isinstance(param_value, str):
-                    if param_value.lower() == 'true':
-                        params[param_name] = True
-                    elif param_value.lower() == 'false':
-                        params[param_name] = False
+    # Нормализуем параметры: применяем дефолты, валидируем, адаптируем к API
+    api_params, validation_errors = normalize_for_generation(model_id, params)
+    
+    if validation_errors:
+        # Ошибки валидации - показываем пользователю
+        user_lang = get_user_language(user_id) if user_id else 'ru'
+        error_text = (
+            f"❌ <b>Ошибка валидации параметров</b>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{chr(10).join('• ' + err for err in validation_errors[:5])}\n\n"
+            f"Пожалуйста, проверьте параметры и попробуйте снова."
+        ) if user_lang == 'ru' else (
+            f"❌ <b>Parameter validation error</b>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{chr(10).join('• ' + err for err in validation_errors[:5])}\n\n"
+            f"Please check parameters and try again."
+        )
+        await send_or_edit_message(error_text)
+        return ConversationHandler.END
+    
+    # Параметры нормализованы, используем api_params вместо params
+    params = api_params
     
     # Check if this is a free generation
     is_free = is_free_generation_available(user_id, model_id)
@@ -12025,340 +12162,12 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await send_or_edit_message(loading_msg)
     
     try:
-        # Prepare params for API (convert image_input to appropriate parameter name if needed)
-        # ⚠️ КРИТИЧНО: Конвертация параметров ТОЛЬКО согласно инструкциям KIE API
-        # НИЧЕГО от себя не придумывать - только по документации!
-        # См. KIE_AI_STRICT_RULES.md для правил конвертации каждой модели
-        api_params = params.copy()
-        if model_id == "seedream/4.5-edit" and 'image_input' in api_params:
-            # Convert image_input to image_urls for seedream/4.5-edit
-            api_params['image_urls'] = api_params.pop('image_input')
-        elif model_id == "kling-2.6/image-to-video" and 'image_input' in api_params:
-            # Convert image_input to image_urls for kling-2.6/image-to-video
-            api_params['image_urls'] = api_params.pop('image_input')
-        elif model_id == "flux-2/pro-image-to-image" and 'image_input' in api_params:
-            # Convert image_input to input_urls for flux-2/pro-image-to-image
-            api_params['input_urls'] = api_params.pop('image_input')
-        elif model_id == "flux-2/flex-image-to-image" and 'image_input' in api_params:
-            # Convert image_input to input_urls for flux-2/flex-image-to-image
-            api_params['input_urls'] = api_params.pop('image_input')
-        elif model_id == "topaz/image-upscale" and 'image_input' in api_params:
-            # Convert image_input to image_url for topaz/image-upscale (single image, not array)
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]  # Take first image
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "kling/v2-5-turbo-image-to-video-pro" and 'image_input' in api_params:
-            # Convert image_input to image_url for kling/v2-5-turbo-image-to-video-pro
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]  # Take first image
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "wan/2-5-image-to-video" and 'image_input' in api_params:
-            # Convert image_input to image_url for wan/2-5-image-to-video
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]  # Take first image
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "hailuo/02-image-to-video-pro" and 'image_input' in api_params:
-            # Convert image_input to image_url for hailuo/02-image-to-video-pro
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]  # Take first image
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "hailuo/02-image-to-video-standard" and 'image_input' in api_params:
-            # Convert image_input to image_url for hailuo/02-image-to-video-standard
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]  # Take first image
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "bytedance/seedream-v4-edit" and 'image_input' in api_params:
-            # Convert image_input to image_urls for bytedance/seedream-v4-edit
-            api_params['image_urls'] = api_params.pop('image_input')
-        elif model_id == "topaz/video-upscale" and 'video_input' in api_params:
-            # Convert video_input to video_url for topaz/video-upscale
-            video_input = api_params.pop('video_input')
-            if isinstance(video_input, list) and len(video_input) > 0:
-                api_params['video_url'] = video_input[0]  # Take first video
-            elif isinstance(video_input, str):
-                api_params['video_url'] = video_input
-        elif model_id == "wan/2-2-animate-move":
-            # Convert video_input and image_input for wan/2-2-animate-move
-            if 'video_input' in api_params:
-                video_input = api_params.pop('video_input')
-                if isinstance(video_input, list) and len(video_input) > 0:
-                    api_params['video_url'] = video_input[0]
-                elif isinstance(video_input, str):
-                    api_params['video_url'] = video_input
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-        elif model_id == "wan/2-2-animate-replace":
-            # CRITICAL: wan/2-2-animate-replace uses video_url (string) and image_url (string), NOT video_input/image_input (arrays)
-            # According to API documentation: input.video_url (required, string URL) and input.image_url (required, string URL)
-            # Convert video_input to video_url and image_input to image_url
-            if 'video_input' in api_params:
-                video_input = api_params.pop('video_input')
-                if isinstance(video_input, list) and len(video_input) > 0:
-                    api_params['video_url'] = video_input[0]
-                elif isinstance(video_input, str):
-                    api_params['video_url'] = video_input
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-        elif model_id == "kling/v1-avatar-standard" or model_id == "kling/ai-avatar-v1-pro":
-            # Convert image_input and audio_input for kling avatar models
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-            if 'audio_input' in api_params:
-                audio_input = api_params.pop('audio_input')
-                if isinstance(audio_input, list) and len(audio_input) > 0:
-                    api_params['audio_url'] = audio_input[0]
-                elif isinstance(audio_input, str):
-                    api_params['audio_url'] = audio_input
-        elif model_id == "infinitalk/from-audio":
-            # Convert image_input and audio_input for infinitalk/from-audio
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-            if 'audio_input' in api_params:
-                audio_input = api_params.pop('audio_input')
-                if isinstance(audio_input, list) and len(audio_input) > 0:
-                    api_params['audio_url'] = audio_input[0]
-                elif isinstance(audio_input, str):
-                    api_params['audio_url'] = audio_input
-        elif model_id == "recraft/remove-background" and 'image_input' in api_params:
-            # CRITICAL: KIE API requires "input.image" (string URL) for recraft/remove-background
-            # Documentation: https://docs.kie.ai/market/recraft/remove-background
-            # API expects: {"model": "recraft/remove-background", "input": {"image": "https://..."}}
-            # Convert image_input to image (as per KIE API specification)
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image'] = image_input[0]  # Take first URL from array
-            elif isinstance(image_input, str):
-                api_params['image'] = image_input  # Use string URL directly
-            # NOTE: api_params now contains only 'image' key, which will be sent as input.image to KIE API
-        elif model_id == "recraft/crisp-upscale" and 'image_input' in api_params:
-            # CRITICAL: KIE API requires "input.image" (string URL) for recraft/crisp-upscale
-            # Convert image_input to image (as per KIE API specification)
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image'] = image_input[0]  # Take first URL from array
-            elif isinstance(image_input, str):
-                api_params['image'] = image_input  # Use string URL directly
-        elif model_id == "ideogram/v3-reframe" and 'image_input' in api_params:
-            # Convert image_input to image_url for ideogram/v3-reframe
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "ideogram/v3-edit":
-            # For ideogram/v3-edit, API expects image_input and mask_input as arrays (not image_url/mask_url)
-            # Keep as arrays, just ensure correct format
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, str):
-                    # Convert string URL to array
-                    api_params['image_input'] = [image_input]
-                elif isinstance(image_input, list):
-                    # Ensure it's a list (API expects array)
-                    api_params['image_input'] = image_input
-                else:
-                    api_params['image_input'] = image_input if isinstance(image_input, list) else [str(image_input)]
-            if 'mask_input' in api_params:
-                mask_input = api_params.pop('mask_input')
-                if isinstance(mask_input, str):
-                    # Convert string URL to array
-                    api_params['mask_input'] = [mask_input]
-                elif isinstance(mask_input, list):
-                    # Ensure it's a list (API expects array)
-                    api_params['mask_input'] = mask_input
-                else:
-                    api_params['mask_input'] = mask_input if isinstance(mask_input, list) else [str(mask_input)]
-        elif model_id == "ideogram/v3-remix":
-            # For ideogram/v3-remix, API expects image_input as array (not image_url)
-            # Keep image_input as array, just ensure it's in correct format
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, str):
-                    # Convert string URL to array
-                    api_params['image_input'] = [image_input]
-                elif isinstance(image_input, list):
-                    # Ensure it's a list (API expects array)
-                    api_params['image_input'] = image_input
-                else:
-                    api_params['image_input'] = image_input if isinstance(image_input, list) else [str(image_input)]
-        elif model_id == "bytedance/v1-pro-fast-image-to-video":
-            # Convert image_input to image_url for bytedance/v1-pro-fast-image-to-video
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-        elif model_id == "bytedance/v1-lite-image-to-video" and 'image_input' in api_params:
-            # Convert image_input to image_url for bytedance/v1-lite-image-to-video
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "bytedance/v1-pro-image-to-video" and 'image_input' in api_params:
-            # Convert image_input to image_url for bytedance/v1-pro-image-to-video
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list) and len(image_input) > 0:
-                api_params['image_url'] = image_input[0]
-            elif isinstance(image_input, str):
-                api_params['image_url'] = image_input
-        elif model_id == "kling/v2-1-master-image-to-video" or model_id == "kling/v2-1-standard" or model_id == "kling/v2-1-pro":
-            # Convert image_input to image_url for kling/v2-1 models
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-        elif model_id == "wan/2-2-a14b-image-to-video-turbo":
-            # Convert image_input to image_url for wan/2-2-a14b-image-to-video-turbo
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-        elif model_id == "wan/2-2-a14b-speech-to-video-turbo":
-            # Convert image_input and audio_input for wan/2-2-a14b-speech-to-video-turbo
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-            if 'audio_input' in api_params:
-                audio_input = api_params.pop('audio_input')
-                if isinstance(audio_input, list) and len(audio_input) > 0:
-                    api_params['audio_url'] = audio_input[0]
-                elif isinstance(audio_input, str):
-                    api_params['audio_url'] = audio_input
-        elif model_id == "qwen/image-to-image" and 'image_input' in api_params:
-            # For qwen/image-to-image, API expects image_input as array (not image_url)
-            # Keep image_input as array, just ensure it's in correct format
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, str):
-                # Convert string URL to array
-                api_params['image_input'] = [image_input]
-            elif isinstance(image_input, list):
-                # Ensure it's a list (API expects array)
-                api_params['image_input'] = image_input
-            else:
-                # If it's already set correctly, keep it
-                api_params['image_input'] = image_input if isinstance(image_input, list) else [str(image_input)]
-        elif model_id == "qwen/image-edit" and 'image_input' in api_params:
-            # For qwen/image-edit, API expects image_input as array (not image_url)
-            # Keep image_input as array, just ensure it's in correct format
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, str):
-                # Convert string URL to array
-                api_params['image_input'] = [image_input]
-            elif isinstance(image_input, list):
-                # Ensure it's a list (API expects array)
-                api_params['image_input'] = image_input
-            else:
-                # If it's already set correctly, keep it
-                api_params['image_input'] = image_input if isinstance(image_input, list) else [str(image_input)]
-        elif model_id == "google/nano-banana-edit" and 'image_input' in api_params:
-            # Convert image_input to image_urls for google/nano-banana-edit
-            image_input = api_params.pop('image_input')
-            if isinstance(image_input, list):
-                api_params['image_urls'] = image_input
-            elif isinstance(image_input, str):
-                api_params['image_urls'] = [image_input]
-        elif model_id == "ideogram/character-edit":
-            # For ideogram/character-edit, API expects image_input, mask_input, and reference_image_input as arrays
-            # Keep as arrays, just ensure correct format
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, str):
-                    # Convert string URL to array
-                    api_params['image_input'] = [image_input]
-                elif isinstance(image_input, list):
-                    # Ensure it's a list (API expects array)
-                    api_params['image_input'] = image_input
-                else:
-                    api_params['image_input'] = image_input if isinstance(image_input, list) else [str(image_input)]
-            if 'mask_input' in api_params:
-                mask_input = api_params.pop('mask_input')
-                if isinstance(mask_input, str):
-                    # Convert string URL to array
-                    api_params['mask_input'] = [mask_input]
-                elif isinstance(mask_input, list):
-                    # Ensure it's a list (API expects array)
-                    api_params['mask_input'] = mask_input
-                else:
-                    api_params['mask_input'] = mask_input if isinstance(mask_input, list) else [str(mask_input)]
-            if 'reference_image_input' in api_params:
-                reference_image_input = api_params.pop('reference_image_input')
-                if isinstance(reference_image_input, str):
-                    # Convert string URL to array
-                    api_params['reference_image_input'] = [reference_image_input]
-                elif isinstance(reference_image_input, list):
-                    # Ensure it's a list (API expects array)
-                    api_params['reference_image_input'] = reference_image_input
-                else:
-                    api_params['reference_image_input'] = reference_image_input if isinstance(reference_image_input, list) else [str(reference_image_input)]
-        elif model_id == "ideogram/character-remix":
-            # Convert image_input and reference_image_input for ideogram/character-remix
-            if 'image_input' in api_params:
-                image_input = api_params.pop('image_input')
-                if isinstance(image_input, list) and len(image_input) > 0:
-                    api_params['image_url'] = image_input[0]
-                elif isinstance(image_input, str):
-                    api_params['image_url'] = image_input
-            if 'reference_image_input' in api_params:
-                reference_image_input = api_params.pop('reference_image_input')
-                if isinstance(reference_image_input, list):
-                    api_params['reference_image_urls'] = reference_image_input
-                elif isinstance(reference_image_input, str):
-                    api_params['reference_image_urls'] = [reference_image_input]
-        elif model_id == "ideogram/character":
-            # Convert reference_image_input for ideogram/character
-            if 'reference_image_input' in api_params:
-                reference_image_input = api_params.pop('reference_image_input')
-                if isinstance(reference_image_input, list):
-                    api_params['reference_image_urls'] = reference_image_input
-                elif isinstance(reference_image_input, str):
-                    api_params['reference_image_urls'] = [reference_image_input]
-        elif model_id == "elevenlabs/speech-to-text" and 'audio_input' in api_params:
-            # Convert audio_input to audio_url for elevenlabs/speech-to-text
-            audio_input = api_params.pop('audio_input')
-            if isinstance(audio_input, list) and len(audio_input) > 0:
-                api_params['audio_url'] = audio_input[0]
-            elif isinstance(audio_input, str):
-                api_params['audio_url'] = audio_input
+        # Параметры уже адаптированы к API через normalize_for_generation выше
+        api_params = params  # params уже содержит API-формат параметров
         
-        # For seedream/4.5-text-to-image, validate and normalize parameters
-        # NOTE: Price calculation - Currently fixed at 6.5 credits regardless of quality/aspect_ratio
-        # If API pricing changes based on quality (basic=2K, high=4K), update calculate_price_rub() accordingly
-        if model_id == "seedream/4.5-text-to-image":
+        # Старый код маппинга удален - теперь используется kie_input_adapter
+        # Все маппинги находятся в API_PARAM_MAPPINGS в kie_input_adapter.py
+        # Валидация также выполняется в адаптере - дополнительные блоки валидации удалены
             # Validate prompt (required, max 3000 characters)
             if 'prompt' not in api_params or not api_params.get('prompt'):
                 error_msg = "❌ <b>Ошибка валидации</b>\n\nПараметр <b>prompt</b> обязателен для модели seedream/4.5-text-to-image."
@@ -25025,14 +24834,24 @@ async def main():
         logger.error("No TELEGRAM_BOT_TOKEN found in environment variables!")
         return
     
-    # Verify models are loaded correctly
-    categories = get_categories()
-    sora_models = [m for m in KIE_MODELS if m['id'] == 'sora-watermark-remover']
-    logger.info(f"Bot starting with {len(KIE_MODELS)} models in {len(categories)} categories: {categories}")
+    # Verify models are loaded correctly (using registry)
+    from app.models.registry import get_models_sync, get_model_registry
+    models_list = get_models_sync()
+    registry_info = get_model_registry()
+    
+    categories = get_categories_from_registry()
+    sora_models = [m for m in models_list if m.get('id') == 'sora-watermark-remover']
+    
+    # Логируем информацию о registry (source, count)
+    logger.info(f"📊 models_registry source={registry_info['used_source']} count={registry_info['count']}")
+    if registry_info.get('yaml_total_models'):
+        logger.info(f"📊 YAML total_models={registry_info['yaml_total_models']}")
+    
+    logger.info(f"Bot starting with {len(models_list)} models in {len(categories)} categories: {categories}")
     if sora_models:
-        logger.info(f"[OK] Sora model loaded: {sora_models[0]['name']} ({sora_models[0]['category']})")
+        logger.info(f"[OK] Sora model loaded: {sora_models[0].get('name', 'unknown')} ({sora_models[0].get('category', 'unknown')})")
     else:
-        logger.warning(f"[WARN] Sora model NOT found! Available models: {[m['id'] for m in KIE_MODELS]}")
+        logger.warning(f"[WARN] Sora model NOT found! Available models: {[m.get('id') for m in models_list[:10]]}")
     
     # Create the Application через bootstrap (с dependency container)
     from app.bootstrap import create_application
@@ -25958,7 +25777,7 @@ async def main():
                     'tutorial_start', 'tutorial_step', 'tutorial_complete', 'confirm_generate',
                     'retry_generate:', 'cancel', 'back_to_previous_step', 'set_param:',
                 ]
-                callback_count = len(known_patterns) + len(KIE_MODELS)  # Примерная оценка
+                callback_count = len(known_patterns) + len(get_models_sync())  # Примерная оценка
         except Exception as e:
             callback_count = f"N/A ({str(e)[:30]})"
         

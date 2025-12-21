@@ -75,7 +75,7 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
         
         param_type = param_schema.get('type', 'string')
         
-            # Type validation
+        # Type validation
         if param_type == 'string':
             if not isinstance(param_value, str):
                 errors.append(f"Параметр '{param_name}' должен быть текстом")

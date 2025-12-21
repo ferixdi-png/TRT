@@ -2,8 +2,12 @@
 Model Registry - Single Source of Truth for KIE Models
 
 This module provides a unified interface for loading models:
-1. If KIE_API_KEY present and API reachable -> use kie_client.list_models() (with cache)
-2. If API unavailable -> fallback to static KIE_MODELS from kie_models.py
+1. If KIE_API_KEY present and API reachable -> use kie_client.list_models() 
+   and enrich with data from models/kie_models.yaml (model_type + input_params)
+2. If API unavailable -> use models/kie_models.yaml as primary source
+
+YAML (models/kie_models.yaml) is the canonical source of truth for model_type and input_params.
+API or kie_models.py provide enrichment data (name, category, emoji, pricing).
 
 Returns normalized schema compatible with existing code.
 """
@@ -15,6 +19,26 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Импортируем YAML registry
+try:
+    from app.models.yaml_registry import (
+        load_yaml_models,
+        get_model_from_yaml,
+        normalize_yaml_model,
+        get_yaml_meta
+    )
+    YAML_REGISTRY_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"YAML registry not available: {e}")
+    YAML_REGISTRY_AVAILABLE = False
+    # Заглушки
+    def load_yaml_models(): return {}
+    def get_model_from_yaml(model_id): return None
+    def normalize_yaml_model(model_id, yaml_data, enrich_from=None):
+        return {'id': model_id, 'name': model_id, 'category': 'Другое', 'emoji': '🤖', 
+                'model_type': 'text_to_image', 'input_params': {}}
+    def get_yaml_meta(): return {}
 
 # Global cache
 _model_cache: Optional[List[Dict[str, Any]]] = None
@@ -48,22 +72,65 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
             api_models = await client.list_models()
             
             if api_models and len(api_models) > 0:
-                # Normalize API models
-                normalized = _normalize_api_models(api_models)
+                # Normalize API models with enrichment from YAML
+                normalized = _normalize_api_models_with_yaml(api_models)
                 _model_cache = normalized
-                _model_source = "kie_api"
+                _model_source = "kie_api_enriched_with_yaml"
                 _model_timestamp = datetime.now()
-                logger.info(f"✅ Loaded {len(normalized)} models from KIE API")
+                logger.info(f"✅ Loaded {len(normalized)} models from KIE API (enriched with YAML)")
                 return normalized
             else:
                 logger.warning("⚠️ API returned empty list, falling back to static models")
         except Exception as e:
             logger.warning(f"⚠️ Failed to load from API: {e}, falling back to static models")
     
-    # Fallback to static models
+    # Fallback to YAML (canonical source of truth)
+    if YAML_REGISTRY_AVAILABLE:
+        try:
+            yaml_models_dict = load_yaml_models()
+            if yaml_models_dict:
+                normalized_yaml = []
+                seen_ids = set()
+                
+                # Пытаемся обогатить данными из kie_models.py (для name/category/emoji/pricing)
+                enrich_data = {}
+                try:
+                    from kie_models import KIE_MODELS
+                    for model in KIE_MODELS:
+                        model_id = model.get('id')
+                        if model_id:
+                            enrich_data[model_id] = model
+                except ImportError:
+                    logger.debug("kie_models.py not available for enrichment")
+                
+                for model_id, yaml_data in yaml_models_dict.items():
+                    if model_id in seen_ids:
+                        logger.warning(f"⚠️ Duplicate model ID in YAML: {model_id}, skipping")
+                        continue
+                    seen_ids.add(model_id)
+                    
+                    enrich = enrich_data.get(model_id)
+                    try:
+                        normalized_model = normalize_yaml_model(model_id, yaml_data, enrich_from=enrich)
+                        normalized_yaml.append(normalized_model)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to normalize YAML model {model_id}: {e}")
+                        continue
+                
+                _model_cache = normalized_yaml
+                _model_source = "yaml"
+                _model_timestamp = datetime.now()
+                yaml_meta = get_yaml_meta()
+                total_in_yaml = yaml_meta.get('total_models', len(normalized_yaml))
+                logger.info(f"✅ Using YAML source: {len(normalized_yaml)} models (YAML says {total_in_yaml} total)")
+                return normalized_yaml
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load YAML models: {e}, falling back to kie_models.py")
+    
+    # Final fallback to kie_models.py (legacy)
     try:
         from kie_models import KIE_MODELS
-        # Нормализуем статические модели тоже (гарантируем model_type и обязательные поля)
+        # Нормализуем статические модели (гарантируем model_type и обязательные поля)
         normalized_static = []
         seen_ids = set()
         for model in KIE_MODELS:
@@ -80,12 +147,12 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
                 continue
         
         _model_cache = normalized_static
-        _model_source = "static_fallback"
+        _model_source = "kie_models_py_fallback"
         _model_timestamp = datetime.now()
-        logger.info(f"✅ Using static fallback: {len(normalized_static)} normalized models")
+        logger.warning(f"⚠️ Using legacy kie_models.py fallback: {len(normalized_static)} normalized models")
         return normalized_static
     except Exception as e:
-        logger.error(f"❌ Failed to load static models: {e}", exc_info=True)
+        logger.error(f"❌ Failed to load models from any source: {e}", exc_info=True)
         return []
 
 
@@ -234,26 +301,49 @@ def _normalize_model(model: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def _normalize_api_models(api_models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _normalize_api_models_with_yaml(api_models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Normalize API models to match static KIE_MODELS schema.
+    Normalize API models and enrich with data from YAML (canonical source for model_type and input_params).
     
-    API models may have different structure, so we normalize them.
-    Гарантирует наличие всех обязательных полей, включая model_type.
+    Priority:
+    1. model_type и input_params берутся из YAML (если доступно)
+    2. Остальные поля (name, category, emoji, pricing) берутся из API
+    3. Если модели нет в YAML - используется определение из API с автодетерминацией model_type
     """
     normalized = []
     seen_ids = set()
     
+    # Загружаем YAML модели для обогащения
+    yaml_models = {}
+    if YAML_REGISTRY_AVAILABLE:
+        try:
+            yaml_models = load_yaml_models()
+            logger.debug(f"Loaded {len(yaml_models)} models from YAML for enrichment")
+        except Exception as e:
+            logger.warning(f"Failed to load YAML for enrichment: {e}")
+    
     for model in api_models:
         try:
-            normalized_model = _normalize_model(model)
+            model_id = model.get('id') or model.get('model_id') or model.get('name', '')
+            if not model_id:
+                continue
             
-            # Проверка на дубликаты
-            model_id = normalized_model['id']
             if model_id in seen_ids:
                 logger.warning(f"⚠️ Duplicate model ID: {model_id}, skipping")
                 continue
             seen_ids.add(model_id)
+            
+            # Проверяем есть ли модель в YAML
+            yaml_data = yaml_models.get(model_id)
+            
+            if yaml_data:
+                # Используем YAML как источник истины для model_type и input_params
+                # API данные используем для обогащения (name, category, emoji, pricing)
+                normalized_model = normalize_yaml_model(model_id, yaml_data, enrich_from=model)
+            else:
+                # Модели нет в YAML - используем API данные с автодетерминацией
+                logger.debug(f"Model {model_id} not found in YAML, using API data")
+                normalized_model = _normalize_model(model)
             
             normalized.append(normalized_model)
         except Exception as e:
@@ -268,38 +358,39 @@ def get_model_registry() -> Dict[str, Any]:
     Get registry metadata (source, count, timestamp).
     
     Returns:
-        Dict with source info
+        Dict with source info including YAML count if available
     """
     global _model_cache, _model_source, _model_timestamp
     
+    models = None
     if _model_cache is None:
         # Load synchronously (blocking) - for non-async contexts
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # If loop is running, we can't use it - return default
-                return {
-                    "used_source": "unknown",
-                    "count": 0,
-                    "timestamp": None,
-                    "sample_ids": []
-                }
+                # If loop is running, use sync loader
+                models = get_models_sync()
             else:
                 models = loop.run_until_complete(load_models())
         except:
-            # No event loop - return default
-            return {
-                "used_source": "unknown",
-                "count": 0,
-                "timestamp": None,
-                "sample_ids": []
-            }
+            # No event loop - use sync loader
+            models = get_models_sync()
     else:
         models = _model_cache
+    
+    # Получаем YAML метаданные для сравнения
+    yaml_count = None
+    if YAML_REGISTRY_AVAILABLE:
+        try:
+            yaml_meta = get_yaml_meta()
+            yaml_count = yaml_meta.get('total_models')
+        except:
+            pass
     
     return {
         "used_source": _model_source or "unknown",
         "count": len(models) if models else 0,
+        "yaml_total_models": yaml_count,
         "timestamp": _model_timestamp.isoformat() if _model_timestamp else None,
         "sample_ids": [m.get('id', '') for m in (models[:5] if models else [])]
     }
@@ -311,7 +402,34 @@ def get_models_sync() -> List[Dict[str, Any]]:
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # Can't use existing loop - return static fallback (normalized)
+            # Can't use existing loop - return YAML or static fallback
+            if YAML_REGISTRY_AVAILABLE:
+                try:
+                    yaml_models_dict = load_yaml_models()
+                    if yaml_models_dict:
+                        normalized = []
+                        enrich_data = {}
+                        try:
+                            from kie_models import KIE_MODELS
+                            for model in KIE_MODELS:
+                                model_id = model.get('id')
+                                if model_id:
+                                    enrich_data[model_id] = model
+                        except ImportError:
+                            pass
+                        
+                        for model_id, yaml_data in yaml_models_dict.items():
+                            try:
+                                enrich = enrich_data.get(model_id)
+                                norm_model = normalize_yaml_model(model_id, yaml_data, enrich_from=enrich)
+                                normalized.append(norm_model)
+                            except:
+                                continue
+                        return normalized
+                except Exception:
+                    pass
+            
+            # Fallback to kie_models.py
             from kie_models import KIE_MODELS
             normalized = []
             seen_ids = set()
@@ -327,7 +445,34 @@ def get_models_sync() -> List[Dict[str, Any]]:
         else:
             return loop.run_until_complete(load_models())
     except:
-        # Fallback to static (normalized)
+        # Fallback to YAML or kie_models.py
+        if YAML_REGISTRY_AVAILABLE:
+            try:
+                yaml_models_dict = load_yaml_models()
+                if yaml_models_dict:
+                    normalized = []
+                    enrich_data = {}
+                    try:
+                        from kie_models import KIE_MODELS
+                        for model in KIE_MODELS:
+                            model_id = model.get('id')
+                            if model_id:
+                                enrich_data[model_id] = model
+                    except ImportError:
+                        pass
+                    
+                    for model_id, yaml_data in yaml_models_dict.items():
+                        try:
+                            enrich = enrich_data.get(model_id)
+                            norm_model = normalize_yaml_model(model_id, yaml_data, enrich_from=enrich)
+                            normalized.append(norm_model)
+                        except:
+                            continue
+                    return normalized
+            except Exception:
+                pass
+        
+        # Final fallback
         from kie_models import KIE_MODELS
         normalized = []
         seen_ids = set()

@@ -77,16 +77,16 @@ admin_limits.json
 *.temp
 .cache/
 
-# Test files
-test/
-tests/
-*_test.py
-*_tests.py
+# Test files (keep for smoke tests)
+# test/
+# tests/
+# *_test.py
+# *_tests.py
 
-# Scripts (not needed in production)
-scripts/
-*.sh
-*.bat
+# Scripts (keep for smoke tests and utilities)
+# scripts/
+# *.sh
+# *.bat
 
 # Other
 .dockerignore

@@ -10,6 +10,9 @@ GitPython>=3.1.40  # Для автоматических коммитов
 # Environment variables
 python-dotenv>=1.0.0
 
+# YAML parsing (required for models/kie_models.yaml)
+PyYAML>=6.0
+
 # Type hints (for Python < 3.9)
 typing-extensions>=4.5.0
 

@@ -19,20 +19,14 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
 
-# Copy only necessary application files
-COPY bot_kie.py run_bot.py main_render.py config.py translations.py kie_models.py kie_client.py kie_gateway.py knowledge_storage.py config_runtime.py helpers.py ./
+# Copy all application files (using .dockerignore to exclude unnecessary files)
+COPY . /app
 
-# Copy app directory (required for app.config, app.bot_mode, etc.)
-COPY app/ ./app/
-
-# Copy validation files if they exist
-COPY validate_*.py ./
-
-# Create directories with empty __init__.py files
+# Create directories with empty __init__.py files if they don't exist
 # Code has try/except for imports, so it will work without these modules
 RUN mkdir -p ./bot_kie_services ./bot_kie_utils && \
-    echo '"""Empty - modules not available in build context"""' > ./bot_kie_services/__init__.py && \
-    echo '"""Empty - modules not available in build context"""' > ./bot_kie_utils/__init__.py
+    (test -f ./bot_kie_services/__init__.py || echo '"""Empty - modules not available in build context"""' > ./bot_kie_services/__init__.py) && \
+    (test -f ./bot_kie_utils/__init__.py || echo '"""Empty - modules not available in build context"""' > ./bot_kie_utils/__init__.py)
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -49,6 +43,11 @@ EXPOSE 10000
 # Health check for Render.com (using Python instead of Node.js)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:10000/health').read()" || exit 1
+
+# Verify critical files exist
+RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml not found!" && exit 1) && \
+    python3 -c "import yaml" || (echo "ERROR: PyYAML not installed!" && exit 1) && \
+    echo "✅ Critical files verified"
 
 # Start the bot using Render-first entrypoint
 CMD ["python3", "main_render.py"]

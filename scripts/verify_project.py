@@ -42,6 +42,52 @@ def mock_env(**env_vars):
             os.environ["SKIP_CONFIG_INIT"] = old_skip
 
 
+def test_pytest():
+    """Запускает pytest -q для всех тестов"""
+    print("\n" + "=" * 60)
+    print("TEST 1: pytest -q")
+    print("=" * 60)
+    
+    import subprocess
+    
+    try:
+        # Устанавливаем TEST_MODE для mock gateway
+        env = os.environ.copy()
+        env["TEST_MODE"] = "1"
+        env["ALLOW_REAL_GENERATION"] = "0"
+        
+        # Запускаем pytest
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "tests/"],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=300  # 5 минут максимум
+        )
+        
+        # Выводим результат
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr and "warning" not in result.stderr.lower():
+            print("STDERR:", result.stderr)
+        
+        if result.returncode == 0:
+            print("[OK] All pytest tests passed")
+            return True
+        else:
+            print(f"[FAIL] pytest failed with exit code {result.returncode}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("[FAIL] pytest timed out (>5 minutes)")
+        return False
+    except Exception as e:
+        print(f"[FAIL] pytest error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def test_imports_no_side_effects():
     """Проверяет импорт модулей без побочных эффектов"""
     print("=" * 60)
@@ -491,6 +537,53 @@ def test_fail_fast_missing_env():
             os.environ["SKIP_CONFIG_INIT"] = old_skip
 
 
+def test_smoke_all_models():
+    """Запускает smoke test всех моделей через scripts/smoke_test_all_models.py"""
+    print("\n" + "=" * 60)
+    print("TEST 2: Smoke test всех моделей (mock gateway)")
+    print("=" * 60)
+    
+    import subprocess
+    
+    try:
+        # Устанавливаем TEST_MODE и ALLOW_REAL_GENERATION для mock gateway
+        env = os.environ.copy()
+        env["TEST_MODE"] = "1"
+        env["ALLOW_REAL_GENERATION"] = "0"
+        
+        # Запускаем скрипт
+        script_path = Path(__file__).parent / "smoke_test_all_models.py"
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=300  # 5 минут максимум
+        )
+        
+        # Выводим результат
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print("STDERR:", result.stderr)
+        
+        if result.returncode == 0:
+            print("[OK] All models passed smoke test")
+            return True
+        else:
+            print(f"[FAIL] Smoke test failed with exit code {result.returncode}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("[FAIL] Smoke test timed out (>5 minutes)")
+        return False
+    except Exception as e:
+        print(f"[FAIL] Smoke test error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def test_optional_dependencies():
     """Проверяет мягкую деградацию опциональных зависимостей"""
     print("\n" + "=" * 60)
@@ -671,6 +764,8 @@ def main():
     print()
     
     tests = [
+        ("pytest -q", test_pytest),
+        ("Smoke test всех моделей", test_smoke_all_models),
         ("Import проверки", test_imports_no_side_effects),
         ("Settings validation", test_settings_validation),
         ("Storage factory", test_storage_factory_json),
