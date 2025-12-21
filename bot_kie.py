@@ -25104,9 +25104,21 @@ async def main():
             logger.error("   Falling back to file-based singleton lock")
             # Fallback на file lock если модули недоступны
             try:
-                bot_mode = get_bot_mode()
-                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
-                singleton_lock = get_singleton_lock(lock_key)
+                try:
+                    bot_mode = get_bot_mode()
+                except Exception as mode_error:
+                    logger.warning(f"⚠️ Failed to get bot mode: {mode_error}, using 'polling' as default")
+                    bot_mode = 'polling'
+                
+                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10] if BOT_TOKEN else 'unknown'}"
+                
+                try:
+                    singleton_lock = get_singleton_lock(lock_key)
+                except Exception as lock_init_error:
+                    logger.error(f"❌ Failed to initialize singleton lock: {lock_init_error}", exc_info=True)
+                    logger.error("   Exiting to prevent conflicts...")
+                    os._exit(1)
+                
                 if not singleton_lock.acquire(timeout=5):
                     logger.error("❌❌❌ Another bot instance detected (file lock held)!")
                     logger.error("   Exiting immediately to prevent 409 Conflict...")
@@ -25122,9 +25134,21 @@ async def main():
             logger.error("   Falling back to file-based singleton lock")
             # Fallback на file lock если БД недоступна
             try:
-                bot_mode = get_bot_mode()
-                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
-                singleton_lock = get_singleton_lock(lock_key)
+                try:
+                    bot_mode = get_bot_mode()
+                except Exception as mode_error:
+                    logger.warning(f"⚠️ Failed to get bot mode: {mode_error}, using 'polling' as default")
+                    bot_mode = 'polling'
+                
+                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10] if BOT_TOKEN else 'unknown'}"
+                
+                try:
+                    singleton_lock = get_singleton_lock(lock_key)
+                except Exception as lock_init_error:
+                    logger.error(f"❌ Failed to initialize singleton lock: {lock_init_error}", exc_info=True)
+                    logger.error("   Exiting to prevent conflicts...")
+                    os._exit(1)
+                
                 if not singleton_lock.acquire(timeout=5):
                     logger.error("❌❌❌ Another bot instance detected (file lock held)!")
                     logger.error("   Exiting immediately to prevent 409 Conflict...")
@@ -25137,9 +25161,21 @@ async def main():
     else:
         logger.warning("⚠️ DATABASE_URL not available, using file-based singleton lock")
         try:
-            bot_mode = get_bot_mode()
-            lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
-            singleton_lock = get_singleton_lock(lock_key)
+            try:
+                bot_mode = get_bot_mode()
+            except Exception as mode_error:
+                logger.warning(f"⚠️ Failed to get bot mode: {mode_error}, using 'polling' as default")
+                bot_mode = 'polling'
+            
+            lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10] if BOT_TOKEN else 'unknown'}"
+            
+            try:
+                singleton_lock = get_singleton_lock(lock_key)
+            except Exception as lock_init_error:
+                logger.error(f"❌ Failed to initialize singleton lock: {lock_init_error}", exc_info=True)
+                logger.error("   Exiting to prevent conflicts...")
+                os._exit(1)
+            
             if not singleton_lock.acquire(timeout=5):
                 logger.error("❌❌❌ Another bot instance detected (file lock held)!")
                 logger.error("   Exiting immediately to prevent 409 Conflict...")
