@@ -26143,20 +26143,31 @@ async def main():
                 logger.error("      3. Verify singleton lock is working correctly")
                 logger.error("      4. Ensure webhook is deleted: curl https://api.telegram.org/bot<TOKEN>/deleteWebhook?drop_pending_updates=true")
                 
-                # CRITICAL: Stop polling/application before exit to prevent retry loops
+                # CRITICAL: Stop updater FIRST to stop polling loop immediately
                 try:
-                    # Try to stop the application if it's running
-                    # context.application доступен в telegram.ext.ContextTypes
                     if hasattr(context, 'application') and context.application:
+                        app = context.application
+                        # Stop updater polling immediately
+                        if hasattr(app, 'updater') and app.updater:
+                            try:
+                                if app.updater.running:
+                                    logger.info("   Stopping updater polling immediately...")
+                                    await app.updater.stop()
+                                    logger.info("   Updater stopped")
+                            except Exception as updater_error:
+                                logger.warning(f"   Could not stop updater: {updater_error}")
+                        
+                        # Then stop application
                         try:
-                            if context.application.running:
-                                logger.info("   Stopping application before exit...")
-                                await context.application.stop()
-                                await context.application.shutdown()
+                            if app.running:
+                                logger.info("   Stopping application...")
+                                await app.stop()
+                                await app.shutdown()
+                                logger.info("   Application stopped")
                         except Exception as stop_error:
                             logger.warning(f"   Could not stop application: {stop_error}")
                 except Exception as e:
-                    logger.warning(f"   Error stopping application: {e}")
+                    logger.warning(f"   Error stopping updater/application: {e}")
                 
                 try:
                     handle_conflict_gracefully(error, "polling")
