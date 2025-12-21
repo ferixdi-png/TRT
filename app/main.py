@@ -196,11 +196,44 @@ async def run(settings, application):
                 logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
-                # Polling mode
+                # Polling mode - безопасный запуск с обработкой конфликтов
                 logger.info("[RUN] Starting polling...")
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                await application.updater.start_polling(drop_pending_updates=True)
-                logger.info("[RUN] Polling started")
+                
+                # КРИТИЧНО: Удаляем webhook ПЕРЕД запуском polling
+                try:
+                    await application.bot.delete_webhook(drop_pending_updates=True)
+                    webhook_info = await application.bot.get_webhook_info()
+                    if webhook_info.url:
+                        logger.warning(f"[RUN] Webhook still present: {webhook_info.url}")
+                    else:
+                        logger.info("[RUN] Webhook removed successfully")
+                except Exception as e:
+                    logger.warning(f"[RUN] Error removing webhook: {e}")
+                    # Проверяем на конфликт
+                    from telegram.error import Conflict
+                    if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e):
+                        logger.error("[RUN] Conflict detected while removing webhook - exiting")
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(str(e)), "polling")
+                        return
+                
+                # Запускаем polling с обработкой конфликтов
+                try:
+                    await application.updater.start_polling(drop_pending_updates=True)
+                    logger.info("[RUN] Polling started successfully")
+                except Exception as e:
+                    from telegram.error import Conflict
+                    if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e) or "terminated by other getUpdates" in str(e):
+                        logger.error("[RUN] Conflict detected during polling start - exiting")
+                        try:
+                            await application.stop()
+                            await application.shutdown()
+                        except:
+                            pass
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(str(e)), "polling")
+                        return
+                    raise  # Re-raise non-Conflict errors
             
             # Ждем остановки
             try:
