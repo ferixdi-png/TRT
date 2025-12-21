@@ -26130,6 +26130,9 @@ async def main():
             error_type = type(error).__name__
             error_msg = str(error)
             
+            # КРИТИЧНО: Логируем ВСЕ ошибки для диагностики
+            logger.error(f"[ERROR_HANDLER] Called with error: {error_type}: {error_msg[:200]}")
+            
             # ==================== КРИТИЧНО: Обработка 409 Conflict ====================
             # Если это Conflict ошибка, обрабатываем её специально (graceful exit)
             from telegram.error import Conflict as TelegramConflict

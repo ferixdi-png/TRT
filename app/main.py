@@ -262,14 +262,44 @@ async def run(settings, application):
                 # Добавляем обработчик ошибок для updater
                 application.add_error_handler(handle_updater_error)
                 
+                # КРИТИЧНО: Запускаем polling с мониторингом ошибок
+                async def monitor_polling_errors():
+                    """Мониторинг ошибок в updater loop"""
+                    try:
+                        # Ждём немного, чтобы updater успел запуститься
+                        await asyncio.sleep(5)
+                        
+                        # Проверяем, что updater работает
+                        while True:
+                            await asyncio.sleep(10)  # Проверяем каждые 10 секунд
+                            
+                            # Если updater не работает, но должен - это проблема
+                            if hasattr(application, 'updater') and application.updater:
+                                if not application.updater.running:
+                                    logger.warning("[MONITOR] Updater stopped unexpectedly")
+                                    break
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        logger.error(f"[MONITOR] Error in monitoring task: {e}")
+                
+                # Запускаем задачу мониторинга
+                monitor_task = asyncio.create_task(monitor_polling_errors())
+                
                 # Запускаем polling с обработкой конфликтов
                 try:
                     await application.updater.start_polling(drop_pending_updates=True)
                     logger.info("[RUN] Polling started successfully")
                 except Exception as e:
+                    monitor_task.cancel()
                     from telegram.error import Conflict
                     if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e) or "terminated by other getUpdates" in str(e):
                         logger.error("[RUN] Conflict detected during polling start - exiting")
+                        try:
+                            if application.updater and application.updater.running:
+                                await application.updater.stop()
+                        except:
+                            pass
                         try:
                             await application.stop()
                             await application.shutdown()
