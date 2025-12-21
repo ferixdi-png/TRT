@@ -199,6 +199,10 @@ async def run(settings, application):
                 # Polling mode - безопасный запуск с обработкой конфликтов
                 logger.info("[RUN] Starting polling...")
                 
+                # КРИТИЧНО: Задержка перед запуском polling для предотвращения конфликтов
+                logger.info("[RUN] Waiting 15 seconds to avoid conflicts with previous instance...")
+                await asyncio.sleep(15)
+                
                 # КРИТИЧНО: Удаляем webhook ПЕРЕД запуском polling
                 try:
                     await application.bot.delete_webhook(drop_pending_updates=True)
@@ -216,6 +220,47 @@ async def run(settings, application):
                         from app.bot_mode import handle_conflict_gracefully
                         handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(str(e)), "polling")
                         return
+                
+                # КРИТИЧНО: Добавляем обработчик ошибок для updater через post_init
+                async def handle_updater_error(update, context):
+                    """Обработчик ошибок для updater polling loop"""
+                    error = context.error
+                    error_msg = str(error) if error else ""
+                    
+                    from telegram.error import Conflict
+                    if isinstance(error, Conflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "409" in error_msg:
+                        logger.error(f"[UPDATER] 409 CONFLICT in updater loop: {error_msg}")
+                        logger.error("[UPDATER] Stopping updater and exiting...")
+                        
+                        # Останавливаем updater немедленно
+                        try:
+                            if application.updater and application.updater.running:
+                                await application.updater.stop()
+                                logger.info("[UPDATER] Updater stopped")
+                        except Exception as e:
+                            logger.warning(f"[UPDATER] Error stopping updater: {e}")
+                        
+                        # Останавливаем application
+                        try:
+                            await application.stop()
+                            await application.shutdown()
+                        except:
+                            pass
+                        
+                        # Освобождаем lock и выходим
+                        try:
+                            from app.locking.single_instance import release_single_instance_lock
+                            release_single_instance_lock()
+                        except:
+                            pass
+                        
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(error if isinstance(error, Conflict) else Conflict(error_msg), "polling")
+                        import os
+                        os._exit(0)
+                
+                # Добавляем обработчик ошибок для updater
+                application.add_error_handler(handle_updater_error)
                 
                 # Запускаем polling с обработкой конфликтов
                 try:
