@@ -4,6 +4,7 @@ Pytest configuration и фикстуры для тестов.
 
 import os
 import pytest
+import pytest_asyncio
 from tests.ptb_harness import PTBHarness
 
 
@@ -25,7 +26,33 @@ def test_env():
         old_env[key] = os.environ.get(key)
         os.environ[key] = test_vars[key]
     
+    # Сбрасываем singleton'ы после установки env переменных
+    try:
+        from app.config import reset_settings
+        reset_settings()
+    except ImportError:
+        pass
+    
+    try:
+        from kie_gateway import reset_gateway
+        reset_gateway()
+    except ImportError:
+        pass
+    
     yield
+    
+    # Снова сбрасываем singleton'ы в teardown
+    try:
+        from app.config import reset_settings
+        reset_settings()
+    except ImportError:
+        pass
+    
+    try:
+        from kie_gateway import reset_gateway
+        reset_gateway()
+    except ImportError:
+        pass
     
     # Восстанавливаем старые значения
     for key, value in old_env.items():
@@ -35,7 +62,7 @@ def test_env():
             os.environ[key] = value
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def harness(test_env):
     """Создает и возвращает PTBHarness для тестов."""
     h = PTBHarness()

@@ -19,7 +19,35 @@ def dry_run_env():
     os.environ["DRY_RUN"] = "1"
     os.environ["TEST_MODE"] = "1"
     os.environ["ALLOW_REAL_GENERATION"] = "0"
+    
+    # Сбрасываем singleton'ы после установки env переменных
+    try:
+        from app.config import reset_settings
+        reset_settings()
+    except ImportError:
+        pass
+    
+    try:
+        from kie_gateway import reset_gateway
+        reset_gateway()
+    except ImportError:
+        pass
+    
     yield
+    
+    # Снова сбрасываем singleton'ы в teardown
+    try:
+        from app.config import reset_settings
+        reset_settings()
+    except ImportError:
+        pass
+    
+    try:
+        from kie_gateway import reset_gateway
+        reset_gateway()
+    except ImportError:
+        pass
+    
     if old_value:
         os.environ["DRY_RUN"] = old_value
     else:

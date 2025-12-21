@@ -552,38 +552,35 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
         Цена в рублях
     """
     try:
-        # Пробуем использовать новый pricing_service
-        try:
-            from services.pricing_service import get_price
-            from decimal import Decimal
-            
-            # Создаем UserContext
-            user_context = create_user_context_for_pricing(
-                user_id=user_id or 0,
-                has_free_generations=False
-            )
-            
-            # Вызываем get_price
-            price_result = get_price(model_id, params or {}, user_context)
-            
-            # Конвертируем в float (рубли)
-            if isinstance(price_result, dict):
-                price_rub = price_result.get('price_rub', 0.0)
-                return float(price_rub) if isinstance(price_rub, (int, float, Decimal)) else 0.0
-            elif isinstance(price_result, (int, float, Decimal)):
-                return float(price_result)
-            elif hasattr(price_result, 'rub'):
-                # Если price_result - объект с атрибутом rub
-                return float(price_result.rub)
-            else:
-                return 0.0
-        except ImportError:
-            # Fallback если services.pricing_service недоступен
-            logger.warning("services.pricing_service not available, using fallback pricing")
-            # Простой fallback: 1 рубль за любую генерацию
+        # Используем новый pricing_service из каталога
+        from app.services.pricing_service import price_for_model_rub, get_model_price_info
+        from app.config import get_settings
+        
+        settings = get_settings()
+        mode_index = 0  # По умолчанию первый режим
+        
+        # Получаем цену из каталога
+        price_rub = price_for_model_rub(model_id, mode_index, settings)
+        
+        if price_rub is None:
+            logger.warning(f"Price not found for model {model_id}, using fallback")
             return 1.0
+        
+        # Логируем информацию о цене
+        price_info = get_model_price_info(model_id, mode_index, settings)
+        if price_info:
+            logger.info(
+                f"PRICE_RUB={price_rub} OFFICIAL_USD={price_info['official_usd']:.4f} "
+                f"MULT={price_info['price_multiplier']} RATE={price_info['usd_to_rub']} "
+                f"MODEL={model_id}"
+            )
+        
+        return float(price_rub)
+    except ImportError as e:
+        logger.warning(f"app.services.pricing_service not available: {e}, using fallback pricing")
+        return 1.0
     except Exception as e:
-        logger.error(f"Error in calculate_price_rub: {e}")
+        logger.error(f"Error in calculate_price_rub: {e}", exc_info=True)
         # Fallback: возвращаем минимальную цену
         return 1.0
 
@@ -1069,6 +1066,19 @@ async def subtract_user_balance_async(user_id: int, amount: float) -> bool:
     """Async subtract from user balance using storage layer."""
     from app.services.user_service import subtract_user_balance as subtract_balance_async
     return await subtract_balance_async(user_id, amount)
+
+
+def db_update_user_balance(user_id: int, amount: float):
+    """
+    Обновляет баланс пользователя напрямую в БД (для тестов/диагностики).
+    Используется для ручного управления балансом.
+    
+    Args:
+        user_id: ID пользователя
+        amount: Новый баланс
+    """
+    logger.info(f"db_update_user_balance: user_id={user_id}, amount={amount:.2f} ₽")
+    set_user_balance(user_id, amount)
 
 
 # ==================== User Language System ====================
@@ -4681,143 +4691,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             logger.info(f"User {user_id} clicked 'show_all_models_list' button")
             
-            # Show all models directly, grouped by category
-            user_lang = get_user_language(user_id)
-            is_admin = get_is_admin(user_id)
-            remaining_free = get_user_free_generations_remaining(user_id)
-            
-            # Group models by category (using registry)
-            categories = get_categories_from_registry()
-            
-            models_text = (
-                f"🤖 <b>ВСЕ НЕЙРОСЕТИ ({len(get_models_sync())})</b> 🤖\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            )
-            
-            if remaining_free > 0:
-                models_text += (
-                    f"🎁 <b>БЕСПЛАТНО:</b> {remaining_free} генераций Z-Image доступно!\n\n"
-                )
-            
-            models_text += (
-                f"💡 <b>Выберите нейросеть из списка ниже</b>\n"
-                f"Модели сгруппированы по категориям для удобства\n\n"
-                f"💰 <b>Все модели работают!</b> Выберите любую и начните генерацию.\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            )
-            
-            keyboard = []
-            
-            # Free generation button - always show with count
-            user_lang = get_user_language(user_id)
-            if user_lang == 'ru':
-                button_text = f"🎁 Генерировать бесплатно ({remaining_free}/{FREE_GENERATIONS_PER_DAY} осталось)"
-            else:
-                button_text = f"🎁 Generate free ({remaining_free}/{FREE_GENERATIONS_PER_DAY} left)"
-            keyboard.append([
-                InlineKeyboardButton(button_text, callback_data="select_model:z-image")
-            ])
-            
-            # Add referral button
-            referral_link = get_user_referral_link(user_id)
-            if user_lang == 'ru':
-                keyboard.append([
-                    InlineKeyboardButton(f"🎁 Пригласи друга → получи +{REFERRAL_BONUS_GENERATIONS} бесплатных!", callback_data="referral_info")
-                ])
-            else:
-                keyboard.append([
-                    InlineKeyboardButton(f"🎁 Invite friend → get +{REFERRAL_BONUS_GENERATIONS} free!", callback_data="referral_info")
-                ])
-            
-            keyboard.append([])  # Empty row
-            
-            # Show models grouped by category (using registry)
-            for category in categories:
-                category_models = get_models_by_category_from_registry(category)
-                if not category_models:
-                    continue
-                
-                # Add category header button (optional, can be clickable to filter)
-                category_emoji = {
-                    "Видео": "🎬",
-                    "Фото": "📸",
-                    "Изображения": "🖼️",
-                    "Редактирование": "✏️",
-                    "Речь в текст": "🎙️"
-                }.get(category, "📁")
-                
-                # Show ALL models from each category (2 per row)
-                category_rows = []
-                for i, model in enumerate(category_models):  # Show ALL models per category
-                    model_name = model.get('name', model.get('id', 'Unknown'))
-                    model_emoji = model.get('emoji', '🤖')
-                    model_id = model.get('id')
-                    
-                    # Calculate price
-                    default_params = {}
-                    if model_id == "nano-banana-pro":
-                        default_params = {"resolution": "1K"}
-                    elif model_id in ["seedream/4.5-text-to-image", "seedream/4.5-edit"]:
-                        default_params = {"quality": "basic"}
-                    
-                    # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
-                    is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-                    price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
-                    import re
-                    price_match = re.search(r'(\d+\.?\d*)\s*₽', price_text)
-                    if price_match:
-                        price_display = price_match.group(1)
-                        if "От" in price_text or "от" in price_text.lower():
-                            price_display = f"от {price_display}₽"
-                        else:
-                            price_display = f"{price_display}₽"
-                    elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
-                        price_display = "беспл."
-                    else:
-                        min_price = calculate_price_rub(model_id, default_params, is_admin_check, user_id)
-                        price_display = f"{min_price:.2f}₽"
-                    
-                    button_text = f"{model_emoji} {model_name[:15]}"
-                    if len(button_text) > 20:
-                        button_text = f"{model_emoji} {model_name[:12]}..."
-                    button_text_with_price = f"{button_text} {price_display}"
-                    
-                    if len(button_text_with_price) > 60:
-                        button_text_with_price = button_text[:50] + "..."
-                    
-                    callback_data = f"select_model:{model_id}"
-                    if len(callback_data.encode('utf-8')) > 64:
-                        callback_data = f"sel:{model_id[:50]}"
-                    
-                    if i % 2 == 0:
-                        category_rows.append([InlineKeyboardButton(
-                            button_text_with_price,
-                            callback_data=callback_data
-                        )])
-                    else:
-                        if category_rows:
-                            category_rows[-1].append(InlineKeyboardButton(
-                                button_text_with_price,
-                                callback_data=callback_data
-                            ))
-                        else:
-                            category_rows.append([InlineKeyboardButton(
-                                button_text_with_price,
-                                callback_data=callback_data
-                            )])
-                
-                # Add category section
-                if category_rows:
-                    keyboard.append([InlineKeyboardButton(
-                        f"{category_emoji} {category} ({len(category_models)})",
-                        callback_data=f"category:{category}"
-                    )])
-                    keyboard.extend(category_rows)
-                    keyboard.append([])  # Empty row between categories
-            
-            user_lang = get_user_language(query.from_user.id)
-            keyboard.append([InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="show_models")])
-            keyboard.append([InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")])
+            # Используем новый каталог
+            try:
+                from app.helpers.models_menu_handlers import handle_show_all_models_list
+                user_lang = get_user_language(user_id)
+                await handle_show_all_models_list(query, user_id, user_lang)
+                return SELECTING_MODEL
+            except Exception as e:
+                logger.error(f"Error in handle_show_all_models_list: {e}", exc_info=True)
+                user_lang = get_user_language(user_id)
+                if user_lang == 'ru':
+                    error_msg = "❌ Ошибка при загрузке моделей. Попробуйте позже."
+                else:
+                    error_msg = "❌ Error loading models. Please try later."
+                await query.answer(error_msg, show_alert=True)
+                return SELECTING_MODEL
             
             try:
                 await query.edit_message_text(
@@ -7805,19 +7693,70 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         
         # Handle model card display (model:<model_id>)
-        if data.startswith("model:"):
+        if data.startswith("model:") or data.startswith("modelk:"):
             try:
                 await query.answer()
             except:
                 pass
             
+            # Используем новый каталог
+            user_lang = get_user_language(user_id)
+            
+            try:
+                from app.helpers.models_menu_handlers import handle_model_callback
+                success = await handle_model_callback(query, user_id, user_lang, data)
+                
+                if success:
+                    return SELECTING_MODEL
+                else:
+                    return ConversationHandler.END
+            except Exception as e:
+                logger.error(f"Error in handle_model_callback: {e}", exc_info=True)
+                if user_lang == 'ru':
+                    await query.answer("❌ Ошибка при загрузке модели", show_alert=True)
+                else:
+                    await query.answer("❌ Error loading model", show_alert=True)
+                return ConversationHandler.END
+            
+            # Fallback на старый код (если новый обработчик не сработал)
             parts = data.split(":", 1)
             if len(parts) < 2:
                 user_lang = get_user_language(user_id)
                 await query.answer(t('error_invalid_model', lang=user_lang, default="❌ Ошибка: неверный формат запроса"), show_alert=True)
                 return ConversationHandler.END
             
-            model_id = parts[1]
+            model_id = parts[1] if len(parts) > 1 else None
+            if not model_id:
+                # Пробуем разрешить через новый каталог
+                from app.helpers.models_menu import resolve_model_id_from_callback
+                model_id = resolve_model_id_from_callback(data)
+            
+            if not model_id:
+                user_lang = get_user_language(user_id)
+                await query.answer(t('error_model_not_found', lang=user_lang, default="❌ Модель не найдена"), show_alert=True)
+                return ConversationHandler.END
+            
+            # Пробуем получить из нового каталога
+            from app.kie_catalog import get_model as get_model_from_catalog
+            catalog_model = get_model_from_catalog(model_id)
+            
+            if catalog_model:
+                # Используем новый каталог
+                from app.helpers.models_menu import build_model_card_text
+                card_text, keyboard_markup = build_model_card_text(catalog_model, 0, user_lang)
+                try:
+                    await query.edit_message_text(
+                        card_text,
+                        reply_markup=keyboard_markup,
+                        parse_mode='HTML'
+                    )
+                    return SELECTING_MODEL
+                except Exception as e:
+                    logger.error(f"Error showing model card: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка при отображении модели", show_alert=True)
+                    return ConversationHandler.END
+            
+            # Fallback на старый код
             model = get_model_by_id(model_id)
             
             if not model:
@@ -8016,21 +7955,69 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         
         # Handle model: callback - shows model card with "Start" button (canonical format for tests)
-        if data.startswith("model:"):
+        if data.startswith("model:") or data.startswith("modelk:"):
             try:
                 await query.answer()
             except:
                 pass
             
+            # Используем новый каталог
+            user_lang = get_user_language(user_id)
+            
+            try:
+                from app.helpers.models_menu_handlers import handle_model_callback
+                success = await handle_model_callback(query, user_id, user_lang, data)
+                
+                if success:
+                    return SELECTING_MODEL
+                else:
+                    return ConversationHandler.END
+            except Exception as e:
+                logger.error(f"Error in handle_model_callback (second handler): {e}", exc_info=True)
+                # Fallback на старый код
+                pass
+            
+            # Fallback на старый код
             parts = data.split(":", 1)
             if len(parts) < 2:
                 user_lang = get_user_language(user_id)
                 await query.answer(t('error_invalid_model', lang=user_lang, default="❌ Ошибка: неверный формат запроса"), show_alert=True)
                 return ConversationHandler.END
             
-            model_id = parts[1]
+            model_id = parts[1] if len(parts) > 1 else None
+            if not model_id:
+                # Пробуем разрешить через новый каталог
+                from app.helpers.models_menu import resolve_model_id_from_callback
+                model_id = resolve_model_id_from_callback(data)
+            
+            if not model_id:
+                user_lang = get_user_language(user_id)
+                await query.answer(t('error_model_not_found', lang=user_lang, default=f"❌ Модель не найдена"), show_alert=True)
+                return ConversationHandler.END
+            
             logger.info(f"Model card requested: model_id={model_id}, user_id={user_id}")
             
+            # Пробуем получить из нового каталога
+            from app.kie_catalog import get_model as get_model_from_catalog
+            catalog_model = get_model_from_catalog(model_id)
+            
+            if catalog_model:
+                # Используем новый каталог
+                from app.helpers.models_menu import build_model_card_text
+                card_text, keyboard_markup = build_model_card_text(catalog_model, 0, user_lang)
+                try:
+                    await query.edit_message_text(
+                        card_text,
+                        reply_markup=keyboard_markup,
+                        parse_mode='HTML'
+                    )
+                    return SELECTING_MODEL
+                except Exception as e:
+                    logger.error(f"Error showing model card: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка при отображении модели", show_alert=True)
+                    return ConversationHandler.END
+            
+            # Fallback на старый код
             # Get model from registry
             model_info = get_model_by_id_from_registry(model_id)
             if not model_info:
@@ -11889,6 +11876,93 @@ async def start_generation_directly(
     # Дополнительная валидация через kie_validator не нужна, т.к. она валидирует по YAML,
     # а параметры уже адаптированы к API формату
     
+    # 🔴 КРИТИЧНО: Списание баланса ДО создания задачи (атомарно)
+    # Используем цену из каталога (official_usd * курс * 2)
+    if not is_admin_user and not is_free:
+        # Получаем цену из каталога
+        from app.services.pricing_service import price_for_model_rub, get_model_price_info
+        from app.config import get_settings
+        
+        settings = get_settings()
+        mode_index = 0  # По умолчанию первый режим
+        price_rub_catalog = price_for_model_rub(model_id, mode_index, settings)
+        
+        if price_rub_catalog is None:
+            logger.error(f"Price not found in catalog for model {model_id}, using calculated price")
+            price_rub_catalog = price
+        
+        # Логируем информацию о цене
+        price_info = get_model_price_info(model_id, mode_index, settings)
+        if price_info:
+            logger.info(
+                f"PRICE_RUB={price_rub_catalog} OFFICIAL_USD={price_info['official_usd']:.4f} "
+                f"MULT={price_info['price_multiplier']} RATE={price_info['usd_to_rub']} "
+                f"MODEL={model_id} USER={user_id}"
+            )
+        
+        # Проверяем баланс
+        user_balance_check = await get_user_balance_async(user_id)
+        if user_balance_check < price_rub_catalog:
+            price_str = f"{price_rub_catalog:.2f}".rstrip('0').rstrip('.')
+            balance_str = f"{user_balance_check:.2f}".rstrip('0').rstrip('.')
+            user_lang_check = get_user_language(user_id)
+            needed = price_rub_catalog - user_balance_check
+            needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+            
+            if user_lang_check == 'ru':
+                insufficient_msg = (
+                    f"❌ <b>Недостаточно средств</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
+                    f"💰 <b>Требуется:</b> {price_str} ₽\n"
+                    f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 Пополните баланс для генерации"
+                )
+            else:
+                insufficient_msg = (
+                    f"❌ <b>Insufficient funds</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💳 <b>Your balance:</b> {balance_str} ₽\n"
+                    f"💰 <b>Required:</b> {price_str} ₽\n"
+                    f"❌ <b>Missing:</b> {needed_str} ₽\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 Top up balance to generate"
+                )
+            
+            keyboard = [
+                [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang_check), callback_data="topup_balance")],
+                [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang_check), callback_data="back_to_menu")]
+            ]
+            
+            await status_message.edit_text(insufficient_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+            return ConversationHandler.END
+        
+        # Списываем баланс ДО создания задачи
+        success = await subtract_user_balance_async(user_id, price_rub_catalog)
+        if not success:
+            logger.error(f"Failed to deduct balance for user {user_id}, amount {price_rub_catalog}")
+            user_lang_check = get_user_language(user_id)
+            error_msg = (
+                f"❌ <b>Ошибка списания баланса</b>\n\n"
+                f"Попробуйте позже или обратитесь в поддержку."
+            ) if user_lang_check == 'ru' else (
+                f"❌ <b>Balance deduction error</b>\n\n"
+                f"Please try later or contact support."
+            )
+            await status_message.edit_text(error_msg, parse_mode='HTML')
+            return ConversationHandler.END
+        
+        # Логируем успешное списание
+        new_balance = await get_user_balance_async(user_id)
+        logger.info(
+            f"BALANCE VERIFIED: user_id={user_id} deducted={price_rub_catalog} "
+            f"old_balance={user_balance_check:.2f} new_balance={new_balance:.2f} model={model_id}"
+        )
+        
+        # Обновляем price для дальнейшего использования
+        price = price_rub_catalog
+    
     # Create task
     # CRITICAL: Log exact API parameters being sent (for KIE API compliance)
     import json
@@ -11899,7 +11973,16 @@ async def start_generation_directly(
     try:
         import time
         start_time = time.time()
-        result = await gateway.create_task(model_id, api_params)
+        
+        # Получаем callback URL если настроен
+        callback_url = None
+        try:
+            from app.services.kie_input_builder import get_callback_url
+            callback_url = get_callback_url()
+        except:
+            pass
+        
+        result = await gateway.create_task(model_id, api_params, callback_url=callback_url)
         elapsed = time.time() - start_time
         
         # Логируем время отклика
@@ -12195,6 +12278,40 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Параметры нормализованы, используем api_params вместо params
     params = api_params
+    
+    # 🔴 КРИТИЧНО: Используем builder из каталога для фильтрации по типу модели
+    try:
+        from app.kie_catalog import get_model
+        from app.services.kie_input_builder import build_input, get_callback_url
+        
+        model_spec = get_model(model_id)
+        if model_spec:
+            # Строим input строго по типу модели (whitelist + валидация)
+            mode_index = 0  # TODO: определить mode_index из параметров если нужно
+            built_input, build_error = build_input(model_spec, api_params, mode_index)
+            
+            if build_error:
+                # Мягкая ошибка валидации - показываем пользователю
+                user_lang = get_user_language(user_id) if user_id else 'ru'
+                error_text = (
+                    f"❌ <b>{build_error}</b>\n\n"
+                    f"Пожалуйста, проверьте параметры и попробуйте снова."
+                ) if user_lang == 'ru' else (
+                    f"❌ <b>{build_error}</b>\n\n"
+                    f"Please check parameters and try again."
+                )
+                await send_or_edit_message(error_text)
+                return ConversationHandler.END
+            
+            # Используем отфильтрованный input
+            api_params = built_input
+            logger.info(f"✅ Input built from catalog: MODEL={model_id} TYPE={model_spec.type} KEYS={list(built_input.keys())}")
+        else:
+            logger.warning(f"⚠️ Model {model_id} not found in catalog, using original api_params")
+    except Exception as e:
+        logger.error(f"❌ Error building input from catalog: {e}", exc_info=True)
+        # Fallback: используем оригинальные api_params
+        pass
     
     # Check if this is a free generation
     is_free = is_free_generation_available(user_id, model_id)
@@ -23640,6 +23757,93 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         # REAL GENERATION: Используем gateway
         gateway = get_kie_gateway()
+        
+        # 🔴 КРИТИЧНО: Списание баланса ДО создания задачи (атомарно)
+        # Используем цену из каталога (official_usd * курс * 2)
+        if not is_admin_user and not is_free:
+            # Получаем цену из каталога
+            from app.services.pricing_service import price_for_model_rub, get_model_price_info
+            from app.config import get_settings
+            
+            settings = get_settings()
+            mode_index = 0  # По умолчанию первый режим
+            price_rub_catalog = price_for_model_rub(model_id, mode_index, settings)
+            
+            if price_rub_catalog is None:
+                logger.error(f"Price not found in catalog for model {model_id}, using calculated price")
+                price_rub_catalog = price
+            
+            # Логируем информацию о цене
+            price_info = get_model_price_info(model_id, mode_index, settings)
+            if price_info:
+                logger.info(
+                    f"PRICE_RUB={price_rub_catalog} OFFICIAL_USD={price_info['official_usd']:.4f} "
+                    f"MULT={price_info['price_multiplier']} RATE={price_info['usd_to_rub']} "
+                    f"MODEL={model_id} USER={user_id}"
+                )
+            
+            # Проверяем баланс
+            user_balance_check = await get_user_balance_async(user_id)
+            if user_balance_check < price_rub_catalog:
+                price_str = f"{price_rub_catalog:.2f}".rstrip('0').rstrip('.')
+                balance_str = f"{user_balance_check:.2f}".rstrip('0').rstrip('.')
+                user_lang_check = get_user_language(user_id)
+                needed = price_rub_catalog - user_balance_check
+                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                
+                if user_lang_check == 'ru':
+                    insufficient_msg = (
+                        f"❌ <b>Недостаточно средств</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
+                        f"💰 <b>Требуется:</b> {price_str} ₽\n"
+                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 Пополните баланс для генерации"
+                    )
+                else:
+                    insufficient_msg = (
+                        f"❌ <b>Insufficient funds</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💳 <b>Your balance:</b> {balance_str} ₽\n"
+                        f"💰 <b>Required:</b> {price_str} ₽\n"
+                        f"❌ <b>Missing:</b> {needed_str} ₽\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 Top up balance to generate"
+                    )
+                
+                keyboard = [
+                    [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang_check), callback_data="topup_balance")],
+                    [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang_check), callback_data="back_to_menu")]
+                ]
+                
+                await query.edit_message_text(insufficient_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+                return ConversationHandler.END
+            
+            # Списываем баланс ДО создания задачи
+            success = await subtract_user_balance_async(user_id, price_rub_catalog)
+            if not success:
+                logger.error(f"Failed to deduct balance for user {user_id}, amount {price_rub_catalog}")
+                user_lang_check = get_user_language(user_id)
+                error_msg = (
+                    f"❌ <b>Ошибка списания баланса</b>\n\n"
+                    f"Попробуйте позже или обратитесь в поддержку."
+                ) if user_lang_check == 'ru' else (
+                    f"❌ <b>Balance deduction error</b>\n\n"
+                    f"Please try later or contact support."
+                )
+                await query.edit_message_text(error_msg, parse_mode='HTML')
+                return ConversationHandler.END
+            
+            # Логируем успешное списание
+            new_balance = await get_user_balance_async(user_id)
+            logger.info(
+                f"BALANCE VERIFIED: user_id={user_id} deducted={price_rub_catalog} "
+                f"old_balance={user_balance_check:.2f} new_balance={new_balance:.2f} model={model_id}"
+            )
+            
+            # Обновляем price для дальнейшего использования
+            price = price_rub_catalog
         
         # Create task (for async models like z-image) with retry logic
         # ⚠️ КРИТИЧНО: Логирование всех параметров перед отправкой в KIE API

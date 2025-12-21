@@ -83,6 +83,38 @@ def load_settings():
             logger.error("[FAIL] Data directory not writable, exiting")
             sys.exit(1)
         
+        # Проверяем каталог моделей при старте
+        try:
+            # Импортируем функцию проверки напрямую
+            import sys
+            from pathlib import Path
+            verify_script = Path(__file__).parent.parent / "scripts" / "verify_catalog.py"
+            if verify_script.exists():
+                # Добавляем scripts в путь для импорта
+                scripts_dir = str(verify_script.parent)
+                if scripts_dir not in sys.path:
+                    sys.path.insert(0, scripts_dir)
+                
+                # Импортируем функцию verify_catalog
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("verify_catalog", verify_script)
+                verify_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(verify_module)
+                
+                logger.info("=" * 60)
+                logger.info("CATALOG VERIFICATION")
+                logger.info("=" * 60)
+                if not verify_module.verify_catalog():
+                    logger.error("[FAIL] Catalog verification failed, exiting")
+                    sys.exit(1)
+                logger.info("[OK] Catalog verification passed")
+        except ImportError as e:
+            logger.warning(f"[WARN] Could not import catalog verification: {e}")
+            # Не останавливаем бота, только предупреждаем
+        except Exception as e:
+            logger.warning(f"[WARN] Catalog verification error: {e}")
+            # Не останавливаем бота, только предупреждаем
+        
         return settings
     except SystemExit:
         raise

@@ -756,6 +756,47 @@ async def test_regression_guards():
                 os.environ.pop("KIE_STUB", None)
 
 
+def test_catalog_verification():
+    """Проверяет каталог моделей через verify_catalog.py"""
+    print("\n" + "=" * 60)
+    print("TEST: Catalog verification")
+    print("=" * 60)
+    
+    import subprocess
+    
+    try:
+        # Запускаем скрипт проверки каталога
+        script_path = Path(__file__).parent / "verify_catalog.py"
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=60  # 1 минута максимум
+        )
+        
+        # Выводим результат
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print("STDERR:", result.stderr)
+        
+        if result.returncode == 0:
+            print("[OK] Catalog verification passed")
+            return True
+        else:
+            print(f"[FAIL] Catalog verification failed with exit code {result.returncode}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("[FAIL] Catalog verification timed out (>1 minute)")
+        return False
+    except Exception as e:
+        print(f"[FAIL] Catalog verification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def main():
     """Главная функция проверки"""
     print("=" * 60)
@@ -764,6 +805,7 @@ def main():
     print()
     
     tests = [
+        ("Catalog verification", test_catalog_verification),
         ("pytest -q", test_pytest),
         ("Smoke test всех моделей", test_smoke_all_models),
         ("Import проверки", test_imports_no_side_effects),

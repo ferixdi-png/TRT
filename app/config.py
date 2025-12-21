@@ -87,6 +87,22 @@ class Settings:
         except ValueError:
             self.credit_to_rub_rate = 0.1
             logger.warning(f"Invalid CREDIT_TO_RUB_RATE: {credit_rate_str}, using 0.1")
+        
+        # Currency conversion
+        usd_to_rub_str = os.getenv('USD_TO_RUB', '100.0')
+        try:
+            self.usd_to_rub = float(usd_to_rub_str)
+        except ValueError:
+            self.usd_to_rub = 100.0
+            logger.warning(f"Invalid USD_TO_RUB: {usd_to_rub_str}, using 100.0")
+        
+        # Price multiplier (×2 для пользовательских цен)
+        price_multiplier_str = os.getenv('PRICE_MULTIPLIER', '2.0')
+        try:
+            self.price_multiplier = float(price_multiplier_str)
+        except ValueError:
+            self.price_multiplier = 2.0
+            logger.warning(f"Invalid PRICE_MULTIPLIER: {price_multiplier_str}, using 2.0")
     
     def get_storage_mode(self) -> str:
         """
