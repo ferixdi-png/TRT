@@ -47,7 +47,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Verify critical files exist
 RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml not found!" && exit 1) && \
     python3 -c "import yaml" || (echo "ERROR: PyYAML not installed!" && exit 1) && \
-    python3 -c "from app.config import get_settings, Settings" || (echo "ERROR: app.config import failed!" && exit 1) && \
+    test -f /app/app/config.py || (echo "ERROR: app/config.py not found!" && exit 1) && \
+    python3 -c "from app.config import get_settings, Settings; print('✅ app.config import OK')" || (echo "ERROR: app.config import failed!" && exit 1) && \
     echo "✅ Critical files verified"
 
 # Start the bot using Render-first entrypoint
