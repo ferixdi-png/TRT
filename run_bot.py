@@ -7,6 +7,7 @@ This script starts the bot and handles graceful shutdown
 import sys
 import os
 import logging
+import asyncio
 
 # Setup logging first
 logging.basicConfig(
@@ -25,12 +26,17 @@ def main():
         # Import and run bot
         from bot_kie import main as bot_main
         logger.info("🚀 Starting KIE Telegram Bot...")
-        bot_main()
+        logger.info("📦 Python version: %s", sys.version)
+        logger.info("📁 Working directory: %s", os.getcwd())
+        
+        # bot_main is async, so we need to run it with asyncio
+        asyncio.run(bot_main())
     except KeyboardInterrupt:
         logger.info("🛑 Bot stopped by user")
         sys.exit(0)
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}", exc_info=True)
+        logger.error("❌ Bot failed to start. Check logs above for details.")
         sys.exit(1)
 
 if __name__ == "__main__":

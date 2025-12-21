@@ -295,6 +295,10 @@ except Exception as e:
 storage = None
 kie = None
 
+# PostgreSQL advisory lock connection (global для keep-alive задачи)
+lock_conn = None
+lock_key_int = None
+
 # Store user sessions
 user_sessions = {}
 
@@ -2325,88 +2329,138 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a marketing welcome message with model selection."""
-    user = update.effective_user
-    user_id = user.id
-    
-    # Check if language is set, if not - show language selection
-    if not has_user_language_set(user_id):
-        keyboard = [
-            [
-                InlineKeyboardButton("🇷🇺 Русский", callback_data="language_select:ru"),
-                InlineKeyboardButton("🇬🇧 English", callback_data="language_select:en")
+    try:
+        logger.info(f"🔥 /start command received from user_id={update.effective_user.id if update.effective_user else 'None'}")
+        
+        user = update.effective_user
+        if not user:
+            logger.error("❌ No effective_user in update")
+            return
+        
+        user_id = user.id
+        
+        # Check if language is set, if not - show language selection
+        if not has_user_language_set(user_id):
+            keyboard = [
+                [
+                    InlineKeyboardButton("🇷🇺 Русский", callback_data="language_select:ru"),
+                    InlineKeyboardButton("🇬🇧 English", callback_data="language_select:en")
+                ]
             ]
-        ]
-        # Определяем язык пользователя по его Telegram языку или используем английский как более универсальный
-        user_lang_code = update.effective_user.language_code or 'en'
-        # Если язык не русский, показываем на английском
-        display_lang = 'ru' if user_lang_code.startswith('ru') else 'en'
+            # Определяем язык пользователя по его Telegram языку или используем английский как более универсальный
+            user_lang_code = update.effective_user.language_code or 'en'
+            # Если язык не русский, показываем на английском
+            display_lang = 'ru' if user_lang_code.startswith('ru') else 'en'
+            
+            await update.message.reply_html(
+                t('select_language', lang=display_lang),
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            logger.info(f"✅ Language selection shown for user_id={user_id}")
+            return
+        
+        # Check if user is admin
+        is_admin = (user_id == ADMIN_ID)
+        
+        # Get user language
+        user_lang = get_user_language(user_id)
+        
+        # Get generation types and models count
+        generation_types = get_generation_types()
+        total_models = len(KIE_MODELS)
+        
+        # Both admin and regular users see the same menu, but admin gets additional "Admin Panel" button
+        # Common menu for both admin and regular users
+        remaining_free = get_user_free_generations_remaining(user_id)
+        is_new = is_new_user(user_id)
+        referral_link = get_user_referral_link(user_id)
+        referrals_count = len(get_user_referrals(user_id))
+        online_count = get_fake_online_count()
+        
+        # Use translations
+        if is_new:
+            welcome_text = t('welcome_new', lang=user_lang,
+                            name=user.mention_html(),
+                            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+                            models=total_models,
+                            types=len(generation_types),
+                            online=online_count,
+                            ref_bonus=REFERRAL_BONUS_GENERATIONS,
+                            ref_link=referral_link)
+        else:
+            referral_bonus_text = ""
+            if referrals_count > 0:
+                referral_bonus_text = t('msg_referral_bonus', lang=user_lang,
+                                        count=referrals_count,
+                                        bonus=referrals_count * REFERRAL_BONUS_GENERATIONS)
+            
+            welcome_text = t('welcome_returning', lang=user_lang,
+                            name=user.mention_html(),
+                            online=online_count,
+                            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+                            models=total_models,
+                            types=len(generation_types))
+            welcome_text += referral_bonus_text
+            
+            # Add full functionality text using translations
+            welcome_text += t('msg_full_functionality', lang=user_lang,
+                            remaining=remaining_free,
+                            total=FREE_GENERATIONS_PER_DAY,
+                            ref_bonus=REFERRAL_BONUS_GENERATIONS,
+                            ref_link=referral_link,
+                            models=total_models,
+                            types=len(generation_types))
+        
+        # Common keyboard for both admin and regular users
+        # Используем helpers для устранения дублирования
+        keyboard = await build_main_menu_keyboard(user_id, user_lang, is_new)
         
         await update.message.reply_html(
-            t('select_language', lang=display_lang),
+            welcome_text,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return
-    
-    # Check if user is admin
-    is_admin = (user_id == ADMIN_ID)
-    
-    # Get user language
-    user_lang = get_user_language(user_id)
-    
-    # Get generation types and models count
-    generation_types = get_generation_types()
-    total_models = len(KIE_MODELS)
-    
-    # Both admin and regular users see the same menu, but admin gets additional "Admin Panel" button
-    # Common menu for both admin and regular users
-    remaining_free = get_user_free_generations_remaining(user_id)
-    is_new = is_new_user(user_id)
-    referral_link = get_user_referral_link(user_id)
-    referrals_count = len(get_user_referrals(user_id))
-    online_count = get_fake_online_count()
-    
-    # Use translations
-    if is_new:
-        welcome_text = t('welcome_new', lang=user_lang,
-                        name=user.mention_html(),
-                        free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                        models=total_models,
-                        types=len(generation_types),
-                        online=online_count,
-                        ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                        ref_link=referral_link)
-    else:
-        referral_bonus_text = ""
-        if referrals_count > 0:
-            referral_bonus_text = t('msg_referral_bonus', lang=user_lang,
-                                    count=referrals_count,
-                                    bonus=referrals_count * REFERRAL_BONUS_GENERATIONS)
         
-        welcome_text = t('welcome_returning', lang=user_lang,
-                        name=user.mention_html(),
-                        online=online_count,
-                        free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                        models=total_models,
-                        types=len(generation_types))
-        welcome_text += referral_bonus_text
+        logger.info(f"✅ /start command completed successfully for user_id={user_id}")
         
-        # Add full functionality text using translations
-        welcome_text += t('msg_full_functionality', lang=user_lang,
-                        remaining=remaining_free,
-                        total=FREE_GENERATIONS_PER_DAY,
-                        ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                        ref_link=referral_link,
-                        models=total_models,
-                        types=len(generation_types))
-    
-    # Common keyboard for both admin and regular users
-    # Используем helpers для устранения дублирования
-    keyboard = await build_main_menu_keyboard(user_id, user_lang, is_new)
-    
-    await update.message.reply_html(
-        welcome_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    except Exception as e:
+        logger.error(f"❌❌❌ ERROR in /start command: {e}", exc_info=True)
+        logger.error(f"   User ID: {update.effective_user.id if update.effective_user else 'None'}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        
+        # Try to send error message to user
+        try:
+            user_lang = 'ru'
+            if update.effective_user:
+                try:
+                    user_lang = get_user_language(update.effective_user.id) if update.effective_user else 'ru'
+                except:
+                    pass
+            
+            error_msg = "❌ Произошла ошибка при запуске бота. Попробуйте еще раз."
+            await update.message.reply_text(error_msg)
+        except Exception as send_error:
+            logger.error(f"❌ Failed to send error message to user: {send_error}", exc_info=True)
+        
+        logger.info(f"✅ /start command completed successfully for user_id={user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌❌❌ ERROR in /start command: {e}", exc_info=True)
+        logger.error(f"   User ID: {update.effective_user.id if update.effective_user else 'None'}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        
+        # Try to send error message to user
+        try:
+            user_lang = 'ru'
+            if update.effective_user:
+                try:
+                    user_lang = get_user_language(update.effective_user.id) if update.effective_user else 'ru'
+                except:
+                    pass
+            
+            error_msg = "❌ Произошла ошибка при запуске бота. Попробуйте еще раз."
+            await update.message.reply_text(error_msg)
+        except Exception as send_error:
+            logger.error(f"❌ Failed to send error message to user: {send_error}", exc_info=True)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -24969,6 +25023,35 @@ async def main():
     """Start the bot."""
     global storage, kie, DATABASE_AVAILABLE, lock_conn, lock_key_int
     
+    # ==================== НАЧАЛЬНАЯ ДИАГНОСТИКА ====================
+    logger.info("=" * 60)
+    logger.info("🚀 Starting KIE Telegram Bot")
+    logger.info("=" * 60)
+    logger.info(f"📦 Python version: {sys.version}")
+    logger.info(f"📁 Working directory: {os.getcwd()}")
+    logger.info(f"🆔 Process ID: {os.getpid()}")
+    logger.info(f"🌍 Platform: {platform.system()} {platform.release()}")
+    
+    # Проверка критичных переменных окружения
+    bot_token_set = bool(BOT_TOKEN)
+    kie_api_key_set = bool(os.getenv('KIE_API_KEY'))
+    database_url_set = bool(os.getenv('DATABASE_URL'))
+    
+    logger.info(f"🔑 BOT_TOKEN: {'✅ Set' if bot_token_set else '❌ NOT SET'}")
+    logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key_set else '❌ NOT SET'}")
+    logger.info(f"🗄️ DATABASE_URL: {'✅ Set' if database_url_set else '⚠️ Not set (using JSON storage)'}")
+    
+    if not bot_token_set:
+        logger.error("❌❌❌ CRITICAL: TELEGRAM_BOT_TOKEN is not set!")
+        logger.error("   Bot cannot start without a valid token.")
+        logger.error("   Set TELEGRAM_BOT_TOKEN in Render Dashboard → Environment")
+        sys.exit(1)
+    
+    if not kie_api_key_set:
+        logger.warning("⚠️ KIE_API_KEY is not set - KIE AI features will not work")
+    
+    logger.info("=" * 60)
+    
     # ==================== POSTGRESQL ADVISORY LOCK (ПЕРЕД ВСЕМ) ====================
     # КРИТИЧНО: Используем PostgreSQL advisory lock для предотвращения 409 Conflict
     # Это работает между разными Render сервисами с общим DATABASE_URL
@@ -24997,8 +25080,8 @@ async def main():
                 logger.error("❌❌❌ Another instance holds PostgreSQL advisory lock!")
                 logger.error("   Exiting to avoid getUpdates conflict (409 Conflict)")
                 logger.error("   Only ONE instance should be running per TELEGRAM_BOT_TOKEN")
-                import sys
-                sys.exit(0)
+                # Используем os._exit для немедленного завершения без cleanup
+                os._exit(1)
             
             logger.info("✅ PostgreSQL advisory lock acquired - this is the leader instance")
             
@@ -25015,30 +25098,57 @@ async def main():
                         logger.error(f"Error releasing lock on exit: {e}")
             atexit.register(release_lock_on_exit)
             
+        except ImportError as e:
+            logger.error(f"❌ Failed to import lock modules: {e}", exc_info=True)
+            logger.error("   Module 'render_singleton_lock' or 'database' not found")
+            logger.error("   Falling back to file-based singleton lock")
+            # Fallback на file lock если модули недоступны
+            try:
+                bot_mode = get_bot_mode()
+                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
+                singleton_lock = get_singleton_lock(lock_key)
+                if not singleton_lock.acquire(timeout=5):
+                    logger.error("❌❌❌ Another bot instance detected (file lock held)!")
+                    logger.error("   Exiting immediately to prevent 409 Conflict...")
+                    os._exit(1)
+                logger.info("✅ File-based singleton lock acquired (modules unavailable)")
+            except Exception as fallback_error:
+                logger.error(f"❌ Failed to acquire file lock: {fallback_error}", exc_info=True)
+                logger.error("   Error details:", exc_info=True)
+                logger.error("   Exiting to prevent conflicts...")
+                os._exit(1)
         except Exception as e:
             logger.error(f"❌ Failed to acquire PostgreSQL advisory lock: {e}", exc_info=True)
             logger.error("   Falling back to file-based singleton lock")
             # Fallback на file lock если БД недоступна
+            try:
+                bot_mode = get_bot_mode()
+                lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
+                singleton_lock = get_singleton_lock(lock_key)
+                if not singleton_lock.acquire(timeout=5):
+                    logger.error("❌❌❌ Another bot instance detected (file lock held)!")
+                    logger.error("   Exiting immediately to prevent 409 Conflict...")
+                    os._exit(1)
+                logger.info("✅ File-based singleton lock acquired (DB unavailable)")
+            except Exception as fallback_error:
+                logger.error(f"❌ Failed to acquire file lock: {fallback_error}", exc_info=True)
+                logger.error("   Exiting to prevent conflicts...")
+                os._exit(1)
+    else:
+        logger.warning("⚠️ DATABASE_URL not available, using file-based singleton lock")
+        try:
             bot_mode = get_bot_mode()
             lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
             singleton_lock = get_singleton_lock(lock_key)
             if not singleton_lock.acquire(timeout=5):
                 logger.error("❌❌❌ Another bot instance detected (file lock held)!")
                 logger.error("   Exiting immediately to prevent 409 Conflict...")
-                import os
                 os._exit(1)
-            logger.info("✅ File-based singleton lock acquired (DB unavailable)")
-    else:
-        logger.warning("⚠️ DATABASE_URL not available, using file-based singleton lock")
-        bot_mode = get_bot_mode()
-        lock_key = f"telegram_bot_{bot_mode}_{BOT_TOKEN[:10]}"
-        singleton_lock = get_singleton_lock(lock_key)
-        if not singleton_lock.acquire(timeout=5):
-            logger.error("❌❌❌ Another bot instance detected (file lock held)!")
-            logger.error("   Exiting immediately to prevent 409 Conflict...")
-            import os
+            logger.info("✅ File-based singleton lock acquired")
+        except Exception as e:
+            logger.error(f"❌ Failed to acquire file lock: {e}", exc_info=True)
+            logger.error("   Exiting to prevent conflicts...")
             os._exit(1)
-        logger.info("✅ File-based singleton lock acquired")
     
     # CRITICAL: Ensure data directory exists and is writable before anything else
     logger.info("🔒 Ensuring data persistence...")
@@ -25070,7 +25180,9 @@ async def main():
             logger.info("✅ Database initialized successfully (schema ok)")
             logger.info("✅ Data will be saved to PostgreSQL")
         except Exception as e:
-            logger.error(f"❌ Failed to initialize database: {e}")
+            logger.error(f"❌ Failed to initialize database: {e}", exc_info=True)
+            logger.error(f"   Error type: {type(e).__name__}")
+            logger.error(f"   Error message: {str(e)}")
             logger.warning("⚠️ Bot will continue with JSON fallback storage")
             # Set DATABASE_AVAILABLE to False to use JSON fallback
             DATABASE_AVAILABLE = False
@@ -25880,7 +25992,7 @@ async def main():
             # ==================== КРИТИЧНО: Обработка 409 Conflict ====================
             # Если это Conflict ошибка, обрабатываем её специально (graceful exit)
             from telegram.error import Conflict as TelegramConflict
-            if isinstance(error, TelegramConflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg:
+            if isinstance(error, TelegramConflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "409" in error_msg:
                 logger.error(f"❌❌❌ 409 CONFLICT DETECTED: {error_msg}")
                 logger.error("   Another bot instance is running or webhook is active")
                 logger.error("   This process will exit gracefully to prevent conflicts")
@@ -25888,10 +26000,12 @@ async def main():
                 logger.error("      1. Check Render Dashboard - ensure only ONE service is running")
                 logger.error("      2. Check local runs - stop all bot instances")
                 logger.error("      3. Verify singleton lock is working correctly")
-                handle_conflict_gracefully(error, "polling")
+                logger.error("      4. Ensure webhook is deleted: curl https://api.telegram.org/bot<TOKEN>/deleteWebhook?drop_pending_updates=true")
+                try:
+                    handle_conflict_gracefully(error, "polling")
+                except Exception as e:
+                    logger.error(f"   Error in handle_conflict_gracefully: {e}")
                 # КРИТИЧНО: Немедленно завершаем процесс
-                import os
-                import sys
                 logger.error("   Exiting process immediately to prevent repeated conflicts...")
                 os._exit(1)  # Немедленный выход без cleanup (предотвращает повторные ошибки)
             
@@ -26344,15 +26458,84 @@ async def main():
             else:
                 logger.info("✅ Webhook подтверждён как удалённый")
         except Exception as e:
-            logger.warning(f"⚠️ Ошибка при финальной проверке webhook: {e}")
+            logger.warning(f"⚠️ Ошибка при финальной проверке webhook: {e}", exc_info=True)
+            logger.warning(f"   Error type: {type(e).__name__}")
         
         logger.info("📡 Запуск polling...")
+        logger.info("   This may take a few seconds...")
         
-        # PostgreSQL advisory lock уже проверен в начале main()
-        # Дополнительная проверка через Telegram API не нужна, но оставляем для безопасности
-        # PostgreSQL advisory lock уже проверен в начале main()
-        # Дополнительная проверка не нужна, но логируем что проверки пройдены
+        # КРИТИЧНО: Проверяем, что advisory lock все еще активен перед запуском polling
+        if DATABASE_AVAILABLE and lock_conn is None:
+            logger.error("❌❌❌ Advisory lock не получен! Невозможно запустить polling.")
+            logger.error("   DATABASE_AVAILABLE=True but lock_conn is None")
+            logger.error("   This should not happen - lock should be acquired at startup")
+            logger.error("   Exiting to prevent 409 Conflict...")
+            os._exit(1)
+        
+        # Дополнительная проверка lock перед запуском polling
+        if DATABASE_AVAILABLE and lock_conn:
+            try:
+                # Проверяем, что соединение с lock живое (не пытаемся получить lock дважды!)
+                with lock_conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                logger.info("✅ Advisory lock verified - connection alive")
+            except Exception as e:
+                logger.error(f"❌ Advisory lock connection check failed: {e}")
+                logger.error("   Exiting to prevent 409 Conflict...")
+                os._exit(1)
+        
         logger.info("✅ All conflict checks passed - advisory lock active")
+        
+        # Запускаем keep-alive задачу для advisory lock (после инициализации application)
+        if lock_conn and lock_key_int:
+            async def keep_lock_alive_task():
+                """Периодически проверяет, что advisory lock активен"""
+                global lock_conn, lock_key_int
+                while True:
+                    try:
+                        await asyncio.sleep(30)  # Проверка каждые 30 секунд
+                        if lock_conn and not lock_conn.closed:
+                            # Простая проверка соединения
+                            try:
+                                with lock_conn.cursor() as cur:
+                                    cur.execute("SELECT 1")
+                                    cur.fetchone()
+                                logger.debug("✅ Advisory lock connection alive")
+                            except Exception as conn_e:
+                                logger.warning(f"⚠️ Connection check failed: {conn_e}, attempting reconnect...")
+                                # Обновляем глобальную переменную модуля
+                                import bot_kie
+                                bot_kie.lock_conn = None
+                                lock_conn = None  # Помечаем как потерянное
+                        else:
+                            logger.error("❌ Advisory lock connection lost! Lock may be released.")
+                            # Попытка переподключения
+                            try:
+                                from database import get_connection_pool
+                                from render_singleton_lock import acquire_lock_session
+                                pool = get_connection_pool()
+                                new_lock_conn = acquire_lock_session(pool, lock_key_int)
+                                if new_lock_conn:
+                                    logger.info("✅ Advisory lock reacquired")
+                                    # Обновляем глобальную переменную модуля
+                                    import bot_kie
+                                    bot_kie.lock_conn = new_lock_conn
+                                    lock_conn = new_lock_conn  # Также обновляем локальную ссылку
+                                else:
+                                    logger.error("❌ Failed to reacquire lock - another instance may be running")
+                                    logger.error("❌ Exiting to prevent 409 Conflict...")
+                                    os._exit(1)
+                            except Exception as e:
+                                logger.error(f"❌ Error reacquiring lock: {e}", exc_info=True)
+                                # Если не удалось переподключиться - выходим
+                                logger.error("❌ Exiting to prevent 409 Conflict...")
+                                os._exit(1)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error in keep_lock_alive: {e}")
+            
+            asyncio.create_task(keep_lock_alive_task())
+            logger.info("✅ Advisory lock keep-alive task started")
         
         # ВСЕ проверки пройдены - запускаем polling
         try:
@@ -26360,9 +26543,20 @@ async def main():
             logger.info("✅ Polling started successfully!")
         except Conflict as e:
             logger.error("❌❌❌ Conflict при запуске polling - немедленный выход")
+            logger.error(f"   Conflict details: {e}")
             handle_conflict_gracefully(e, "polling")
-            import os
             os._exit(1)  # Немедленный выход
+        except Exception as e:
+            error_msg = str(e)
+            if "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
+                logger.error("❌❌❌ Conflict detected in exception handler - немедленный выход")
+                logger.error(f"   Error: {error_msg}")
+                from telegram.error import Conflict as TelegramConflict
+                handle_conflict_gracefully(TelegramConflict(error_msg), "polling")
+                os._exit(1)
+            else:
+                logger.error(f"❌ Unexpected error starting polling: {e}", exc_info=True)
+                raise
     
     # Выполняем preflight проверку
     logger.info("🚀 Starting preflight check (webhook removal + conflict detection)...")
@@ -26473,6 +26667,14 @@ if __name__ == '__main__':
     
     # Единая точка входа через asyncio.run
     # НЕ запускаем бота при импортах - только при прямом вызове
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user (KeyboardInterrupt)")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"❌ Fatal error in main(): {e}", exc_info=True)
+        logger.error("❌ Bot failed to start. Check logs above for details.")
+        sys.exit(1)
 
 
