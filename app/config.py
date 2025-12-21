@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 # Глобальный экземпляр settings (singleton)
 _settings: Optional['Settings'] = None
 
+# Явный экспорт для импорта
+__all__ = ['Settings', 'get_settings', 'reset_settings']
+
 
 class Settings:
     """Application settings loaded from environment variables"""
