@@ -8044,11 +8044,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [
                     [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
                 ]
-                await query.edit_message_text(
-                    t('error_model_unavailable', lang=user_lang) or "Модель временно недоступна",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
+                error_msg = t('error_model_unavailable', lang=user_lang) or "Модель временно недоступна"
+                try:
+                    await query.edit_message_text(
+                        error_msg,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='HTML'
+                    )
+                except Exception as edit_error:
+                    logger.warning(f"Could not edit message for coming_soon model: {edit_error}")
+                    try:
+                        await query.message.reply_text(error_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+                        try:
+                            await query.message.delete()
+                        except:
+                            pass
+                    except:
+                        await query.answer(error_msg, show_alert=True)
                 return ConversationHandler.END
             
             # Show model card with info and "Start" button
@@ -8095,11 +8107,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
             ]
             
-            await query.edit_message_text(
-                model_info_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
-            )
+            # Try to edit message, fallback to reply if edit fails
+            try:
+                await query.edit_message_text(
+                    model_info_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+            except Exception as edit_error:
+                logger.warning(f"Could not edit message in model: handler: {edit_error}, sending new message")
+                try:
+                    await query.message.reply_text(
+                        model_info_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='HTML'
+                    )
+                    try:
+                        await query.message.delete()
+                    except:
+                        pass
+                except Exception as send_error:
+                    logger.error(f"Could not send new message in model: handler: {send_error}", exc_info=True)
+                    await query.answer(t('error_try_start', lang=user_lang, default="❌ Ошибка отображения. Попробуйте /start"), show_alert=True)
+            
             return ConversationHandler.END
         
         # Handle select_model: callback - starts generation flow directly (legacy, still supported)
