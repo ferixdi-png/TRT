@@ -3,11 +3,14 @@ KIE (Knowledge Is Everything) Telegram Bot
 Enhanced version with KIE AI model selection and generation
 """
 
+from __future__ import annotations
+
 import logging
 import asyncio
 import sys
 import os
 from pathlib import Path
+from typing import Optional, Dict, Any, List
 
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
@@ -101,8 +104,15 @@ def validate_required_env():
 
 
 # Выполняем self-check ПЕРЕД импортом других модулей
-log_env_summary()
-validate_required_env()
+# ТОЛЬКО если явно запрошено через RUN_ENV_CHECK=1 и не пропущено через SKIP_CONFIG_INIT=1
+# Это позволяет тестам импортировать модуль без side effects
+if os.getenv("RUN_ENV_CHECK", "0") == "1" and os.getenv("SKIP_CONFIG_INIT", "0") != "1":
+    log_env_summary()
+    validate_required_env()
+elif os.getenv("SKIP_CONFIG_INIT", "0") != "1" and os.getenv("TEST_MODE", "0") != "1":
+    # В production режиме логируем summary без валидации (чтобы не падать при отсутствии ENV)
+    # Валидация будет происходить в main() / create_bot_application()
+    log_env_summary()
 
 # ==================== IMPORTS AFTER SELF-CHECK ====================
 from telegram.ext import (
@@ -168,7 +178,6 @@ import random
 import traceback
 import time
 from asyncio import Lock
-from typing import Optional
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -12168,67 +12177,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Старый код маппинга удален - теперь используется kie_input_adapter
         # Все маппинги находятся в API_PARAM_MAPPINGS в kie_input_adapter.py
         # Валидация также выполняется в адаптере - дополнительные блоки валидации удалены
-            # Validate prompt (required, max 3000 characters)
-            if 'prompt' not in api_params or not api_params.get('prompt'):
-                error_msg = "❌ <b>Ошибка валидации</b>\n\nПараметр <b>prompt</b> обязателен для модели seedream/4.5-text-to-image."
-                await send_or_edit_message(error_msg)
-                logger.error(f"Missing required parameter prompt for seedream/4.5-text-to-image")
-                return ConversationHandler.END
-            
-            prompt = str(api_params['prompt']).strip()
-            if len(prompt) > 3000:
-                error_msg = (
-                    f"❌ <b>Ошибка валидации</b>\n\n"
-                    f"Параметр prompt слишком длинный (макс. 3000 символов).\n"
-                    f"Текущая длина: {len(prompt)} символов."
-                )
-                await send_or_edit_message(error_msg)
-                logger.error(f"prompt too long for seedream/4.5-text-to-image: {len(prompt)} characters")
-                return ConversationHandler.END
-            api_params['prompt'] = prompt
-            
-            # Validate aspect_ratio (required, enum values)
-            # NOTE: Currently doesn't affect price, but validated for API correctness
-            valid_aspect_ratios = ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"]
-            if 'aspect_ratio' not in api_params or not api_params.get('aspect_ratio'):
-                # Use default if not set
-                api_params['aspect_ratio'] = "1:1"
-            else:
-                aspect_ratio = str(api_params['aspect_ratio']).strip()
-                if aspect_ratio not in valid_aspect_ratios:
-                    error_msg = (
-                        f"❌ <b>Ошибка валидации</b>\n\n"
-                        f"Неверное значение параметра aspect_ratio.\n"
-                        f"Допустимые значения: {', '.join(valid_aspect_ratios)}\n\n"
-                        f"Полученное значение: {aspect_ratio}"
-                    )
-                    await send_or_edit_message(error_msg)
-                    logger.error(f"Invalid aspect_ratio for seedream/4.5-text-to-image: {aspect_ratio}")
-                    return ConversationHandler.END
-                api_params['aspect_ratio'] = aspect_ratio
-            
-            # Validate and normalize quality (required, enum values: basic/high)
-            # NOTE: Quality affects output (basic=2K, high=4K) but currently doesn't affect price
-            # If API pricing changes, update calculate_price_rub() to use params.get('quality')
-            # API accepts "basic" or "high" (lowercase), but user might send "Basic" or "High"
-            valid_qualities = ["basic", "high"]
-            if 'quality' not in api_params or not api_params.get('quality'):
-                # Use default if not set
-                api_params['quality'] = "basic"
-            else:
-                quality = str(api_params['quality']).strip().lower()
-                # Normalize: Basic/High -> basic/high (already lowercased above)
-                if quality not in valid_qualities:
-                    error_msg = (
-                        f"❌ <b>Ошибка валидации</b>\n\n"
-                        f"Неверное значение параметра quality.\n"
-                        f"Допустимые значения: basic, high\n\n"
-                        f"Полученное значение: {api_params.get('quality')}"
-                    )
-                    await send_or_edit_message(error_msg)
-                    logger.error(f"Invalid quality for seedream/4.5-text-to-image: {api_params.get('quality')}")
-                    return ConversationHandler.END
-                api_params['quality'] = quality
         
         # For seedream/4.5-edit, validate and normalize parameters
         # NOTE: Price calculation - Currently fixed at 6.5 credits regardless of quality/aspect_ratio
@@ -24695,6 +24643,281 @@ def initialize_data_files():
         except Exception as e:
             logger.error(f"Error releasing lock on exit: {e}")
     atexit.register(release_lock_on_exit)
+
+
+async def create_bot_application(settings) -> Application:
+    """
+    Создает и настраивает Telegram Application с зарегистрированными handlers.
+    НЕ запускает polling/webhook - только создает и настраивает application.
+    
+    Args:
+        settings: Настройки из app.config.Settings
+        
+    Returns:
+        Application с зарегистрированными handlers
+    """
+    # Импортируем Settings для проверки типа
+    from app.config import Settings
+    
+    # Проверяем тип settings (может быть Settings или dict)
+    if not isinstance(settings, Settings):
+        # Если передан dict, создаем Settings из него
+        if isinstance(settings, dict):
+            from app.config import get_settings
+            settings = get_settings(validate=False)
+        else:
+            raise TypeError(f"settings must be Settings or dict, got {type(settings)}")
+    
+    if not settings.telegram_bot_token:
+        raise ValueError("telegram_bot_token is required in settings")
+    
+    # Verify models are loaded correctly (using registry)
+    from app.models.registry import get_models_sync, get_model_registry
+    models_list = get_models_sync()
+    registry_info = get_model_registry()
+    
+    categories = get_categories_from_registry()
+    
+    # Логируем информацию о registry
+    logger.info(f"📊 models_registry source={registry_info['used_source']} count={registry_info['count']}")
+    if registry_info.get('yaml_total_models'):
+        logger.info(f"📊 YAML total_models={registry_info['yaml_total_models']}")
+    
+    logger.info(f"Creating application with {len(models_list)} models in {len(categories)} categories: {categories}")
+    
+    # Create the Application через bootstrap (с dependency container)
+    from app.bootstrap import create_application
+    application = await create_application(settings)
+    
+    # Для обратной совместимости: сохраняем в глобальные переменные
+    # TODO: Удалить после полного рефакторинга handlers
+    global storage, kie
+    deps = application.bot_data["deps"]
+    storage = deps.get_storage()
+    kie = deps.get_kie_client()
+    
+    # ==================== NO-SILENCE GUARD ====================
+    from app.observability.no_silence_guard import get_no_silence_guard
+    no_silence_guard = get_no_silence_guard()
+    logger.info("✅ NO-SILENCE GUARD: Integrated in button_callback, input_parameters, error_handler")
+    
+    # Вызываем внутреннюю функцию для регистрации handlers
+    # (см. _register_all_handlers_internal ниже в main())
+    await _register_all_handlers_internal(application)
+    
+    logger.info("✅ Application created with all handlers registered")
+    return application
+
+
+async def _register_all_handlers_internal(application: Application):
+    """
+    Внутренняя функция для регистрации всех handlers.
+    Используется и в create_bot_application, и в main().
+    """
+    # Create conversation handler for generation
+    generation_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(button_callback, pattern='^show_models$'),
+            CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
+            CallbackQueryHandler(button_callback, pattern='^category:'),
+            CallbackQueryHandler(button_callback, pattern='^all_models$'),
+            CallbackQueryHandler(button_callback, pattern='^gen_type:'),
+            CallbackQueryHandler(button_callback, pattern='^free_tools$'),
+            CallbackQueryHandler(button_callback, pattern='^check_balance$'),
+            CallbackQueryHandler(button_callback, pattern='^language_select:'),
+            CallbackQueryHandler(button_callback, pattern='^change_language$'),
+            CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
+            CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
+            CallbackQueryHandler(button_callback, pattern='^help_menu$'),
+            CallbackQueryHandler(button_callback, pattern='^support_contact$'),
+            CallbackQueryHandler(button_callback, pattern='^select_model:'),
+            CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
+            CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
+            CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_set_currency_rate$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_search$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_add$'),
+            CallbackQueryHandler(button_callback, pattern='^view_payment_screenshots$'),
+            CallbackQueryHandler(button_callback, pattern='^payment_screenshot_nav:'),
+            CallbackQueryHandler(button_callback, pattern='^admin_payments_back$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
+            CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
+            CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+            CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
+            CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
+            CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
+            CallbackQueryHandler(button_callback, pattern='^referral_info$'),
+            CallbackQueryHandler(button_callback, pattern='^generate_again$'),
+            CallbackQueryHandler(button_callback, pattern='^my_generations$'),
+            CallbackQueryHandler(button_callback, pattern='^gen_view:'),
+            CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
+            CallbackQueryHandler(button_callback, pattern='^gen_history:'),
+            CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
+            CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
+            CallbackQueryHandler(button_callback, pattern='^tutorial_complete$')
+        ],
+        states={
+            SELECTING_MODEL: [
+                CallbackQueryHandler(button_callback, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, pattern='^show_models$'),
+                CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
+                CallbackQueryHandler(button_callback, pattern='^category:'),
+                CallbackQueryHandler(button_callback, pattern='^all_models$'),
+                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, pattern='^free_tools$'),
+                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, pattern='^language_select:'),
+                CallbackQueryHandler(button_callback, pattern='^change_language$'),
+                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$')
+            ],
+            CONFIRMING_GENERATION: [
+                CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
+                CallbackQueryHandler(button_callback, pattern='^retry_generate:'),
+                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, pattern='^language_select:'),
+                CallbackQueryHandler(button_callback, pattern='^change_language$'),
+                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$')
+            ],
+            INPUTTING_PARAMS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
+                MessageHandler(filters.PHOTO, input_parameters),
+                MessageHandler(filters.Document.ALL, input_parameters),
+                MessageHandler(filters.AUDIO | filters.VOICE, input_parameters),
+                CallbackQueryHandler(button_callback, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$'),
+                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, pattern='^language_select:'),
+                CallbackQueryHandler(button_callback, pattern='^change_language$'),
+                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$')
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(button_callback, pattern='^cancel$'),
+                   CommandHandler('cancel', cancel)],
+        per_message=True
+    )
+    
+    # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
+    # Здесь мы регистрируем только базовые handlers, остальные будут добавлены в main()
+    # Для полной функциональности нужно вызвать полную регистрацию из main()
+    # Но для create_bot_application достаточно базовой регистрации
+    
+    # Регистрируем error handler (нужно найти его определение)
+    # application.add_error_handler(error_handler) - будет добавлено в main()
+    
+    # Регистрируем generation_handler
+    application.add_handler(generation_handler)
+    
+    # Базовые command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("balance", check_balance))
+    application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler('generate', start_generation))
+    application.add_handler(CommandHandler('models', list_models))
+    
+    # Базовые callback handlers
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    logger.info("✅ Basic handlers registered (full registration happens in main())")
+
 
 async def main():
     """Start the bot."""

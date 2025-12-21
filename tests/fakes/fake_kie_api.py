@@ -4,6 +4,7 @@ Fake KIE API для тестов
 """
 
 import asyncio
+import os
 import time
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -43,7 +44,9 @@ class FakeKieAPI:
             }
         
         if self._timeout_mode:
-            await asyncio.sleep(100)  # Симуляция таймаута
+            # Управляемый таймаут для тестов (не убивает пайплайн)
+            sleep_seconds = float(os.getenv("FAKE_TIMEOUT_SLEEP", "0.2"))
+            await asyncio.sleep(sleep_seconds)  # Симуляция таймаута
         
         self._task_counter += 1
         task_id = f"fake_task_{self._task_counter}"
