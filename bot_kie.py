@@ -26422,6 +26422,34 @@ async def main():
         
         logger.info("📡 Starting polling...")
         
+        # CRITICAL: Add Conflict monitoring task before starting polling
+        # This will catch Conflict errors that occur inside updater loop
+        conflict_detected = asyncio.Event()
+        
+        async def monitor_conflict_errors():
+            """Monitor for Conflict errors and stop polling immediately"""
+            await asyncio.sleep(5)  # Wait for polling to start
+            while True:
+                await asyncio.sleep(10)  # Check every 10 seconds
+                if conflict_detected.is_set():
+                    logger.error("❌❌❌ Conflict detected in monitoring task - stopping polling...")
+                    try:
+                        await application.updater.stop()
+                        await application.stop()
+                        await application.shutdown()
+                    except:
+                        pass
+                    try:
+                        from app.locking.single_instance import release_single_instance_lock
+                        release_single_instance_lock()
+                    except:
+                        pass
+                    import os
+                    os._exit(0)
+        
+        # Start monitoring task
+        monitor_task = asyncio.create_task(monitor_conflict_errors())
+        
         # Запускаем polling с обработкой Conflict
         try:
             await application.updater.start_polling(drop_pending_updates=drop_updates)
