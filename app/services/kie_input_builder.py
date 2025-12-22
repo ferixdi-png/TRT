@@ -2393,6 +2393,111 @@ def _validate_kling_v2_1_standard(
     return True, None
 
 
+def _validate_kling_v2_1_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling/v2-1-pro согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - duration (опциональный, enum, default "5")
+    - negative_prompt (опциональный, макс 500 символов, default "blur, distort, and low quality")
+    - cfg_scale (опциональный, number, диапазон 0-1, шаг 0.1, default 0.5)
+    - tail_image_url (опциональный, макс 10MB, jpeg/png/webp, default "")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["kling/v2-1-pro", "kling-v2-1-pro", "v2-1-pro"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация duration: опциональный, enum
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        # Может быть строкой "5" или "10", или числом 5 или 10
+        if isinstance(duration, str):
+            if duration not in ["5", "10"]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = duration
+        elif isinstance(duration, (int, float)):
+            if duration not in [5, 10]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = str(int(duration))
+        else:
+            return False, f"Поле 'duration' должно быть строкой или числом (получено: {duration})"
+    
+    # Валидация negative_prompt: опциональный, string, макс 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 500)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация cfg_scale: опциональный, number, диапазон 0-1, шаг 0.1
+    cfg_scale = normalized_input.get('cfg_scale')
+    if cfg_scale is not None:
+        try:
+            cfg_scale_num = float(cfg_scale)
+            if cfg_scale_num < 0 or cfg_scale_num > 1:
+                return False, f"Поле 'cfg_scale' должно быть в диапазоне от 0 до 1 (получено: {cfg_scale})"
+            # Округляем до 1 знака после запятой (шаг 0.1)
+            cfg_scale_num = round(cfg_scale_num, 1)
+            normalized_input['cfg_scale'] = cfg_scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'cfg_scale' должно быть числом от 0 до 1 (получено: {cfg_scale})"
+    
+    # Валидация tail_image_url: опциональный, string
+    tail_image_url = normalized_input.get('tail_image_url')
+    if tail_image_url is not None:
+        if not isinstance(tail_image_url, str):
+            tail_image_url = str(tail_image_url)
+        tail_image_url = tail_image_url.strip()
+        # Если пустая строка, оставляем как есть (default "")
+        if len(tail_image_url) > 0:
+            # Проверяем что это валидный URL (если не пустой)
+            normalized_input['tail_image_url'] = tail_image_url
+        else:
+            normalized_input['tail_image_url'] = ""  # Default пустая строка
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
