@@ -4138,6 +4138,198 @@ def _validate_bytedance_seedream(
     return True, None
 
 
+def _normalize_output_format_for_qwen_i2i(value: Any) -> Optional[str]:
+    """
+    Нормализует output_format для qwen/image-to-image.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение output_format (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["png", "jpeg"]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _normalize_acceleration_for_qwen_i2i(value: Any) -> Optional[str]:
+    """
+    Нормализует acceleration для qwen/image-to-image.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение acceleration (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["none", "regular", "high"]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_qwen_image_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для qwen/image-to-image согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - strength (опциональный, number, 0-1, default 0.8)
+    - output_format (опциональный, enum, default "png")
+    - acceleration (опциональный, enum, default "none")
+    - negative_prompt (опциональный, string, макс 500 символов, default "blurry, ugly")
+    - seed (опциональный, number)
+    - num_inference_steps (опциональный, number, 2-250, default 30)
+    - guidance_scale (опциональный, number, 0-20, default 2.5)
+    - enable_safety_checker (опциональный, boolean, default true)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["qwen/image-to-image", "qwen-image-to-image", "qwen/i2i"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации изображения. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация strength: опциональный, number, 0-1
+    strength = normalized_input.get('strength')
+    if strength is not None:
+        try:
+            strength_num = float(strength)
+            if strength_num < 0 or strength_num > 1:
+                return False, f"Поле 'strength' должно быть в диапазоне от 0 до 1 (получено: {strength})"
+            normalized_input['strength'] = strength_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'strength' должно быть числом от 0 до 1 (получено: {strength})"
+    
+    # Валидация output_format: опциональный, enum
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        normalized_format = _normalize_output_format_for_qwen_i2i(output_format)
+        if normalized_format is None:
+            return False, f"Поле 'output_format' должно быть одним из: png, jpeg (получено: {output_format})"
+        normalized_input['output_format'] = normalized_format
+    
+    # Валидация acceleration: опциональный, enum
+    acceleration = normalized_input.get('acceleration')
+    if acceleration is not None:
+        normalized_accel = _normalize_acceleration_for_qwen_i2i(acceleration)
+        if normalized_accel is None:
+            return False, f"Поле 'acceleration' должно быть одним из: none, regular, high (получено: {acceleration})"
+        normalized_input['acceleration'] = normalized_accel
+    
+    # Валидация negative_prompt: опциональный, string, макс 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 500)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация num_inference_steps: опциональный, number, 2-250
+    num_inference_steps = normalized_input.get('num_inference_steps')
+    if num_inference_steps is not None:
+        try:
+            steps_num = int(float(num_inference_steps))
+            if steps_num < 2 or steps_num > 250:
+                return False, f"Поле 'num_inference_steps' должно быть в диапазоне от 2 до 250 (получено: {num_inference_steps})"
+            normalized_input['num_inference_steps'] = steps_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'num_inference_steps' должно быть числом от 2 до 250 (получено: {num_inference_steps})"
+    
+    # Валидация guidance_scale: опциональный, number, 0-20
+    guidance_scale = normalized_input.get('guidance_scale')
+    if guidance_scale is not None:
+        try:
+            scale_num = float(guidance_scale)
+            if scale_num < 0 or scale_num > 20:
+                return False, f"Поле 'guidance_scale' должно быть в диапазоне от 0 до 20 (получено: {guidance_scale})"
+            normalized_input['guidance_scale'] = scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'guidance_scale' должно быть числом от 0 до 20 (получено: {guidance_scale})"
+    
+    # Валидация enable_safety_checker: опциональный, boolean
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

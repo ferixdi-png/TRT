@@ -51,7 +51,12 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'image_resolution',  # Для bytedance/seedream-v4-edit
         'max_images',  # Для bytedance/seedream-v4-edit
         'rendering_speed',  # Для ideogram/v3-reframe
-        'num_images'  # Для ideogram/v3-reframe
+        'num_images',  # Для ideogram/v3-reframe
+        'output_format',  # Для qwen/image-to-image
+        'acceleration',  # Для qwen/image-to-image
+        'num_inference_steps',  # Для qwen/image-to-image
+        'guidance_scale',  # Для qwen/image-to-image
+        'enable_safety_checker'  # Для qwen/image-to-image
     },
     
     # Text-to-Video

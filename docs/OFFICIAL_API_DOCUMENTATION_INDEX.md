@@ -214,6 +214,11 @@
   - Опциональные: `image_size` (enum, 6 значений), `guidance_scale` (1-10), `seed`, `enable_safety_checker` (boolean)
   - Default: `image_size="square_hd"`, `guidance_scale=2.5`, `enable_safety_checker=true`
   - Важно: Использует `guidance_scale` вместо стандартного `guidance`! Использует `image_size` вместо стандартных `width`/`height`! Уникальный параметр: `enable_safety_checker`! НЕТ параметров `negative_prompt`, `width`, `height`, `steps`, `guidance`, `style`!
+- [x] **qwen/image-to-image** - `docs/QWEN_IMAGE_TO_IMAGE_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000), `image_url` (max 10MB, jpeg/png/webp)
+  - Опциональные: `strength` (0-1), `output_format` (enum: png/jpeg), `acceleration` (enum: none/regular/high), `negative_prompt` (max 500), `seed`, `num_inference_steps` (2-250), `guidance_scale` (0-20), `enable_safety_checker` (boolean)
+  - Default: `strength=0.8`, `output_format="png"`, `acceleration="none"`, `negative_prompt="blurry, ugly"`, `num_inference_steps=30`, `guidance_scale=2.5`, `enable_safety_checker=true`
+  - Важно: Использует `num_inference_steps` вместо стандартного `steps`! Использует `guidance_scale` вместо стандартного `guidance`! Уникальные параметры: `output_format`, `acceleration`, `enable_safety_checker`! НЕТ параметров `width`, `height`, `steps`, `guidance`, `style`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
