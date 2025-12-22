@@ -1976,6 +1976,53 @@ def _validate_grok_imagine_text_to_video(
     return True, None
 
 
+def _validate_grok_imagine_text_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для grok-imagine/text-to-image согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["grok-imagine/text-to-image", "grok/imagine-text-to-image"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация aspect_ratio: опциональный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        # Переиспользуем функцию нормализации из text-to-video (те же 3 значения)
+        normalized_aspect_ratio = _normalize_aspect_ratio_for_grok_imagine_text_to_video(aspect_ratio)
+        if normalized_aspect_ratio is None:
+            valid_values = ["2:3", "3:2", "1:1"]
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # ВАЖНО: Нет параметра mode для text-to-image (в отличие от text-to-video и image-to-video)
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -2222,6 +2269,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для grok-imagine/text-to-image
+    is_valid, error_msg = _validate_grok_imagine_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -2286,6 +2338,12 @@ def build_input(
             normalized_input['aspect_ratio'] = "2:3"  # Default согласно документации
         if 'mode' not in normalized_input:
             normalized_input['mode'] = "normal"  # Default согласно документации
+    
+    # Применяем дефолты для grok-imagine/text-to-image
+    if model_id in ["grok-imagine/text-to-image", "grok/imagine-text-to-image"]:
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "3:2"  # Default согласно документации (отличается от text-to-video!)
+        # ВАЖНО: Нет параметра mode для text-to-image (в отличие от text-to-video и image-to-video)
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
