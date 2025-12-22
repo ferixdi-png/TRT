@@ -56,6 +56,11 @@
 
 ### ✅ WAN Models
 
+- [x] **wan/2-5-image-to-video** - `docs/WAN_2_5_IMAGE_TO_VIDEO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 800 chars), `image_url` (string, не массив!)
+  - Опциональные: `duration` ("5" | "10"), `resolution` ("720p" | "1080p"), `negative_prompt` (max 500 chars), `enable_prompt_expansion` (boolean), `seed` (number)
+  - Default: `image_url="https://file.aiquickdraw.com/..."`, `duration="5"`, `resolution="1080p"`, `negative_prompt=""`, `enable_prompt_expansion=true`
+  - Важно: `image_url` - это string, а не массив! `prompt` максимум 800 символов (в 2-6 было 5000)!
 - [x] **wan/2-6-text-to-video** - `docs/WAN_2_6_TEXT_TO_VIDEO_INTEGRATION.md`
 - [x] **wan/2-6-image-to-video** - `docs/WAN_2_6_IMAGE_TO_VIDEO_INTEGRATION.md`
 - [x] **wan/2-6-video-to-video** - `docs/WAN_2_6_VIDEO_TO_VIDEO_INTEGRATION.md`
