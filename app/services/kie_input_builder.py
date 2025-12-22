@@ -4890,6 +4890,11 @@ def build_input(
         if 'video_url' not in normalized_input:
             normalized_input['video_url'] = "https://sora.chatgpt.com/p/s_68e83bd7eee88191be79d2ba7158516f"  # Default согласно документации
     
+    # Применяем дефолты для infinitalk/from-audio
+    if model_id in ["infinitalk/from-audio", "infinitalk-from-audio"]:
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "480p"  # Default согласно документации
+    
     # Применяем дефолты для topaz/image-upscale
     if model_id in ["topaz/image-upscale", "topaz/image-upscaler", "topaz/upscale"]:
         if 'image_url' not in normalized_input:
