@@ -6953,6 +6953,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для ideogram/character
+    is_valid, error_msg = _validate_ideogram_character(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для seedream/4.5-edit
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
