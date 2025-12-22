@@ -2214,6 +2214,92 @@ def _validate_hailuo_2_3_image_to_video_pro(
     return True, None
 
 
+def _validate_hailuo_2_3_image_to_video_standard(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для hailuo/2-3-image-to-video-standard согласно документации API.
+    
+    ВАЖНО: Параметры идентичны hailuo/2-3-image-to-video-pro, но это другая модель!
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["hailuo/2-3-image-to-video-standard", "hailuo/2-3-i2v-standard"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, строка (не массив!)
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Загрузите изображение"
+    
+    if not isinstance(image_url, str):
+        # Если передан массив, берем первый элемент
+        if isinstance(image_url, list) and len(image_url) > 0:
+            image_url = str(image_url[0])
+        else:
+            image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Базовая валидация URL
+    if not (image_url.startswith('http://') or image_url.startswith('https://')):
+        return False, f"Поле 'image_url' должно быть валидным URL (начинаться с http:// или https://). Получено: {image_url[:50]}..."
+    
+    normalized_input['image_url'] = image_url
+    
+    # Валидация duration: опциональный, enum ("6" или "10")
+    # Переиспользуем функцию нормализации из hailuo/2-3-image-to-video-pro
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_hailuo_2_3_pro(duration)
+        if normalized_duration is None:
+            return False, f"Поле 'duration' должно быть '6' или '10' (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+    
+    # Валидация resolution: опциональный, enum ("768P" или "1080P")
+    # Переиспользуем функцию нормализации из hailuo/2-3-image-to-video-pro
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_hailuo_2_3_pro(resolution)
+        if normalized_resolution is None:
+            valid_values = ["768P", "1080P"]
+            return False, f"Поле 'resolution' должно быть одним из: {', '.join(valid_values)} (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    # ВАЖНО: Проверяем взаимоисключающие значения
+    # Если resolution="1080P", то duration не может быть "10"!
+    final_resolution = normalized_input.get('resolution', "768P")  # Default "768P"
+    final_duration = normalized_input.get('duration', "6")  # Default "6"
+    
+    if final_resolution == "1080P" and final_duration == "10":
+        return False, "Для разрешения '1080P' не поддерживается длительность '10' секунд. Используйте duration='6' или resolution='768P'"
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -2475,6 +2561,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для hailuo/2-3-image-to-video-standard
+    is_valid, error_msg = _validate_hailuo_2_3_image_to_video_standard(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -2548,6 +2639,13 @@ def build_input(
     
     # Применяем дефолты для hailuo/2-3-image-to-video-pro
     if model_id in ["hailuo/2-3-image-to-video-pro", "hailuo/2-3-i2v-pro"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "6"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "768P"  # Default согласно документации
+    
+    # Применяем дефолты для hailuo/2-3-image-to-video-standard
+    if model_id in ["hailuo/2-3-image-to-video-standard", "hailuo/2-3-i2v-standard"]:
         if 'duration' not in normalized_input:
             normalized_input['duration'] = "6"  # Default согласно документации
         if 'resolution' not in normalized_input:
