@@ -41,21 +41,25 @@ async def handle_show_all_models_list(
         
         if user_lang == 'ru':
             models_text = (
-                f"🤖 <b>ВСЕ МОДЕЛИ KIE AI</b> 🤖\n\n"
+                f"╔═══════════════════════════════════╗\n"
+                f"║  🤖 ВСЕ МОДЕЛИ KIE AI 🤖          ║\n"
+                f"╚═══════════════════════════════════╝\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📦 <b>Доступно:</b> <b>{len(catalog)} моделей</b>\n"
+                f"💰 <b>Цены в рублях</b> (×2 от официальной)\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📦 <b>Доступно:</b> {len(catalog)} моделей\n"
-                f"💰 <b>Цены указаны в рублях</b> (×2 от официальной цены)\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"💡 Выберите модель для просмотра деталей и генерации"
+                f"💡 <b>Выберите модель для просмотра деталей и генерации</b>"
             )
         else:
             models_text = (
-                f"🤖 <b>ALL KIE AI MODELS</b> 🤖\n\n"
+                f"╔═══════════════════════════════════╗\n"
+                f"║  🤖 ALL KIE AI MODELS 🤖          ║\n"
+                f"╚═══════════════════════════════════╝\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📦 <b>Available:</b> <b>{len(catalog)} models</b>\n"
+                f"💰 <b>Prices in RUB</b> (×2 from official)\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📦 <b>Available:</b> {len(catalog)} models\n"
-                f"💰 <b>Prices in RUB</b> (×2 from official price)\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"💡 Select a model to view details and generate"
+                f"💡 <b>Select a model to view details and generate</b>"
             )
         
         # Строим клавиатуру из каталога

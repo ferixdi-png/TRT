@@ -192,7 +192,13 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
         # Используем callback_data который не обрабатывается (для визуального разделения)
         keyboard.append([
             InlineKeyboardButton(
-                f"{emoji} {type_name} ({len(models)})",
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                callback_data="type_header:ignore"  # Неактивная кнопка
+            )
+        ])
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{emoji} <b>{type_name}</b> ({len(models)})",
                 callback_data="type_header:ignore"  # Неактивная кнопка
             )
         ])
@@ -223,13 +229,16 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
                 if price_rub is None:
                     price_rub = 0
                 
-                # Формируем текст кнопки
-                button_text = f"{model.title_ru} (₽{price_rub})"
+                # Получаем эмодзи для типа модели
+                type_emoji = _get_type_emoji(model.type)
+                
+                # Формируем текст кнопки с эмодзи и ценой
+                button_text = f"{type_emoji} {model.title_ru} • ₽{price_rub}"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
-                    max_len = 60 - len(f" (₽{price_rub})".encode('utf-8'))
-                    button_text = f"{model.title_ru[:max_len]}... (₽{price_rub})"
+                    max_len = 60 - len(f" • ₽{price_rub}".encode('utf-8')) - 2  # -2 для эмодзи и пробела
+                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • ₽{price_rub}"
                 
                 callback_data = _create_callback_data(model.id)
                 
@@ -241,10 +250,11 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
                 ])
     
     # Кнопка "Назад"
+    keyboard.append([])  # Пустая строка для разделения
     if user_lang == 'ru':
-        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")])
+        keyboard.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")])
     else:
-        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")])
+        keyboard.append([InlineKeyboardButton("🔙 Back to menu", callback_data="back_to_menu")])
     
     return InlineKeyboardMarkup(keyboard)
 
@@ -272,62 +282,78 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
         price_rub = 0
     
     # Формируем текст карточки
+    type_emoji = _get_type_emoji(model.type)
+    
     if user_lang == 'ru':
         type_name = _get_type_name_ru(model.type)
         
         card_text = (
-            f"🤖 <b>{model.title_ru}</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📋 <b>Тип:</b> {type_name}\n"
+            f"╔═══════════════════════════════════╗\n"
+            f"║  {type_emoji} <b>{model.title_ru}</b>  ║\n"
+            f"╚═══════════════════════════════════╝\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📋 <b>Тип генерации:</b> {type_name}\n"
         )
         
         if mode.notes:
-            card_text += f"⚙️ <b>Режим:</b> {mode.notes}\n"
+            card_text += f"⚙️ <b>Режим:</b> <code>{mode.notes}</code>\n"
         
-        card_text += f"\n💰 <b>Цена:</b> ₽{price_rub}\n"
-        card_text += f"💵 <b>Официально:</b> ${mode.official_usd:.4f}\n"
-        card_text += f"🎫 <b>Кредиты:</b> {mode.credits}\n"
-        card_text += f"📦 <b>Единица:</b> {mode.unit}\n"
+        card_text += (
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 <b>ЦЕНА:</b> <b>₽{price_rub}</b>\n"
+            f"💵 Официально: ${mode.official_usd:.4f}\n"
+            f"🎫 Кредиты: {mode.credits}\n"
+            f"📦 Единица: {mode.unit}\n"
+        )
         
         if len(model.modes) > 1:
-            card_text += f"\n📌 <b>Доступно режимов:</b> {len(model.modes)}\n"
+            card_text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            card_text += f"📌 <b>Доступно режимов:</b> {len(model.modes)}\n"
     else:
         card_text = (
-            f"🤖 <b>{model.title_ru}</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📋 <b>Type:</b> {model.type}\n"
+            f"╔═══════════════════════════════════╗\n"
+            f"║  {type_emoji} <b>{model.title_ru}</b>  ║\n"
+            f"╚═══════════════════════════════════╝\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📋 <b>Generation Type:</b> {model.type}\n"
         )
         
         if mode.notes:
-            card_text += f"⚙️ <b>Mode:</b> {mode.notes}\n"
+            card_text += f"⚙️ <b>Mode:</b> <code>{mode.notes}</code>\n"
         
-        card_text += f"\n💰 <b>Price:</b> ₽{price_rub}\n"
-        card_text += f"💵 <b>Official:</b> ${mode.official_usd:.4f}\n"
-        card_text += f"🎫 <b>Credits:</b> {mode.credits}\n"
-        card_text += f"📦 <b>Unit:</b> {mode.unit}\n"
+        card_text += (
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 <b>PRICE:</b> <b>₽{price_rub}</b>\n"
+            f"💵 Official: ${mode.official_usd:.4f}\n"
+            f"🎫 Credits: {mode.credits}\n"
+            f"📦 Unit: {mode.unit}\n"
+        )
         
         if len(model.modes) > 1:
-            card_text += f"\n📌 <b>Available modes:</b> {len(model.modes)}\n"
+            card_text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            card_text += f"📌 <b>Available modes:</b> {len(model.modes)}\n"
     
     # Формируем клавиатуру
     keyboard = []
     
     if user_lang == 'ru':
         keyboard.append([
-            InlineKeyboardButton("✅ Сгенерировать", callback_data=f"select_model:{model.id}")
+            InlineKeyboardButton("🚀 Сгенерировать", callback_data=f"select_model:{model.id}")
         ])
         keyboard.append([
-            InlineKeyboardButton("ℹ️ Пример", callback_data=f"example:{model.id}")
+            InlineKeyboardButton("📸 Пример", callback_data=f"example:{model.id}"),
+            InlineKeyboardButton("ℹ️ Инфо", callback_data=f"info:{model.id}")
         ])
         keyboard.append([
             InlineKeyboardButton("🔙 Назад к моделям", callback_data="show_models")
         ])
     else:
         keyboard.append([
-            InlineKeyboardButton("✅ Generate", callback_data=f"select_model:{model.id}")
+            InlineKeyboardButton("🚀 Generate", callback_data=f"select_model:{model.id}")
         ])
         keyboard.append([
-            InlineKeyboardButton("ℹ️ Example", callback_data=f"example:{model.id}")
+            InlineKeyboardButton("📸 Example", callback_data=f"example:{model.id}"),
+            InlineKeyboardButton("ℹ️ Info", callback_data=f"info:{model.id}")
         ])
         keyboard.append([
             InlineKeyboardButton("🔙 Back to models", callback_data="show_models")
