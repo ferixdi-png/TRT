@@ -57,6 +57,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'prompt',
         'duration',
         'fps',
+        'frames_per_second',  # Для wan/2-6-text-to-video
         'resolution',
         'seed',
         'with_audio',
@@ -69,7 +70,14 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'style',
         'aspect_ratio',
         'cfg_scale',  # Для kling/v2-5-turbo-text-to-video-pro
-        'prompt_optimizer'  # Для hailuo/02-text-to-video-pro
+        'prompt_optimizer',  # Для hailuo/02-text-to-video-pro
+        'image_url',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'audio_url',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'num_frames',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'num_inference_steps',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'guidance_scale',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'shift',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'enable_safety_checker'  # Для wan/2-2-a14b-speech-to-video-turbo
     },
     
     # Image-to-Video
