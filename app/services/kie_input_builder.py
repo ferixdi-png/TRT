@@ -7938,6 +7938,15 @@ def build_input(
         if 'output_format' not in normalized_input:
             normalized_input['output_format'] = "mp3_44100_128"  # Default согласно документации
     
+    # Применяем дефолты для kling/v2-1-standard
+    if model_id in ["kling/v2-1-standard", "kling-v2-1-standard", "v2-1-standard"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
+    
     # Применяем дефолты для elevenlabs/speech-to-text
     if model_id in ["elevenlabs/speech-to-text", "elevenlabs-speech-to-text"]:
         if 'language_code' not in normalized_input:
