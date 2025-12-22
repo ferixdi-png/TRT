@@ -133,6 +133,18 @@ class PGStorage:
         if self._connection:
             await self._connection.close()
             self._connection = None
+    
+    def test_connection(self) -> bool:
+        """
+        Synchronous test of PostgreSQL connection.
+        Used by factory to check if PostgreSQL is available.
+        
+        Returns:
+            True if connection successful, False otherwise
+        """
+        if not self.dsn:
+            return False
+        return sync_check_pg(self.dsn)
 
 
 # Compatibility alias

@@ -203,10 +203,28 @@ async def run(settings, application):
     global _application
     
     # Singleton lock должен быть получен ДО любых async операций
-    from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock
+    from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock, is_lock_acquired
     
-    if not await acquire_singleton_lock():
-        # acquire_singleton_lock уже вызвал exit(0) если lock не получен
+    lock_acquired = await acquire_singleton_lock()
+    
+    if not lock_acquired:
+        # Passive mode: lock not acquired, run healthcheck only (no polling)
+        logger.info("[LOCK] Passive mode: lock not acquired, running healthcheck only")
+        
+        # Запускаем healthcheck сервер если PORT задан
+        if settings.port > 0:
+            logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (Passive mode)")
+            await start_health_server(port=settings.port)
+            
+            # Держим процесс живым для healthcheck
+            logger.info("[LOCK] Passive mode: keeping process alive for healthcheck")
+            try:
+                while True:
+                    await asyncio.sleep(60)  # Sleep indefinitely
+            except KeyboardInterrupt:
+                logger.info("[LOCK] Passive mode: shutdown requested")
+        else:
+            logger.info("[LOCK] Passive mode: no PORT set, exiting")
         return
     
     try:
@@ -249,6 +267,19 @@ async def run(settings, application):
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
                 # Polling mode - безопасный запуск с обработкой конфликтов
+                # Проверяем что lock получен перед запуском polling
+                if not is_lock_acquired():
+                    logger.warning("[RUN] Lock not acquired, skipping polling (passive mode)")
+                    # Держим процесс живым для healthcheck
+                    if settings.port > 0:
+                        logger.info("[RUN] Keeping process alive for healthcheck")
+                        try:
+                            while True:
+                                await asyncio.sleep(60)
+                        except KeyboardInterrupt:
+                            logger.info("[RUN] Shutdown requested")
+                    return
+                
                 logger.info("[RUN] Starting polling...")
                 
                 # КРИТИЧНО: Задержка перед запуском polling для предотвращения конфликтов
