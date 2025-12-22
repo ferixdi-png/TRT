@@ -52,11 +52,11 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'style',
         'mode',
         'quality',
-        'image_size',  # Для bytedance/seedream-v4-edit, ideogram/v3-reframe, google/nano-banana-edit и qwen/image-edit
+        'image_size',  # Для bytedance/seedream-v4-edit, ideogram/v3-reframe, google/nano-banana-edit, qwen/image-edit и ideogram/character-remix
         'image_resolution',  # Для bytedance/seedream-v4-edit
         'max_images',  # Для bytedance/seedream-v4-edit
-        'rendering_speed',  # Для ideogram/v3-reframe и ideogram/character-edit
-        'num_images',  # Для ideogram/v3-reframe, qwen/image-edit и ideogram/character-edit
+        'rendering_speed',  # Для ideogram/v3-reframe, ideogram/character-edit и ideogram/character-remix
+        'num_images',  # Для ideogram/v3-reframe, qwen/image-edit, ideogram/character-edit и ideogram/character-remix
         'output_format',  # Для qwen/image-to-image, google/nano-banana-edit и qwen/image-edit
         'acceleration',  # Для qwen/image-to-image и qwen/image-edit
         'num_inference_steps',  # Для qwen/image-to-image и qwen/image-edit
@@ -64,8 +64,9 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'enable_safety_checker',  # Для qwen/image-to-image и qwen/image-edit
         'sync_mode',  # Для qwen/image-edit
         'mask_url',  # Для ideogram/character-edit
-        'reference_image_urls',  # Для ideogram/character-edit
-        'expand_prompt'  # Для ideogram/character-edit
+        'reference_image_urls',  # Для ideogram/character-edit и ideogram/character-remix
+        'expand_prompt',  # Для ideogram/character-edit и ideogram/character-remix
+        'reference_mask_urls'  # Для ideogram/character-remix
     },
     
     # Text-to-Video
