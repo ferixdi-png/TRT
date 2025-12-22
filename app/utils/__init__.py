@@ -1,9 +1,1 @@
-# Utils package
-
-
-
-
-
-
-
-
+"""Utils package."""

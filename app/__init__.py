@@ -1,9 +1,1 @@
-# App package
-
-
-
-
-
-
-
-
+"""App package."""
