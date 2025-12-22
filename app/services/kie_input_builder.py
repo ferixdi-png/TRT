@@ -2693,6 +2693,103 @@ def _validate_ideogram_v3_text_to_image(
     return True, None
 
 
+def _validate_ideogram_v3_edit(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для ideogram/v3-edit согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - mask_url (обязательный, макс 10MB, jpeg/png/webp) - уникальный параметр для inpainting!
+    - rendering_speed (опциональный, enum, default "BALANCED")
+    - expand_prompt (опциональный, boolean, default true)
+    - seed (опциональный, number)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["ideogram/v3-edit", "ideogram-v3-edit", "ideogram/v3-edit", "v3-edit"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для редактирования изображения. Введите текстовое описание для заполнения замаскированной части изображения."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для редактирования изображения. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация mask_url: обязательный, string - уникальный параметр для inpainting!
+    mask_url = normalized_input.get('mask_url')
+    if not mask_url:
+        return False, "Поле 'mask_url' обязательно для редактирования изображения. Укажите URL маски для инпейнтинга."
+    
+    if not isinstance(mask_url, str):
+        mask_url = str(mask_url)
+    
+    mask_url = mask_url.strip()
+    if len(mask_url) == 0:
+        return False, "Поле 'mask_url' не может быть пустым"
+    
+    # Валидация rendering_speed: опциональный, enum
+    rendering_speed = normalized_input.get('rendering_speed')
+    if rendering_speed is not None:
+        # Переиспользуем функцию из ideogram/character-edit
+        normalized_speed = _normalize_rendering_speed_for_ideogram_character_edit(rendering_speed)
+        if normalized_speed is None:
+            valid_values = ["TURBO", "BALANCED", "QUALITY"]
+            return False, f"Поле 'rendering_speed' должно быть одним из: {', '.join(valid_values)} (получено: {rendering_speed})"
+        normalized_input['rendering_speed'] = normalized_speed
+    
+    # Валидация expand_prompt: опциональный, boolean
+    expand_prompt = normalized_input.get('expand_prompt')
+    if expand_prompt is not None:
+        normalized_bool = _normalize_boolean(expand_prompt)
+        if normalized_bool is None:
+            return False, f"Поле 'expand_prompt' должно быть boolean (получено: {expand_prompt})"
+        normalized_input['expand_prompt'] = normalized_bool
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = float(seed)
+            # Преобразуем в int если это целое число
+            if seed_num == int(seed_num):
+                normalized_input['seed'] = int(seed_num)
+            else:
+                normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
