@@ -198,7 +198,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'image',
         'resolution',
         'model',
-        'prompt'  # Для kling/v1-avatar-standard
+        'prompt',  # Для kling/v1-avatar-standard и infinitalk/from-audio
+        'seed'  # Для infinitalk/from-audio
     }
 }
 

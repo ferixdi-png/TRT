@@ -2940,6 +2940,123 @@ def _validate_bytedance_seedream_v4_edit(
     return True, None
 
 
+def _normalize_resolution_for_infinitalk_from_audio(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для infinitalk/from-audio.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре.
+    ВАЖНО: Поддерживаются только "480p" и "720p"!
+    
+    Args:
+        value: Значение resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["480p", "720p"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["480", "480p", "480 p", "480p"]:
+        return "480p"
+    elif str_value in ["720", "720p", "720 p", "720p", "hd"]:
+        return "720p"
+    
+    return None
+
+
+def _validate_infinitalk_from_audio(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для infinitalk/from-audio согласно документации API.
+    
+    ВАЖНО: Это модель lip sync, которая требует:
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - audio_url (обязательный, макс 10MB, mpeg/wav/aac/mp4/ogg)
+    - prompt (обязательный, макс 5000 символов)
+    - resolution (опциональный, "480p" | "720p", default "480p")
+    - seed (опциональный, number, 10000-1000000)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["infinitalk/from-audio", "infinitalk/from-audio", "infinitalk-from-audio"]:
+        return True, None
+    
+    # Валидация image_url: обязательный
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Загрузите изображение."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация audio_url: обязательный
+    audio_url = normalized_input.get('audio_url')
+    if not audio_url:
+        return False, "Поле 'audio_url' обязательно для генерации видео. Загрузите аудио файл."
+    
+    if not isinstance(audio_url, str):
+        audio_url = str(audio_url)
+    
+    audio_url = audio_url.strip()
+    if len(audio_url) == 0:
+        return False, "Поле 'audio_url' не может быть пустым"
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация resolution: опциональный, "480p" | "720p"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_infinitalk_from_audio(resolution)
+        if normalized_resolution is None:
+            valid_values = ["480p", "720p"]
+            return False, f"Поле 'resolution' должно быть одним из: {', '.join(valid_values)} (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    # Валидация seed: опциональный, number, 10000-1000000
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))  # Поддерживаем и int и float
+            if seed_num < 10000 or seed_num > 1000000:
+                return False, f"Поле 'seed' должно быть в диапазоне от 10000 до 1000000 (получено: {seed})"
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом от 10000 до 1000000 (получено: {seed})"
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
