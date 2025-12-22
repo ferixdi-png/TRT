@@ -5535,6 +5535,15 @@ def build_input(
         if 'output_format' not in normalized_input:
             normalized_input['output_format'] = "mp3_44100_128"  # Default согласно документации
     
+    # Применяем дефолты для elevenlabs/speech-to-text
+    if model_id in ["elevenlabs/speech-to-text", "elevenlabs-speech-to-text"]:
+        if 'language_code' not in normalized_input:
+            normalized_input['language_code'] = ""  # Default согласно документации
+        if 'tag_audio_events' not in normalized_input:
+            normalized_input['tag_audio_events'] = True  # Default согласно документации
+        if 'diarize' not in normalized_input:
+            normalized_input['diarize'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
