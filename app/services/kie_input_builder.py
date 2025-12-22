@@ -911,6 +911,90 @@ def _validate_kling_2_6_text_to_video(
     return True, None
 
 
+def _normalize_aspect_ratio_for_z_image(value: Any) -> Optional[str]:
+    """
+    Нормализует aspect_ratio для z-image.
+    Принимает строку и возвращает нормализованное значение.
+    ВАЖНО: Для z-image поддерживаются только "1:1", "4:3", "3:4", "16:9", "9:16" (5 значений)!
+    
+    Args:
+        value: Значение aspect_ratio (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение (только 5 значений для z-image!)
+    valid_values = ["1:1", "4:3", "3:4", "16:9", "9:16"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["1:1", "1/1", "1x1", "square"]:
+        return "1:1"
+    elif str_lower in ["4:3", "4/3", "4x3"]:
+        return "4:3"
+    elif str_lower in ["3:4", "3/4", "3x4"]:
+        return "3:4"
+    elif str_lower in ["16:9", "16/9", "16x9", "landscape", "wide"]:
+        return "16:9"
+    elif str_lower in ["9:16", "9/16", "9x16", "portrait", "vertical"]:
+        return "9:16"
+    
+    return None
+
+
+def _validate_z_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для z-image согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "z-image":
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 1000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 1000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 1000)"
+    
+    # Валидация aspect_ratio: обязательный, "1:1" | "4:3" | "3:4" | "16:9" | "9:16"
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if not aspect_ratio:
+        return False, "Поле 'aspect_ratio' обязательно для генерации изображения"
+    
+    normalized_aspect_ratio = _normalize_aspect_ratio_for_z_image(aspect_ratio)
+    if normalized_aspect_ratio is None:
+        valid_values = ["1:1", "4:3", "3:4", "16:9", "9:16"]
+        return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+    normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -1111,6 +1195,16 @@ def build_input(
     is_valid, error_msg = _validate_kling_2_6_text_to_video(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
+    
+    # Специфичная валидация для z-image
+    is_valid, error_msg = _validate_z_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Применяем дефолты для z-image
+    if model_id == "z-image":
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
