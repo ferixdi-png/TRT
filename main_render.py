@@ -131,20 +131,40 @@ async def build_application(settings):
     
     try:
         # КРИТИЧНО: Импорт bot_kie с явным указанием пути
+        create_bot_application = None
+        
+        # Метод 1: Прямой импорт из корня (если sys.path настроен правильно)
         try:
             from bot_kie import create_bot_application
-        except ImportError as e:
-            logger.error(f"[BUILD] Failed to import bot_kie: {e}")
-            logger.error(f"[BUILD] sys.path: {sys.path}")
-            logger.error(f"[BUILD] Current dir: {os.getcwd()}")
-            logger.error(f"[BUILD] Script dir: {Path(__file__).parent}")
-            # Пробуем добавить путь явно
+            logger.info("[BUILD] Successfully imported create_bot_application from bot_kie")
+        except ImportError as e1:
+            logger.warning(f"[BUILD] Failed to import from bot_kie: {e1}")
+            
+            # Метод 2: Пробуем через importlib с явным путем
             bot_kie_path = Path(__file__).parent / "bot_kie.py"
             if bot_kie_path.exists():
-                logger.info(f"[BUILD] bot_kie.py exists at {bot_kie_path}")
+                logger.info(f"[BUILD] bot_kie.py exists at {bot_kie_path}, trying importlib")
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("bot_kie", bot_kie_path)
+                    if spec and spec.loader:
+                        bot_kie_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(bot_kie_module)
+                        create_bot_application = getattr(bot_kie_module, "create_bot_application", None)
+                        if create_bot_application:
+                            logger.info("[BUILD] Successfully loaded create_bot_application via importlib")
+                        else:
+                            logger.error("[BUILD] create_bot_application not found in bot_kie module")
+                except Exception as e2:
+                    logger.error(f"[BUILD] Failed to load via importlib: {e2}")
             else:
                 logger.error(f"[BUILD] bot_kie.py NOT found at {bot_kie_path}")
-            raise
+                logger.error(f"[BUILD] Current dir: {os.getcwd()}")
+                logger.error(f"[BUILD] Script dir: {Path(__file__).parent}")
+                logger.error(f"[BUILD] sys.path: {sys.path}")
+        
+        if not create_bot_application:
+            raise ImportError(f"Could not import create_bot_application from bot_kie. Check that bot_kie.py exists and contains create_bot_application function.")
         
         logger.info("[BUILD] Creating Telegram Application...")
         _application = await create_bot_application(settings)

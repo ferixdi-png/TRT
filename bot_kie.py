@@ -10153,6 +10153,30 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 waiting_for = image_param_name
                 logger.info(f"✅✅✅ AUTO-FIX COMPLETE: waiting_for={image_param_name}, model={model_id}, continuing image processing...")
     
+    # CRITICAL: Check if waiting for URL parameter but file was sent
+    waiting_for = session.get('waiting_for')
+    if waiting_for and waiting_for.endswith('_url') and waiting_for != 'image_urls':
+        # For URL parameters (except image_urls which accepts files), check if file was sent
+        if update.message.photo or update.message.video or update.message.document or update.message.audio:
+            user_lang = get_user_language(user_id)
+            param_name = waiting_for.replace('_url', '').replace('_', ' ').title()
+            if user_lang == 'en':
+                error_msg = (
+                    f"❌ <b>URL required, not file</b>\n\n"
+                    f"Parameter <b>{waiting_for}</b> requires a URL (link), not a file.\n\n"
+                    f"Please send the URL as text (e.g., https://example.com/file.mp4)\n\n"
+                    f"If you have a file, upload it to a hosting service first and send the URL."
+                )
+            else:
+                error_msg = (
+                    f"❌ <b>Требуется URL, а не файл</b>\n\n"
+                    f"Параметр <b>{waiting_for}</b> требует URL (ссылку), а не файл.\n\n"
+                    f"Пожалуйста, отправьте URL текстом (например, https://example.com/file.mp4)\n\n"
+                    f"Если у вас есть файл, сначала загрузите его на хостинг и отправьте URL."
+                )
+            await update.message.reply_text(error_msg, parse_mode='HTML')
+            return INPUTTING_PARAMS
+    
     # If photo sent but not waiting for image, try to auto-fix session
     if update.message.photo and not waiting_for_image:
         model_id = session.get('model_id', 'Unknown')
@@ -12076,7 +12100,8 @@ async def start_generation_directly(
     # Дополнительная валидация через kie_validator не нужна, т.к. она валидирует по YAML,
     # а параметры уже адаптированы к API формату
     
-    # 🔴 КРИТИЧНО: Списание баланса ДО создания задачи (атомарно)
+    # 🔴 КРИТИЧНО: Проверяем баланс ДО создания задачи, но НЕ списываем
+    # Списание произойдет ТОЛЬКО после успешной генерации (commit_charge)
     # Используем цену из каталога (official_usd * курс * 2)
     if not is_admin_user and not is_free:
         # Получаем цену из каталога
@@ -12100,7 +12125,7 @@ async def start_generation_directly(
                 f"MODEL={model_id} USER={user_id}"
             )
         
-        # Проверяем баланс
+        # Проверяем баланс (но НЕ списываем - списание только при success)
         user_balance_check = await get_user_balance_async(user_id)
         if user_balance_check < price_rub_catalog:
             price_str = f"{price_rub_catalog:.2f}".rstrip('0').rstrip('.')
@@ -12138,26 +12163,10 @@ async def start_generation_directly(
             await status_message.edit_text(insufficient_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
             return ConversationHandler.END
         
-        # Списываем баланс ДО создания задачи
-        success = await subtract_user_balance_async(user_id, price_rub_catalog)
-        if not success:
-            logger.error(f"Failed to deduct balance for user {user_id}, amount {price_rub_catalog}")
-            user_lang_check = get_user_language(user_id)
-            error_msg = (
-                f"❌ <b>Ошибка списания баланса</b>\n\n"
-                f"Попробуйте позже или обратитесь в поддержку."
-            ) if user_lang_check == 'ru' else (
-                f"❌ <b>Balance deduction error</b>\n\n"
-                f"Please try later or contact support."
-            )
-            await status_message.edit_text(error_msg, parse_mode='HTML')
-            return ConversationHandler.END
-        
-        # Логируем успешное списание
-        new_balance = await get_user_balance_async(user_id)
+        # Логируем проверку баланса (списание будет после success)
         logger.info(
-            f"BALANCE VERIFIED: user_id={user_id} deducted={price_rub_catalog} "
-            f"old_balance={user_balance_check:.2f} new_balance={new_balance:.2f} model={model_id}"
+            f"BALANCE CHECKED: user_id={user_id} required={price_rub_catalog} "
+            f"balance={user_balance_check:.2f} model={model_id} (will charge on success only)"
         )
         
         # Обновляем price для дальнейшего использования
@@ -12277,9 +12286,10 @@ async def start_generation_directly(
         logger.info(f"✅✅✅ Polling task created for task {task_id}")
         
         # ⚠️ ВАЖНО: Баланс НЕ списывается здесь!
-        # Баланс будет списан только ПОСЛЕ успешной генерации в poll_task_status
+        # Баланс будет списан только ПОСЛЕ успешной генерации в poll_task_status (commit_charge)
+        # При fail/timeout/cancel будет выполнен auto-refund (если был предварительный hold)
         # Это гарантирует, что пользователь платит только за успешные генерации
-        logger.info(f"💰 Balance will be deducted after successful generation (task_id={task_id})")
+        logger.info(f"💰 Balance will be deducted after successful generation only (commit_charge on success, task_id={task_id})")
         
         return ConversationHandler.END
     else:
@@ -24406,8 +24416,17 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             # Limited admin - deduct from limit
                             add_admin_spent(user_id, price)
                         else:
-                            # Regular user - deduct from balance
-                            await subtract_user_balance_async(user_id, price)
+                            # Regular user - commit_charge: deduct from balance (idempotent - check if already charged)
+                            # Check if already charged by looking at session flag
+                            if not session.get('balance_charged', False):
+                                success = await subtract_user_balance_async(user_id, price)
+                                if success:
+                                    session['balance_charged'] = True
+                                    logger.info(f"💰 COMMIT_CHARGE: Charged {price} from user {user_id} for successful task {task_id}")
+                                else:
+                                    logger.error(f"❌ Failed to charge user {user_id} for successful task {task_id}")
+                            else:
+                                logger.warning(f"⚠️ Balance already charged for task {task_id}, skipping (idempotency protection)")
                     elif dry_run:
                         logger.info(f"🔧 DRY-RUN: Would deduct {price} from user {user_id} after successful generation (NOT DEDUCTED)")
                 
@@ -24695,13 +24714,37 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 break
             
             elif state == 'fail':
-                # Task failed
+                # Task failed - auto-refund if charge was made
                 fail_msg = status_result.get('failMsg', 'Unknown error')
                 fail_code = status_result.get('failCode', '')
                 
                 # CRITICAL: Log full error details for debugging
                 logger.error(f"❌ Task {task_id} failed: code={fail_code}, msg={fail_msg}")
                 logger.error(f"❌ Full status_result: {json.dumps(status_result, ensure_ascii=False, indent=2)}")
+                
+                # AUTO-REFUND: If balance was charged, refund it
+                generation_key = (user_id, task_id)
+                async with active_generations_lock:
+                    if generation_key in active_generations:
+                        session = active_generations[generation_key]
+                        model_id = session.get('model_id', '')
+                        params = session.get('params', {})
+                        is_admin_user = get_is_admin(user_id)
+                        is_free = session.get('is_free_generation', False)
+                        
+                        # Check if charge was made (shouldn't be, but check anyway)
+                        if not is_free and user_id != ADMIN_ID:
+                            price = calculate_price_rub(model_id, params, is_admin_user)
+                            # Refund if charge was made (idempotent - safe to call multiple times)
+                            try:
+                                await add_user_balance_async(user_id, price)
+                                logger.info(f"💰 AUTO-REFUND: Refunded {price} to user {user_id} for failed task {task_id}")
+                            except Exception as refund_error:
+                                logger.error(f"❌ Failed to refund user {user_id} for failed task {task_id}: {refund_error}")
+                        
+                        session['status'] = 'failed'
+                        session['error'] = fail_msg
+                        session['fail_code'] = fail_code
                 
                 # Используем обработчик ошибок для получения понятного сообщения
                 try:
@@ -24738,16 +24781,6 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     parse_mode='HTML'
                 )
                 
-                # Обновляем статус задачи как failed
-                generation_key = (user_id, task_id)
-                async with active_generations_lock:
-                    if generation_key in active_generations:
-                        session = active_generations[generation_key]
-                        session['status'] = 'failed'
-                        session['error'] = fail_msg
-                        session['fail_code'] = fail_code
-                        # Не удаляем сразу, чтобы пользователь мог увидеть статус
-                
                 break
             
             elif state in ['waiting', 'queuing', 'generating']:
@@ -24767,31 +24800,63 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
         except Exception as e:
             logger.error(f"Error polling task status: {e}", exc_info=True)
             if attempt >= max_attempts:
+                # Timeout - auto-refund if charge was made
+                generation_key = (user_id, task_id)
+                async with active_generations_lock:
+                    if generation_key in active_generations:
+                        session = active_generations[generation_key]
+                        model_id = session.get('model_id', '')
+                        params = session.get('params', {})
+                        is_admin_user = get_is_admin(user_id)
+                        is_free = session.get('is_free_generation', False)
+                        
+                        # AUTO-REFUND on timeout
+                        if not is_free and user_id != ADMIN_ID:
+                            price = calculate_price_rub(model_id, params, is_admin_user)
+                            try:
+                                await add_user_balance_async(user_id, price)
+                                logger.info(f"💰 AUTO-REFUND: Refunded {price} to user {user_id} for timeout task {task_id}")
+                            except Exception as refund_error:
+                                logger.error(f"❌ Failed to refund user {user_id} for timeout task {task_id}: {refund_error}")
+                        
+                        del active_generations[generation_key]
+                
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"❌ Превышено время ожидания. Попробуйте начать генерацию заново.",
                     parse_mode='HTML'
                 )
-                # Clean up active generation on timeout/error
-                generation_key = (user_id, task_id)
-                async with active_generations_lock:
-                    if generation_key in active_generations:
-                        del active_generations[generation_key]
                 break
             # For non-fatal errors, continue polling (don't break the loop)
             continue
     
     if attempt >= max_attempts:
+        # Timeout - auto-refund if charge was made
+        generation_key = (user_id, task_id)
+        async with active_generations_lock:
+            if generation_key in active_generations:
+                session = active_generations[generation_key]
+                model_id = session.get('model_id', '')
+                params = session.get('params', {})
+                is_admin_user = get_is_admin(user_id)
+                is_free = session.get('is_free_generation', False)
+                
+                # AUTO-REFUND on timeout
+                if not is_free and user_id != ADMIN_ID:
+                    price = calculate_price_rub(model_id, params, is_admin_user)
+                    try:
+                        await add_user_balance_async(user_id, price)
+                        logger.info(f"💰 AUTO-REFUND: Refunded {price} to user {user_id} for timeout task {task_id}")
+                    except Exception as refund_error:
+                        logger.error(f"❌ Failed to refund user {user_id} for timeout task {task_id}: {refund_error}")
+                
+                del active_generations[generation_key]
+        
         await context.bot.send_message(
             chat_id=chat_id,
             text=f"⏰ Время ожидания истекло. Попробуйте начать генерацию заново.",
             parse_mode='HTML'
         )
-        # Clean up active generation on timeout
-        generation_key = (user_id, task_id)
-        async with active_generations_lock:
-            if generation_key in active_generations:
-                del active_generations[generation_key]
 
 
 async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -25463,6 +25528,73 @@ async def _register_all_handlers_internal(application: Application):
     
     # Базовые callback handlers
     application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Fallback handler for unknown callbacks (must be last, lowest priority)
+    async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Fallback handler for unknown callbacks - ensures no silence"""
+        query = update.callback_query
+        if query:
+            try:
+                await query.answer("❌ Неизвестная команда. Используйте /start для возврата в меню.", show_alert=True)
+                user_id = update.effective_user.id if update.effective_user else None
+                user_lang = get_user_language(user_id) if user_id else 'ru'
+                keyboard = build_main_menu_keyboard(user_id, user_lang)
+                try:
+                    await query.edit_message_text(
+                        "❌ <b>Неизвестная команда</b>\n\n"
+                        "Используйте /start для возврата в главное меню.",
+                        reply_markup=keyboard,
+                        parse_mode='HTML'
+                    )
+                except:
+                    try:
+                        await query.message.reply_text(
+                            "❌ Неизвестная команда. Используйте /start для возврата в меню.",
+                            reply_markup=keyboard
+                        )
+                    except:
+                        pass
+            except Exception as e:
+                logger.error(f"Error in unknown_callback_handler: {e}", exc_info=True)
+    
+    # Fallback handler for non-text messages (photo/video/audio/document) when not in conversation
+    async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Fallback handler for non-text messages when not in conversation - ensures no silence"""
+        if not update.message:
+            return
+        
+        user_id = update.effective_user.id if update.effective_user else None
+        user_lang = get_user_language(user_id) if user_id else 'ru'
+        keyboard = build_main_menu_keyboard(user_id, user_lang)
+        
+        message_type = "файл"
+        if update.message.photo:
+            message_type = "фото"
+        elif update.message.video:
+            message_type = "видео"
+        elif update.message.audio or update.message.voice:
+            message_type = "аудио"
+        elif update.message.document:
+            message_type = "документ"
+        
+        try:
+            await update.message.reply_text(
+                f"❌ <b>Я не ожидаю {message_type} сейчас</b>\n\n"
+                "Пожалуйста:\n"
+                "• Выберите модель из меню через /start\n"
+                "• Или следуйте инструкциям бота",
+                reply_markup=keyboard,
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            logger.error(f"Error in unknown_message_handler: {e}", exc_info=True)
+    
+    # Add fallback handlers with lowest priority (group=100, added last)
+    application.add_handler(CallbackQueryHandler(unknown_callback_handler), group=100)
+    application.add_handler(MessageHandler(
+        filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
+        unknown_message_handler
+    ), group=100)
     
     logger.info("✅ Basic handlers registered (full registration happens in main())")
 
