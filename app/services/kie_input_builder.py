@@ -4893,6 +4893,202 @@ def _validate_qwen_image_edit(
     return True, None
 
 
+def _normalize_rendering_speed_for_ideogram_character_edit(value: Any) -> Optional[str]:
+    """
+    Нормализует rendering_speed для ideogram/character-edit.
+    Принимает значение и возвращает нормализованную строку в верхнем регистре.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение rendering_speed (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы, конвертируем в верхний регистр
+    str_value = str(value).strip().upper()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["TURBO", "BALANCED", "QUALITY"]
+    
+    # Проверяем точное совпадение
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _normalize_style_for_ideogram_character_edit(value: Any) -> Optional[str]:
+    """
+    Нормализует style для ideogram/character-edit.
+    Принимает значение и возвращает нормализованную строку в верхнем регистре.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение style (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы, конвертируем в верхний регистр
+    str_value = str(value).strip().upper()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["AUTO", "REALISTIC", "FICTION"]
+    
+    # Проверяем точное совпадение
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _validate_ideogram_character_edit(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для ideogram/character-edit согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - mask_url (обязательный, макс 10MB, jpeg/png/webp)
+    - reference_image_urls (обязательный, массив, макс 10MB общий размер, jpeg/png/webp, только 1 изображение поддерживается)
+    - rendering_speed (опциональный, enum, default "BALANCED")
+    - style (опциональный, enum, default "AUTO")
+    - expand_prompt (опциональный, boolean, default true)
+    - num_images (опциональный, string enum, default "1")
+    - seed (опциональный, number)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["ideogram/character-edit", "ideogram-character-edit", "character-edit"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для редактирования персонажа. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для редактирования персонажа. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация mask_url: обязательный, string
+    mask_url = normalized_input.get('mask_url')
+    if not mask_url:
+        return False, "Поле 'mask_url' обязательно для редактирования персонажа. Укажите URL маски."
+    
+    if not isinstance(mask_url, str):
+        mask_url = str(mask_url)
+    
+    mask_url = mask_url.strip()
+    if len(mask_url) == 0:
+        return False, "Поле 'mask_url' не может быть пустым"
+    
+    normalized_input['mask_url'] = mask_url
+    
+    # Валидация reference_image_urls: обязательный, массив
+    reference_image_urls = normalized_input.get('reference_image_urls')
+    if not reference_image_urls:
+        return False, "Поле 'reference_image_urls' обязательно для редактирования персонажа. Укажите массив URL изображений-референсов."
+    
+    # Проверяем что reference_image_urls это массив
+    if not isinstance(reference_image_urls, list):
+        return False, "Поле 'reference_image_urls' должно быть массивом URL изображений"
+    
+    # Проверяем количество изображений (минимум 1, но только 1 поддерживается)
+    if len(reference_image_urls) == 0:
+        return False, "Поле 'reference_image_urls' не может быть пустым. Укажите хотя бы одно изображение-референс."
+    
+    # Проверяем что все элементы - строки (URL)
+    for idx, url in enumerate(reference_image_urls):
+        if not isinstance(url, str):
+            return False, f"Элемент {idx} в 'reference_image_urls' должен быть строкой (URL)"
+        if not url.strip():
+            return False, f"Элемент {idx} в 'reference_image_urls' не может быть пустым"
+    
+    # ВАЖНО: Только 1 изображение поддерживается, остальные игнорируются
+    if len(reference_image_urls) > 1:
+        # Предупреждение: используем только первое изображение
+        reference_image_urls = [reference_image_urls[0]]
+    
+    normalized_input['reference_image_urls'] = reference_image_urls
+    
+    # Валидация rendering_speed: опциональный, enum
+    rendering_speed = normalized_input.get('rendering_speed')
+    if rendering_speed is not None:
+        normalized_speed = _normalize_rendering_speed_for_ideogram_character_edit(rendering_speed)
+        if normalized_speed is None:
+            return False, f"Поле 'rendering_speed' должно быть одним из: TURBO, BALANCED, QUALITY (получено: {rendering_speed})"
+        normalized_input['rendering_speed'] = normalized_speed
+    
+    # Валидация style: опциональный, enum
+    style = normalized_input.get('style')
+    if style is not None:
+        normalized_style = _normalize_style_for_ideogram_character_edit(style)
+        if normalized_style is None:
+            return False, f"Поле 'style' должно быть одним из: AUTO, REALISTIC, FICTION (получено: {style})"
+        normalized_input['style'] = normalized_style
+    
+    # Валидация expand_prompt: опциональный, boolean
+    expand_prompt = normalized_input.get('expand_prompt')
+    if expand_prompt is not None:
+        normalized_bool = _normalize_boolean(expand_prompt)
+        if normalized_bool is None:
+            return False, f"Поле 'expand_prompt' должно быть boolean (true/false) (получено: {expand_prompt})"
+        normalized_input['expand_prompt'] = normalized_bool
+    
+    # Валидация num_images: опциональный, string enum
+    num_images = normalized_input.get('num_images')
+    if num_images is not None:
+        # Переиспользуем функцию из qwen/image-edit
+        normalized_num = _normalize_num_images_for_qwen_image_edit(num_images)
+        if normalized_num is None:
+            return False, f"Поле 'num_images' должно быть одним из: 1, 2, 3, 4 (получено: {num_images})"
+        normalized_input['num_images'] = normalized_num
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
