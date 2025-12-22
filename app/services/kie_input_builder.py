@@ -5937,6 +5937,25 @@ def build_input(
         if 'language_code' not in normalized_input:
             normalized_input['language_code'] = ""  # Default согласно документации
     
+    # Применяем дефолты для wan/2-2-a14b-speech-to-video-turbo
+    if model_id in ["wan/2-2-a14b-speech-to-video-turbo", "wan-2-2-a14b-speech-to-video-turbo"]:
+        if 'num_frames' not in normalized_input:
+            normalized_input['num_frames'] = 80  # Default согласно документации
+        if 'frames_per_second' not in normalized_input:
+            normalized_input['frames_per_second'] = 16  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "480p"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации
+        if 'num_inference_steps' not in normalized_input:
+            normalized_input['num_inference_steps'] = 27  # Default согласно документации
+        if 'guidance_scale' not in normalized_input:
+            normalized_input['guidance_scale'] = 3.5  # Default согласно документации
+        if 'shift' not in normalized_input:
+            normalized_input['shift'] = 5  # Default согласно документации
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
