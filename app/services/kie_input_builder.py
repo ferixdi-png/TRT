@@ -8057,6 +8057,17 @@ def build_input(
         if 'cfg_scale' not in normalized_input:
             normalized_input['cfg_scale'] = 0.5  # Default согласно документации
     
+    # Применяем дефолты для kling/v2-1-pro
+    if model_id in ["kling/v2-1-pro", "kling-v2-1-pro", "v2-1-pro"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
+        if 'tail_image_url' not in normalized_input:
+            normalized_input['tail_image_url'] = ""  # Default согласно документации (пустая строка!)
+    
     # Применяем дефолты для elevenlabs/speech-to-text
     if model_id in ["elevenlabs/speech-to-text", "elevenlabs-speech-to-text"]:
         if 'language_code' not in normalized_input:
