@@ -37,3 +37,12 @@ kie_full_api.json
 .DS_Store
 Thumbs.db
 
+# Локальные файлы
+*.rar
+*.lnk
+desktop.ini
+*.bat
+5656-main/
+Новая папка/
+bot.rar
+

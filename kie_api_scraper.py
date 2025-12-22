@@ -1,12 +1,31 @@
+# -*- coding: utf-8 -*-
 # kie_api_scraper.py - Автоматический сборщик ВСЕХ моделей Kie.ai + API настройки
 # Готовый скрипт "одна кнопка" - запускай и получай полный дамп
 
+# -*- coding: utf-8 -*-
+"""
+Kie.ai API Scraper
+Автоматический сборщик всех моделей Kie.ai с полной документацией API
+Готов к развертыванию на Render.com
+"""
+
+import sys
+import os
 import requests
 import json
 import time
 from urllib.parse import urljoin
 import re
 from bs4 import BeautifulSoup
+
+# Устанавливаем кодировку для вывода (важно для Render)
+if sys.stdout.encoding is None or sys.stdout.encoding.lower() != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except (AttributeError, ValueError):
+        # Для старых версий Python
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
 
 class KieApiScraper:
     def __init__(self):
@@ -82,6 +101,9 @@ class KieApiScraper:
             script_tags = soup.find_all('script', type='application/json')
             for script in script_tags:
                 try:
+                    # Проверяем что script.string не None
+                    if script.string is None:
+                        continue
                     data = json.loads(script.string)
                     # Рекурсивный поиск моделей в JSON
                     if isinstance(data, dict):
@@ -94,7 +116,8 @@ class KieApiScraper:
                                                 'name': item.get('name', ''),
                                                 'url': item.get('url', item.get('href', ''))
                                             })
-                except:
+                except (json.JSONDecodeError, AttributeError, TypeError) as e:
+                    # Игнорируем ошибки парсинга JSON
                     pass
             
             # Удаляем дубликаты и пустые записи
@@ -166,7 +189,7 @@ class KieApiScraper:
                     # Парсим JSON для проверки
                     json.loads(code)
                     return code
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     # Если не валидный JSON, но похож на него
                     if code.count('{') > 0 and code.count('}') > 0:
                         return code
@@ -239,7 +262,7 @@ class KieApiScraper:
                         else:
                             params[param_name] = int(match.group(1))
                         break
-                    except:
+                    except (ValueError, TypeError, AttributeError):
                         continue
         
         return params
@@ -323,7 +346,7 @@ class KieApiScraper:
                     parsed = json.loads(example_json)
                     model_info['example_request'] = parsed
                     print(f"    ✅ ОТВЕТ: Пример JSON найден и распарсен")
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     print(f"    ✅ ОТВЕТ: Пример JSON найден (не валидный JSON)")
             else:
                 # Создаем базовый пример
@@ -433,7 +456,7 @@ class KieApiScraper:
         if not model_info.get('example_request'):
             try:
                 model_info['example_request'] = json.loads(model_info['example'])
-            except:
+            except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
                 model_info['example_request'] = {"prompt": "Пример запроса"}
         
         # Проверка input_schema
@@ -518,7 +541,7 @@ class KieApiScraper:
                 else:
                     model['example_request'] = {"prompt": "Пример запроса"}
                 fixed = True
-            except:
+            except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
                 model['example_request'] = {"prompt": "Пример запроса"}
                 fixed = True
         
@@ -642,12 +665,21 @@ class KieApiScraper:
         print("\n💾 ДЕЙСТВИЕ 4: Сохранение результатов в файл...")
         output_file = 'kie_full_api.json'
         try:
-            with open(output_file, 'w', encoding='utf-8') as f:
+            # Убеждаемся что путь относительный (для Render)
+            output_path = os.path.join(os.getcwd(), output_file)
+            with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(self.models, f, ensure_ascii=False, indent=2)
             print(f"✅ ОТВЕТ: Файл {output_file} успешно сохранен")
-            print(f"   📊 Размер: {len(json.dumps(self.models, ensure_ascii=False))} символов")
-        except Exception as e:
+            file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            print(f"   📊 Размер файла: {file_size} байт")
+        except (IOError, OSError, PermissionError) as e:
             print(f"❌ ОТВЕТ: Ошибка при сохранении файла: {e}")
+            print(f"   📁 Текущая директория: {os.getcwd()}")
+            return []
+        except Exception as e:
+            print(f"❌ ОТВЕТ: Неожиданная ошибка при сохранении: {e}")
+            import traceback
+            print(f"   📋 Детали: {traceback.format_exc()}")
             return []
         
         # Финальный ответ
@@ -662,42 +694,63 @@ class KieApiScraper:
 
 # === ЗАПУСК ОДНОЙ КНОПКОЙ ===
 if __name__ == "__main__":
-    print("\n" + "=" * 60)
-    print("🎯 ИНИЦИАЛИЗАЦИЯ СКРИПТА...")
-    print("=" * 60)
-    
-    scraper = KieApiScraper()
-    print("✅ ОТВЕТ: Класс KieApiScraper инициализирован")
-    print(f"   📡 Base URL: {scraper.base_url}")
-    print(f"   🌐 Market URL: {scraper.market_url}")
-    
-    models = scraper.run_full_scrape()
-    
-    # Действие 5: Показ примеров
-    print("\n📋 ДЕЙСТВИЕ 5: Отображение примеров моделей...")
-    if models:
-        print(f"✅ ОТВЕТ: Показываем первые {min(5, len(models))} моделей из {len(models)}")
+    try:
         print("\n" + "=" * 60)
-        for i, model in enumerate(models[:5], 1):
-            print(f"\n📦 Модель {i}: {model['name']}")
-            print(f"   🔗 Endpoint: {model['endpoint'] or 'не найден'}")
-            print(f"   📝 Method: {model['method']}")
-            print(f"   🌐 Base URL: {model['base_url']}")
-            print(f"   📂 Категория: {model.get('category', 'other')}")
-            if model.get('params'):
-                print(f"   ⚙️ Параметры: {model['params']}")
-            if model.get('input_schema'):
-                required = model['input_schema'].get('required', [])
-                if required:
-                    print(f"   📋 Обязательные поля: {', '.join(required)}")
-            if model.get('example_request'):
-                print(f"   💡 Пример запроса:")
-                print(f"      {json.dumps(model['example_request'], ensure_ascii=False, indent=6)}")
-            elif model.get('example'):
-                print(f"   💡 Пример: {model['example'][:150]}...")
-            print()
+        print("🎯 ИНИЦИАЛИЗАЦИЯ СКРИПТА...")
         print("=" * 60)
-        print(f"\n✅ ОТВЕТ: Все действия выполнены успешно!")
-    else:
-        print("❌ ОТВЕТ: Модели не были собраны. Проверьте логи выше.")
+        
+        # Проверка окружения
+        print(f"🐍 Python версия: {sys.version}")
+        print(f"📁 Рабочая директория: {os.getcwd()}")
+        print(f"🌍 Кодировка stdout: {sys.stdout.encoding}")
+        
+        scraper = KieApiScraper()
+        print("✅ ОТВЕТ: Класс KieApiScraper инициализирован")
+        print(f"   📡 Base URL: {scraper.base_url}")
+        print(f"   🌐 Market URL: {scraper.market_url}")
+        
+        models = scraper.run_full_scrape()
+        
+        # Действие 5: Показ примеров
+        print("\n📋 ДЕЙСТВИЕ 5: Отображение примеров моделей...")
+        if models:
+            print(f"✅ ОТВЕТ: Показываем первые {min(5, len(models))} моделей из {len(models)}")
+            print("\n" + "=" * 60)
+            for i, model in enumerate(models[:5], 1):
+                try:
+                    print(f"\n📦 Модель {i}: {model['name']}")
+                    print(f"   🔗 Endpoint: {model['endpoint'] or 'не найден'}")
+                    print(f"   📝 Method: {model['method']}")
+                    print(f"   🌐 Base URL: {model['base_url']}")
+                    print(f"   📂 Категория: {model.get('category', 'other')}")
+                    if model.get('params'):
+                        print(f"   ⚙️ Параметры: {model['params']}")
+                    if model.get('input_schema'):
+                        required = model['input_schema'].get('required', [])
+                        if required:
+                            print(f"   📋 Обязательные поля: {', '.join(required)}")
+                    if model.get('example_request'):
+                        print(f"   💡 Пример запроса:")
+                        print(f"      {json.dumps(model['example_request'], ensure_ascii=False, indent=6)}")
+                    elif model.get('example'):
+                        example_str = str(model['example'])
+                        print(f"   💡 Пример: {example_str[:150]}...")
+                    print()
+                except (KeyError, TypeError, UnicodeEncodeError) as e:
+                    print(f"   ⚠️ Ошибка при выводе модели {i}: {e}")
+                    continue
+            
+            print("=" * 60)
+            print(f"\n✅ ОТВЕТ: Все действия выполнены успешно!")
+        else:
+            print("❌ ОТВЕТ: Модели не были собраны. Проверьте логи выше.")
+    
+    except KeyboardInterrupt:
+        print("\n\n⚠️ ОТВЕТ: Прервано пользователем")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n\n❌ КРИТИЧЕСКАЯ ОШИБКА: {e}")
+        import traceback
+        print(f"📋 Детали ошибки:\n{traceback.format_exc()}")
+        sys.exit(1)
 
