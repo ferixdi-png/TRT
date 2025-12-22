@@ -1,0 +1,1716 @@
+{
+  "timestamp": "2025-12-21T20:00:00Z",
+  "currency": {
+    "usd_to_rub": 100,
+    "multiplier": 2,
+    "note": "Цены в рублях = Our Price (USD) * USD_TO_RUB * 2"
+  },
+  "total_models": 70,
+  "total_modes": 214,
+  "models": {
+    "flux-2/flex-image-to-image": {
+      "model_id": "flux-2/flex-image-to-image",
+      "name": "Flux 2 Flex Image to Image",
+      "modes": [
+        {
+          "mode": "1.0s-1K",
+          "credits_per_generation": 14.0,
+          "price_usd": 0.07,
+          "price_rub": 14.0
+        },
+        {
+          "mode": "1.0s-2K",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        }
+      ]
+    },
+    "flux-2/flex-text-to-image": {
+      "model_id": "flux-2/flex-text-to-image",
+      "name": "Flux 2 Flex Text to Image",
+      "modes": [
+        {
+          "mode": "1.0s-1K",
+          "credits_per_generation": 14.0,
+          "price_usd": 0.07,
+          "price_rub": 14.0
+        },
+        {
+          "mode": "1.0s-2K",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        }
+      ]
+    },
+    "flux-2/pro-image-to-image": {
+      "model_id": "flux-2/pro-image-to-image",
+      "name": "Flux 2 Pro Image to Image",
+      "modes": [
+        {
+          "mode": "1.0s-1K",
+          "credits_per_generation": 5.0,
+          "price_usd": 0.025,
+          "price_rub": 5.0
+        },
+        {
+          "mode": "1.0s-2K",
+          "credits_per_generation": 7.0,
+          "price_usd": 0.035,
+          "price_rub": 7.0
+        }
+      ]
+    },
+    "flux-2/pro-text-to-image": {
+      "model_id": "flux-2/pro-text-to-image",
+      "name": "Flux 2 Pro Text to Image",
+      "modes": [
+        {
+          "mode": "1.0s-1K",
+          "credits_per_generation": 5.0,
+          "price_usd": 0.025,
+          "price_rub": 5.0
+        },
+        {
+          "mode": "1.0s-2K",
+          "credits_per_generation": 7.0,
+          "price_usd": 0.035,
+          "price_rub": 7.0
+        }
+      ]
+    },
+    "flux/kontext": {
+      "model_id": "flux/kontext",
+      "name": "Flux Kontext",
+      "modes": [
+        {
+          "mode": "Pro",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        },
+        {
+          "mode": "Max",
+          "credits_per_generation": 8.0,
+          "price_usd": 0.04,
+          "price_rub": 8.0
+        }
+      ]
+    },
+    "bytedance/seedance": {
+      "model_id": "bytedance/seedance",
+      "name": "Seedance 1.0 Image to Video",
+      "modes": [
+        {
+          "mode": "Lite-5.0s-480p",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        },
+        {
+          "mode": "Lite-5.0s-720p",
+          "credits_per_generation": 22.5,
+          "price_usd": 0.1125,
+          "price_rub": 22.5
+        },
+        {
+          "mode": "Lite-5.0s-1080p",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        },
+        {
+          "mode": "Lite-10.0s-480p",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.1,
+          "price_rub": 20.0
+        },
+        {
+          "mode": "Lite-10.0s-720p",
+          "credits_per_generation": 45.0,
+          "price_usd": 0.225,
+          "price_rub": 45.0
+        },
+        {
+          "mode": "Lite-10.0s-1080p",
+          "credits_per_generation": 100.0,
+          "price_usd": 0.5,
+          "price_rub": 100.0
+        },
+        {
+          "mode": "Pro-5.0s-480p",
+          "credits_per_generation": 14.0,
+          "price_usd": 0.07,
+          "price_rub": 14.0
+        },
+        {
+          "mode": "Pro-5.0s-720p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "Pro-5.0s-1080p",
+          "credits_per_generation": 70.0,
+          "price_usd": 0.35,
+          "price_rub": 70.0
+        },
+        {
+          "mode": "Pro-10.0s-480p",
+          "credits_per_generation": 28.0,
+          "price_usd": 0.14,
+          "price_rub": 28.0
+        },
+        {
+          "mode": "Pro-10.0s-720p",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "Pro-10.0s-1080p",
+          "credits_per_generation": 140.0,
+          "price_usd": 0.7,
+          "price_rub": 140.0
+        },
+        {
+          "mode": "Lite-5.0s-480p",
+          "credits_per_generation": 14.0,
+          "price_usd": 0.07,
+          "price_rub": 14.0
+        },
+        {
+          "mode": "Lite-5.0s-720p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "Lite-5.0s-1080p",
+          "credits_per_generation": 70.0,
+          "price_usd": 0.35,
+          "price_rub": 70.0
+        },
+        {
+          "mode": "Pro-10.0s-480p",
+          "credits_per_generation": 28.0,
+          "price_usd": 0.14,
+          "price_rub": 28.0
+        },
+        {
+          "mode": "Pro-10.0s-720p",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "Pro-10.0s-1080p",
+          "credits_per_generation": 140.0,
+          "price_usd": 0.7,
+          "price_rub": 140.0
+        },
+        {
+          "mode": "Pro Fast-5.0s-720p",
+          "credits_per_generation": 16.0,
+          "price_usd": 0.08,
+          "price_rub": 16.0
+        },
+        {
+          "mode": "Pro Fast-10.0s-720p",
+          "credits_per_generation": 36.0,
+          "price_usd": 0.18,
+          "price_rub": 36.0
+        },
+        {
+          "mode": "Pro Fast-5.0s-1080p",
+          "credits_per_generation": 36.0,
+          "price_usd": 0.18,
+          "price_rub": 36.0
+        },
+        {
+          "mode": "Pro Fast-10.0s-1080p",
+          "credits_per_generation": 72.0,
+          "price_usd": 0.36,
+          "price_rub": 72.0
+        }
+      ]
+    },
+    "bytedance/v1-pro-fast-image-to-video": {
+      "model_id": "bytedance/v1-pro-fast-image-to-video",
+      "name": "Seedance V1 Pro Fast Image to Video",
+      "modes": [
+        {
+          "mode": "Fast-5.0s-720p",
+          "credits_per_generation": 16.0,
+          "price_usd": 0.08,
+          "price_rub": 16.0
+        },
+        {
+          "mode": "Fast-10.0s-720p",
+          "credits_per_generation": 36.0,
+          "price_usd": 0.18,
+          "price_rub": 36.0
+        },
+        {
+          "mode": "Fast-5.0s-1080p",
+          "credits_per_generation": 36.0,
+          "price_usd": 0.18,
+          "price_rub": 36.0
+        },
+        {
+          "mode": "Fast-10.0s-1080p",
+          "credits_per_generation": 72.0,
+          "price_usd": 0.36,
+          "price_rub": 72.0
+        }
+      ]
+    },
+    "bytedance/seedream": {
+      "model_id": "bytedance/seedream",
+      "name": "Seedream 3.0 Text to Image",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 3.5,
+          "price_usd": 0.0175,
+          "price_rub": 3.5
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 5.0,
+          "price_usd": 0.025,
+          "price_rub": 5.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 5.0,
+          "price_usd": 0.025,
+          "price_rub": 5.0
+        }
+      ]
+    },
+    "seedream/4.5-text-to-image": {
+      "model_id": "seedream/4.5-text-to-image",
+      "name": "Seedream 4.5 Text to Image",
+      "modes": [
+        {
+          "mode": "Basic",
+          "credits_per_generation": 6.5,
+          "price_usd": 0.0325,
+          "price_rub": 6.5
+        },
+        {
+          "mode": "High",
+          "credits_per_generation": 6.5,
+          "price_usd": 0.0325,
+          "price_rub": 6.5
+        }
+      ]
+    },
+    "seedream/4.5-edit": {
+      "model_id": "seedream/4.5-edit",
+      "name": "Seedream 4.5 Image Edit",
+      "modes": [
+        {
+          "mode": "Basic",
+          "credits_per_generation": 6.5,
+          "price_usd": 0.0325,
+          "price_rub": 6.5
+        },
+        {
+          "mode": "High",
+          "credits_per_generation": 6.5,
+          "price_usd": 0.0325,
+          "price_rub": 6.5
+        }
+      ]
+    },
+    "elevenlabs/audio-isolation": {
+      "model_id": "elevenlabs/audio-isolation",
+      "name": "Elevenlabs Audio Isolation",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 0.2,
+          "price_usd": 0.001,
+          "price_rub": 0.2
+        }
+      ]
+    },
+    "elevenlabs/sound-effect": {
+      "model_id": "elevenlabs/sound-effect",
+      "name": "Elevenlabs Sound Effect V2",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 0.24,
+          "price_usd": 0.0012,
+          "price_rub": 0.24
+        }
+      ]
+    },
+    "elevenlabs/speech-to-text": {
+      "model_id": "elevenlabs/speech-to-text",
+      "name": "Elevenlabs Speech to Text",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 3.5,
+          "price_usd": 0.0175,
+          "price_rub": 3.5
+        }
+      ]
+    },
+    "elevenlabs/text-to-speech": {
+      "model_id": "elevenlabs/text-to-speech",
+      "name": "Elevenlabs Text to Speech Multilingual v2",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "turbo",
+          "credits_per_generation": 6.0,
+          "price_usd": 0.03,
+          "price_rub": 6.0
+        }
+      ]
+    },
+    "google/imagen4": {
+      "model_id": "google/imagen4",
+      "name": "Google Imagen 4",
+      "modes": [
+        {
+          "mode": "Ultra",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        }
+      ]
+    },
+    "google/imagen4-fast": {
+      "model_id": "google/imagen4-fast",
+      "name": "Google Imagen 4 Fast",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        }
+      ]
+    },
+    "google/imagen4-ultra": {
+      "model_id": "google/imagen4-ultra",
+      "name": "Google Imagen 4",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 8.0,
+          "price_usd": 0.04,
+          "price_rub": 8.0
+        }
+      ]
+    },
+    "google/nano-banana": {
+      "model_id": "google/nano-banana",
+      "name": "Google Nano Banana Text to Image",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        }
+      ]
+    },
+    "google/nano-banana-edit": {
+      "model_id": "google/nano-banana-edit",
+      "name": "Google Nano Banana Edit",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        }
+      ]
+    },
+    "google/nano-banana-pro": {
+      "model_id": "google/nano-banana-pro",
+      "name": "Google Nano Banana Pro",
+      "modes": [
+        {
+          "mode": "1.0s-1K",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "1.0s-2K",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "1.0s-4K",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        }
+      ]
+    },
+    "google/veo-3": {
+      "model_id": "google/veo-3",
+      "name": "Google Veo 3 Text to Video",
+      "modes": [
+        {
+          "mode": "Fast",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "Quality",
+          "credits_per_generation": 250.0,
+          "price_usd": 1.25,
+          "price_rub": 250.0
+        },
+        {
+          "mode": "Fast",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "Quality",
+          "credits_per_generation": 250.0,
+          "price_usd": 1.25,
+          "price_rub": 250.0
+        },
+        {
+          "mode": "Fast",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        }
+      ]
+    },
+    "google/veo-3.1": {
+      "model_id": "google/veo-3.1",
+      "name": "Google Veo 3.1 Text to Video",
+      "modes": [
+        {
+          "mode": "Fast",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "Quality",
+          "credits_per_generation": 250.0,
+          "price_usd": 1.25,
+          "price_rub": 250.0
+        },
+        {
+          "mode": "Fast",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "Quality",
+          "credits_per_generation": 250.0,
+          "price_usd": 1.25,
+          "price_rub": 250.0
+        },
+        {
+          "mode": "Fast",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        }
+      ]
+    },
+    "grok/imagine": {
+      "model_id": "grok/imagine",
+      "name": "Grok Imagine Image to Video",
+      "modes": [
+        {
+          "mode": "6.0s",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.1,
+          "price_rub": 20.0
+        },
+        {
+          "mode": "6.0s",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.1,
+          "price_rub": 20.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        },
+        {
+          "mode": "360p→720p",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        }
+      ]
+    },
+    "hailuo/02-image-to-video-standard": {
+      "model_id": "hailuo/02-image-to-video-standard",
+      "name": "Hailuo 02 Image to Video",
+      "modes": [
+        {
+          "mode": "Pro-6.0s-1080p",
+          "credits_per_generation": 57.0,
+          "price_usd": 0.285,
+          "price_rub": 57.0
+        },
+        {
+          "mode": "Standard-6.0s-512p",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "Standard-10.0s-512p",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.1,
+          "price_rub": 20.0
+        },
+        {
+          "mode": "Standard-10.0s-768p",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        }
+      ]
+    },
+    "hailuo/02-text-to-video-standard": {
+      "model_id": "hailuo/02-text-to-video-standard",
+      "name": "Hailuo 02 Text to Video",
+      "modes": [
+        {
+          "mode": "Pro-6.0s-1080p",
+          "credits_per_generation": 57.0,
+          "price_usd": 0.285,
+          "price_rub": 57.0
+        },
+        {
+          "mode": "Standard-6.0s-768p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "Standard-10.0s-768p",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        }
+      ]
+    },
+    "hailuo/2.3": {
+      "model_id": "hailuo/2.3",
+      "name": "Hailuo 2.3 Image to Video",
+      "modes": [
+        {
+          "mode": "Standard-6.0s-768p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "Standard-10.0s-768p",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        },
+        {
+          "mode": "Standard-6.0s-1080p",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        },
+        {
+          "mode": "Pro-6.0s-768p",
+          "credits_per_generation": 45.0,
+          "price_usd": 0.225,
+          "price_rub": 45.0
+        },
+        {
+          "mode": "Pro-10.0s-768p",
+          "credits_per_generation": 90.0,
+          "price_usd": 0.45,
+          "price_rub": 90.0
+        },
+        {
+          "mode": "Pro-6.0s-1080p",
+          "credits_per_generation": 80.0,
+          "price_usd": 0.4,
+          "price_rub": 80.0
+        }
+      ]
+    },
+    "ideogram/v3-text-to-image": {
+      "model_id": "ideogram/v3-text-to-image",
+      "name": "Ideogram V3 Text to Image",
+      "modes": [
+        {
+          "mode": "TURBO",
+          "credits_per_generation": 3.5,
+          "price_usd": 0.0175,
+          "price_rub": 3.5
+        },
+        {
+          "mode": "BALANCED",
+          "credits_per_generation": 7.0,
+          "price_usd": 0.035,
+          "price_rub": 7.0
+        },
+        {
+          "mode": "QUALITY",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        }
+      ]
+    },
+    "ideogram/v3-reframe": {
+      "model_id": "ideogram/v3-reframe",
+      "name": "Ideogram V3 Reframe",
+      "modes": [
+        {
+          "mode": "Turbo",
+          "credits_per_generation": 3.5,
+          "price_usd": 0.0175,
+          "price_rub": 3.5
+        },
+        {
+          "mode": "Balanced",
+          "credits_per_generation": 7.0,
+          "price_usd": 0.035,
+          "price_rub": 7.0
+        },
+        {
+          "mode": "Quality",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        }
+      ]
+    },
+    "ideogram/v3-edit": {
+      "model_id": "ideogram/v3-edit",
+      "name": "Ideogram V3 Edit",
+      "modes": [
+        {
+          "mode": "TURBO",
+          "credits_per_generation": 3.5,
+          "price_usd": 0.0175,
+          "price_rub": 3.5
+        },
+        {
+          "mode": "BALANCED",
+          "credits_per_generation": 7.0,
+          "price_usd": 0.035,
+          "price_rub": 7.0
+        },
+        {
+          "mode": "QUALITY",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        }
+      ]
+    },
+    "ideogram/v3-remix": {
+      "model_id": "ideogram/v3-remix",
+      "name": "Ideogram V3 Remix",
+      "modes": [
+        {
+          "mode": "TURBO",
+          "credits_per_generation": 3.5,
+          "price_usd": 0.0175,
+          "price_rub": 3.5
+        },
+        {
+          "mode": "BALANCED",
+          "credits_per_generation": 7.0,
+          "price_usd": 0.035,
+          "price_rub": 7.0
+        },
+        {
+          "mode": "QUALITY",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        }
+      ]
+    },
+    "ideogram/character": {
+      "model_id": "ideogram/character",
+      "name": "Ideogram Character",
+      "modes": [
+        {
+          "mode": "TURBO",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "BALANCED",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "QUALITY",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        }
+      ]
+    },
+    "ideogram/character-edit": {
+      "model_id": "ideogram/character-edit",
+      "name": "Ideogram Character Edit",
+      "modes": [
+        {
+          "mode": "TURBO",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "BALANCED",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "QUALITY",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        }
+      ]
+    },
+    "ideogram/character-remix": {
+      "model_id": "ideogram/character-remix",
+      "name": "Ideogram Character Remix",
+      "modes": [
+        {
+          "mode": "TURBO",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "BALANCED",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "QUALITY",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        }
+      ]
+    },
+    "kling/v2-1-master-image-to-video": {
+      "model_id": "kling/v2-1-master-image-to-video",
+      "name": "Kling 2.1 Image to Video",
+      "modes": [
+        {
+          "mode": "Master-5.0s",
+          "credits_per_generation": 160.0,
+          "price_usd": 0.8,
+          "price_rub": 160.0
+        },
+        {
+          "mode": "Master-10.0s",
+          "credits_per_generation": 320.0,
+          "price_usd": 1.6,
+          "price_rub": 320.0
+        }
+      ]
+    },
+    "kling/v2-1-standard": {
+      "model_id": "kling/v2-1-standard",
+      "name": "Kling 2.1 Video Generation",
+      "modes": [
+        {
+          "mode": "Standard-5.0s",
+          "credits_per_generation": 25.0,
+          "price_usd": 0.125,
+          "price_rub": 25.0
+        },
+        {
+          "mode": "Standard-10.0s",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        }
+      ]
+    },
+    "kling/v2-1-pro": {
+      "model_id": "kling/v2-1-pro",
+      "name": "Kling 2.1 Video Generation",
+      "modes": [
+        {
+          "mode": "Pro-5.0s",
+          "credits_per_generation": 50.0,
+          "price_usd": 0.25,
+          "price_rub": 50.0
+        },
+        {
+          "mode": "Pro-10.0s",
+          "credits_per_generation": 100.0,
+          "price_usd": 0.5,
+          "price_rub": 100.0
+        }
+      ]
+    },
+    "kling/v2-1-master-text-to-video": {
+      "model_id": "kling/v2-1-master-text-to-video",
+      "name": "Kling 2.1 Text to Video",
+      "modes": [
+        {
+          "mode": "Master-5.0s",
+          "credits_per_generation": 160.0,
+          "price_usd": 0.8,
+          "price_rub": 160.0
+        },
+        {
+          "mode": "Master-10.0s",
+          "credits_per_generation": 320.0,
+          "price_usd": 1.6,
+          "price_rub": 320.0
+        }
+      ]
+    },
+    "kling/v2-5-turbo-image-to-video-pro": {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "name": "Kling 2.5 Turbo Image to Video",
+      "modes": [
+        {
+          "mode": "Turbo Pro-5.0s",
+          "credits_per_generation": 42.0,
+          "price_usd": 0.21,
+          "price_rub": 42.0
+        },
+        {
+          "mode": "Turbo Pro-10.0s",
+          "credits_per_generation": 84.0,
+          "price_usd": 0.42,
+          "price_rub": 84.0
+        }
+      ]
+    },
+    "kling/v2-5-turbo-text-to-video-pro": {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "name": "Kling 2.5 Turbo Text to Video",
+      "modes": [
+        {
+          "mode": "Turbo Pro-5.0s",
+          "credits_per_generation": 42.0,
+          "price_usd": 0.21,
+          "price_rub": 42.0
+        },
+        {
+          "mode": "Turbo Pro-10.0s",
+          "credits_per_generation": 84.0,
+          "price_usd": 0.42,
+          "price_rub": 84.0
+        }
+      ]
+    },
+    "kling-2.6/image-to-video": {
+      "model_id": "kling-2.6/image-to-video",
+      "name": "Kling 2.6 Image to Video",
+      "modes": [
+        {
+          "mode": "without audio-5.0s",
+          "credits_per_generation": 55.0,
+          "price_usd": 0.275,
+          "price_rub": 55.0
+        },
+        {
+          "mode": "with audio-5.0s",
+          "credits_per_generation": 110.0,
+          "price_usd": 0.55,
+          "price_rub": 110.0
+        },
+        {
+          "mode": "without audio-10.0s",
+          "credits_per_generation": 110.0,
+          "price_usd": 0.55,
+          "price_rub": 110.0
+        },
+        {
+          "mode": "with audio-10.0s",
+          "credits_per_generation": 220.0,
+          "price_usd": 1.1,
+          "price_rub": 220.0
+        }
+      ]
+    },
+    "kling-2.6/text-to-video": {
+      "model_id": "kling-2.6/text-to-video",
+      "name": "Kling 2.6 Text to Video",
+      "modes": [
+        {
+          "mode": "without audio-5.0s",
+          "credits_per_generation": 55.0,
+          "price_usd": 0.275,
+          "price_rub": 55.0
+        },
+        {
+          "mode": "with audio-5.0s",
+          "credits_per_generation": 110.0,
+          "price_usd": 0.55,
+          "price_rub": 110.0
+        },
+        {
+          "mode": "without audio-10.0s",
+          "credits_per_generation": 110.0,
+          "price_usd": 0.55,
+          "price_rub": 110.0
+        },
+        {
+          "mode": "with audio-10.0s",
+          "credits_per_generation": 220.0,
+          "price_usd": 1.1,
+          "price_rub": 220.0
+        }
+      ]
+    },
+    "kling/v1-avatar-standard": {
+      "model_id": "kling/v1-avatar-standard",
+      "name": "Kling AI Avatar Lip Sync",
+      "modes": [
+        {
+          "mode": "Standard-up to 15 secondss-720p",
+          "credits_per_generation": 8.0,
+          "price_usd": 0.04,
+          "price_rub": 8.0
+        }
+      ]
+    },
+    "kling/ai-avatar-v1-pro": {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "name": "Kling AI Avatar Lip Sync",
+      "modes": [
+        {
+          "mode": "Pro-up to 15 secondss-1080p",
+          "credits_per_generation": 16.0,
+          "price_usd": 0.08,
+          "price_rub": 16.0
+        }
+      ]
+    },
+    "infinitalk/from-audio": {
+      "model_id": "infinitalk/from-audio",
+      "name": "MeiGen-AI InfiniteTalk Lip Sync",
+      "modes": [
+        {
+          "mode": "up to 15 secondss-480p",
+          "credits_per_generation": 3.0,
+          "price_usd": 0.015,
+          "price_rub": 3.0
+        },
+        {
+          "mode": "up to 15 secondss-720p",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        }
+      ]
+    },
+    "midjourney/api": {
+      "model_id": "midjourney/api",
+      "name": "Midjourney Text to Image",
+      "modes": [
+        {
+          "mode": "relaxed",
+          "credits_per_generation": 3.0,
+          "price_usd": 0.015,
+          "price_rub": 3.0
+        },
+        {
+          "mode": "fast",
+          "credits_per_generation": 8.0,
+          "price_usd": 0.04,
+          "price_rub": 8.0
+        },
+        {
+          "mode": "turbo",
+          "credits_per_generation": 16.0,
+          "price_usd": 0.08,
+          "price_rub": 16.0
+        },
+        {
+          "mode": "relaxed",
+          "credits_per_generation": 3.0,
+          "price_usd": 0.015,
+          "price_rub": 3.0
+        },
+        {
+          "mode": "fast",
+          "credits_per_generation": 8.0,
+          "price_usd": 0.04,
+          "price_rub": 8.0
+        },
+        {
+          "mode": "turbo",
+          "credits_per_generation": 16.0,
+          "price_usd": 0.08,
+          "price_rub": 16.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        }
+      ]
+    },
+    "sora-2-text-to-video": {
+      "model_id": "sora-2-text-to-video",
+      "name": "OpenAI Sora 2 Text to Video",
+      "modes": [
+        {
+          "mode": "Standard-10.0s",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.1,
+          "price_rub": 20.0
+        },
+        {
+          "mode": "Standard-15.0s",
+          "credits_per_generation": 25.0,
+          "price_usd": 0.125,
+          "price_rub": 25.0
+        }
+      ]
+    },
+    "sora-2-pro-image-to-video": {
+      "model_id": "sora-2-pro-image-to-video",
+      "name": "OpenAI Sora 2 Image to Video",
+      "modes": [
+        {
+          "mode": "Standard-10.0s",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.1,
+          "price_rub": 20.0
+        },
+        {
+          "mode": "Standard-15.0s",
+          "credits_per_generation": 25.0,
+          "price_usd": 0.125,
+          "price_rub": 25.0
+        },
+        {
+          "mode": "Pro Standard-10.0s",
+          "credits_per_generation": 150.0,
+          "price_usd": 0.75,
+          "price_rub": 150.0
+        },
+        {
+          "mode": "Pro Standard-15.0s",
+          "credits_per_generation": 270.0,
+          "price_usd": 1.35,
+          "price_rub": 270.0
+        },
+        {
+          "mode": "Pro High-10.0s",
+          "credits_per_generation": 330.0,
+          "price_usd": 1.65,
+          "price_rub": 330.0
+        },
+        {
+          "mode": "Pro High-15.0s",
+          "credits_per_generation": 630.0,
+          "price_usd": 3.15,
+          "price_rub": 630.0
+        }
+      ]
+    },
+    "sora-2-pro-storyboard": {
+      "model_id": "sora-2-pro-storyboard",
+      "name": "OpenAI Sora 2 Pro Storyboard",
+      "modes": [
+        {
+          "mode": "Pro-10.0s",
+          "credits_per_generation": 150.0,
+          "price_usd": 0.75,
+          "price_rub": 150.0
+        },
+        {
+          "mode": "Pro-15-25s",
+          "credits_per_generation": 270.0,
+          "price_usd": 1.35,
+          "price_rub": 270.0
+        }
+      ]
+    },
+    "sora-2-pro-text-to-video": {
+      "model_id": "sora-2-pro-text-to-video",
+      "name": "OpenAI Sora 2 Pro Text to Video",
+      "modes": [
+        {
+          "mode": "Pro Standard-10.0s",
+          "credits_per_generation": 150.0,
+          "price_usd": 0.75,
+          "price_rub": 150.0
+        },
+        {
+          "mode": "Pro Standard-15.0s",
+          "credits_per_generation": 270.0,
+          "price_usd": 1.35,
+          "price_rub": 270.0
+        },
+        {
+          "mode": "Pro High-10.0s",
+          "credits_per_generation": 330.0,
+          "price_usd": 1.65,
+          "price_rub": 330.0
+        },
+        {
+          "mode": "Pro High-15.0s",
+          "credits_per_generation": 630.0,
+          "price_usd": 3.15,
+          "price_rub": 630.0
+        }
+      ]
+    },
+    "sora-watermark-remover": {
+      "model_id": "sora-watermark-remover",
+      "name": "OpenAI Sora 2 Watermark Remover",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        }
+      ]
+    },
+    "openai/4o-image": {
+      "model_id": "openai/4o-image",
+      "name": "OpenAI 4o Image Text to Image",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 6.0,
+          "price_usd": 0.03,
+          "price_rub": 6.0
+        }
+      ]
+    },
+    "qwen/image-to-image": {
+      "model_id": "qwen/image-to-image",
+      "name": "Qwen Image Image to Image",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        }
+      ]
+    },
+    "qwen/text-to-image": {
+      "model_id": "qwen/text-to-image",
+      "name": "Qwen Image Text to Image",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 4.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        }
+      ]
+    },
+    "qwen/image-edit": {
+      "model_id": "qwen/image-edit",
+      "name": "Qwen Image Edit",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 5.0,
+          "price_usd": 0.03,
+          "price_rub": 6.0
+        }
+      ]
+    },
+    "z-image": {
+      "model_id": "z-image",
+      "name": "Qwen Z-Image Text to Image",
+      "modes": [
+        {
+          "mode": "1.0s",
+          "credits_per_generation": 0.8,
+          "price_usd": 0.004,
+          "price_rub": 0.8
+        }
+      ]
+    },
+    "recraft/crisp-upscale": {
+      "model_id": "recraft/crisp-upscale",
+      "name": "Recraft Crisp Upscale",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 0.5,
+          "price_usd": 0.0025,
+          "price_rub": 0.5
+        }
+      ]
+    },
+    "recraft/remove-background": {
+      "model_id": "recraft/remove-background",
+      "name": "Recraft Remove Background",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 1.0,
+          "price_usd": 0.005,
+          "price_rub": 1.0
+        }
+      ]
+    },
+    "runway/gen-4": {
+      "model_id": "runway/gen-4",
+      "name": "Runway Image to Video",
+      "modes": [
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "10.0s-720p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "5.0s-1080p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "10.0s-720p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        },
+        {
+          "mode": "5.0s-1080p",
+          "credits_per_generation": 30.0,
+          "price_usd": 0.15,
+          "price_rub": 30.0
+        }
+      ]
+    },
+    "suno/v5": {
+      "model_id": "suno/v5",
+      "name": "Suno Generate Music",
+      "modes": [
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 2.0,
+          "price_usd": 0.01,
+          "price_rub": 2.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 0.4,
+          "price_usd": 0.002,
+          "price_rub": 0.4
+        },
+        {
+          "mode": "default",
+          "credits_per_generation": 0.4,
+          "price_usd": 0.002,
+          "price_rub": 0.4
+        }
+      ]
+    },
+    "topaz/image-upscale": {
+      "model_id": "topaz/image-upscale",
+      "name": "Topaz Image Upscaler",
+      "modes": [
+        {
+          "mode": "≤2K",
+          "credits_per_generation": 10.0,
+          "price_usd": 0.05,
+          "price_rub": 10.0
+        },
+        {
+          "mode": "4K",
+          "credits_per_generation": 20.0,
+          "price_usd": 0.01,
+          "price_rub": 2.0
+        },
+        {
+          "mode": "8K",
+          "credits_per_generation": 40.0,
+          "price_usd": 0.02,
+          "price_rub": 4.0
+        }
+      ]
+    },
+    "topaz/video-upscale": {
+      "model_id": "topaz/video-upscale",
+      "name": "Topaz Video Upscaler",
+      "modes": [
+        {
+          "mode": "upscale factor 1x/2x/4xs",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        }
+      ]
+    },
+    "wan/2-2-a14b-text-to-video-turbo": {
+      "model_id": "wan/2-2-a14b-text-to-video-turbo",
+      "name": "Wan 2.2 Text to Video",
+      "modes": [
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 80.0,
+          "price_usd": 0.4,
+          "price_rub": 80.0
+        },
+        {
+          "mode": "5.0s-580p",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "5.0s-480p",
+          "credits_per_generation": 40.0,
+          "price_usd": 0.2,
+          "price_rub": 40.0
+        }
+      ]
+    },
+    "wan/2-2-a14b-image-to-video-turbo": {
+      "model_id": "wan/2-2-a14b-image-to-video-turbo",
+      "name": "Wan 2.2 Image to Video",
+      "modes": [
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 80.0,
+          "price_usd": 0.4,
+          "price_rub": 80.0
+        },
+        {
+          "mode": "5.0s-580p",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "5.0s-480p",
+          "credits_per_generation": 40.0,
+          "price_usd": 0.2,
+          "price_rub": 40.0
+        }
+      ]
+    },
+    "wan/2-2-a14b-speech-to-video-turbo": {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "name": "Wan 2.2 A14B Turbo API Speech to Video",
+      "modes": [
+        {
+          "mode": "720p",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        },
+        {
+          "mode": "580p",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "480p",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        }
+      ]
+    },
+    "wan/2-2-animate-move": {
+      "model_id": "wan/2-2-animate-move",
+      "name": "Wan 2.2 Animate Speech to Video",
+      "modes": [
+        {
+          "mode": "Turbo-1.0s-720p",
+          "credits_per_generation": 24.0,
+          "price_usd": 0.12,
+          "price_rub": 24.0
+        },
+        {
+          "mode": "Turbo-1.0s-580p",
+          "credits_per_generation": 18.0,
+          "price_usd": 0.09,
+          "price_rub": 18.0
+        },
+        {
+          "mode": "Turbo-1.0s-480p",
+          "credits_per_generation": 12.0,
+          "price_usd": 0.06,
+          "price_rub": 12.0
+        }
+      ]
+    },
+    "wan/2-5-image-to-video": {
+      "model_id": "wan/2-5-image-to-video",
+      "name": "Wan 2.5 Image to Video",
+      "modes": [
+        {
+          "mode": "default-5.0s-720p",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "default-10.0s-720p",
+          "credits_per_generation": 120.0,
+          "price_usd": 0.6,
+          "price_rub": 120.0
+        },
+        {
+          "mode": "default-5.0s-1080p",
+          "credits_per_generation": 100.0,
+          "price_usd": 0.5,
+          "price_rub": 100.0
+        },
+        {
+          "mode": "default-10.0s-1080p",
+          "credits_per_generation": 200.0,
+          "price_usd": 1.0,
+          "price_rub": 200.0
+        }
+      ]
+    },
+    "wan/2-5-text-to-video": {
+      "model_id": "wan/2-5-text-to-video",
+      "name": "Wan 2.5 Text to Video",
+      "modes": [
+        {
+          "mode": "default-5.0s-720p",
+          "credits_per_generation": 60.0,
+          "price_usd": 0.3,
+          "price_rub": 60.0
+        },
+        {
+          "mode": "default-10.0s-720p",
+          "credits_per_generation": 120.0,
+          "price_usd": 0.6,
+          "price_rub": 120.0
+        },
+        {
+          "mode": "default-5.0s-1080p",
+          "credits_per_generation": 100.0,
+          "price_usd": 0.5,
+          "price_rub": 100.0
+        },
+        {
+          "mode": "default-10.0s-1080p",
+          "credits_per_generation": 200.0,
+          "price_usd": 1.0,
+          "price_rub": 200.0
+        }
+      ]
+    },
+    "wan/2-6-text-to-video": {
+      "model_id": "wan/2-6-text-to-video",
+      "name": "Wan 2.6 Text to Video",
+      "modes": [
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 70.0,
+          "price_usd": 0.35,
+          "price_rub": 70.0
+        },
+        {
+          "mode": "10.0s-720p",
+          "credits_per_generation": 140.0,
+          "price_usd": 0.7,
+          "price_rub": 140.0
+        },
+        {
+          "mode": "15.0s-720p",
+          "credits_per_generation": 210.0,
+          "price_usd": 1.05,
+          "price_rub": 210.0
+        },
+        {
+          "mode": "5.0s-1080p",
+          "credits_per_generation": 104.5,
+          "price_usd": 0.5225,
+          "price_rub": 104.5
+        },
+        {
+          "mode": "10.0s-1080p",
+          "credits_per_generation": 209.5,
+          "price_usd": 1.0475,
+          "price_rub": 209.5
+        },
+        {
+          "mode": "15.0s-1080p",
+          "credits_per_generation": 315.0,
+          "price_usd": 1.575,
+          "price_rub": 315.0
+        }
+      ]
+    },
+    "wan/2-6-image-to-video": {
+      "model_id": "wan/2-6-image-to-video",
+      "name": "Wan 2.6 Image to Video",
+      "modes": [
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 70.0,
+          "price_usd": 0.35,
+          "price_rub": 70.0
+        },
+        {
+          "mode": "10.0s-720p",
+          "credits_per_generation": 140.0,
+          "price_usd": 0.7,
+          "price_rub": 140.0
+        },
+        {
+          "mode": "15.0s-720p",
+          "credits_per_generation": 210.0,
+          "price_usd": 1.05,
+          "price_rub": 210.0
+        },
+        {
+          "mode": "5.0s-1080p",
+          "credits_per_generation": 104.5,
+          "price_usd": 0.5225,
+          "price_rub": 104.5
+        },
+        {
+          "mode": "10.0s-1080p",
+          "credits_per_generation": 209.5,
+          "price_usd": 1.0475,
+          "price_rub": 209.5
+        },
+        {
+          "mode": "15.0s-1080p",
+          "credits_per_generation": 315.0,
+          "price_usd": 1.575,
+          "price_rub": 315.0
+        }
+      ]
+    },
+    "wan/2-6-video-to-video": {
+      "model_id": "wan/2-6-video-to-video",
+      "name": "Wan 2.6 Video to Video",
+      "modes": [
+        {
+          "mode": "5.0s-720p",
+          "credits_per_generation": 70.0,
+          "price_usd": 0.35,
+          "price_rub": 70.0
+        },
+        {
+          "mode": "10.0s-720p",
+          "credits_per_generation": 140.0,
+          "price_usd": 0.7,
+          "price_rub": 140.0
+        },
+        {
+          "mode": "15.0s-720p",
+          "credits_per_generation": 210.0,
+          "price_usd": 1.05,
+          "price_rub": 210.0
+        },
+        {
+          "mode": "5.0s-1080p",
+          "credits_per_generation": 104.5,
+          "price_usd": 0.5225,
+          "price_rub": 104.5
+        },
+        {
+          "mode": "10.0s-1080p",
+          "credits_per_generation": 209.5,
+          "price_usd": 1.0475,
+          "price_rub": 209.5
+        },
+        {
+          "mode": "15.0s-1080p",
+          "credits_per_generation": 315.0,
+          "price_usd": 1.575,
+          "price_rub": 315.0
+        }
+      ]
+    }
+  }
+}

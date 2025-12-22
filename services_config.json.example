@@ -1,0 +1,25 @@
+{
+  "services": [
+    {
+      "name": "Основной бот",
+      "service_id": "srv-xxxxx",
+      "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN_HERE",
+      "enabled": true
+    },
+    {
+      "name": "Тестовый бот",
+      "service_id": "srv-yyyyy",
+      "telegram_token": "YOUR_ANOTHER_TELEGRAM_BOT_TOKEN_HERE",
+      "enabled": true
+    }
+  ],
+  "render_api_key": "YOUR_RENDER_API_KEY_HERE",
+  "default_service": "srv-xxxxx"
+}
+
+
+
+
+
+
+

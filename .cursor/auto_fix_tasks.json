@@ -1,0 +1,3303 @@
+[
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:10:12,915 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:10:12.915837276Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:18:38.722969",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:10:17,915 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:10:17.91614912Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:18:38.722983",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:18:46,010 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:18:46.011056821Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:19:39.983293",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:18:51,011 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:18:51.01138006Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:19:39.983305",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:18:56,586 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:18:56.586118162Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:19:39.983309",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:19:01,586 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:19:01.586566598Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:19:39.983313",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:19:51,069 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:19:51.069580637Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392403",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:19:56,069 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:19:56.069912575Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392410",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:20:02,710 - __main__ - INFO - ⏳ Waiting 5 seconds to avoid conflicts with previous instance...",
+    "timestamp": "2025-12-19T08:20:02.710738657Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392411",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:20:07,710 - __main__ - INFO - 🚀 Starting preflight check (webhook removal + conflict detection)...",
+    "timestamp": "2025-12-19T08:20:07.711040914Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:20:41.392412",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:06,127 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:06.127304974Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596532",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:06,127 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:06.128045732Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596542",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:06,127 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:06.128063012Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596545",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:10,215 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:10.215774341Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596547",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:10,216 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:10.217204423Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596549",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:10.217280584Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596551",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:11,300 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:11.300993451Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596553",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:11,301 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:11.301654417Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596555",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:11,301 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:11.301669478Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596557",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:15,889 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:15.889731441Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596559",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:15,890 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:15.891295616Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596560",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:17,485 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:17.486070175Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596562",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:17,486 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:17.486770142Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596563",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:17,486 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:17.486807033Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596565",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:22,831 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:22.831903322Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596567",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:22,832 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:22.833385715Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596568",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:25,169 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:25.169566154Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596570",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:25,170 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:25.170266181Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596572",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:25,170 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:25.170285571Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596574",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:28,632 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:28.632404517Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596576",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:28,632 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:28.633381159Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596577",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:32,094 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:32.09462822Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596579",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:32,095 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:32.095534662Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596581",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:32,095 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:32.095560493Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596583",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:37,412 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:37.413114506Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:21:42.596584",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:37,413 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:37.414448475Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:21:42.596586",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:42,746 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:42.746698957Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977223",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:42,747 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:42.747456095Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977238",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:42,747 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:42.747485166Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977241",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:50,615 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:50.615431067Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977244",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:21:50,615 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:21:50.616657424Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:22:43.977246",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:58,480 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:21:58.481043775Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977249",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:58,481 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:21:58.481909376Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977251",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:21:58,481 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:21:58.481960427Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977254",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:10,131 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:22:10.131965226Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977256",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:22:10,132 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:22:10.133344167Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:22:43.977258",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:14,219 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:22:14.220251216Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977260",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:14,220 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:22:14.220992344Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977262",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:14,220 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:22:14.221009234Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977264",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:31,584 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:22:31.58430185Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977266",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:22:31,584 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:22:31.585323713Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:22:43.977268",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:35,671 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:22:35.673868824Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977270",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:35,672 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:22:35.673904415Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977273",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:22:35,672 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:22:35.673913655Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:22:43.977276",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:01,588 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:23:01.58865335Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085866",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:23:01,589 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:23:01.589883247Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:23:45.085877",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:05,675 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:23:05.675988579Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085878",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:05,676 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:23:05.677063994Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085880",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:05,676 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:23:05.677081075Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085882",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:35,954 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:23:35.954976115Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085883",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:23:35,955 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:23:35.955957666Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:23:45.085884",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:40,042 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:23:40.042559093Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085886",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:40,043 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:23:40.04327212Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085888",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:23:40,043 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:23:40.04328714Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:23:45.085889",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:10,348 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:24:10.348757842Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:24:46.264702",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:24:10,349 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:24:10.349802045Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:24:46.264711",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:14,436 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:24:14.437665957Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:24:46.264712",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:14,437 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:24:14.437686047Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:24:46.264713",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:14,437 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:24:14.437698388Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:24:46.264714",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:44,739 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:24:44.74016213Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:24:46.264715",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:24:44,741 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:24:44.7424064Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:24:46.264717",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:48,831 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:24:48.831488976Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617030",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:48,832 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:24:48.832218814Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617097",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:24:48,832 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:24:48.832235944Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617121",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:25:19,117 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:25:19.117979672Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617139",
+    "status": "pending"
+  },
+  {
+    "type": "general_error",
+    "error": "2025-12-19 08:25:19,118 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "timestamp": "2025-12-19T08:25:19.11922351Z",
+    "fix": "Проанализировать и исправить ошибку",
+    "priority": "medium",
+    "created_at": "2025-12-19T11:25:50.617154",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:25:23,206 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getUpdates \"HTTP/1.1 409 Conflict\"",
+    "timestamp": "2025-12-19T08:25:23.206903061Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617172",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:25:23,207 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "timestamp": "2025-12-19T08:25:23.221514732Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617207",
+    "status": "pending"
+  },
+  {
+    "type": "telegram_conflict",
+    "error": "2025-12-19 08:25:23,207 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "timestamp": "2025-12-19T08:25:23.221531382Z",
+    "fix": "Удалить webhook и перезапустить сервис",
+    "priority": "critical",
+    "created_at": "2025-12-19T11:25:50.617227",
+    "status": "pending"
+  },
+  {
+    "id": "general_error:2025-12-19 08:53:37,943 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:53:37,943 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:53:37.943653608Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205040"
+  },
+  {
+    "id": "general_error:2025-12-19 08:53:37,943 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:53:37,943 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:53:37.943671339Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205054"
+  },
+  {
+    "id": "general_error:2025-12-19 08:54:08,215 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:54:08,215 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:08.2167997Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205059"
+  },
+  {
+    "id": "telegram_conflict:telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one b:unknown",
+    "type": "telegram_conflict",
+    "error": "telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:08.216960393Z",
+    "priority": "critical",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: telegram_conflict\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205062"
+  },
+  {
+    "id": "general_error:2025-12-19 08:54:12,306 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:54:12,306 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:12.306314019Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205066"
+  },
+  {
+    "id": "general_error:2025-12-19 08:54:12,306 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:54:12,306 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:12.30634302Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205069"
+  },
+  {
+    "id": "general_error:2025-12-19 08:54:42,588 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:54:42,588 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:42.589018993Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205072"
+  },
+  {
+    "id": "general_error:2025-12-19 08:54:46,675 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:54:46,675 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:46.675274142Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205075"
+  },
+  {
+    "id": "general_error:2025-12-19 08:54:46,675 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:54:46,675 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:54:46.675311063Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205077"
+  },
+  {
+    "id": "general_error:2025-12-19 08:55:16,982 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:55:16,982 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:55:16.982632228Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205080"
+  },
+  {
+    "id": "general_error:2025-12-19 08:55:21,066 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:55:21,066 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:55:21.181015374Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205082"
+  },
+  {
+    "id": "general_error:2025-12-19 08:55:21,066 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:55:21,066 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:55:21.181037024Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205085"
+  },
+  {
+    "id": "general_error:2025-12-19 08:55:51,373 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:55:51,373 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:55:51.374180041Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205088"
+  },
+  {
+    "id": "general_error:2025-12-19 08:55:55,460 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:55:55,460 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:55:55.460273059Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205091"
+  },
+  {
+    "id": "general_error:2025-12-19 08:55:55,460 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:55:55,460 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:55:55.46029806Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205093"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:20,231 - __main__ - ERROR - delete_webhook failed (non-fatal):unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:20,231 - __main__ - ERROR - delete_webhook failed (non-fatal)",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.235983761Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205096"
+  },
+  {
+    "id": "general_error:    raise RuntimeError(\"This HTTPXRequest is not initialized!\"):unknown",
+    "type": "general_error",
+    "error": "    raise RuntimeError(\"This HTTPXRequest is not initialized!\")",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.236017851Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205098"
+  },
+  {
+    "id": "general_error:RuntimeError: This HTTPXRequest is not initialized!:unknown",
+    "type": "general_error",
+    "error": "RuntimeError: This HTTPXRequest is not initialized!",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.236020131Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205100"
+  },
+  {
+    "id": "general_error:    raise NetworkError(f\"Unknown error in HTTP implementation: {exc!r}\") from exc:unknown",
+    "type": "general_error",
+    "error": "    raise NetworkError(f\"Unknown error in HTTP implementation: {exc!r}\") from exc",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.236083932Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205103"
+  },
+  {
+    "id": "general_error:telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError('This HTTPXRequest i:unknown",
+    "type": "general_error",
+    "error": "telegram.error.NetworkError: Unknown error in HTTP implementation: RuntimeError('This HTTPXRequest is not initialized!')",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.236086712Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205105"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:20,924 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:20,924 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.924691746Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205108"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:20,924 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:20,924 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:20.924716007Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205111"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:25,014 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:25,014 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:25.015348617Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205113"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:26,096 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:26,096 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:26.096584641Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205116"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:26,096 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:26,096 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:26.096613652Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205118"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:30,700 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:30,700 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:30.701142107Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205121"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:32,282 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:32,282 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:32.283071102Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205124"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:32,282 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:32,282 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:32.283089632Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205128"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:37,622 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:37,622 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:37.623416949Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205130"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:39,956 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:39,956 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:39.957826032Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205133"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:39,956 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:39,956 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:39.957843782Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205135"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:43,420 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:43,420 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:43.42075086Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205143"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:46,880 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:46,880 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:46.884422645Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205146"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:46,880 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:46,880 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:46.884435995Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:57:50.205149"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:52,203 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:52,203 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:52.204767315Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653351"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:57,533 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:57,533 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:57.533767138Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653354"
+  },
+  {
+    "id": "general_error:2025-12-19 08:57:57,533 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:57:57,533 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:57:57.533778148Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653370"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:05,385 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:05,385 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:05.385788605Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653373"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:13,251 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:13,251 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:13.258293027Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653377"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:13,252 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:13,252 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:13.258304047Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653380"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:24,938 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:24,938 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:24.938792011Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653383"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:29,027 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:29,027 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:29.027930425Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653386"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:29,027 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:29,027 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:29.027954115Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653390"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:46,382 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:46,382 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:46.383573549Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653393"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:50,471 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:50,471 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:50.471678417Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653397"
+  },
+  {
+    "id": "general_error:2025-12-19 08:58:50,471 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:58:50,471 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:58:50.471698977Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653400"
+  },
+  {
+    "id": "general_error:2025-12-19 08:59:16,396 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:59:16,396 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:59:16.396548755Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653403"
+  },
+  {
+    "id": "general_error:2025-12-19 08:59:20,484 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:59:20,484 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:59:20.484302368Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653407"
+  },
+  {
+    "id": "general_error:2025-12-19 08:59:20,484 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:59:20,484 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:59:20.484326049Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653410"
+  },
+  {
+    "id": "general_error:2025-12-19 08:59:50,761 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:59:50,761 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T08:59:50.762263767Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T11:59:52.653414"
+  },
+  {
+    "id": "general_error:2025-12-19 08:59:54,849 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:59:54,849 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T08:59:54.849302891Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214085"
+  },
+  {
+    "id": "general_error:2025-12-19 08:59:54,849 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 08:59:54,849 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T08:59:54.849323571Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214088"
+  },
+  {
+    "id": "general_error:2025-12-19 09:00:25,148 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:00:25,148 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:00:25.149353308Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214091"
+  },
+  {
+    "id": "general_error:2025-12-19 09:00:29,236 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:00:29,236 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:00:29.236221771Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214094"
+  },
+  {
+    "id": "general_error:2025-12-19 09:00:29,236 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:00:29,236 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:00:29.236239822Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214098"
+  },
+  {
+    "id": "general_error:2025-12-19 09:00:59,518 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:00:59,518 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:00:59.519504262Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214101"
+  },
+  {
+    "id": "general_error:2025-12-19 09:01:03,605 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:01:03,605 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:01:03.606015693Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214105"
+  },
+  {
+    "id": "general_error:2025-12-19 09:01:03,605 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:01:03,605 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:01:03.606030943Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214108"
+  },
+  {
+    "id": "general_error:2025-12-19 09:01:33,908 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:01:33,908 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:01:33.908797658Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214111"
+  },
+  {
+    "id": "general_error:2025-12-19 09:01:37,995 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:01:37,995 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:01:37.995804617Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214115"
+  },
+  {
+    "id": "general_error:2025-12-19 09:01:37,995 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:01:37,995 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:01:37.995833888Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:01:55.214118"
+  },
+  {
+    "id": "general_error:2025-12-19 09:05:56,106 - __main__ - ERROR - Error in button_callback for data 'language_select:ru'::unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:05:56,106 - __main__ - ERROR - Error in button_callback for data 'language_select:ru': cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)",
+    "file": null,
+    "timestamp": "2025-12-19T09:05:56.108191697Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+        "C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py"
+      ],
+      "related_functions": [
+        {
+          "name": "get_user_balance",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+          "line": 155,
+          "async": false
+        },
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [
+        {
+          "callback_data": "language_select:ru",
+          "handler": "button_callback",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py",
+          "line": 6727
+        }
+      ],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": [
+        "Проверить, что callback_data обработан в button_callback",
+        "Убедиться, что query.answer() вызван",
+        "Проверить обработчик для: language_select:ru"
+      ]
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - get_user_balance в C:\\Users\\User\\Desktop\\5656-main\\database.py (строка 155)\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nСвязанные кнопки:\n  - callback_data: language_select:ru\n    handler: button_callback в C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py (строка 6727)\n\nПРЕДЛОЖЕНИЯ ПО ИСПРАВЛЕНИЮ:\n  - Проверить, что callback_data обработан в button_callback\n  - Убедиться, что query.answer() вызван\n  - Проверить обработчик для: language_select:ru\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713526"
+  },
+  {
+    "id": "general_error:ImportError: cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.:unknown",
+    "type": "general_error",
+    "error": "ImportError: cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)",
+    "file": null,
+    "timestamp": "2025-12-19T09:05:56.108230688Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\database.py"
+      ],
+      "related_functions": [
+        {
+          "name": "get_user_balance",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+          "line": 155,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - get_user_balance в C:\\Users\\User\\Desktop\\5656-main\\database.py (строка 155)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713553"
+  },
+  {
+    "id": "general_error:2025-12-19 09:05:56,312 - __main__ - ERROR - Error in button_callback for data 'language_select:ru'::unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:05:56,312 - __main__ - ERROR - Error in button_callback for data 'language_select:ru': cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)",
+    "file": null,
+    "timestamp": "2025-12-19T09:05:56.312910505Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+        "C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py"
+      ],
+      "related_functions": [
+        {
+          "name": "get_user_balance",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+          "line": 155,
+          "async": false
+        },
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [
+        {
+          "callback_data": "language_select:ru",
+          "handler": "button_callback",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py",
+          "line": 6727
+        }
+      ],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": [
+        "Проверить, что callback_data обработан в button_callback",
+        "Убедиться, что query.answer() вызван",
+        "Проверить обработчик для: language_select:ru"
+      ]
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - get_user_balance в C:\\Users\\User\\Desktop\\5656-main\\database.py (строка 155)\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nСвязанные кнопки:\n  - callback_data: language_select:ru\n    handler: button_callback в C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py (строка 6727)\n\nПРЕДЛОЖЕНИЯ ПО ИСПРАВЛЕНИЮ:\n  - Проверить, что callback_data обработан в button_callback\n  - Убедиться, что query.answer() вызван\n  - Проверить обработчик для: language_select:ru\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713568"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:00,094 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:00,094 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:00.09626347Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713577"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:01,184 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:01,184 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:01.185599904Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713592"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:05,775 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:05,775 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:05.776002884Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713599"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:07,364 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:07,364 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:07.364785901Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713605"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:12,001 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:12,001 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:12.001968112Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713612"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:12,706 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:12,706 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:12.706559001Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713620"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:12,706 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:12,706 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:12.706594912Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713628"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:14,346 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:14,346 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:14.346494153Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713635"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:17,813 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:17,813 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:17.814546886Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713640"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:21,278 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:21,278 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:21.279301231Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713646"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:22,201 - __main__ - ERROR - Error in button_callback for data 'language_select:ru'::unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:22,201 - __main__ - ERROR - Error in button_callback for data 'language_select:ru': cannot import name 'get_user_balance' from 'knowledge_storage' (/app/knowledge_storage.py)",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:22.202266212Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+        "C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py"
+      ],
+      "related_functions": [
+        {
+          "name": "get_user_balance",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\database.py",
+          "line": 155,
+          "async": false
+        },
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [
+        {
+          "callback_data": "language_select:ru",
+          "handler": "button_callback",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py",
+          "line": 6727
+        }
+      ],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": [
+        "Проверить, что callback_data обработан в button_callback",
+        "Убедиться, что query.answer() вызван",
+        "Проверить обработчик для: language_select:ru"
+      ]
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - get_user_balance в C:\\Users\\User\\Desktop\\5656-main\\database.py (строка 155)\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nСвязанные кнопки:\n  - callback_data: language_select:ru\n    handler: button_callback в C:\\Users\\User\\Desktop\\5656-main\\bot_kie.py (строка 6727)\n\nПРЕДЛОЖЕНИЯ ПО ИСПРАВЛЕНИЮ:\n  - Проверить, что callback_data обработан в button_callback\n  - Убедиться, что query.answer() вызван\n  - Проверить обработчик для: language_select:ru\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713656"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:26,617 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:26,617 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:26.618387663Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713662"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:30,707 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:30,707 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:30.70770642Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713667"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:42,988 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:42,988 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:42.989137317Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713673"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:47,077 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:47,077 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:47.07781325Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713680"
+  },
+  {
+    "id": "general_error:2025-12-19 09:06:47,077 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:06:47,077 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:06:47.07782955Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713686"
+  },
+  {
+    "id": "general_error:2025-12-19 09:07:17,368 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:07:17,368 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:07:17.369943087Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713692"
+  },
+  {
+    "id": "general_error:2025-12-19 09:07:21,457 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:07:21,457 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:07:21.4581098Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713698"
+  },
+  {
+    "id": "general_error:2025-12-19 09:07:21,458 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:07:21,458 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:07:21.45812917Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713704"
+  },
+  {
+    "id": "general_error:2025-12-19 09:07:51,747 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:07:51,747 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:07:51.748566734Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713710"
+  },
+  {
+    "id": "general_error:2025-12-19 09:07:55,834 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:07:55,834 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:07:55.834704909Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713716"
+  },
+  {
+    "id": "general_error:2025-12-19 09:07:55,834 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:07:55,834 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:07:55.83472055Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713723"
+  },
+  {
+    "id": "general_error:2025-12-19 09:08:26,131 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:08:26,131 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:08:26.131846795Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713728"
+  },
+  {
+    "id": "general_error:2025-12-19 09:08:30,220 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminate:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:08:30,220 - __main__ - ERROR - ❌❌❌ GLOBAL ERROR HANDLER: Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+    "file": null,
+    "timestamp": "2025-12-19T09:08:30.221117472Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713734"
+  },
+  {
+    "id": "general_error:2025-12-19 09:08:30,220 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_messag:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:08:30,220 - __main__ - ERROR - Error details: {'error_type': 'Conflict', 'error_message': 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running', 'user_id': None, 'chat_id': None}",
+    "file": null,
+    "timestamp": "2025-12-19T09:08:30.221127732Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:08:42.713740"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:15,901 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:15,901 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:15.904720444Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026322"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:19,998 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 1/3)!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:19,998 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 1/3)!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:19.999009743Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026498"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:19,998 - __main__ - ERROR - Другой экземпляр бота уже работает!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:19,998 - __main__ - ERROR - Другой экземпляр бота уже работает!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:19.999028053Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026538"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:23,593 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:23,593 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:23.594403143Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026565"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:28,189 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 2/3)!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:28,189 - __main__ - ERROR - ❌❌❌ КОНФЛИКТ ОБНАРУЖЕН (попытка 2/3)!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:28.190083079Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026598"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:28,190 - __main__ - ERROR - Другой экземпляр бота уже работает!:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:28,190 - __main__ - ERROR - Другой экземпляр бота уже работает!",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:28.19009841Z",
+    "priority": "high",
+    "context": {
+      "related_files": [
+        "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py"
+      ],
+      "related_functions": [
+        {
+          "name": "main",
+          "file": "C:\\Users\\User\\Desktop\\5656-main\\run_bot.py",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nСвязанные функции:\n  - main в C:\\Users\\User\\Desktop\\5656-main\\run_bot.py (строка 22)\n\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026627"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:31,803 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:31,803 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:31.804469672Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026649"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:37,350 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:37,350 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:37.351007405Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026672"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:40,821 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:40,821 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:40.825822197Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026697"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:44,912 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:44,912 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:44.913196516Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026719"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:50,253 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:50,253 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:50.254109381Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026743"
+  },
+  {
+    "id": "general_error:2025-12-19 09:58:54,844 - telegram.ext.Updater - ERROR - Exception happened while polling for update:unknown",
+    "type": "general_error",
+    "error": "2025-12-19 09:58:54,844 - telegram.ext.Updater - ERROR - Exception happened while polling for updates.",
+    "file": null,
+    "timestamp": "2025-12-19T09:58:54.844644358Z",
+    "priority": "high",
+    "context": {
+      "related_files": [],
+      "related_functions": [],
+      "related_callbacks": [],
+      "related_generations": [],
+      "related_kie_calls": [],
+      "imports_chain": [],
+      "suggestions": []
+    },
+    "fix_instructions": "Тип ошибки: general_error\nФайл: None\n\nКОНТЕКСТ ПРОЕКТА:\nВАЖНО:\n  - Учитывать структуру проекта (кнопки → handlers → генерации → KIE API)\n  - Проверить все связанные функции и файлы\n  - Убедиться, что исправление не сломает другие компоненты\n  - Протестировать кнопки и генерации после исправления",
+    "status": "pending",
+    "created_at": "2025-12-19T12:59:03.026766"
+  }
+]

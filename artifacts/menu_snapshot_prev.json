@@ -1,0 +1,1074 @@
+{
+  "timestamp": "1766142427.7498527",
+  "callbacks": {
+    "language_select:ru": {
+      "type": "exact",
+      "handlers": []
+    },
+    "language_select:en": {
+      "type": "exact",
+      "handlers": []
+    },
+    "all_models": {
+      "type": "exact",
+      "handlers": []
+    },
+    "back_to_previous_step": {
+      "type": "exact",
+      "handlers": []
+    },
+    "back_to_menu": {
+      "type": "exact",
+      "handlers": []
+    },
+    "cancel": {
+      "type": "exact",
+      "handlers": []
+    },
+    "show_models": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_stats": {
+      "type": "exact",
+      "handlers": []
+    },
+    "payment_screenshot_nav:prev": {
+      "type": "exact",
+      "handlers": []
+    },
+    "payment_screenshot_nav:next": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_payments_back": {
+      "type": "exact",
+      "handlers": []
+    },
+    "check_balance": {
+      "type": "exact",
+      "handlers": []
+    },
+    "topup_balance": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_back_to_admin": {
+      "type": "exact",
+      "handlers": []
+    },
+    "help_menu": {
+      "type": "exact",
+      "handlers": []
+    },
+    "support_contact": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_settings": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_search": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_add": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_test_ocr": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_user_mode": {
+      "type": "exact",
+      "handlers": []
+    },
+    "select_model:z-image": {
+      "type": "exact",
+      "handlers": []
+    },
+    "referral_info": {
+      "type": "exact",
+      "handlers": []
+    },
+    "free_tools": {
+      "type": "exact",
+      "handlers": []
+    },
+    "claim_gift": {
+      "type": "exact",
+      "handlers": []
+    },
+    "my_generations": {
+      "type": "exact",
+      "handlers": []
+    },
+    "tutorial_start": {
+      "type": "exact",
+      "handlers": []
+    },
+    "change_language": {
+      "type": "exact",
+      "handlers": []
+    },
+    "confirm_generate": {
+      "type": "exact",
+      "handlers": []
+    },
+    "show_all_models_list": {
+      "type": "exact",
+      "handlers": []
+    },
+    "skip_audio": {
+      "type": "exact",
+      "handlers": []
+    },
+    "topup_amount:50": {
+      "type": "exact",
+      "handlers": []
+    },
+    "topup_amount:100": {
+      "type": "exact",
+      "handlers": []
+    },
+    "topup_amount:150": {
+      "type": "exact",
+      "handlers": []
+    },
+    "topup_custom": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_view_generations": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_set_currency_rate": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_broadcast": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_promocodes": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_create_broadcast": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_broadcast_stats": {
+      "type": "exact",
+      "handlers": []
+    },
+    "tutorial_step1": {
+      "type": "exact",
+      "handlers": []
+    },
+    "tutorial_step2": {
+      "type": "exact",
+      "handlers": []
+    },
+    "tutorial_step3": {
+      "type": "exact",
+      "handlers": []
+    },
+    "tutorial_step4": {
+      "type": "exact",
+      "handlers": []
+    },
+    "tutorial_complete": {
+      "type": "exact",
+      "handlers": []
+    },
+    "add_image": {
+      "type": "exact",
+      "handlers": []
+    },
+    "image_done": {
+      "type": "exact",
+      "handlers": []
+    },
+    "add_audio": {
+      "type": "exact",
+      "handlers": []
+    },
+    "skip_image": {
+      "type": "exact",
+      "handlers": []
+    },
+    "generate_again": {
+      "type": "exact",
+      "handlers": []
+    },
+    "view_payment_screenshots": {
+      "type": "exact",
+      "handlers": []
+    },
+    "admin_gen_nav:prev": {
+      "type": "f-string",
+      "handlers": []
+    },
+    "admin_gen_nav:next": {
+      "type": "f-string",
+      "handlers": []
+    },
+    "^show_models$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^show_all_models_list$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^category:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^all_models$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^gen_type:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^free_tools$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^check_balance$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^language_select:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^change_language$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^copy_bot$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^claim_gift$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^help_menu$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^support_contact$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^select_model:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_stats$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_view_generations$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_gen_nav:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_gen_view:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_settings$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_set_currency_rate$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_search$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_add$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^view_payment_screenshots$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^payment_screenshot_nav:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_payments_back$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_promocodes$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_broadcast$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_create_broadcast$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_broadcast_stats$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_test_ocr$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_user_mode$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^admin_back_to_admin$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^back_to_menu$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^topup_balance$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^topup_amount:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^topup_custom$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^referral_info$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^generate_again$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^my_generations$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^gen_view:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^gen_repeat:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^gen_history:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^tutorial_start$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^tutorial_step": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^tutorial_complete$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^cancel$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^back_to_previous_step$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^confirm_generate$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^retry_generate:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^set_param:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^add_image$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^skip_image$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^image_done$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^add_audio$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^skip_audio$": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^pay_stars:": {
+      "type": "pattern",
+      "handlers": []
+    },
+    "^pay_sbp:": {
+      "type": "pattern",
+      "handlers": []
+    }
+  },
+  "handlers": {
+    "claim_gift": [
+      "button_callback"
+    ],
+    "admin_user_mode": [
+      "button_callback"
+    ],
+    "admin_back_to_admin": [
+      "button_callback"
+    ],
+    "back_to_menu": [
+      "button_callback"
+    ],
+    "generate_again": [
+      "button_callback"
+    ],
+    "cancel": [
+      "button_callback"
+    ],
+    "free_tools": [
+      "button_callback"
+    ],
+    "show_models": [
+      "button_callback"
+    ],
+    "show_all_models_list": [
+      "button_callback"
+    ],
+    "add_image": [
+      "button_callback"
+    ],
+    "image_done": [
+      "button_callback"
+    ],
+    "add_audio": [
+      "button_callback"
+    ],
+    "skip_audio": [
+      "button_callback"
+    ],
+    "skip_image": [
+      "button_callback"
+    ],
+    "back_to_previous_step": [
+      "button_callback"
+    ],
+    "check_balance": [
+      "button_callback"
+    ],
+    "topup_balance": [
+      "button_callback"
+    ],
+    "topup_custom": [
+      "button_callback"
+    ],
+    "admin_stats": [
+      "button_callback"
+    ],
+    "view_payment_screenshots": [
+      "button_callback"
+    ],
+    "admin_payments_back": [
+      "button_callback"
+    ],
+    "admin_view_generations": [
+      "button_callback"
+    ],
+    "admin_settings": [
+      "button_callback"
+    ],
+    "admin_promocodes": [
+      "button_callback"
+    ],
+    "admin_broadcast": [
+      "button_callback"
+    ],
+    "admin_create_broadcast": [
+      "button_callback"
+    ],
+    "admin_set_currency_rate": [
+      "button_callback"
+    ],
+    "admin_broadcast_stats": [
+      "button_callback"
+    ],
+    "admin_search": [
+      "button_callback"
+    ],
+    "admin_add": [
+      "button_callback"
+    ],
+    "admin_test_ocr": [
+      "button_callback"
+    ],
+    "tutorial_start": [
+      "button_callback"
+    ],
+    "tutorial_step1": [
+      "button_callback"
+    ],
+    "tutorial_step2": [
+      "button_callback"
+    ],
+    "tutorial_step3": [
+      "button_callback"
+    ],
+    "tutorial_step4": [
+      "button_callback"
+    ],
+    "tutorial_complete": [
+      "button_callback"
+    ],
+    "help_menu": [
+      "button_callback"
+    ],
+    "support_contact": [
+      "button_callback"
+    ],
+    "copy_bot": [
+      "button_callback"
+    ],
+    "change_language": [
+      "button_callback"
+    ],
+    "referral_info": [
+      "button_callback"
+    ],
+    "my_generations": [
+      "button_callback"
+    ],
+    "confirm_generate": [
+      "button_callback"
+    ],
+    "language_select:": [
+      "button_callback"
+    ],
+    "set_language:": [
+      "button_callback"
+    ],
+    "retry_generate:": [
+      "button_callback"
+    ],
+    "gen_type:": [
+      "button_callback"
+    ],
+    "category:": [
+      "button_callback"
+    ],
+    "set_param:": [
+      "button_callback"
+    ],
+    "topup_amount:": [
+      "button_callback"
+    ],
+    "pay_stars:": [
+      "button_callback"
+    ],
+    "pay_sbp:": [
+      "button_callback"
+    ],
+    "payment_screenshot_nav:": [
+      "button_callback"
+    ],
+    "admin_gen_nav:": [
+      "button_callback"
+    ],
+    "admin_gen_view:": [
+      "button_callback"
+    ],
+    "gen_view:": [
+      "button_callback"
+    ],
+    "gen_repeat:": [
+      "button_callback"
+    ],
+    "gen_history:": [
+      "button_callback"
+    ],
+    "model:": [
+      "button_callback"
+    ],
+    "start:": [
+      "button_callback"
+    ],
+    "example:": [
+      "button_callback"
+    ],
+    "select_model:": [
+      "button_callback"
+    ]
+  },
+  "models": [
+    {
+      "id": "z-image",
+      "name": "Z-Image",
+      "emoji": "🖼️",
+      "generation_type": ""
+    },
+    {
+      "id": "nano-banana-pro",
+      "name": "Nano Banana Pro",
+      "emoji": "🍌",
+      "generation_type": ""
+    },
+    {
+      "id": "seedream/4.5-text-to-image",
+      "name": "Seedream 4.5 Text-to-Image",
+      "emoji": "🎨",
+      "generation_type": ""
+    },
+    {
+      "id": "seedream/4.5-edit",
+      "name": "Seedream 4.5 Edit",
+      "emoji": "✏️",
+      "generation_type": ""
+    },
+    {
+      "id": "sora-2-pro-image-to-video",
+      "name": "Sora 2 Pro Image-to-Video",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "sora-watermark-remover",
+      "name": "Sora 2 Watermark Remover",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "sora-2-text-to-video",
+      "name": "Sora 2 Text-to-Video",
+      "emoji": "🎥",
+      "generation_type": ""
+    },
+    {
+      "id": "kling-2.6/image-to-video",
+      "name": "Kling 2.6 Image-to-Video",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "kling-2.6/text-to-video",
+      "name": "Kling 2.6 Text-to-Video",
+      "emoji": "🎥",
+      "generation_type": ""
+    },
+    {
+      "id": "flux-2/pro-image-to-image",
+      "name": "Flux 2 Pro Image-to-Image",
+      "emoji": "🎨",
+      "generation_type": ""
+    },
+    {
+      "id": "flux-2/pro-text-to-image",
+      "name": "Flux 2 Pro Text-to-Image",
+      "emoji": "✨",
+      "generation_type": ""
+    },
+    {
+      "id": "flux-2/flex-image-to-image",
+      "name": "Flux 2 Flex Image-to-Image",
+      "emoji": "🎭",
+      "generation_type": ""
+    },
+    {
+      "id": "flux-2/flex-text-to-image",
+      "name": "Flux 2 Flex Text-to-Image",
+      "emoji": "🌟",
+      "generation_type": ""
+    },
+    {
+      "id": "topaz/image-upscale",
+      "name": "Topaz Image Upscale",
+      "emoji": "🔍",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-5-turbo-text-to-video-pro",
+      "name": "Kling 2.5 Turbo Text-to-Video Pro",
+      "emoji": "⚡",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-5-turbo-image-to-video-pro",
+      "name": "Kling 2.5 Turbo Image-to-Video Pro",
+      "emoji": "🎞️",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-5-image-to-video",
+      "name": "WAN 2.5 Image-to-Video",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-5-text-to-video",
+      "name": "WAN 2.5 Text-to-Video",
+      "emoji": "🎥",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-2-animate-move",
+      "name": "WAN 2.2 Animate Move",
+      "emoji": "🎭",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-2-animate-replace",
+      "name": "WAN 2.2 Animate Replace",
+      "emoji": "🔄",
+      "generation_type": ""
+    },
+    {
+      "id": "hailuo/02-text-to-video-pro",
+      "name": "Hailuo 02 Text-to-Video Pro",
+      "emoji": "🎞️",
+      "generation_type": ""
+    },
+    {
+      "id": "hailuo/02-image-to-video-pro",
+      "name": "Hailuo 02 Image-to-Video Pro",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "hailuo/02-image-to-video-standard",
+      "name": "Hailuo 02 Image-to-Video Standard",
+      "emoji": "🎥",
+      "generation_type": ""
+    },
+    {
+      "id": "hailuo/02-text-to-video-standard",
+      "name": "Hailuo 02 Text-to-Video Standard",
+      "emoji": "🎞️",
+      "generation_type": ""
+    },
+    {
+      "id": "topaz/video-upscale",
+      "name": "Topaz Video Upscale",
+      "emoji": "📹",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v1-avatar-standard",
+      "name": "Kling AI Avatar Standard",
+      "emoji": "👤",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/ai-avatar-v1-pro",
+      "name": "Kling AI Avatar Pro",
+      "emoji": "👥",
+      "generation_type": ""
+    },
+    {
+      "id": "bytedance/seedream-v4-text-to-image",
+      "name": "Seedream V4 Text-to-Image",
+      "emoji": "🎨",
+      "generation_type": ""
+    },
+    {
+      "id": "bytedance/seedream-v4-edit",
+      "name": "Seedream V4 Edit",
+      "emoji": "✏️",
+      "generation_type": ""
+    },
+    {
+      "id": "recraft/remove-background",
+      "name": "Recraft Remove Background",
+      "emoji": "✂️",
+      "generation_type": ""
+    },
+    {
+      "id": "recraft/crisp-upscale",
+      "name": "Recraft Crisp Upscale",
+      "emoji": "🔍",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/v3-reframe",
+      "name": "Ideogram V3 Reframe",
+      "emoji": "🖼️",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-2-a14b-speech-to-video-turbo",
+      "name": "WAN 2.2 A14B Speech-to-Video Turbo",
+      "emoji": "🎤",
+      "generation_type": ""
+    },
+    {
+      "id": "bytedance/seedream",
+      "name": "Seedream 3.0",
+      "emoji": "🎨",
+      "generation_type": ""
+    },
+    {
+      "id": "qwen/text-to-image",
+      "name": "Qwen Text-to-Image",
+      "emoji": "🎭",
+      "generation_type": ""
+    },
+    {
+      "id": "qwen/image-to-image",
+      "name": "Qwen Image-to-Image",
+      "emoji": "🖼️",
+      "generation_type": ""
+    },
+    {
+      "id": "qwen/image-edit",
+      "name": "Qwen Image Edit",
+      "emoji": "✏️",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/character-edit",
+      "name": "Ideogram Character Edit",
+      "emoji": "👤",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/character-remix",
+      "name": "Ideogram Character Remix",
+      "emoji": "🎭",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/character",
+      "name": "Ideogram Character",
+      "emoji": "👥",
+      "generation_type": ""
+    },
+    {
+      "id": "bytedance/v1-pro-fast-image-to-video",
+      "name": "ByteDance V1 Pro Fast Image-to-Video",
+      "emoji": "⚡",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-1-master-image-to-video",
+      "name": "Kling V2.1 Master Image-to-Video",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-1-standard",
+      "name": "Kling V2.1 Standard",
+      "emoji": "🎥",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-1-pro",
+      "name": "Kling V2.1 Pro",
+      "emoji": "🎞️",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-1-master-text-to-video",
+      "name": "Kling V2.1 Master Text-to-Video",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/v3-text-to-image",
+      "name": "Ideogram V3 Text-to-Image",
+      "emoji": "✨",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/v3-edit",
+      "name": "Ideogram V3 Edit",
+      "emoji": "✏️",
+      "generation_type": ""
+    },
+    {
+      "id": "ideogram/v3-remix",
+      "name": "Ideogram V3 Remix",
+      "emoji": "🎭",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-2-a14b-text-to-video-turbo",
+      "name": "WAN 2.2 A14B Text-to-Video Turbo",
+      "emoji": "⚡",
+      "generation_type": ""
+    },
+    {
+      "id": "wan/2-2-a14b-image-to-video-turbo",
+      "name": "WAN 2.2 A14B Image-to-Video Turbo",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "google/imagen4-ultra",
+      "name": "Google Imagen 4 Ultra",
+      "emoji": "🌟",
+      "generation_type": ""
+    },
+    {
+      "id": "google/imagen4-fast",
+      "name": "Google Imagen 4 Fast",
+      "emoji": "⚡",
+      "generation_type": ""
+    },
+    {
+      "id": "google/imagen4",
+      "name": "Google Imagen 4",
+      "emoji": "🎨",
+      "generation_type": ""
+    },
+    {
+      "id": "google/nano-banana",
+      "name": "Google Nano Banana",
+      "emoji": "🍌",
+      "generation_type": ""
+    },
+    {
+      "id": "google/nano-banana-edit",
+      "name": "Google Nano Banana Edit",
+      "emoji": "✏️",
+      "generation_type": ""
+    },
+    {
+      "id": "elevenlabs/speech-to-text",
+      "name": "ElevenLabs Speech-to-Text",
+      "emoji": "🎤",
+      "generation_type": ""
+    },
+    {
+      "id": "grok/imagine",
+      "name": "Grok Imagine",
+      "emoji": "🤖",
+      "generation_type": ""
+    },
+    {
+      "id": "openai/4o-image",
+      "name": "OpenAI 4o Image",
+      "emoji": "🎨",
+      "generation_type": ""
+    },
+    {
+      "id": "flux/kontext",
+      "name": "Flux Kontext",
+      "emoji": "🎭",
+      "generation_type": ""
+    },
+    {
+      "id": "google/veo-3",
+      "name": "Google Veo 3",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "google/veo-3.1",
+      "name": "Google Veo 3.1",
+      "emoji": "🎥",
+      "generation_type": ""
+    },
+    {
+      "id": "sora-2-pro-storyboard",
+      "name": "Sora 2 Pro Storyboard",
+      "emoji": "📽️",
+      "generation_type": ""
+    },
+    {
+      "id": "kling/v2-5-turbo",
+      "name": "Kling 2.5 Turbo",
+      "emoji": "⚡",
+      "generation_type": ""
+    },
+    {
+      "id": "hailuo/2.3",
+      "name": "Hailuo 2.3",
+      "emoji": "🎞️",
+      "generation_type": ""
+    },
+    {
+      "id": "infinitalk/from-audio",
+      "name": "Infinitalk API-AI lip-sync",
+      "emoji": "👄",
+      "generation_type": ""
+    },
+    {
+      "id": "elevenlabs/audio-isolation",
+      "name": "Elevenlabs Audio Isolation",
+      "emoji": "🎧",
+      "generation_type": ""
+    },
+    {
+      "id": "elevenlabs/sound-effect",
+      "name": "Elevenlabs Sound Effect",
+      "emoji": "🔊",
+      "generation_type": ""
+    },
+    {
+      "id": "elevenlabs/text-to-speech",
+      "name": "Elevenlabs Text to Speech",
+      "emoji": "🗣️",
+      "generation_type": ""
+    },
+    {
+      "id": "google/nanobanana-gemini-2.5-flash",
+      "name": "Google NanoBanana-Gemini 2.5 Flash",
+      "emoji": "🍌",
+      "generation_type": ""
+    },
+    {
+      "id": "runway/gen-4",
+      "name": "Runway Video Generation",
+      "emoji": "🎬",
+      "generation_type": ""
+    },
+    {
+      "id": "suno/v5",
+      "name": "Suno API",
+      "emoji": "🎵",
+      "generation_type": ""
+    },
+    {
+      "id": "midjourney/api",
+      "name": "Midjourney API",
+      "emoji": "🎨",
+      "generation_type": ""
+    }
+  ]
+}

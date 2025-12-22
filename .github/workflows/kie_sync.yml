@@ -1,0 +1,60 @@
+name: KIE Market Sync
+
+on:
+  schedule:
+    # Run daily at 3:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright pyyaml
+
+      - name: Install Playwright browsers
+        run: python -m playwright install chromium --with-deps
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+      - name: Run KIE Market sync
+        env:
+          KIE_COOKIE_HEADER: ${{ secrets.KIE_COOKIE_HEADER }}
+        run: |
+          # Don't echo cookie header (security)
+          python tools/kie_sync/run_all.py --sync 2>&1 | grep -v "KIE_COOKIE" || true
+        continue-on-error: true
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git diff --quiet pricing/config.yaml models/catalog.yaml models/catalog.json || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git add pricing/config.yaml models/catalog.yaml models/catalog.json
+          git commit -m "chore: sync KIE Market models [skip ci]" || exit 0
+          git push origin HEAD:main
+
+      - name: Summary
+        run: |
+          echo "✅ Sync completed"
+          git status --short || true

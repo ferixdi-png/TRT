@@ -1,0 +1,10 @@
+{
+  "incidents": [],
+  "errors": [],
+  "summary": {
+    "total_errors": 0,
+    "incident_types": {},
+    "stacktraces_count": 0
+  },
+  "stacktraces": []
+}

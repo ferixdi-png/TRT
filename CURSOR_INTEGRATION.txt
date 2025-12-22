@@ -1,0 +1,47 @@
+============================================================
+  ИНТЕГРАЦИЯ С CURSOR ДЛЯ АВТОМАТИЧЕСКОГО ИСПРАВЛЕНИЯ
+============================================================
+
+ОДИН ФАЙЛ ДЛЯ ЗАПУСКА:
+  cursor_auto_fix.bat
+
+ЧТО ДЕЛАЕТ:
+  - Мониторит логи на Render каждые 60 секунд
+  - Находит ошибки автоматически
+  - Создаёт задачи для Cursor AI
+  - Сохраняет промпты в .cursor/auto_fix_prompt.md
+
+КАК ИСПОЛЬЗОВАТЬ:
+
+1. Запустите:
+   cursor_auto_fix.bat
+
+2. В Cursor откройте файл:
+   .cursor/auto_fix_prompt.md
+
+3. В Cursor Chat напишите:
+   "Прочитай .cursor/auto_fix_prompt.md и исправь все ошибки"
+
+4. Cursor исправит ошибки автоматически!
+
+НАСТРОЙКИ:
+  Все ключи уже установлены в скрипте:
+  - RENDER_API_KEY: rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
+  - RENDER_SERVICE_ID: srv-d4s025er433s73bsf62g
+  - TELEGRAM_BOT_TOKEN: 8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
+
+ФАЙЛЫ:
+  - .cursor/auto_fix_tasks.json - все задачи в JSON
+  - .cursor/auto_fix_prompt.md - промпт для Cursor
+
+ОСТАНОВКА:
+  Нажмите Ctrl+C
+
+============================================================
+
+
+
+
+
+
+

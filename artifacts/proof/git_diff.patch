@@ -1,0 +1,27 @@
+﻿ AUTOPILOT_COMPLETE_GREEN.md               |  79 ++++++
+ app/models/__init__.py                    |   7 +
+ app/models/registry.py                    | 172 +++++++++++
+ artifacts/behavioral/summary.md           |   2 +-
+ artifacts/buttons/summary.md              |  31 ++
+ artifacts/buttons/transcript.md           |  42 +++
+ artifacts/diag/silence_root_cause.md      | 109 +++++++
+ artifacts/inputs/summary.md               |  36 +++
+ artifacts/inputs/transcript.md            |  42 +++
+ artifacts/menu_snapshot.md                |   2 +-
+ artifacts/models/source.json              |  19 ++
+ artifacts/proof/CHANGED_FILES.md          |  44 +++
+ artifacts/proof/FINAL_STATUS.md           |  64 +++++
+ artifacts/proof/entrypoint.md             |  18 ++
+ artifacts/proof/git_diff.patch            |  19 ++
+ artifacts/proof/git_diff_stat.txt         |  12 +
+ artifacts/proof/git_status_before.txt     |   1 +
+ artifacts/proof/head_after.txt            |   1 +
+ artifacts/proof/head_before.txt           |   1 +
+ artifacts/proof/ls.txt                    | 455 ++++++++++++++++++++++++++++++
+ artifacts/proof/pwd.txt                   |   6 +
+ bot_kie.py                                | 136 +++++++++
+ scripts/button_matrix_e2e.py              | 201 +++++++++++++
+ scripts/generate_model_source_artifact.py |  51 ++++
+ scripts/input_matrix_e2e.py               | 267 ++++++++++++++++++
+ scripts/verify_project.py                 |  21 +-
+ 26 files changed, 1834 insertions(+), 4 deletions(-)

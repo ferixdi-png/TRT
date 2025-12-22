@@ -1,0 +1,19 @@
+{
+  "services": [
+    {
+      "name": "Основной бот",
+      "service_id": "srv-d4s025er433s73bsf62g",
+      "telegram_token": "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y",
+      "enabled": true
+    }
+  ],
+  "render_api_key": "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw",
+  "default_service": "srv-d4s025er433s73bsf62g"
+}
+
+
+
+
+
+
+

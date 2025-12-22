@@ -1,0 +1,89 @@
+════════════════════════════════════════════════════════════════
+🚀 START HERE - QUICK START GUIDE
+════════════════════════════════════════════════════════════════
+
+📋 ЛОКАЛЬНЫЙ ЗАПУСК
+════════════════════════════════════════════════════════════════
+
+1. Установи зависимости:
+   pip install -r requirements.txt
+
+2. Настрой ENV переменные (создай .env или используй системные):
+   TELEGRAM_BOT_TOKEN=your_token
+   KIE_API_KEY=your_key
+   DATABASE_URL=postgresql://...
+   BOT_MODE=polling
+
+3. Запусти проверки:
+   python scripts/autopilot_one_command.py
+
+4. Запусти бота:
+   BOT_MODE=polling python bot_kie.py
+
+════════════════════════════════════════════════════════════════
+🔄 КАК CI/CD РАБОТАЕТ
+════════════════════════════════════════════════════════════════
+
+АВТОМАТИЧЕСКИЙ ДЕПЛОЙ:
+
+1. Push в main → запускается CI workflow
+2. CI проверяет:
+   - verify_project.py
+   - behavioral_e2e.py
+   - singleton lock protection
+   - нет тишины
+3. Если все PASS → автоматически запускается Deploy workflow
+4. Deploy отправляет запрос на Render (Deploy Hook или API)
+5. Render деплоит новую версию
+6. Health check проверяет что сервис поднялся
+
+НАСТРОЙКА (ОДИН РАЗ):
+
+1. GitHub → Settings → Secrets and variables → Actions
+2. Добавь Secrets:
+   - RENDER_DEPLOY_HOOK (предпочтительно)
+     ИЛИ
+   - RENDER_API_KEY + RENDER_SERVICE_ID
+   - RENDER_HEALTH_URL (опционально, для health check)
+
+3. Готово! Дальше всё автоматически.
+
+════════════════════════════════════════════════════════════════
+📝 КОМАНДЫ
+════════════════════════════════════════════════════════════════
+
+# Полный цикл автопилота
+python scripts/autopilot_one_command.py
+
+# Отдельные проверки
+python scripts/verify_project.py
+python scripts/behavioral_e2e.py
+python scripts/preflight_checks.py
+
+# Логи Render
+python scripts/read_logs.py --since 60m --grep "ERROR"
+
+# Парсинг инцидентов
+python scripts/parse_logs.py
+
+════════════════════════════════════════════════════════════════
+✅ ПРОВЕРКА ГОТОВНОСТИ
+════════════════════════════════════════════════════════════════
+
+Проект готов ТОЛЬКО ЕСЛИ:
+
+✅ python scripts/verify_project.py = PASS
+✅ python scripts/behavioral_e2e.py = 100% MODELS RESPONDED
+✅ artifacts/behavioral/summary.md содержит "100% MODELS RESPONDED"
+✅ Нет тишины
+✅ Нет 409 Conflict
+
+БЕЗ ЭТОГО — НЕ ГОТОВО
+
+════════════════════════════════════════════════════════════════
+
+
+
+
+
+

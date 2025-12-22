@@ -1,0 +1,98 @@
+﻿
+================================================================================
+VERIFY PROJECT - ╨Х╨Ф╨Ш╨Э╨б╨в╨Т╨Х╨Э╨Э╨Р╨п ╨Я╨а╨Р╨Т╨Ф╨Р
+================================================================================
+[93mWARN pytest not installed, skipping tests[0m
+
+================================================================================
+[CHECK] Compile Python
+================================================================================
+[92m[PASS][0m
+
+================================================================================
+[CHECK] Snapshot Menu
+================================================================================
+[92m[PASS][0m
+Creating menu snapshot...
+OK Saved C:\Users\User\Desktop\5656-main\artifacts\menu_snapshot.json
+OK Saved C:\Users\User\Desktop\5656-main\artifacts\menu_snapshot.md
+
+Statistics:
+  Main menu: 0 buttons
+  Models: 72
+  Total callbacks: 53
+
+
+================================================================================
+[CHECK] Diff Menu
+================================================================================
+[92m[PASS][0m
+Comparing menu snapshots...
+OK Saved C:\Users\User\Desktop\5656-main\artifacts\menu_diff.md
+OK Saved C:\Users\User\Desktop\5656-main\artifacts\menu_snapshot_previous.json for next comparison
+
+
+================================================================================
+[CHECK] Verify Invariants
+================================================================================
+[92m[PASS][0m
+Checking repository invariants...
+
+OK All invariants satisfied (1 warnings):
+
+  WARN Possible hardcoded keys (check manually): validate_sora_watermark_remover.py:40
+
+
+================================================================================
+[CHECK] Verify UI Texts
+================================================================================
+[92m[PASS][0m
+OK UI texts verified
+
+
+================================================================================
+[CHECK] Verify Models KIE Only
+================================================================================
+[92m[PASS][0m
+OK 72 models from KIE
+
+
+================================================================================
+[CHECK] Verify Models Visible
+================================================================================
+[92m[PASS][0m
+OK Models visible in menu
+
+
+================================================================================
+[CHECK] Verify Callbacks
+================================================================================
+[92m[PASS][0m
+OK 53 callbacks verified
+
+
+================================================================================
+[CHECK] Verify Payments Balance
+================================================================================
+[92m[PASS][0m
+OK Balance saving to DB found
+OK Balance verification found
+OK Payments/balance verified
+
+
+================================================================================
+FINAL REPORT
+================================================================================
+[92m[PASS][0m Compile Python
+[92m[PASS][0m Snapshot Menu
+[92m[PASS][0m Diff Menu
+[92m[PASS][0m Verify Invariants
+[92m[PASS][0m Verify UI Texts
+[92m[PASS][0m Verify Models KIE Only
+[92m[PASS][0m Verify Models Visible
+[92m[PASS][0m Verify Callbacks
+[92m[PASS][0m Verify Payments Balance
+
+9/9 checks passed
+
+[92mALL CHECKS PASSED![0m
