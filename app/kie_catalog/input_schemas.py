@@ -93,6 +93,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'cfg_scale',  # Для kling/v2-5-turbo-text-to-video-pro
         'prompt_optimizer',  # Для hailuo/02-text-to-video-pro
         'image_url',  # Для wan/2-2-a14b-speech-to-video-turbo
+        'enable_prompt_expansion',  # Для wan/2-2-a14b-text-to-video-turbo
+        'acceleration',  # Для wan/2-2-a14b-text-to-video-turbo
         'audio_url',  # Для wan/2-2-a14b-speech-to-video-turbo
         'num_frames',  # Для wan/2-2-a14b-speech-to-video-turbo
         'num_inference_steps',  # Для wan/2-2-a14b-speech-to-video-turbo
