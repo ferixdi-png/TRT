@@ -262,36 +262,34 @@ async def run(settings, application):
                 # Добавляем обработчик ошибок для updater
                 application.add_error_handler(handle_updater_error)
                 
-                # КРИТИЧНО: Запускаем polling с мониторингом ошибок
-                async def monitor_polling_errors():
-                    """Мониторинг ошибок в updater loop"""
-                    try:
-                        # Ждём немного, чтобы updater успел запуститься
-                        await asyncio.sleep(5)
-                        
-                        # Проверяем, что updater работает
-                        while True:
-                            await asyncio.sleep(10)  # Проверяем каждые 10 секунд
-                            
-                            # Если updater не работает, но должен - это проблема
-                            if hasattr(application, 'updater') and application.updater:
-                                if not application.updater.running:
-                                    logger.warning("[MONITOR] Updater stopped unexpectedly")
-                                    break
-                    except asyncio.CancelledError:
-                        pass
-                    except Exception as e:
-                        logger.error(f"[MONITOR] Error in monitoring task: {e}")
-                
-                # Запускаем задачу мониторинга
-                monitor_task = asyncio.create_task(monitor_polling_errors())
+                # КРИТИЧНО: Проверяем конфликт ПЕРЕД запуском polling
+                logger.info("[RUN] Checking for conflicts before polling start...")
+                try:
+                    # Пытаемся сделать тестовый getUpdates для проверки конфликта
+                    test_updates = await application.bot.get_updates(limit=1, timeout=1)
+                    logger.info("[RUN] Pre-flight check passed: no conflicts detected")
+                except Exception as test_e:
+                    from telegram.error import Conflict
+                    error_msg = str(test_e)
+                    if isinstance(test_e, Conflict) or "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
+                        logger.error(f"[RUN] ❌❌❌ CONFLICT DETECTED in pre-flight check: {error_msg}")
+                        logger.error("[RUN] Another bot instance is already polling - exiting")
+                        try:
+                            await application.stop()
+                            await application.shutdown()
+                        except:
+                            pass
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(test_e if isinstance(test_e, Conflict) else Conflict(error_msg), "polling")
+                        return
+                    else:
+                        logger.warning(f"[RUN] Pre-flight check warning (non-conflict): {test_e}")
                 
                 # Запускаем polling с обработкой конфликтов
                 try:
                     await application.updater.start_polling(drop_pending_updates=True)
                     logger.info("[RUN] Polling started successfully")
                 except Exception as e:
-                    monitor_task.cancel()
                     from telegram.error import Conflict
                     if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e) or "terminated by other getUpdates" in str(e):
                         logger.error("[RUN] Conflict detected during polling start - exiting")
