@@ -3947,6 +3947,19 @@ def build_input(
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "1080p"  # Default согласно документации
     
+    # Применяем дефолты для wan/2-5-text-to-video
+    if model_id in ["wan/2-5-text-to-video", "wan/2.5-text-to-video"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "1080p"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка)
+        if 'enable_prompt_expansion' not in normalized_input:
+            normalized_input['enable_prompt_expansion'] = True  # Default согласно документации
+    
     # Применяем дефолты для wan/2-5-image-to-video
     if model_id in ["wan/2-5-image-to-video", "wan/2.5-image-to-video"]:
         if 'image_url' not in normalized_input:
