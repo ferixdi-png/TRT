@@ -3996,6 +3996,11 @@ def build_input(
             normalized_input['aspect_ratio'] = "3:2"  # Default согласно документации (отличается от text-to-video!)
         # ВАЖНО: Нет параметра mode для text-to-image (в отличие от text-to-video и image-to-video)
     
+    # Применяем дефолты для hailuo/02-text-to-video-pro
+    if model_id in ["hailuo/02-text-to-video-pro", "hailuo/02-t2v-pro", "hailuo/0.2-text-to-video-pro"]:
+        if 'prompt_optimizer' not in normalized_input:
+            normalized_input['prompt_optimizer'] = True  # Default согласно документации
+    
     # Применяем дефолты для hailuo/2-3-image-to-video-pro
     if model_id in ["hailuo/2-3-image-to-video-pro", "hailuo/2-3-i2v-pro"]:
         if 'duration' not in normalized_input:
