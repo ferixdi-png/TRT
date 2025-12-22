@@ -6074,6 +6074,15 @@ def build_input(
         if 'enable_safety_checker' not in normalized_input:
             normalized_input['enable_safety_checker'] = True  # Default согласно документации
     
+    # Применяем дефолты для bytedance/seedream
+    if model_id in ["bytedance/seedream", "bytedance-seedream", "seedream"]:
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "square_hd"  # Default согласно документации
+        if 'guidance_scale' not in normalized_input:
+            normalized_input['guidance_scale'] = 2.5  # Default согласно документации
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
