@@ -327,78 +327,9 @@ async def run(settings, application):
                     else:
                         raise  # Re-raise non-Conflict errors
                 
-                # КРИТИЧНО: Мониторим updater на ошибки конфликтов
-                # Ошибки в updater loop могут не попадать в error handler
-                # Поэтому мониторим логи и останавливаем процесс при обнаружении конфликта
-                async def monitor_updater_for_conflicts():
-                    """Мониторит updater на ошибки конфликтов и останавливает процесс"""
-                    import time
-                    last_error_time = 0
-                    conflict_count = 0
-                    
-                    while True:
-                        await asyncio.sleep(5)  # Проверяем каждые 5 секунд
-                        
-                        # Проверяем, что updater работает
-                        if hasattr(application, 'updater') and application.updater:
-                            if not application.updater.running:
-                                logger.warning("[MONITOR] Updater stopped unexpectedly")
-                                break
-                        
-                        # Если есть ошибки конфликтов в логах (через проверку состояния)
-                        # Это fallback механизм на случай, если error handler не сработает
-                        try:
-                            # Проверяем состояние через тестовый getUpdates
-                            test_updates = await application.bot.get_updates(limit=1, timeout=1)
-                        except Exception as test_e:
-                            from telegram.error import Conflict
-                            error_msg = str(test_e)
-                            if isinstance(test_e, Conflict) or "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
-                                conflict_count += 1
-                                current_time = time.time()
-                                
-                                # Если конфликт повторяется - останавливаем процесс
-                                if conflict_count >= 2 or (current_time - last_error_time < 10):
-                                    logger.error(f"[MONITOR] ❌❌❌ CONFLICT DETECTED in updater (count={conflict_count}): {error_msg}")
-                                    logger.error("[MONITOR] Stopping updater and exiting immediately...")
-                                    
-                                    # Останавливаем updater
-                                    try:
-                                        if application.updater and application.updater.running:
-                                            await application.updater.stop()
-                                    except:
-                                        pass
-                                    
-                                    # Останавливаем application
-                                    try:
-                                        await application.stop()
-                                        await application.shutdown()
-                                    except:
-                                        pass
-                                    
-                                    # Освобождаем lock
-                                    try:
-                                        from app.locking.single_instance import release_single_instance_lock
-                                        release_single_instance_lock()
-                                    except:
-                                        pass
-                                    
-                                    from app.bot_mode import handle_conflict_gracefully
-                                    handle_conflict_gracefully(test_e if isinstance(test_e, Conflict) else Conflict(error_msg), "polling")
-                                    import os
-                                    os._exit(0)  # Немедленный выход
-                                
-                                last_error_time = current_time
-                            else:
-                                # Не конфликт - сбрасываем счетчик
-                                conflict_count = 0
-                        except asyncio.CancelledError:
-                            break
-                        except Exception as e:
-                            logger.debug(f"[MONITOR] Error in monitoring: {e}")
-                
-                # Запускаем мониторинг в фоне
-                monitor_task = asyncio.create_task(monitor_updater_for_conflicts())
+                # КРИТИЧНО: НЕ мониторим updater через get_updates!
+                # Это вызывает конфликты, потому что updater уже делает get_updates в своем loop.
+                # Ошибки обрабатываются через error handler, который уже добавлен выше.
             
             # Ждем остановки
             try:

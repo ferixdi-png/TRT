@@ -202,11 +202,134 @@ async def run(settings, application):
                 logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
-                # Polling mode
+                # Polling mode - безопасный запуск с обработкой конфликтов
                 logger.info("[RUN] Starting polling...")
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                await application.updater.start_polling(drop_pending_updates=True)
-                logger.info("[RUN] Polling started")
+                
+                # КРИТИЧНО: Задержка перед запуском polling для предотвращения конфликтов
+                logger.info("[RUN] Waiting 15 seconds to avoid conflicts with previous instance...")
+                await asyncio.sleep(15)
+                
+                # КРИТИЧНО: Удаляем webhook ПЕРЕД запуском polling
+                try:
+                    await application.bot.delete_webhook(drop_pending_updates=True)
+                    webhook_info = await application.bot.get_webhook_info()
+                    if webhook_info.url:
+                        logger.warning(f"[RUN] Webhook still present: {webhook_info.url}")
+                    else:
+                        logger.info("[RUN] Webhook removed successfully")
+                except Exception as e:
+                    logger.warning(f"[RUN] Error removing webhook: {e}")
+                    # Проверяем на конфликт
+                    from telegram.error import Conflict
+                    if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e):
+                        logger.error("[RUN] Conflict detected while removing webhook - exiting")
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(str(e)), "polling")
+                        return
+                
+                # КРИТИЧНО: Добавляем обработчик ошибок для updater
+                async def handle_updater_error(update, context):
+                    """Обработчик ошибок для updater polling loop"""
+                    error = context.error
+                    error_msg = str(error) if error else ""
+                    
+                    from telegram.error import Conflict
+                    if isinstance(error, Conflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "409" in error_msg:
+                        logger.error(f"[UPDATER] 409 CONFLICT in updater loop: {error_msg}")
+                        logger.error("[UPDATER] Stopping updater and exiting...")
+                        
+                        # Останавливаем updater немедленно
+                        try:
+                            if application.updater and application.updater.running:
+                                await application.updater.stop()
+                                logger.info("[UPDATER] Updater stopped")
+                        except Exception as e:
+                            logger.warning(f"[UPDATER] Error stopping updater: {e}")
+                        
+                        # Останавливаем application
+                        try:
+                            await application.stop()
+                            await application.shutdown()
+                        except:
+                            pass
+                        
+                        # Освобождаем lock и выходим
+                        try:
+                            from app.locking.single_instance import release_single_instance_lock
+                            release_single_instance_lock()
+                        except:
+                            pass
+                        
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(error if isinstance(error, Conflict) else Conflict(error_msg), "polling")
+                        import os
+                        os._exit(0)
+                
+                # Добавляем обработчик ошибок для updater
+                application.add_error_handler(handle_updater_error)
+                
+                # КРИТИЧНО: Проверяем конфликт ПЕРЕД запуском polling
+                logger.info("[RUN] Checking for conflicts before polling start...")
+                try:
+                    # Пытаемся сделать тестовый getUpdates для проверки конфликта
+                    test_updates = await application.bot.get_updates(limit=1, timeout=1)
+                    logger.info("[RUN] Pre-flight check passed: no conflicts detected")
+                except Exception as test_e:
+                    from telegram.error import Conflict
+                    error_msg = str(test_e)
+                    if isinstance(test_e, Conflict) or "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
+                        logger.error(f"[RUN] ❌❌❌ CONFLICT DETECTED in pre-flight check: {error_msg}")
+                        logger.error("[RUN] Another bot instance is already polling - exiting")
+                        try:
+                            await application.stop()
+                            await application.shutdown()
+                        except:
+                            pass
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(test_e if isinstance(test_e, Conflict) else Conflict(error_msg), "polling")
+                        return
+                    else:
+                        logger.warning(f"[RUN] Pre-flight check warning (non-conflict): {test_e}")
+                
+                # КРИТИЧНО: Запускаем polling с обработкой конфликтов
+                try:
+                    await application.updater.start_polling(drop_pending_updates=True)
+                    logger.info("[RUN] Polling started successfully")
+                except Exception as e:
+                    from telegram.error import Conflict
+                    error_msg = str(e)
+                    if isinstance(e, Conflict) or "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
+                        logger.error(f"[RUN] ❌❌❌ CONFLICT DETECTED during polling start: {error_msg}")
+                        logger.error("[RUN] Stopping updater and exiting immediately...")
+                        
+                        # Останавливаем updater немедленно
+                        try:
+                            if application.updater and application.updater.running:
+                                await application.updater.stop()
+                                logger.info("[RUN] Updater stopped")
+                        except Exception as stop_e:
+                            logger.warning(f"[RUN] Error stopping updater: {stop_e}")
+                        
+                        # Останавливаем application
+                        try:
+                            await application.stop()
+                            await application.shutdown()
+                        except:
+                            pass
+                        
+                        # Освобождаем lock
+                        try:
+                            from app.locking.single_instance import release_single_instance_lock
+                            release_single_instance_lock()
+                        except:
+                            pass
+                        
+                        from app.bot_mode import handle_conflict_gracefully
+                        handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(error_msg), "polling")
+                        import os
+                        os._exit(0)  # Немедленный выход
+                    else:
+                        raise  # Re-raise non-Conflict errors
             
             # Ждем остановки
             try:

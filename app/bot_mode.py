@@ -113,14 +113,19 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     """
     Graceful обработка Conflict ошибки
     Логирует и завершает процесс без агрессивных retry
+    
+    КРИТИЧНО: Использует os._exit(0) для немедленного завершения,
+    чтобы предотвратить повторные конфликты и остановить polling loop немедленно.
     """
     logger.error(f"❌❌❌ Conflict detected in {mode} mode: {error}")
     logger.error("   Another instance is already running")
     logger.error("   Exiting gracefully to allow orchestrator restart")
     
     # НЕ делаем retry, НЕ перезапускаем - просто выходим
-    import sys
-    sys.exit(0)
+    # os._exit(0) завершает процесс немедленно, обходя cleanup handlers
+    # Это предотвращает повторные конфликты и останавливает polling loop
+    import os
+    os._exit(0)
 
 
 
