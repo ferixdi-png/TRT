@@ -2785,6 +2785,13 @@ def build_input(
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "768P"  # Default согласно документации
     
+    # Применяем дефолты для sora-2-pro-storyboard
+    if model_id in ["sora-2-pro-storyboard", "sora-2-pro/storyboard", "openai/sora-2-pro-storyboard"]:
+        if 'n_frames' not in normalized_input:
+            normalized_input['n_frames'] = "15"  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
+    
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
         if 'sound' not in normalized_input:
