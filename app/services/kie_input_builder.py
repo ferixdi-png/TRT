@@ -6280,6 +6280,23 @@ def build_input(
         if 'enable_safety_checker' not in normalized_input:
             normalized_input['enable_safety_checker'] = True  # Default согласно документации
     
+    # Применяем дефолты для qwen/image-to-image
+    if model_id in ["qwen/image-to-image", "qwen-image-to-image", "qwen/i2i"]:
+        if 'strength' not in normalized_input:
+            normalized_input['strength'] = 0.8  # Default согласно документации
+        if 'output_format' not in normalized_input:
+            normalized_input['output_format'] = "png"  # Default согласно документации
+        if 'acceleration' not in normalized_input:
+            normalized_input['acceleration'] = "none"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blurry, ugly"  # Default согласно документации
+        if 'num_inference_steps' not in normalized_input:
+            normalized_input['num_inference_steps'] = 30  # Default согласно документации
+        if 'guidance_scale' not in normalized_input:
+            normalized_input['guidance_scale'] = 2.5  # Default согласно документации
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
