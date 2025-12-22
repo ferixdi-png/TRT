@@ -2585,6 +2585,114 @@ def _validate_kling_v2_1_master_text_to_video(
     return True, None
 
 
+def _validate_ideogram_v3_text_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для ideogram/v3-text-to-image согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - rendering_speed (опциональный, enum, default "BALANCED")
+    - style (опциональный, enum, default "AUTO")
+    - expand_prompt (опциональный, boolean, default true)
+    - image_size (опциональный, enum, default "square_hd")
+    - seed (опциональный, number)
+    - negative_prompt (опциональный, string, макс 5000 символов, default "")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["ideogram/v3-text-to-image", "ideogram-v3-text-to-image", "ideogram/v3-t2i", "v3-text-to-image"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация rendering_speed: опциональный, enum
+    rendering_speed = normalized_input.get('rendering_speed')
+    if rendering_speed is not None:
+        # Переиспользуем функцию из ideogram/character-edit
+        normalized_speed = _normalize_rendering_speed_for_ideogram_character_edit(rendering_speed)
+        if normalized_speed is None:
+            valid_values = ["TURBO", "BALANCED", "QUALITY"]
+            return False, f"Поле 'rendering_speed' должно быть одним из: {', '.join(valid_values)} (получено: {rendering_speed})"
+        normalized_input['rendering_speed'] = normalized_speed
+    
+    # Валидация style: опциональный, enum
+    style = normalized_input.get('style')
+    if style is not None:
+        # Переиспользуем функцию из ideogram/character-edit
+        normalized_style = _normalize_style_for_ideogram_character_edit(style)
+        if normalized_style is None:
+            valid_values = ["AUTO", "GENERAL", "REALISTIC", "DESIGN"]
+            return False, f"Поле 'style' должно быть одним из: {', '.join(valid_values)} (получено: {style})"
+        normalized_input['style'] = normalized_style
+    
+    # Валидация expand_prompt: опциональный, boolean
+    expand_prompt = normalized_input.get('expand_prompt')
+    if expand_prompt is not None:
+        normalized_bool = _normalize_boolean(expand_prompt)
+        if normalized_bool is None:
+            return False, f"Поле 'expand_prompt' должно быть boolean (получено: {expand_prompt})"
+        normalized_input['expand_prompt'] = normalized_bool
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        # Переиспользуем функцию из qwen/image-edit
+        normalized_size = _normalize_image_size_for_qwen_image_edit(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd",
+                "portrait_4_3", "portrait_16_9",
+                "landscape_4_3", "landscape_16_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = float(seed)
+            # Преобразуем в int если это целое число
+            if seed_num == int(seed_num):
+                normalized_input['seed'] = int(seed_num)
+            else:
+                normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация negative_prompt: опциональный, string, макс 5000 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 5000:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 5000)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
