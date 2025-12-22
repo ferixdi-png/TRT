@@ -8657,6 +8657,19 @@ def build_input(
         if 'language_code' not in normalized_input:
             normalized_input['language_code'] = ""  # Default согласно документации
     
+    # Применяем дефолты для wan/2-2-a14b-text-to-video-turbo
+    if model_id in ["wan/2-2-a14b-text-to-video-turbo", "wan-2-2-a14b-text-to-video-turbo", "wan/2-2-a14b-t2v-turbo", "2-2-a14b-text-to-video-turbo"]:
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "720p"  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'enable_prompt_expansion' not in normalized_input:
+            normalized_input['enable_prompt_expansion'] = False  # Default согласно документации
+        if 'seed' not in normalized_input:
+            normalized_input['seed'] = 0  # Default согласно документации
+        if 'acceleration' not in normalized_input:
+            normalized_input['acceleration'] = "none"  # Default согласно документации
+    
     # Применяем дефолты для wan/2-2-a14b-speech-to-video-turbo
     if model_id in ["wan/2-2-a14b-speech-to-video-turbo", "wan-2-2-a14b-speech-to-video-turbo"]:
         if 'num_frames' not in normalized_input:
