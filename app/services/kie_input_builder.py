@@ -7947,6 +7947,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для ideogram/v3-text-to-image
+    is_valid, error_msg = _validate_ideogram_v3_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для elevenlabs/audio-isolation
     is_valid, error_msg = _validate_elevenlabs_audio_isolation(model_id, normalized_input)
     if not is_valid:
