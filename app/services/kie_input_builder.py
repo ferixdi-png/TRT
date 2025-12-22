@@ -6675,6 +6675,13 @@ def build_input(
         if 'image_size' not in normalized_input:
             normalized_input['image_size'] = "1:1"  # Default согласно документации
     
+    # Применяем дефолты для google/nano-banana-edit
+    if model_id in ["google/nano-banana-edit", "google-nano-banana-edit", "nano-banana-edit"]:
+        if 'output_format' not in normalized_input:
+            normalized_input['output_format'] = "png"  # Default согласно документации
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "1:1"  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
