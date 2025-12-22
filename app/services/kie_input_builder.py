@@ -4721,6 +4721,15 @@ def build_input(
         if 'quality' not in normalized_input:
             normalized_input['quality'] = "basic"  # Default согласно документации
     
+    # Применяем дефолты для bytedance/seedream-v4-text-to-image
+    if model_id in ["bytedance/seedream-v4-text-to-image", "seedream-v4-text-to-image", "seedream-v4-t2i"]:
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "square_hd"  # Default согласно документации
+        if 'image_resolution' not in normalized_input:
+            normalized_input['image_resolution'] = "1K"  # Default согласно документации
+        if 'max_images' not in normalized_input:
+            normalized_input['max_images'] = 1  # Default согласно документации
+    
     # Применяем дефолты для wan/2-6-text-to-video
     if model_id == "wan/2-6-text-to-video":
         if 'duration' not in normalized_input:
