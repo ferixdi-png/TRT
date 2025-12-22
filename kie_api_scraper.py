@@ -373,12 +373,9 @@ class KieApiScraper:
             }
             
             # Улучшенное извлечение endpoint
-            print(f"    🔍 ОТВЕТ: Поиск API endpoint...")
             model_info['endpoint'] = self._extract_endpoint(resp_text, model_name)
-            print(f"    ✅ ОТВЕТ: Endpoint найден: {model_info['endpoint']}")
             
             # Улучшенное извлечение JSON примера
-            print(f"    🔍 ОТВЕТ: Поиск примеров JSON...")
             example_json = self._extract_json_example(soup, resp_text)
             if example_json:
                 model_info['example'] = example_json
@@ -386,9 +383,8 @@ class KieApiScraper:
                 try:
                     parsed = json.loads(example_json)
                     model_info['example_request'] = parsed
-                    print(f"    ✅ ОТВЕТ: Пример JSON найден и распарсен")
                 except (json.JSONDecodeError, ValueError, TypeError):
-                    print(f"    ✅ ОТВЕТ: Пример JSON найден (не валидный JSON)")
+                    pass
             else:
                 # Создаем базовый пример
                 model_info['example'] = json.dumps({
@@ -396,23 +392,17 @@ class KieApiScraper:
                     **{k: v for k, v in model_info.get('params', {}).items()}
                 }, ensure_ascii=False, indent=2)
                 model_info['example_request'] = {"prompt": "Пример запроса"}
-                print(f"    ⚠️ ОТВЕТ: Пример не найден, создан базовый")
             
             # Улучшенное извлечение параметров
-            print(f"    🔍 ОТВЕТ: Извлечение параметров...")
             extracted_params = self._extract_parameters(resp_text, soup)
             if extracted_params:
                 model_info['params'] = extracted_params
-                print(f"    ✅ ОТВЕТ: Найдено параметров: {', '.join(extracted_params.keys())}")
             else:
                 # Устанавливаем базовые параметры по умолчанию
                 model_info['params'] = {}
-                print(f"    ⚠️ ОТВЕТ: Параметры не найдены, используются значения по умолчанию")
             
             # Извлечение схемы input
-            print(f"    🔍 ОТВЕТ: Извлечение схемы input...")
             model_info['input_schema'] = self._extract_input_schema(resp_text, soup)
-            print(f"    ✅ ОТВЕТ: Схема input извлечена")
             
             # Определяем категорию модели
             category_keywords = {
