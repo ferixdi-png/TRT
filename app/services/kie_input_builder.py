@@ -4675,6 +4675,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для recraft/remove-background
+    is_valid, error_msg = _validate_recraft_remove_background(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для grok-imagine/upscale
     is_valid, error_msg = _validate_grok_imagine_upscale(model_id, normalized_input)
     if not is_valid:
