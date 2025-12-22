@@ -8954,6 +8954,15 @@ def build_input(
         if 'cfg_scale' not in normalized_input:
             normalized_input['cfg_scale'] = 0.5  # Default согласно документации
     
+    # Применяем дефолты для google/imagen4-fast
+    if model_id in ["google/imagen4-fast", "google-imagen4-fast", "imagen4-fast", "imagen4/fast"]:
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка!)
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'num_images' not in normalized_input:
+            normalized_input['num_images'] = "1"  # Default согласно документации
+    
     # Применяем дефолты для google/nano-banana
     if model_id in ["google/nano-banana", "google-nano-banana", "nano-banana"]:
         if 'output_format' not in normalized_input:
