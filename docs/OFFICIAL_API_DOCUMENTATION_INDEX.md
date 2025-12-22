@@ -125,6 +125,11 @@
   - Опциональные: `duration` ("6" | "10"), `prompt_optimizer` (boolean)
   - Default: `duration="6"`, `prompt_optimizer=true`
   - Важно: `prompt` максимум 1500 символов! Есть параметр `duration` (в отличие от pro версии)! НЕТ параметра `resolution`!
+- [x] **kling/v1-avatar-standard** - `docs/KLING_V1_AVATAR_STANDARD_INTEGRATION.md`
+  - Обязательные: `image_url`, `audio_url`, `prompt` (max 5000 chars)
+  - Опциональные: нет
+  - Default: нет (все параметры обязательные)
+  - Важно: Все три параметра обязательны! Максимальный размер файлов: 10MB для изображения и аудио!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)

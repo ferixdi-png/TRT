@@ -190,7 +190,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'image_url',
         'image',
         'resolution',
-        'model'
+        'model',
+        'prompt'  # Для kling/v1-avatar-standard
     }
 }
 
