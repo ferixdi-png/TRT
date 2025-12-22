@@ -4484,6 +4484,95 @@ def _validate_qwen_text_to_image(
     return True, None
 
 
+def _normalize_image_size_for_google_nano_banana(value: Any) -> Optional[str]:
+    """
+    Нормализует image_size для google/nano-banana.
+    Принимает значение и возвращает нормализованную строку в формате "X:Y" или "auto".
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение image_size (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9", "auto"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_google_nano_banana(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для google/nano-banana согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - output_format (опциональный, enum, default "png")
+    - image_size (опциональный, enum, 11 значений, default "1:1")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["google/nano-banana", "google-nano-banana", "nano-banana"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация output_format: опциональный, enum
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        normalized_format = _normalize_output_format_for_qwen_i2i(output_format)  # Переиспользуем функцию из i2i
+        if normalized_format is None:
+            return False, f"Поле 'output_format' должно быть одним из: png, jpeg (получено: {output_format})"
+        normalized_input['output_format'] = normalized_format
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_google_nano_banana(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9", "auto"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

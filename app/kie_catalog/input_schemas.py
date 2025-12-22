@@ -24,11 +24,11 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'resolution',
         'model',
         'mode',
-        'image_size',  # Для bytedance/seedream-v4-text-to-image, bytedance/seedream и qwen/text-to-image
+        'image_size',  # Для bytedance/seedream-v4-text-to-image, bytedance/seedream, qwen/text-to-image и google/nano-banana
         'image_resolution',  # Для bytedance/seedream-v4-text-to-image
         'max_images',  # Для bytedance/seedream-v4-text-to-image
         'enable_safety_checker',  # Для bytedance/seedream и qwen/text-to-image
-        'output_format',  # Для qwen/text-to-image
+        'output_format',  # Для qwen/text-to-image и google/nano-banana
         'acceleration',  # Для qwen/text-to-image
         'num_inference_steps'  # Для qwen/text-to-image
     },

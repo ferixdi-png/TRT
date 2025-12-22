@@ -224,6 +224,11 @@
   - Опциональные: `image_size` (enum, 6 значений), `num_inference_steps` (2-250), `seed`, `guidance_scale` (0-20), `enable_safety_checker` (boolean), `output_format` (enum: png/jpeg), `negative_prompt` (max 500), `acceleration` (enum: none/regular/high)
   - Default: `image_size="square_hd"`, `num_inference_steps=30`, `guidance_scale=2.5`, `enable_safety_checker=true`, `output_format="png"`, `negative_prompt=" "` (пробел!), `acceleration="none"`
   - Важно: Использует `num_inference_steps` вместо стандартного `steps`! Использует `guidance_scale` вместо стандартного `guidance`! Использует `image_size` вместо стандартных `width`/`height`! Уникальные параметры: `output_format`, `acceleration`, `enable_safety_checker`! `negative_prompt` имеет default `" "` (пробел!), а не пустую строку! НЕТ параметров `width`, `height`, `steps`, `guidance`, `style`!
+- [x] **google/nano-banana** - `docs/GOOGLE_NANO_BANANA_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000)
+  - Опциональные: `output_format` (enum: png/jpeg), `image_size` (enum, 11 значений)
+  - Default: `output_format="png"`, `image_size="1:1"`
+  - Важно: Использует `image_size` вместо стандартных `width`/`height`! Уникальный параметр: `output_format`! НЕТ параметров `negative_prompt`, `width`, `height`, `steps`, `seed`, `guidance`, `guidance_scale`, `style`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
