@@ -12,8 +12,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# Добавляем корневую директорию в путь
-sys.path.insert(0, str(Path(__file__).parent))
+# Добавляем корневую директорию в путь (КРИТИЧНО для Render)
+project_root = Path(__file__).parent.absolute()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # Настраиваем логирование ПЕРЕД импортом других модулей
 from app.utils.logging_config import setup_logging, get_logger
@@ -128,15 +130,33 @@ async def build_application(settings):
     global _application
     
     try:
-        from bot_kie import create_bot_application
+        # КРИТИЧНО: Импорт bot_kie с явным указанием пути
+        try:
+            from bot_kie import create_bot_application
+        except ImportError as e:
+            logger.error(f"[BUILD] Failed to import bot_kie: {e}")
+            logger.error(f"[BUILD] sys.path: {sys.path}")
+            logger.error(f"[BUILD] Current dir: {os.getcwd()}")
+            logger.error(f"[BUILD] Script dir: {Path(__file__).parent}")
+            # Пробуем добавить путь явно
+            bot_kie_path = Path(__file__).parent / "bot_kie.py"
+            if bot_kie_path.exists():
+                logger.info(f"[BUILD] bot_kie.py exists at {bot_kie_path}")
+            else:
+                logger.error(f"[BUILD] bot_kie.py NOT found at {bot_kie_path}")
+            raise
         
         logger.info("[BUILD] Creating Telegram Application...")
         _application = await create_bot_application(settings)
         logger.info("[BUILD] Application created successfully")
         
         return _application
-    except (AttributeError, NameError):
-        logger.warning("[BUILD] create_bot_application not found, using legacy initialization")
+    except (AttributeError, NameError) as e:
+        logger.warning(f"[BUILD] create_bot_application not found: {e}, using legacy initialization")
+        return None
+    except ImportError as e:
+        logger.error(f"[BUILD] Import error: {e}")
+        logger.warning("[BUILD] Using legacy bot_kie.main() initialization")
         return None
     except Exception as e:
         from app.utils.logging_config import log_error_with_stacktrace
@@ -180,8 +200,14 @@ async def run(settings, application):
         if application is None:
             # Используем старый способ через bot_kie.main()
             logger.info("[RUN] Using legacy bot_kie.main() initialization")
-            from bot_kie import main as bot_main
-            await bot_main()
+            try:
+                from bot_kie import main as bot_main
+                await bot_main()
+            except ImportError as e:
+                logger.error(f"[RUN] Failed to import bot_kie.main: {e}")
+                logger.error("[RUN] Falling back to app.main")
+                from app.main import main as app_main
+                await app_main()
         else:
             # Используем новый способ
             logger.info("[RUN] Initializing application...")

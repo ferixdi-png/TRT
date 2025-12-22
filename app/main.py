@@ -78,10 +78,23 @@ async def start_telegram_bot():
         app = Application.builder().token(token).build()
         
         # Register handlers
+        # КРИТИЧНО: Исправляем импорт для Render
         try:
-            from app.bot_kie import generation_handler
-        except ImportError:
+            # Пробуем импорт из корня (для main_render.py)
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).parent.parent.absolute()
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            
             from bot_kie import generation_handler
+        except ImportError:
+            try:
+                # Fallback: пробуем из app.bot_kie (если есть)
+                from app.bot_kie import generation_handler
+            except ImportError:
+                logger.error("Failed to import generation_handler from bot_kie or app.bot_kie")
+                raise
         app.add_handler(generation_handler)
         
         # Delete webhook and start polling
