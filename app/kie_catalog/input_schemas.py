@@ -131,8 +131,11 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'audio_url',
         'audio',
         'language',
+        'language_code',  # Для elevenlabs/speech-to-text
         'model',
-        'format'
+        'format',
+        'tag_audio_events',  # Для elevenlabs/speech-to-text
+        'diarize'  # Для elevenlabs/speech-to-text
     },
     
     # Sound Effects

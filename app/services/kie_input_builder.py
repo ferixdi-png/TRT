@@ -3583,6 +3583,81 @@ def _validate_elevenlabs_sound_effect_v2(
     return True, None
 
 
+def _validate_elevenlabs_speech_to_text(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для elevenlabs/speech-to-text согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - audio_url (обязательный, макс 200MB, mpeg/wav/aac/mp4/ogg)
+    - language_code (опциональный, string, макс 500 символов, default "")
+    - tag_audio_events (опциональный, boolean, default true)
+    - diarize (опциональный, boolean, default true)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["elevenlabs/speech-to-text", "elevenlabs-speech-to-text", "elevenlabs/speech-to-text"]:
+        return True, None
+    
+    # Валидация audio_url: обязательный
+    # Модель использует параметр 'audio_url', но мы можем принимать 'audio' или 'audio_url'
+    audio_url = normalized_input.get('audio_url') or normalized_input.get('audio')
+    if not audio_url:
+        return False, "Поле 'audio_url' обязательно для транскрипции аудио. Загрузите аудио файл."
+    
+    if not isinstance(audio_url, str):
+        audio_url = str(audio_url)
+    
+    audio_url = audio_url.strip()
+    if len(audio_url) == 0:
+        return False, "Поле 'audio_url' не может быть пустым"
+    
+    # Нормализуем: если был передан 'audio', переименовываем в 'audio_url'
+    if 'audio' in normalized_input and 'audio_url' not in normalized_input:
+        normalized_input['audio_url'] = normalized_input.pop('audio')
+    elif 'audio_url' not in normalized_input:
+        normalized_input['audio_url'] = audio_url
+    
+    # Удаляем лишний параметр, если он был
+    if 'audio' in normalized_input and normalized_input.get('audio_url') != normalized_input.get('audio'):
+        del normalized_input['audio']
+    
+    # Валидация language_code: опциональный, string, макс 500 символов
+    language_code = normalized_input.get('language_code')
+    if language_code is not None:
+        if not isinstance(language_code, str):
+            language_code = str(language_code)
+        language_code = language_code.strip()
+        if len(language_code) > 500:
+            return False, f"Поле 'language_code' слишком длинное: {len(language_code)} символов (максимум 500)"
+        normalized_input['language_code'] = language_code
+    
+    # Валидация tag_audio_events: опциональный, boolean
+    tag_audio_events = normalized_input.get('tag_audio_events')
+    if tag_audio_events is not None:
+        normalized_bool = _normalize_boolean(tag_audio_events)
+        if normalized_bool is None:
+            return False, f"Поле 'tag_audio_events' должно быть boolean (true/false) (получено: {tag_audio_events})"
+        normalized_input['tag_audio_events'] = normalized_bool
+    
+    # Валидация diarize: опциональный, boolean
+    diarize = normalized_input.get('diarize')
+    if diarize is not None:
+        normalized_bool = _normalize_boolean(diarize)
+        if normalized_bool is None:
+            return False, f"Поле 'diarize' должно быть boolean (true/false) (получено: {diarize})"
+        normalized_input['diarize'] = normalized_bool
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

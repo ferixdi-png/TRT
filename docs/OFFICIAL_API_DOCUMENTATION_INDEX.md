@@ -194,6 +194,11 @@
   - Опциональные: `loop` (boolean), `duration_seconds` (0.5-22), `prompt_influence` (0-1), `output_format` (enum, 18 значений)
   - Default: `loop=false`, `prompt_influence=0.3`, `output_format="mp3_44100_128"`
   - Важно: Параметр называется `text` (не `prompt`)! Использует `duration_seconds` вместо `duration`! Уникальные параметры: `loop`, `prompt_influence`, `output_format`! НЕТ параметров `style` и `seed`!
+- [x] **elevenlabs/speech-to-text** - `docs/ELEVENLABS_SPEECH_TO_TEXT_INTEGRATION.md`
+  - Обязательные: `audio_url` (string, макс 200MB, mpeg/wav/aac/mp4/ogg)
+  - Опциональные: `language_code` (string, макс 500), `tag_audio_events` (boolean), `diarize` (boolean)
+  - Default: `language_code=""`, `tag_audio_events=true`, `diarize=true`
+  - Важно: Использует `language_code` вместо стандартного `language`! Уникальные параметры: `tag_audio_events`, `diarize`! НЕТ параметров `model` и `format`! Максимальный размер файла: 200MB!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
