@@ -5514,6 +5514,123 @@ def _validate_bytedance_v1_pro_text_to_video(
     return True, None
 
 
+def _validate_bytedance_v1_lite_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/v1-lite-image-to-video согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 10000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - resolution (опциональный, enum, default "720p")
+    - duration (опциональный, enum, default "5")
+    - camera_fixed (опциональный, boolean, default false)
+    - seed (опциональный, number, может быть -1 для случайного, default -1)
+    - enable_safety_checker (опциональный, boolean, default true)
+    - end_image_url (опциональный, string, макс 10MB, jpeg/png/webp, default "")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["bytedance/v1-lite-image-to-video", "bytedance-v1-lite-image-to-video", "v1-lite-image-to-video"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 10000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация resolution: опциональный, enum
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        valid_resolutions = ["480p", "720p", "1080p"]
+        if resolution not in valid_resolutions:
+            return False, f"Поле 'resolution' должно быть одним из: 480p, 720p, 1080p (получено: {resolution})"
+        normalized_input['resolution'] = resolution
+    
+    # Валидация duration: опциональный, enum
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        # Может быть строкой "5" или "10", или числом 5 или 10
+        if isinstance(duration, str):
+            if duration not in ["5", "10"]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = duration
+        elif isinstance(duration, (int, float)):
+            if duration not in [5, 10]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = str(int(duration))
+        else:
+            return False, f"Поле 'duration' должно быть строкой или числом (получено: {duration})"
+    
+    # Валидация camera_fixed: опциональный, boolean
+    camera_fixed = normalized_input.get('camera_fixed')
+    if camera_fixed is not None:
+        normalized_bool = _normalize_boolean(camera_fixed)
+        if normalized_bool is None:
+            return False, f"Поле 'camera_fixed' должно быть boolean (true/false) (получено: {camera_fixed})"
+        normalized_input['camera_fixed'] = normalized_bool
+    
+    # Валидация seed: опциональный, number (может быть -1 для случайного, default -1)
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            # -1 разрешён для случайного seed, диапазон: -1 до 2147483647
+            if seed_num < -1 or seed_num > 2147483647:
+                return False, f"Поле 'seed' должно быть в диапазоне от -1 до 2147483647 (получено: {seed})"
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (может быть -1 для случайного) (получено: {seed})"
+    
+    # Валидация enable_safety_checker: опциональный, boolean
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+    
+    # Валидация end_image_url: опциональный, string
+    end_image_url = normalized_input.get('end_image_url')
+    if end_image_url is not None:
+        if not isinstance(end_image_url, str):
+            end_image_url = str(end_image_url)
+        
+        end_image_url = end_image_url.strip()
+        # Может быть пустой строкой (default "")
+        normalized_input['end_image_url'] = end_image_url
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
