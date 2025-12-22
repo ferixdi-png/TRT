@@ -316,6 +316,185 @@ def _normalize_image_urls_for_wan_2_6(value: Any) -> Optional[List[str]]:
     return None
 
 
+def _normalize_resolution_for_wan_2_5(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для wan/2-5-image-to-video.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре.
+    ВАЖНО: Для wan/2-5-image-to-video поддерживаются только "720p" и "1080p"!
+    
+    Args:
+        value: Значение resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["720p", "1080p"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["720", "720p", "hd"]:
+        return "720p"
+    elif str_value in ["1080", "1080p", "fullhd", "fhd"]:
+        return "1080p"
+    
+    return None
+
+
+def _normalize_boolean(value: Any) -> Optional[bool]:
+    """
+    Нормализует boolean значение для enable_prompt_expansion.
+    Принимает значение и возвращает bool или None.
+    
+    Args:
+        value: Значение (может быть str, int, bool)
+    
+    Returns:
+        bool или None
+    """
+    if value is None:
+        return None
+    
+    if isinstance(value, bool):
+        return value
+    
+    if isinstance(value, (int, float)):
+        return bool(value)
+    
+    if isinstance(value, str):
+        str_lower = value.strip().lower()
+        if str_lower in ["true", "1", "yes", "y", "on"]:
+            return True
+        elif str_lower in ["false", "0", "no", "n", "off"]:
+            return False
+    
+    return None
+
+
+def _validate_wan_2_5_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для wan/2-5-image-to-video согласно документации API.
+    
+    ВАЖНО: Отличается от wan/2-6-image-to-video:
+    - prompt максимум 800 символов (в 2-6 было 5000)
+    - image_url обязательный string (не массив image_urls!)
+    - negative_prompt максимум 500 символов (в 2-6 было больше)
+    - Есть параметр enable_prompt_expansion (boolean)
+    - resolution только "720p" | "1080p" (в 2-6 были другие значения)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["wan/2-5-image-to-video", "wan/2.5-image-to-video"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 800 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 800:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 800)"
+    
+    # Валидация image_url: обязательный string (не массив!)
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения"
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if not image_url:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Проверяем что это валидный URL
+    if not image_url.startswith(('http://', 'https://')):
+        return False, "Поле 'image_url' должно быть валидным URL (начинается с http:// или https://)"
+    
+    normalized_input['image_url'] = image_url
+    
+    # ВАЖНО: Удаляем image_urls если он был передан (для этой модели нужен только image_url как string!)
+    if 'image_urls' in normalized_input:
+        logger.warning(f"Parameter 'image_urls' is not supported for wan/2-5-image-to-video (use 'image_url' as string), removing it")
+        del normalized_input['image_urls']
+    
+    # Валидация duration: опциональный, "5" | "10", default "5"
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_wan_2_6(duration)  # Переиспользуем функцию (те же значения "5" и "10")
+        if normalized_duration is None or normalized_duration not in ["5", "10"]:
+            valid_values = ["5", "10"]
+            return False, f"Поле 'duration' должно быть одним из: {', '.join(valid_values)} (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+    
+    # Валидация resolution: опциональный, "720p" | "1080p", default "1080p"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_wan_2_5(resolution)
+        if normalized_resolution is None:
+            valid_values = ["720p", "1080p"]
+            return False, f"Поле 'resolution' должно быть одним из: {', '.join(valid_values)} (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    # Валидация negative_prompt: опциональный, максимум 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        
+        negative_prompt = negative_prompt.strip()
+        negative_prompt_len = len(negative_prompt)
+        if negative_prompt_len > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {negative_prompt_len} символов (максимум 500)"
+        # Если пустая строка, удаляем параметр
+        if not negative_prompt:
+            del normalized_input['negative_prompt']
+        else:
+            normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация enable_prompt_expansion: опциональный boolean
+    enable_prompt_expansion = normalized_input.get('enable_prompt_expansion')
+    if enable_prompt_expansion is not None:
+        normalized_bool = _normalize_boolean(enable_prompt_expansion)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_prompt_expansion' должно быть boolean (true/false) (получено: {enable_prompt_expansion})"
+        normalized_input['enable_prompt_expansion'] = normalized_bool
+    
+    # Валидация seed: опциональный number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(seed) if isinstance(seed, (int, float, str)) else None
+            if seed_num is None:
+                return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    return True, None
+
+
 def _validate_wan_2_6_image_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -3298,6 +3477,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для wan/2-5-image-to-video
+    is_valid, error_msg = _validate_wan_2_5_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для wan/2-6-image-to-video
     is_valid, error_msg = _validate_wan_2_6_image_to_video(model_id, normalized_input)
     if not is_valid:
@@ -3654,6 +3838,19 @@ def build_input(
             normalized_input['duration'] = "5"  # Default согласно документации
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "1080p"  # Default согласно документации
+    
+    # Применяем дефолты для wan/2-5-image-to-video
+    if model_id in ["wan/2-5-image-to-video", "wan/2.5-image-to-video"]:
+        if 'image_url' not in normalized_input:
+            normalized_input['image_url'] = "https://file.aiquickdraw.com/custom-page/akr/section-images/1758796480945qb63zxq8.webp"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "1080p"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка)
+        if 'enable_prompt_expansion' not in normalized_input:
+            normalized_input['enable_prompt_expansion'] = True  # Default согласно документации
     
     # Применяем дефолты для wan/2-6-image-to-video
     if model_id == "wan/2-6-image-to-video":

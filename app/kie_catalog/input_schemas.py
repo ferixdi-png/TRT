@@ -81,7 +81,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'guidance',
         'motion',
         'style',
-        'cfg_scale'  # Для kling/v2-5-turbo-image-to-video-pro
+        'cfg_scale',  # Для kling/v2-5-turbo-image-to-video-pro
+        'enable_prompt_expansion'  # Для wan/2-5-image-to-video
     },
     
     # Video-to-Video
