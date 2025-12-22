@@ -3865,6 +3865,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для hailuo/02-text-to-video-pro
+    is_valid, error_msg = _validate_hailuo_02_text_to_video_pro(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для hailuo/2-3-image-to-video-pro
     is_valid, error_msg = _validate_hailuo_2_3_image_to_video_pro(model_id, normalized_input)
     if not is_valid:

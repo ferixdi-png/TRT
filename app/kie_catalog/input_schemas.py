@@ -59,7 +59,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'motion',
         'style',
         'aspect_ratio',
-        'cfg_scale'  # Для kling/v2-5-turbo-text-to-video-pro
+        'cfg_scale',  # Для kling/v2-5-turbo-text-to-video-pro
+        'prompt_optimizer'  # Для hailuo/02-text-to-video-pro
     },
     
     # Image-to-Video
