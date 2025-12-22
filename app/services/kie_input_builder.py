@@ -7918,6 +7918,13 @@ def build_input(
         if 'negative_prompt' not in normalized_input:
             normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка!)
     
+    # Применяем дефолты для bytedance/v1-pro-fast-image-to-video
+    if model_id in ["bytedance/v1-pro-fast-image-to-video", "bytedance-v1-pro-fast-image-to-video", "v1-pro-fast-image-to-video"]:
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "720p"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+    
     # Применяем дефолты для bytedance/v1-lite-text-to-video
     if model_id in ["bytedance/v1-lite-text-to-video", "bytedance-v1-lite-text-to-video", "v1-lite-text-to-video"]:
         if 'aspect_ratio' not in normalized_input:
