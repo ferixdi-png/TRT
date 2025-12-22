@@ -4240,6 +4240,13 @@ def build_input(
         if 'prompt_optimizer' not in normalized_input:
             normalized_input['prompt_optimizer'] = True  # Default согласно документации
     
+    # Применяем дефолты для hailuo/02-text-to-video-standard
+    if model_id in ["hailuo/02-text-to-video-standard", "hailuo/02-t2v-standard", "hailuo/0.2-text-to-video-standard"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "6"  # Default согласно документации
+        if 'prompt_optimizer' not in normalized_input:
+            normalized_input['prompt_optimizer'] = True  # Default согласно документации
+    
     # Применяем дефолты для hailuo/02-image-to-video-pro
     if model_id in ["hailuo/02-image-to-video-pro", "hailuo/02-i2v-pro", "hailuo/0.2-image-to-video-pro"]:
         if 'image_url' not in normalized_input:
