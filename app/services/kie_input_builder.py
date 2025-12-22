@@ -8065,6 +8065,17 @@ def build_input(
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "768P"  # Default согласно документации
     
+    # Применяем дефолты для kling/v2-1-master-text-to-video
+    if model_id in ["kling/v2-1-master-text-to-video", "kling-v2-1-master-text-to-video", "v2-1-master-text-to-video"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
+    
     # Применяем дефолты для hailuo/2-3-image-to-video-standard
     if model_id in ["hailuo/2-3-image-to-video-standard", "hailuo/2-3-i2v-standard"]:
         if 'duration' not in normalized_input:
