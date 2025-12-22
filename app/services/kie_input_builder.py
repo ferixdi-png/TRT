@@ -2745,6 +2745,74 @@ def _validate_wan_2_6_text_to_video(
     return True, None
 
 
+def _normalize_video_url_for_sora_watermark_remover(video_url: Any) -> Optional[str]:
+    """
+    Нормализует video_url для sora-watermark-remover.
+    
+    Args:
+        video_url: URL видео (строка или другой тип)
+    
+    Returns:
+        Нормализованный URL или None если невалидный
+    """
+    if not video_url:
+        return None
+    
+    # Конвертируем в строку
+    if not isinstance(video_url, str):
+        video_url = str(video_url)
+    
+    video_url = video_url.strip()
+    
+    # Проверяем что URL не пустой
+    if not video_url:
+        return None
+    
+    # Проверяем максимальную длину (500 символов)
+    if len(video_url) > 500:
+        return None
+    
+    # Проверяем что URL начинается с sora.chatgpt.com
+    if not video_url.startswith(('https://sora.chatgpt.com/', 'http://sora.chatgpt.com/')):
+        return None
+    
+    return video_url
+
+
+def _validate_sora_watermark_remover(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для sora-watermark-remover согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["sora-watermark-remover", "openai/sora-watermark-remover", "sora-2-watermark-remover"]:
+        return True, None
+    
+    # Валидация video_url: обязательный, должен начинаться с sora.chatgpt.com, максимум 500 символов
+    video_url = normalized_input.get('video_url')
+    if not video_url:
+        return False, "Поле 'video_url' обязательно для удаления водяного знака. Укажите публично доступную ссылку на видео Sora 2 (начинается с sora.chatgpt.com)"
+    
+    normalized_video_url = _normalize_video_url_for_sora_watermark_remover(video_url)
+    if normalized_video_url is None:
+        if len(str(video_url)) > 500:
+            return False, f"Поле 'video_url' слишком длинное: {len(str(video_url))} символов (максимум 500)"
+        return False, "Поле 'video_url' должно быть публично доступной ссылкой на видео Sora 2 от OpenAI (начинается с sora.chatgpt.com)"
+    
+    normalized_input['video_url'] = normalized_video_url
+    
+    return True, None
+
+
 def build_input(
     model_spec: ModelSpec,
     user_payload: Dict[str, Any],
@@ -2976,6 +3044,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для sora-watermark-remover
+    is_valid, error_msg = _validate_sora_watermark_remover(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -3089,6 +3162,11 @@ def build_input(
             normalized_input['size'] = "standard"  # Default согласно документации (отличается от text-to-video, где "high"!)
         if 'remove_watermark' not in normalized_input:
             normalized_input['remove_watermark'] = True  # Default согласно документации
+    
+    # Применяем дефолты для sora-watermark-remover
+    if model_id in ["sora-watermark-remover", "openai/sora-watermark-remover", "sora-2-watermark-remover"]:
+        if 'video_url' not in normalized_input:
+            normalized_input['video_url'] = "https://sora.chatgpt.com/p/s_68e83bd7eee88191be79d2ba7158516f"  # Default согласно документации
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":

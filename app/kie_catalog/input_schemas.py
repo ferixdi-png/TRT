@@ -158,6 +158,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'image_url',
         'image_base64',
         'image',
+        'video_url',  # Для sora-watermark-remover
         'strength'
     },
     
