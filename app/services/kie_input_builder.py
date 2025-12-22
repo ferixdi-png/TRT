@@ -2936,6 +2936,96 @@ def _validate_ideogram_v3_remix(
     return True, None
 
 
+def _validate_wan_2_2_a14b_text_to_video_turbo(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для wan/2-2-a14b-text-to-video-turbo согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - resolution (опциональный, enum, default "720p")
+    - aspect_ratio (опциональный, enum, default "16:9")
+    - enable_prompt_expansion (опциональный, boolean, default false)
+    - seed (опциональный, number, диапазон 0-2147483647, default 0)
+    - acceleration (опциональный, enum, default "none")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["wan/2-2-a14b-text-to-video-turbo", "wan-2-2-a14b-text-to-video-turbo", "wan/2-2-a14b-t2v-turbo", "2-2-a14b-text-to-video-turbo"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация resolution: опциональный, enum
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        valid_resolutions = ["480p", "580p", "720p"]
+        if resolution not in valid_resolutions:
+            return False, f"Поле 'resolution' должно быть одним из: 480p, 580p, 720p (получено: {resolution})"
+        normalized_input['resolution'] = resolution
+    
+    # Валидация aspect_ratio: опциональный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        valid_aspect_ratios = ["16:9", "9:16", "1:1"]
+        if aspect_ratio not in valid_aspect_ratios:
+            return False, f"Поле 'aspect_ratio' должно быть одним из: 16:9, 9:16, 1:1 (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = aspect_ratio
+    
+    # Валидация enable_prompt_expansion: опциональный, boolean
+    enable_prompt_expansion = normalized_input.get('enable_prompt_expansion')
+    if enable_prompt_expansion is not None:
+        normalized_bool = _normalize_boolean(enable_prompt_expansion)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_prompt_expansion' должно быть boolean (получено: {enable_prompt_expansion})"
+        normalized_input['enable_prompt_expansion'] = normalized_bool
+    
+    # Валидация seed: опциональный, number, диапазон 0-2147483647
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = float(seed)
+            # Преобразуем в int если это целое число
+            if seed_num == int(seed_num):
+                seed_int = int(seed_num)
+                if seed_int < 0 or seed_int > 2147483647:
+                    return False, f"Поле 'seed' должно быть в диапазоне от 0 до 2147483647 (получено: {seed})"
+                normalized_input['seed'] = seed_int
+            else:
+                return False, f"Поле 'seed' должно быть целым числом от 0 до 2147483647 (получено: {seed})"
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом от 0 до 2147483647 (получено: {seed})"
+    
+    # Валидация acceleration: опциональный, enum
+    acceleration = normalized_input.get('acceleration')
+    if acceleration is not None:
+        valid_accelerations = ["none", "regular"]
+        if acceleration not in valid_accelerations:
+            return False, f"Поле 'acceleration' должно быть одним из: none, regular (получено: {acceleration})"
+        normalized_input['acceleration'] = acceleration
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
