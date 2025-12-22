@@ -470,6 +470,109 @@ def _validate_wan_2_6_video_to_video(
     return True, None
 
 
+def _normalize_aspect_ratio_for_seedream_4_5(value: Any) -> Optional[str]:
+    """
+    Нормализует aspect_ratio для seedream/4.5-text-to-image.
+    Принимает строки и возвращает нормализованную строку.
+    
+    Args:
+        value: Значение aspect_ratio
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    str_value = str(value).strip()
+    
+    # Валидные значения
+    valid_values = ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"]
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _normalize_quality_for_seedream_4_5(value: Any) -> Optional[str]:
+    """
+    Нормализует quality для seedream/4.5-text-to-image.
+    Принимает строки и возвращает нормализованную строку в нижнем регистре.
+    
+    Args:
+        value: Значение quality
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    str_value = str(value).strip().lower()
+    
+    # Валидные значения
+    valid_values = ["basic", "high"]
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _validate_seedream_4_5_text_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для seedream/4.5-text-to-image согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "seedream/4.5-text-to-image":
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 3000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 3000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 3000)"
+    
+    # Валидация aspect_ratio: обязательный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if not aspect_ratio:
+        return False, "Поле 'aspect_ratio' обязательно для генерации изображения"
+    
+    normalized_aspect_ratio = _normalize_aspect_ratio_for_seedream_4_5(aspect_ratio)
+    if normalized_aspect_ratio is None:
+        valid_values = ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"]
+        return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+    normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация quality: обязательный, enum
+    quality = normalized_input.get('quality')
+    if not quality:
+        return False, "Поле 'quality' обязательно для генерации изображения"
+    
+    normalized_quality = _normalize_quality_for_seedream_4_5(quality)
+    if normalized_quality is None:
+        return False, f"Поле 'quality' должно быть 'basic' или 'high' (получено: {quality})"
+    normalized_input['quality'] = normalized_quality
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -650,6 +753,18 @@ def build_input(
     is_valid, error_msg = _validate_wan_2_6_video_to_video(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
+    
+    # Специфичная валидация для seedream/4.5-text-to-image
+    is_valid, error_msg = _validate_seedream_4_5_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Применяем дефолты для seedream/4.5-text-to-image
+    if model_id == "seedream/4.5-text-to-image":
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
+        if 'quality' not in normalized_input:
+            normalized_input['quality'] = "basic"  # Default согласно документации
     
     # Применяем дефолты для wan/2-6-text-to-video
     if model_id == "wan/2-6-text-to-video":
