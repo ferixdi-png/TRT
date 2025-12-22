@@ -71,6 +71,11 @@
   - Опциональные: `resolution` ("480p" | "580p" | "720p")
   - Default: `video_url="https://file.aiquickdraw.com/..."`, `image_url="https://file.aiquickdraw.com/..."`, `resolution="480p"`
   - Важно: Требует оба параметра: `video_url` И `image_url`! НЕТ параметра `prompt` и `duration`!
+- [x] **wan/2-2-animate-replace** - `docs/WAN_2_2_ANIMATE_REPLACE_INTEGRATION.md`
+  - Обязательные: `video_url` (string, не массив!), `image_url` (string)
+  - Опциональные: `resolution` ("480p" | "580p" | "720p")
+  - Default: `video_url="https://file.aiquickdraw.com/..."`, `image_url="https://file.aiquickdraw.com/..."`, `resolution="480p"`
+  - Важно: Требует оба параметра: `video_url` И `image_url`! НЕТ параметра `prompt` и `duration`! Заменяет объекты в видео на основе изображения!
 - [x] **wan/2-6-text-to-video** - `docs/WAN_2_6_TEXT_TO_VIDEO_INTEGRATION.md`
 - [x] **wan/2-6-image-to-video** - `docs/WAN_2_6_IMAGE_TO_VIDEO_INTEGRATION.md`
 - [x] **wan/2-6-video-to-video** - `docs/WAN_2_6_VIDEO_TO_VIDEO_INTEGRATION.md`
