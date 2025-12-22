@@ -7534,6 +7534,21 @@ def build_input(
         if 'enable_safety_checker' not in normalized_input:
             normalized_input['enable_safety_checker'] = True  # Default согласно документации
     
+    # Применяем дефолты для bytedance/v1-pro-text-to-video
+    if model_id in ["bytedance/v1-pro-text-to-video", "bytedance-v1-pro-text-to-video", "v1-pro-text-to-video"]:
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "720p"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'camera_fixed' not in normalized_input:
+            normalized_input['camera_fixed'] = False  # Default согласно документации
+        if 'seed' not in normalized_input:
+            normalized_input['seed'] = -1  # Default согласно документации (случайный seed)
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
