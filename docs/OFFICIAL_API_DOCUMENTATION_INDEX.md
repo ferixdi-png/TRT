@@ -183,6 +183,11 @@
   - Обязательные: `image_url`, `image_size` (enum, 6 значений)
   - Опциональные: `rendering_speed` ("TURBO" | "BALANCED" | "QUALITY"), `style` ("AUTO" | "GENERAL" | "REALISTIC" | "DESIGN"), `num_images` ("1" | "2" | "3" | "4"), `seed` (number)
   - Default: `image_size="square_hd"`, `rendering_speed="BALANCED"`, `style="AUTO"`, `num_images="1"`, `seed=0`
+- [x] **ideogram/character-edit** - `docs/IDEOGRAM_CHARACTER_EDIT_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000), `image_url` (max 10MB, jpeg/png/webp), `mask_url` (max 10MB, jpeg/png/webp), `reference_image_urls` (массив, max 10MB общий размер, jpeg/png/webp, только 1 поддерживается)
+  - Опциональные: `rendering_speed` (enum: TURBO/BALANCED/QUALITY), `style` (enum: AUTO/REALISTIC/FICTION), `expand_prompt` (boolean), `num_images` (string enum: 1/2/3/4), `seed`
+  - Default: `rendering_speed="BALANCED"`, `style="AUTO"`, `expand_prompt=true`, `num_images="1"`
+  - Важно: Модель для редактирования персонажей с inpainting! Использует `mask_url` для указания области для inpainting! Использует `reference_image_urls` для указания референсов персонажа (только 1 изображение поддерживается, остальные игнорируются)! Уникальные параметры: `mask_url`, `reference_image_urls`, `expand_prompt`! НЕТ параметров `strength`, `negative_prompt`, `width`, `height`, `steps`, `guidance`!
   - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
 - [x] **elevenlabs/audio-isolation** - `docs/ELEVENLABS_AUDIO_ISOLATION_INTEGRATION.md`
   - Обязательные: `audio_url` (string, макс 10MB, mpeg/wav/aac/mp4/ogg)
