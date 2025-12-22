@@ -7552,6 +7552,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для kling/v2-1-standard
+    is_valid, error_msg = _validate_kling_v2_1_standard(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для seedream/4.5-edit
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
