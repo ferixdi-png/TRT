@@ -2528,6 +2528,134 @@ def _validate_grok_imagine_upscale(
     return True, None
 
 
+def _validate_kling_v1_avatar_standard(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling/v1-avatar-standard согласно документации API.
+    
+    ВАЖНО: Это модель lip sync, которая требует:
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - audio_url (обязательный, макс 10MB, mpeg/wav/aac/mp4/ogg)
+    - prompt (обязательный, макс 5000 символов)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["kling/v1-avatar-standard", "kling/v1-avatar", "kling/avatar-standard"]:
+        return True, None
+    
+    # Валидация image_url: обязательный
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации аватара. Загрузите изображение."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация audio_url: обязательный
+    audio_url = normalized_input.get('audio_url')
+    if not audio_url:
+        return False, "Поле 'audio_url' обязательно для генерации аватара. Загрузите аудио файл."
+    
+    if not isinstance(audio_url, str):
+        audio_url = str(audio_url)
+    
+    audio_url = audio_url.strip()
+    if len(audio_url) == 0:
+        return False, "Поле 'audio_url' не может быть пустым"
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации аватара. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    return True, None
+
+
+def _validate_kling_ai_avatar_v1_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling/ai-avatar-v1-pro согласно документации API.
+    
+    ВАЖНО: Это модель lip sync (Pro версия), которая требует:
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - audio_url (обязательный, макс 10MB, mpeg/wav/aac/mp4/ogg)
+    - prompt (обязательный, макс 5000 символов)
+    
+    Параметры идентичны kling/v1-avatar-standard, но это другая модель (Pro версия).
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["kling/ai-avatar-v1-pro", "kling/avatar-v1-pro", "kling/ai-avatar-pro"]:
+        return True, None
+    
+    # Валидация image_url: обязательный
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации аватара. Загрузите изображение."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация audio_url: обязательный
+    audio_url = normalized_input.get('audio_url')
+    if not audio_url:
+        return False, "Поле 'audio_url' обязательно для генерации аватара. Загрузите аудио файл."
+    
+    if not isinstance(audio_url, str):
+        audio_url = str(audio_url)
+    
+    audio_url = audio_url.strip()
+    if len(audio_url) == 0:
+        return False, "Поле 'audio_url' не может быть пустым"
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации аватара. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
@@ -4111,6 +4239,11 @@ def build_input(
     
     # Специфичная валидация для kling/v1-avatar-standard
     is_valid, error_msg = _validate_kling_v1_avatar_standard(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для kling/ai-avatar-v1-pro
+    is_valid, error_msg = _validate_kling_ai_avatar_v1_pro(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     

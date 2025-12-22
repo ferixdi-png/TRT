@@ -130,6 +130,11 @@
   - Опциональные: нет
   - Default: нет (все параметры обязательные)
   - Важно: Все три параметра обязательны! Максимальный размер файлов: 10MB для изображения и аудио!
+- [x] **kling/ai-avatar-v1-pro** - `docs/KLING_AI_AVATAR_V1_PRO_INTEGRATION.md`
+  - Обязательные: `image_url`, `audio_url`, `prompt` (max 5000 chars)
+  - Опциональные: нет
+  - Default: нет (все параметры обязательные)
+  - Важно: Все три параметра обязательны! Pro версия модели! Параметры идентичны kling/v1-avatar-standard!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
