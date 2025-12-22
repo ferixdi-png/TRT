@@ -7456,6 +7456,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для kling/v2-1-master-image-to-video
+    is_valid, error_msg = _validate_kling_v2_1_master_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для seedream/4.5-edit
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
@@ -7928,6 +7933,15 @@ def build_input(
             normalized_input['negative_prompt'] = " "  # Default согласно документации (пробел!)
         if 'acceleration' not in normalized_input:
             normalized_input['acceleration'] = "none"  # Default согласно документации
+    
+    # Применяем дефолты для kling/v2-1-master-image-to-video
+    if model_id in ["kling/v2-1-master-image-to-video", "kling-v2-1-master-image-to-video", "v2-1-master-image-to-video"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
     
     # Применяем дефолты для google/nano-banana
     if model_id in ["google/nano-banana", "google-nano-banana", "nano-banana"]:
