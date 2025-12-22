@@ -3658,6 +3658,180 @@ def _validate_elevenlabs_speech_to_text(
     return True, None
 
 
+def _normalize_voice_for_elevenlabs_tts_multilingual_v2(value: Any) -> Optional[str]:
+    """
+    Нормализует voice для elevenlabs/text-to-speech-multilingual-v2.
+    Принимает значение и возвращает нормализованную строку с первой заглавной буквой.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение voice (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "Rachel", "Aria", "Roger", "Sarah", "Laura", "Charlie", "George", "Callum",
+        "River", "Liam", "Charlotte", "Alice", "Matilda", "Will", "Jessica", "Eric",
+        "Chris", "Brian", "Daniel", "Lily", "Bill"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive, но возвращаем с правильным регистром)
+    for valid in valid_values:
+        if str_value.lower() == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_elevenlabs_text_to_speech_multilingual_v2(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для elevenlabs/text-to-speech-multilingual-v2 согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - text (обязательный, макс 5000 символов)
+    - voice (опциональный, enum, 21 значение, default "Rachel")
+    - stability (опциональный, number, 0-1, default 0.5)
+    - similarity_boost (опциональный, number, 0-1, default 0.75)
+    - style (опциональный, number, 0-1, default 0)
+    - speed (опциональный, number, 0.7-1.2, default 1)
+    - timestamps (опциональный, boolean, default false)
+    - previous_text (опциональный, string, макс 5000 символов, default "")
+    - next_text (опциональный, string, макс 5000 символов, default "")
+    - language_code (опциональный, string, макс 500 символов, default "")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["elevenlabs/text-to-speech-multilingual-v2", "elevenlabs-text-to-speech-multilingual-v2", "elevenlabs/text-to-speech-multilingual-v2"]:
+        return True, None
+    
+    # Валидация text: обязательный, максимум 5000 символов
+    text = normalized_input.get('text')
+    if not text:
+        return False, "Поле 'text' обязательно для генерации речи. Введите текст для преобразования в речь."
+    
+    if not isinstance(text, str):
+        text = str(text)
+    
+    text_len = len(text.strip())
+    if text_len == 0:
+        return False, "Поле 'text' не может быть пустым"
+    if text_len > 5000:
+        return False, f"Поле 'text' слишком длинное: {text_len} символов (максимум 5000)"
+    
+    # Валидация voice: опциональный, enum
+    voice = normalized_input.get('voice')
+    if voice is not None:
+        normalized_voice = _normalize_voice_for_elevenlabs_tts_multilingual_v2(voice)
+        if normalized_voice is None:
+            valid_values = [
+                "Rachel", "Aria", "Roger", "Sarah", "Laura", "Charlie", "George", "Callum",
+                "River", "Liam", "Charlotte", "Alice", "Matilda", "Will", "Jessica", "Eric",
+                "Chris", "Brian", "Daniel", "Lily", "Bill"
+            ]
+            return False, f"Поле 'voice' должно быть одним из: {', '.join(valid_values)} (получено: {voice})"
+        normalized_input['voice'] = normalized_voice
+    
+    # Валидация stability: опциональный, number, 0-1
+    stability = normalized_input.get('stability')
+    if stability is not None:
+        try:
+            stability_num = float(stability)
+            if stability_num < 0 or stability_num > 1:
+                return False, f"Поле 'stability' должно быть в диапазоне от 0 до 1 (получено: {stability})"
+            normalized_input['stability'] = stability_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'stability' должно быть числом от 0 до 1 (получено: {stability})"
+    
+    # Валидация similarity_boost: опциональный, number, 0-1
+    similarity_boost = normalized_input.get('similarity_boost')
+    if similarity_boost is not None:
+        try:
+            boost_num = float(similarity_boost)
+            if boost_num < 0 or boost_num > 1:
+                return False, f"Поле 'similarity_boost' должно быть в диапазоне от 0 до 1 (получено: {similarity_boost})"
+            normalized_input['similarity_boost'] = boost_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'similarity_boost' должно быть числом от 0 до 1 (получено: {similarity_boost})"
+    
+    # Валидация style: опциональный, number, 0-1
+    style = normalized_input.get('style')
+    if style is not None:
+        try:
+            style_num = float(style)
+            if style_num < 0 or style_num > 1:
+                return False, f"Поле 'style' должно быть в диапазоне от 0 до 1 (получено: {style})"
+            normalized_input['style'] = style_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'style' должно быть числом от 0 до 1 (получено: {style})"
+    
+    # Валидация speed: опциональный, number, 0.7-1.2
+    speed = normalized_input.get('speed')
+    if speed is not None:
+        try:
+            speed_num = float(speed)
+            if speed_num < 0.7 or speed_num > 1.2:
+                return False, f"Поле 'speed' должно быть в диапазоне от 0.7 до 1.2 (получено: {speed})"
+            normalized_input['speed'] = speed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'speed' должно быть числом от 0.7 до 1.2 (получено: {speed})"
+    
+    # Валидация timestamps: опциональный, boolean
+    timestamps = normalized_input.get('timestamps')
+    if timestamps is not None:
+        normalized_bool = _normalize_boolean(timestamps)
+        if normalized_bool is None:
+            return False, f"Поле 'timestamps' должно быть boolean (true/false) (получено: {timestamps})"
+        normalized_input['timestamps'] = normalized_bool
+    
+    # Валидация previous_text: опциональный, string, макс 5000 символов
+    previous_text = normalized_input.get('previous_text')
+    if previous_text is not None:
+        if not isinstance(previous_text, str):
+            previous_text = str(previous_text)
+        previous_text = previous_text.strip()
+        if len(previous_text) > 5000:
+            return False, f"Поле 'previous_text' слишком длинное: {len(previous_text)} символов (максимум 5000)"
+        normalized_input['previous_text'] = previous_text
+    
+    # Валидация next_text: опциональный, string, макс 5000 символов
+    next_text = normalized_input.get('next_text')
+    if next_text is not None:
+        if not isinstance(next_text, str):
+            next_text = str(next_text)
+        next_text = next_text.strip()
+        if len(next_text) > 5000:
+            return False, f"Поле 'next_text' слишком длинное: {len(next_text)} символов (максимум 5000)"
+        normalized_input['next_text'] = next_text
+    
+    # Валидация language_code: опциональный, string, макс 500 символов
+    language_code = normalized_input.get('language_code')
+    if language_code is not None:
+        if not isinstance(language_code, str):
+            language_code = str(language_code)
+        language_code = language_code.strip()
+        if len(language_code) > 500:
+            return False, f"Поле 'language_code' слишком длинное: {len(language_code)} символов (максимум 500)"
+        normalized_input['language_code'] = language_code
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

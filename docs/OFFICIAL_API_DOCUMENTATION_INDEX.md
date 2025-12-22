@@ -199,6 +199,11 @@
   - Опциональные: `language_code` (string, макс 500), `tag_audio_events` (boolean), `diarize` (boolean)
   - Default: `language_code=""`, `tag_audio_events=true`, `diarize=true`
   - Важно: Использует `language_code` вместо стандартного `language`! Уникальные параметры: `tag_audio_events`, `diarize`! НЕТ параметров `model` и `format`! Максимальный размер файла: 200MB!
+- [x] **elevenlabs/text-to-speech-multilingual-v2** - `docs/ELEVENLABS_TEXT_TO_SPEECH_MULTILINGUAL_V2_INTEGRATION.md`
+  - Обязательные: `text` (max 5000 chars)
+  - Опциональные: `voice` (enum, 21 значение), `stability` (0-1), `similarity_boost` (0-1), `style` (0-1), `speed` (0.7-1.2), `timestamps` (boolean), `previous_text` (max 5000), `next_text` (max 5000), `language_code` (max 500)
+  - Default: `voice="Rachel"`, `stability=0.5`, `similarity_boost=0.75`, `style=0`, `speed=1`, `timestamps=false`, `previous_text=""`, `next_text=""`, `language_code=""`
+  - Важно: Уникальные параметры: `stability`, `similarity_boost`, `timestamps`, `previous_text`, `next_text`! Использует `language_code` вместо стандартного `language`! НЕТ параметров `model` и `emotion`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)

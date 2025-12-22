@@ -120,10 +120,16 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'text',
         'voice',
         'language',
+        'language_code',  # Для elevenlabs/text-to-speech-multilingual-v2
         'speed',
         'model',
         'style',
-        'emotion'
+        'emotion',
+        'stability',  # Для elevenlabs/text-to-speech-multilingual-v2
+        'similarity_boost',  # Для elevenlabs/text-to-speech-multilingual-v2
+        'timestamps',  # Для elevenlabs/text-to-speech-multilingual-v2
+        'previous_text',  # Для elevenlabs/text-to-speech-multilingual-v2
+        'next_text'  # Для elevenlabs/text-to-speech-multilingual-v2
     },
     
     # Speech-to-Text
