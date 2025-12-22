@@ -7131,6 +7131,17 @@ def build_input(
         if 'negative_prompt' not in normalized_input:
             normalized_input['negative_prompt'] = "blurry, ugly"  # Default согласно документации
     
+    # Применяем дефолты для ideogram/character-edit
+    if model_id in ["ideogram/character-edit", "ideogram-character-edit", "character-edit"]:
+        if 'rendering_speed' not in normalized_input:
+            normalized_input['rendering_speed'] = "BALANCED"  # Default согласно документации
+        if 'style' not in normalized_input:
+            normalized_input['style'] = "AUTO"  # Default согласно документации
+        if 'expand_prompt' not in normalized_input:
+            normalized_input['expand_prompt'] = True  # Default согласно документации
+        if 'num_images' not in normalized_input:
+            normalized_input['num_images'] = "1"  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
