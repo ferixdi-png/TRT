@@ -223,6 +223,11 @@
   - Опциональные: `resolution` (enum: 720p/1080p, НЕТ 480p!), `duration` (enum: "5"/"10")
   - Default: `resolution="720p"`, `duration="5"`
   - Важно: Модель для генерации видео из изображения - Pro Fast версия! Использует `duration` как string enum ("5" или "10")! `resolution` только 2 значения (720p, 1080p), НЕТ 480p (в отличие от других v1 моделей)! НЕТ параметров `camera_fixed`, `seed`, `enable_safety_checker`, `end_image_url` (есть в других v1 моделях)! `prompt` имеет максимум 10000 символов (больше, чем у большинства других моделей)! НЕТ параметров `fps`, `with_audio`, `width`, `height`, `guidance`, `steps`, `negative_prompt`, `motion`, `style`, `strength`!
+- [x] **kling/v2-1-master-image-to-video** - `docs/KLING_V2_1_MASTER_IMAGE_TO_VIDEO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000), `image_url` (max 10MB, jpeg/png/webp)
+  - Опциональные: `duration` (enum: "5"/"10"), `negative_prompt` (max 500, default "blur, distort, and low quality"), `cfg_scale` (0-1, шаг 0.1, default 0.5)
+  - Default: `duration="5"`, `negative_prompt="blur, distort, and low quality"`, `cfg_scale=0.5`
+  - Важно: Модель для генерации видео из изображения - Master версия! Использует `duration` как string enum ("5" или "10")! Использует `cfg_scale` для управления следованием промпту (диапазон 0-1, шаг 0.1, default 0.5)! `negative_prompt` имеет default "blur, distort, and low quality" (не пустая строка!)! `prompt` имеет максимум 5000 символов! НЕТ параметров `resolution`, `camera_fixed`, `seed`, `enable_safety_checker`, `fps`, `with_audio`, `width`, `height`, `guidance`, `steps`, `motion`, `style`, `strength`!
   - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
 - [x] **elevenlabs/audio-isolation** - `docs/ELEVENLABS_AUDIO_ISOLATION_INTEGRATION.md`
   - Обязательные: `audio_url` (string, макс 10MB, mpeg/wav/aac/mp4/ogg)
