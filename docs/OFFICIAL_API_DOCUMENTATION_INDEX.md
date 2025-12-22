@@ -213,6 +213,11 @@
   - Опциональные: `resolution` (enum: 480p/720p/1080p), `duration` (enum: "5"/"10"), `camera_fixed` (boolean), `seed` (может быть -1, default -1), `enable_safety_checker` (boolean), `end_image_url` (string, max 10MB, jpeg/png/webp, default "")
   - Default: `resolution="720p"`, `duration="5"`, `camera_fixed=false`, `seed=-1`, `enable_safety_checker=true`, `end_image_url=""`
   - Важно: Модель для генерации видео из изображения! Использует `camera_fixed` для управления позицией камеры (уникальный параметр)! Использует `duration` как string enum ("5" или "10")! Использует `end_image_url` для указания изображения, которым заканчивается видео (уникальный параметр)! `seed` может быть -1 для случайного seed, default -1! `prompt` имеет максимум 10000 символов (больше, чем у большинства других моделей)! НЕТ параметров `fps`, `with_audio`, `width`, `height`, `guidance`, `steps`, `negative_prompt`, `motion`, `style`, `strength`!
+- [x] **bytedance/v1-pro-image-to-video** - `docs/BYTEDANCE_V1_PRO_IMAGE_TO_VIDEO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 10000), `image_url` (max 10MB, jpeg/png/webp)
+  - Опциональные: `resolution` (enum: 480p/720p/1080p), `duration` (enum: "5"/"10"), `camera_fixed` (boolean), `seed` (может быть -1, default -1), `enable_safety_checker` (boolean)
+  - Default: `resolution="720p"`, `duration="5"`, `camera_fixed=false`, `seed=-1`, `enable_safety_checker=true`
+  - Важно: Модель для генерации видео из изображения - Pro версия! Использует `camera_fixed` для управления позицией камеры (уникальный параметр)! Использует `duration` как string enum ("5" или "10")! НЕТ параметра `end_image_url` (есть в v1-lite-image-to-video)! `seed` может быть -1 для случайного seed, default -1! `prompt` имеет максимум 10000 символов (больше, чем у большинства других моделей)! НЕТ параметров `fps`, `with_audio`, `width`, `height`, `guidance`, `steps`, `negative_prompt`, `motion`, `style`, `strength`!
   - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
 - [x] **elevenlabs/audio-isolation** - `docs/ELEVENLABS_AUDIO_ISOLATION_INTEGRATION.md`
   - Обязательные: `audio_url` (string, макс 10MB, mpeg/wav/aac/mp4/ogg)
