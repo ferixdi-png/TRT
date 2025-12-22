@@ -28,9 +28,11 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'image_resolution',  # Для bytedance/seedream-v4-text-to-image
         'max_images',  # Для bytedance/seedream-v4-text-to-image
         'enable_safety_checker',  # Для bytedance/seedream и qwen/text-to-image
-        'output_format',  # Для qwen/text-to-image и google/nano-banana
+        'output_format',  # Для qwen/text-to-image, google/nano-banana и nano-banana-pro
         'acceleration',  # Для qwen/text-to-image
-        'num_inference_steps'  # Для qwen/text-to-image
+        'num_inference_steps',  # Для qwen/text-to-image
+        'image_input',  # Для nano-banana-pro
+        'resolution'  # Для nano-banana-pro (1K, 2K, 4K)
     },
     
     # Image-to-Image

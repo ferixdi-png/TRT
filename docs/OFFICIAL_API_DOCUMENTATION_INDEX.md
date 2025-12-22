@@ -234,6 +234,11 @@
   - Опциональные: `output_format` (enum: png/jpeg), `image_size` (enum, 11 значений)
   - Default: `output_format="png"`, `image_size="1:1"`
   - Важно: Использует `image_urls` (массив, до 10) вместо стандартного `image_url`! Использует `image_size` вместо стандартных `width`/`height`! Уникальный параметр: `output_format`! Нормализует `image_url` в `image_urls`! НЕТ параметров `strength`, `negative_prompt`, `width`, `height`, `steps`, `seed`, `guidance`, `guidance_scale`, `style`!
+- [x] **nano-banana-pro** - `docs/NANO_BANANA_PRO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 10000)
+  - Опциональные: `image_input` (массив, до 8 изображений, max 30MB каждое, jpeg/png/webp), `aspect_ratio` (enum, 11 значений), `resolution` (enum: 1K/2K/4K), `output_format` (enum: png/jpg)
+  - Default: `image_input=[]`, `aspect_ratio="1:1"`, `resolution="1K"`, `output_format="png"`
+  - Важно: Может работать как t2i и i2i (если указан `image_input`)! Использует `aspect_ratio` вместо стандартных `width`/`height`! Использует `resolution` (1K/2K/4K) вместо стандартных значений! Уникальный параметр: `output_format` (png/jpg, не jpeg!)! `prompt` имеет максимум 10000 символов (больше чем у других моделей)! НЕТ параметров `negative_prompt`, `width`, `height`, `steps`, `seed`, `guidance`, `guidance_scale`, `style`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
