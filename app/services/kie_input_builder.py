@@ -6567,6 +6567,13 @@ def build_input(
         if 'acceleration' not in normalized_input:
             normalized_input['acceleration'] = "none"  # Default согласно документации
     
+    # Применяем дефолты для google/nano-banana
+    if model_id in ["google/nano-banana", "google-nano-banana", "nano-banana"]:
+        if 'output_format' not in normalized_input:
+            normalized_input['output_format'] = "png"  # Default согласно документации
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "1:1"  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
