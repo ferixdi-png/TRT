@@ -7605,7 +7605,7 @@ def build_input(
             normalized_input['output_format'] = "png"  # Default согласно документации
     
     # Применяем дефолты для bytedance/v1-pro-fast-image-to-video
-    if model_id == "bytedance/v1-pro-fast-image-to-video":
+    if model_id in ["bytedance/v1-pro-fast-image-to-video", "bytedance-v1-pro-fast-image-to-video", "v1-pro-fast-image-to-video"]:
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "720p"  # Default согласно документации
         if 'duration' not in normalized_input:
