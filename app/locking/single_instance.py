@@ -137,6 +137,10 @@ def acquire_single_instance_lock() -> bool:
     """
     Попытаться получить single instance lock (PostgreSQL или filelock).
     
+    КРИТИЧНО: Если DATABASE_URL установлен, PostgreSQL lock ОБЯЗАТЕЛЕН.
+    Если PostgreSQL lock не получен (другой инстанс его держит), процесс должен завершиться,
+    даже если file lock получен. Это предотвращает одновременную работу двух инстансов.
+    
     Returns:
         True если lock получен, False если нет
         
@@ -144,6 +148,8 @@ def acquire_single_instance_lock() -> bool:
         Сохраняет lock handle в глобальной переменной для последующего освобождения
     """
     global _lock_handle, _lock_type, _lock_connection
+    
+    database_url = os.getenv('DATABASE_URL')
     
     # Пробуем PostgreSQL advisory lock сначала
     lock_data = _acquire_postgres_lock()
@@ -153,7 +159,18 @@ def acquire_single_instance_lock() -> bool:
         _lock_type = 'postgres'
         return True
     
-    # Fallback на filelock
+    # КРИТИЧНО: Если DATABASE_URL установлен, но PostgreSQL lock не получен - это конфликт!
+    # Другой инстанс уже держит PostgreSQL lock, и мы НЕ должны запускаться с file lock.
+    if database_url:
+        logger.error("=" * 60)
+        logger.error("[LOCK] CRITICAL: DATABASE_URL is set, but PostgreSQL lock NOT acquired")
+        logger.error("[LOCK] Another bot instance is already running with PostgreSQL lock")
+        logger.error("[LOCK] This instance will exit to prevent 409 Conflict")
+        logger.error("[LOCK] Exiting gracefully (exit code 0) to prevent restart loop")
+        logger.error("=" * 60)
+        return False
+    
+    # Fallback на filelock ТОЛЬКО если DATABASE_URL не установлен
     lock_handle = _acquire_file_lock()
     if lock_handle:
         _lock_handle = lock_handle
