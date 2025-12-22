@@ -2790,6 +2790,152 @@ def _validate_ideogram_v3_edit(
     return True, None
 
 
+def _validate_ideogram_v3_remix(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для ideogram/v3-remix согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - rendering_speed (опциональный, enum, default "BALANCED")
+    - style (опциональный, enum, default "AUTO")
+    - expand_prompt (опциональный, boolean, default true)
+    - image_size (опциональный, enum, default "square_hd")
+    - num_images (опциональный, string enum, default "1")
+    - seed (опциональный, number)
+    - strength (опциональный, number, диапазон 0.01-1, шаг 0.01, default 0.8)
+    - negative_prompt (опциональный, string, макс 5000 символов, default "")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["ideogram/v3-remix", "ideogram-v3-remix", "ideogram/v3-remix", "v3-remix"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для ремикса изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для ремикса изображения. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация rendering_speed: опциональный, enum
+    rendering_speed = normalized_input.get('rendering_speed')
+    if rendering_speed is not None:
+        # Переиспользуем функцию из ideogram/character-edit
+        normalized_speed = _normalize_rendering_speed_for_ideogram_character_edit(rendering_speed)
+        if normalized_speed is None:
+            valid_values = ["TURBO", "BALANCED", "QUALITY"]
+            return False, f"Поле 'rendering_speed' должно быть одним из: {', '.join(valid_values)} (получено: {rendering_speed})"
+        normalized_input['rendering_speed'] = normalized_speed
+    
+    # Валидация style: опциональный, enum
+    style = normalized_input.get('style')
+    if style is not None:
+        # Переиспользуем функцию из ideogram/character-edit
+        normalized_style = _normalize_style_for_ideogram_character_edit(style)
+        if normalized_style is None:
+            valid_values = ["AUTO", "GENERAL", "REALISTIC", "DESIGN"]
+            return False, f"Поле 'style' должно быть одним из: {', '.join(valid_values)} (получено: {style})"
+        normalized_input['style'] = normalized_style
+    
+    # Валидация expand_prompt: опциональный, boolean
+    expand_prompt = normalized_input.get('expand_prompt')
+    if expand_prompt is not None:
+        normalized_bool = _normalize_boolean(expand_prompt)
+        if normalized_bool is None:
+            return False, f"Поле 'expand_prompt' должно быть boolean (получено: {expand_prompt})"
+        normalized_input['expand_prompt'] = normalized_bool
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        # Переиспользуем функцию из qwen/image-edit
+        normalized_size = _normalize_image_size_for_qwen_image_edit(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd",
+                "portrait_4_3", "portrait_16_9",
+                "landscape_4_3", "landscape_16_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация num_images: опциональный, string enum
+    num_images = normalized_input.get('num_images')
+    if num_images is not None:
+        # Переиспользуем функцию из qwen/image-edit
+        normalized_num = _normalize_num_images_for_qwen_image_edit(num_images)
+        if normalized_num is None:
+            valid_values = ["1", "2", "3", "4"]
+            return False, f"Поле 'num_images' должно быть одним из: {', '.join(valid_values)} (получено: {num_images})"
+        normalized_input['num_images'] = normalized_num
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = float(seed)
+            # Преобразуем в int если это целое число
+            if seed_num == int(seed_num):
+                normalized_input['seed'] = int(seed_num)
+            else:
+                normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация strength: опциональный, number, диапазон 0.01-1, шаг 0.01
+    strength = normalized_input.get('strength')
+    if strength is not None:
+        try:
+            strength_num = float(strength)
+            if strength_num < 0.01 or strength_num > 1:
+                return False, f"Поле 'strength' должно быть в диапазоне от 0.01 до 1 (получено: {strength})"
+            # Округляем до 2 знаков после запятой (шаг 0.01)
+            strength_num = round(strength_num, 2)
+            normalized_input['strength'] = strength_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'strength' должно быть числом от 0.01 до 1 (получено: {strength})"
+    
+    # Валидация negative_prompt: опциональный, string, макс 5000 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 5000:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 5000)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
