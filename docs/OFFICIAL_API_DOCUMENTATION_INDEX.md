@@ -73,6 +73,11 @@
   - Обязательные: `prompt` (max 2500 chars)
   - Опциональные: `duration` ("5" | "10"), `aspect_ratio` ("16:9" | "9:16" | "1:1"), `negative_prompt` (max 2500 chars), `cfg_scale` (0-1, step 0.1)
   - Default: `duration="5"`, `aspect_ratio="16:9"`, `negative_prompt="blur, distort, and low quality"`, `cfg_scale=0.5`
+- [x] **kling/v2-5-turbo-image-to-video-pro** - `docs/KLING_V2_5_TURBO_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 2500 chars), `image_url` (string, не массив!)
+  - Опциональные: `tail_image_url` (string), `duration` ("5" | "10"), `negative_prompt` (max 2496 chars), `cfg_scale` (0-1, step 0.1)
+  - Default: `image_url="https://file.aiquickdraw.com/..."`, `duration="5"`, `negative_prompt="blur, distort, and low quality"`, `cfg_scale=0.5`
+  - Важно: `image_url` - это string, а не массив! `negative_prompt` максимум 2496 символов (не 2500)!
 
 ### ✅ Flux Models
 
