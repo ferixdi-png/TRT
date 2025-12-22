@@ -212,6 +212,114 @@ def _normalize_resolution_for_wan_2_6(value: Any) -> Optional[str]:
     return None
 
 
+def _normalize_image_urls_for_wan_2_6(value: Any) -> Optional[List[str]]:
+    """
+    Нормализует image_urls для wan/2-6-image-to-video.
+    Принимает строку, массив строк или None и возвращает массив строк.
+    
+    Args:
+        value: Значение image_urls (может быть str, list, None)
+    
+    Returns:
+        Нормализованный массив URL или None
+    """
+    if value is None:
+        return None
+    
+    # Если это строка, конвертируем в массив
+    if isinstance(value, str):
+        if value.strip():
+            return [value.strip()]
+        return None
+    
+    # Если это массив, проверяем и нормализуем элементы
+    if isinstance(value, list):
+        normalized = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                normalized.append(item.strip())
+        return normalized if normalized else None
+    
+    return None
+
+
+def _validate_wan_2_6_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для wan/2-6-image-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "wan/2-6-image-to-video":
+        return True, None
+    
+    # Валидация prompt: обязательный, 2-5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len < 2:
+        return False, "Поле 'prompt' должно содержать минимум 2 символа"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_urls: обязательный массив
+    # Проверяем различные варианты имени поля
+    image_urls = None
+    if 'image_urls' in normalized_input:
+        image_urls = normalized_input['image_urls']
+    elif 'image_url' in normalized_input:
+        # Конвертируем image_url в image_urls
+        image_urls = normalized_input['image_url']
+    elif 'image' in normalized_input:
+        image_urls = normalized_input['image']
+    
+    if not image_urls:
+        return False, "Поле 'image_urls' обязательно для генерации видео из изображения"
+    
+    # Нормализуем image_urls
+    normalized_image_urls = _normalize_image_urls_for_wan_2_6(image_urls)
+    if not normalized_image_urls:
+        return False, "Поле 'image_urls' должно содержать хотя бы один валидный URL изображения"
+    
+    # Проверяем что все URL начинаются с http:// или https://
+    for idx, url in enumerate(normalized_image_urls):
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return False, f"URL изображения #{idx + 1} должен начинаться с http:// или https://"
+    
+    # Сохраняем нормализованное значение
+    normalized_input['image_urls'] = normalized_image_urls
+    
+    # Валидация duration: опциональный, "5" | "10" | "15", default "5"
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_wan_2_6(duration)
+        if normalized_duration is None:
+            return False, f"Поле 'duration' должно быть '5', '10' или '15' (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+    
+    # Валидация resolution: опциональный, "720p" | "1080p", default "1080p"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_wan_2_6(resolution)
+        if normalized_resolution is None:
+            return False, f"Поле 'resolution' должно быть '720p' или '1080p' (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -357,8 +465,20 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для wan/2-6-image-to-video
+    is_valid, error_msg = _validate_wan_2_6_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для wan/2-6-text-to-video
     if model_id == "wan/2-6-text-to-video":
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "1080p"  # Default согласно документации
+    
+    # Применяем дефолты для wan/2-6-image-to-video
+    if model_id == "wan/2-6-image-to-video":
         if 'duration' not in normalized_input:
             normalized_input['duration'] = "5"  # Default согласно документации
         if 'resolution' not in normalized_input:

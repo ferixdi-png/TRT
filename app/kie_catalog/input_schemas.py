@@ -64,6 +64,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
     # Image-to-Video
     'i2v': {
         'image_url',
+        'image_urls',  # Для wan/2-6-image-to-video
         'image_base64',
         'image',
         'prompt',
