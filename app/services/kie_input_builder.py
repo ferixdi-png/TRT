@@ -2429,6 +2429,183 @@ def _validate_sora_2_pro_storyboard(
     return True, None
 
 
+def _normalize_n_frames_for_sora_2_pro_text_to_video(value: Any) -> Optional[str]:
+    """
+    Нормализует n_frames для sora-2-pro-text-to-video.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Для sora-2-pro-text-to-video поддерживаются только "10" и "15"!
+    (В отличие от storyboard, где также есть "25")
+    
+    Args:
+        value: Значение n_frames (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["10", "15"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["10", "10s", "10sec", "10 seconds"]:
+        return "10"
+    elif str_lower in ["15", "15s", "15sec", "15 seconds"]:
+        return "15"
+    
+    # Пробуем конвертировать число в строку
+    try:
+        num_value = float(str_value)
+        if num_value == 10.0 or num_value == 10:
+            return "10"
+        elif num_value == 15.0 or num_value == 15:
+            return "15"
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _normalize_size_for_sora_2_pro_text_to_video(value: Any) -> Optional[str]:
+    """
+    Нормализует size для sora-2-pro-text-to-video.
+    Принимает строку и возвращает нормализованное значение в нижнем регистре.
+    ВАЖНО: Для sora-2-pro-text-to-video поддерживаются только "standard" и "high"!
+    
+    Args:
+        value: Значение size (может быть str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["standard", "high"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["standard", "std", "normal", "medium"]:
+        return "standard"
+    elif str_value in ["high", "hq", "quality", "best"]:
+        return "high"
+    
+    return None
+
+
+def _normalize_boolean(value: Any) -> Optional[bool]:
+    """
+    Нормализует boolean значение.
+    Принимает различные форматы и возвращает bool или None.
+    
+    Args:
+        value: Значение (может быть str, bool, int)
+    
+    Returns:
+        bool или None
+    """
+    if value is None:
+        return None
+    
+    if isinstance(value, bool):
+        return value
+    
+    if isinstance(value, (int, float)):
+        return bool(value)
+    
+    if isinstance(value, str):
+        str_lower = value.strip().lower()
+        if str_lower in ['true', '1', 'yes', 'y', 'on', 'enabled']:
+            return True
+        elif str_lower in ['false', '0', 'no', 'n', 'off', 'disabled']:
+            return False
+    
+    return None
+
+
+def _validate_sora_2_pro_text_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для sora-2-pro-text-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["sora-2-pro-text-to-video", "sora-2-pro/t2v", "openai/sora-2-pro-text-to-video"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 10000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    
+    # Валидация aspect_ratio: опциональный, enum ("portrait" или "landscape")
+    # Переиспользуем функцию нормализации из sora-2-pro-storyboard
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        normalized_aspect_ratio = _normalize_aspect_ratio_for_sora_2_pro_storyboard(aspect_ratio)
+        if normalized_aspect_ratio is None:
+            valid_values = ["portrait", "landscape"]
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация n_frames: опциональный, enum ("10" или "15")
+    n_frames = normalized_input.get('n_frames')
+    if n_frames is not None:
+        normalized_n_frames = _normalize_n_frames_for_sora_2_pro_text_to_video(n_frames)
+        if normalized_n_frames is None:
+            valid_values = ["10", "15"]
+            return False, f"Поле 'n_frames' должно быть одним из: {', '.join(valid_values)} (получено: {n_frames})"
+        normalized_input['n_frames'] = normalized_n_frames
+    
+    # Валидация size: опциональный, enum ("standard" или "high")
+    size = normalized_input.get('size')
+    if size is not None:
+        normalized_size = _normalize_size_for_sora_2_pro_text_to_video(size)
+        if normalized_size is None:
+            valid_values = ["standard", "high"]
+            return False, f"Поле 'size' должно быть одним из: {', '.join(valid_values)} (получено: {size})"
+        normalized_input['size'] = normalized_size
+    
+    # Валидация remove_watermark: опциональный boolean
+    remove_watermark = normalized_input.get('remove_watermark')
+    if remove_watermark is not None:
+        normalized_remove_watermark = _normalize_boolean(remove_watermark)
+        if normalized_remove_watermark is None:
+            return False, f"Поле 'remove_watermark' должно быть boolean (true/false) (получено: {remove_watermark})"
+        normalized_input['remove_watermark'] = normalized_remove_watermark
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -2697,6 +2874,11 @@ def build_input(
     
     # Специфичная валидация для sora-2-pro-storyboard
     is_valid, error_msg = _validate_sora_2_pro_storyboard(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для sora-2-pro-text-to-video
+    is_valid, error_msg = _validate_sora_2_pro_text_to_video(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     
