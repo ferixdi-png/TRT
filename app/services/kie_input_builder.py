@@ -7516,6 +7516,19 @@ def build_input(
         if 'negative_prompt' not in normalized_input:
             normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка!)
     
+    # Применяем дефолты для bytedance/v1-lite-text-to-video
+    if model_id in ["bytedance/v1-lite-text-to-video", "bytedance-v1-lite-text-to-video", "v1-lite-text-to-video"]:
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "720p"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'camera_fixed' not in normalized_input:
+            normalized_input['camera_fixed'] = False  # Default согласно документации
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
