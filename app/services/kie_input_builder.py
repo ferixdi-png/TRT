@@ -1197,6 +1197,63 @@ def _validate_flux_2_pro_image_to_image(
     return True, None
 
 
+def _validate_flux_2_pro_text_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для flux-2/pro-text-to-image согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "flux-2/pro-text-to-image":
+        return True, None
+    
+    # Валидация prompt: обязательный, от 3 до 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len < 3:
+        return False, f"Поле 'prompt' слишком короткое: {prompt_len} символов (минимум 3)"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация aspect_ratio: обязательный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if not aspect_ratio:
+        return False, "Поле 'aspect_ratio' обязательно для генерации изображения"
+    
+    normalized_aspect_ratio = _normalize_aspect_ratio_for_flux_2_pro(aspect_ratio)
+    if normalized_aspect_ratio is None:
+        valid_values = ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "auto"]
+        return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+    normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация resolution: обязательный, "1K" | "2K"
+    resolution = normalized_input.get('resolution')
+    if not resolution:
+        return False, "Поле 'resolution' обязательно для генерации изображения"
+    
+    normalized_resolution = _normalize_resolution_for_flux_2_pro(resolution)
+    if normalized_resolution is None:
+        return False, f"Поле 'resolution' должно быть '1K' или '2K' (получено: {resolution})"
+    normalized_input['resolution'] = normalized_resolution
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -1408,6 +1465,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для flux-2/pro-text-to-image
+    is_valid, error_msg = _validate_flux_2_pro_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -1415,6 +1477,13 @@ def build_input(
     
     # Применяем дефолты для flux-2/pro-image-to-image
     if model_id == "flux-2/pro-image-to-image":
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "1K"  # Default согласно документации
+    
+    # Применяем дефолты для flux-2/pro-text-to-image
+    if model_id == "flux-2/pro-text-to-image":
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
         if 'resolution' not in normalized_input:
