@@ -66,8 +66,8 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
     
     if api_key:
         try:
-            from kie_client import get_client
-            client = get_client()
+            from app.integrations.kie_client import get_kie_client
+            client = get_kie_client()
             logger.info("📡 Attempting to load models from KIE API...")
             api_models = await client.list_models()
             

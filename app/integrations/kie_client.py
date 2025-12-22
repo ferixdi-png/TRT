@@ -365,6 +365,52 @@ class KIEClient:
             
             # pending или processing - продолжаем polling
             await asyncio.sleep(poll_interval)
+    
+    async def list_models(self) -> List[Dict[str, Any]]:
+        """
+        Получить список всех моделей с ценами из market API
+        
+        Returns:
+            List[Dict[str, Any]] - список моделей с информацией и ценами
+        """
+        if not self.api_key:
+            logger.warning("KIE_API_KEY not configured, cannot fetch models from API")
+            return []
+        
+        url = f"{self.base_url}/v1/market/list"
+        
+        async def _make_request():
+            session = await self._get_session()
+            async with session.get(url, headers=self._headers()) as resp:
+                status = resp.status
+                if status == 200:
+                    data = await resp.json()
+                    # API может вернуть данные в разных форматах
+                    if isinstance(data, list):
+                        return data
+                    elif isinstance(data, dict):
+                        # Может быть обёрнуто в 'data' или 'models'
+                        return data.get('data', data.get('models', []))
+                    else:
+                        logger.warning(f"Unexpected response format from /v1/market/list: {type(data)}")
+                        return []
+                else:
+                    error_text = await resp.text()
+                    raise aiohttp.ClientResponseError(
+                        request_info=resp.request_info,
+                        history=resp.history,
+                        status=status,
+                        message=error_text
+                    )
+        
+        try:
+            return await self._retry_with_backoff(_make_request)
+        except KIEClientError4xx as e:
+            logger.error(f"[KIE] Failed to list models (client error): {e}")
+            return []
+        except (KIENetworkError, KIEServerError, KIERateLimitError) as e:
+            logger.error(f"[KIE] Failed to list models after retries: {e}")
+            return []
 
 
 def get_kie_client() -> KIEClient:
