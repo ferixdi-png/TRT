@@ -3035,6 +3035,114 @@ def _validate_topaz_image_upscale(
     return True, None
 
 
+def _validate_kling_v2_5_turbo_image_to_video_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling/v2-5-turbo-image-to-video-pro согласно документации API.
+    
+    ВАЖНО: Отличается от других i2v моделей:
+    - image_url обязательный string (не массив!)
+    - tail_image_url опциональный string (новый параметр)
+    - negative_prompt максимум 2496 символов (не 2500!)
+    - НЕТ параметра aspect_ratio
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["kling/v2-5-turbo-image-to-video-pro", "kling/v2-5-turbo-i2v-pro", "kling/v2.5-turbo-image-to-video-pro"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 2500 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 2500:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 2500)"
+    
+    # Валидация image_url: обязательный string (не массив!)
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения"
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if not image_url:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Проверяем что это валидный URL
+    if not image_url.startswith(('http://', 'https://')):
+        return False, "Поле 'image_url' должно быть валидным URL (начинается с http:// или https://)"
+    
+    normalized_input['image_url'] = image_url
+    
+    # ВАЖНО: Удаляем image_urls если он был передан (для этой модели нужен только image_url как string!)
+    if 'image_urls' in normalized_input:
+        logger.warning(f"Parameter 'image_urls' is not supported for kling/v2-5-turbo-image-to-video-pro (use 'image_url' as string), removing it")
+        del normalized_input['image_urls']
+    
+    # Валидация tail_image_url: опциональный string
+    tail_image_url = normalized_input.get('tail_image_url')
+    if tail_image_url is not None:
+        if not isinstance(tail_image_url, str):
+            tail_image_url = str(tail_image_url)
+        
+        tail_image_url = tail_image_url.strip()
+        # Если пустая строка, удаляем параметр
+        if not tail_image_url:
+            del normalized_input['tail_image_url']
+        else:
+            # Проверяем что это валидный URL
+            if not tail_image_url.startswith(('http://', 'https://')):
+                return False, "Поле 'tail_image_url' должно быть валидным URL (начинается с http:// или https://)"
+            normalized_input['tail_image_url'] = tail_image_url
+    
+    # Валидация duration: опциональный, enum ("5" или "10")
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_kling_v2_5_turbo(duration)
+        if normalized_duration is None:
+            valid_values = ["5", "10"]
+            return False, f"Поле 'duration' должно быть одним из: {', '.join(valid_values)} (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+    
+    # Валидация negative_prompt: опциональный, максимум 2496 символов (не 2500!)
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        
+        negative_prompt_len = len(negative_prompt.strip())
+        if negative_prompt_len > 2496:
+            return False, f"Поле 'negative_prompt' слишком длинное: {negative_prompt_len} символов (максимум 2496)"
+        normalized_input['negative_prompt'] = negative_prompt.strip()
+    
+    # Валидация cfg_scale: опциональный number, диапазон 0-1, шаг 0.1
+    cfg_scale = normalized_input.get('cfg_scale')
+    if cfg_scale is not None:
+        normalized_cfg_scale = _normalize_cfg_scale(cfg_scale)
+        if normalized_cfg_scale is None:
+            return False, f"Поле 'cfg_scale' должно быть числом от 0 до 1 (шаг 0.1) (получено: {cfg_scale})"
+        normalized_input['cfg_scale'] = normalized_cfg_scale
+    
+    return True, None
+
+
 def _validate_sora_watermark_remover(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -3325,6 +3433,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для kling/v2-5-turbo-image-to-video-pro
+    is_valid, error_msg = _validate_kling_v2_5_turbo_image_to_video_pro(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -3508,6 +3621,18 @@ def build_input(
             normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
         if 'cfg_scale' not in normalized_input:
             normalized_input['cfg_scale'] = 0.5  # Default согласно документации
+    
+    # Применяем дефолты для kling/v2-5-turbo-image-to-video-pro
+    if model_id in ["kling/v2-5-turbo-image-to-video-pro", "kling/v2-5-turbo-i2v-pro", "kling/v2.5-turbo-image-to-video-pro"]:
+        if 'image_url' not in normalized_input:
+            normalized_input['image_url'] = "https://file.aiquickdraw.com/custom-page/akr/section-images/1759211376283gfcw5zcy.png"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
+        # tail_image_url опциональный, default "" (пустая строка) - не добавляем если не указан
     
     # Применяем дефолты для seedream/4.5-text-to-image
     if model_id == "seedream/4.5-text-to-image":

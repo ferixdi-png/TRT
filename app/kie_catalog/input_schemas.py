@@ -66,6 +66,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
     'i2v': {
         'image_url',
         'image_urls',  # Для wan/2-6-image-to-video
+        'tail_image_url',  # Для kling/v2-5-turbo-image-to-video-pro
         'image_base64',
         'image',
         'prompt',
@@ -79,7 +80,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'height',
         'guidance',
         'motion',
-        'style'
+        'style',
+        'cfg_scale'  # Для kling/v2-5-turbo-image-to-video-pro
     },
     
     # Video-to-Video
