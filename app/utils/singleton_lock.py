@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 _lock_acquired = False
 _lock_strict_mode = os.getenv("SINGLETON_LOCK_STRICT", "0").lower() in ("1", "true", "yes")
 
+# Module-global SingletonLock instance
+_singleton_lock_instance = None
+
 
 def is_lock_acquired() -> bool:
     """Check if singleton lock was acquired."""
@@ -43,3 +46,43 @@ def get_safe_mode() -> str:
     if _lock_acquired:
         return "active"
     return "passive"
+
+
+async def acquire_singleton_lock(dsn=None) -> bool:
+    """
+    Async function to acquire singleton lock.
+    Creates SingletonLock instance and acquires lock.
+    
+    Args:
+        dsn: Optional database connection string
+        
+    Returns:
+        True if lock acquired, False otherwise
+    """
+    global _singleton_lock_instance
+    
+    try:
+        from app.locking.single_instance import SingletonLock
+        
+        _singleton_lock_instance = SingletonLock(dsn)
+        result = await _singleton_lock_instance.acquire()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to acquire singleton lock: {e}")
+        return False
+
+
+async def release_singleton_lock() -> None:
+    """
+    Async function to release singleton lock.
+    Releases lock if instance exists.
+    """
+    global _singleton_lock_instance
+    
+    if _singleton_lock_instance is not None:
+        try:
+            await _singleton_lock_instance.release()
+        except Exception as e:
+            logger.error(f"Failed to release singleton lock: {e}")
+        finally:
+            _singleton_lock_instance = None

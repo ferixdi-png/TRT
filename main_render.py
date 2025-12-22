@@ -205,7 +205,7 @@ async def run(settings, application):
     # Singleton lock должен быть получен ДО любых async операций
     from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock
     
-    if not acquire_singleton_lock():
+    if not await acquire_singleton_lock():
         # acquire_singleton_lock уже вызвал exit(0) если lock не получен
         return
     
@@ -401,7 +401,7 @@ async def run(settings, application):
         await stop_health_server()
         
         # Освобождаем singleton lock
-        release_singleton_lock()
+        await release_singleton_lock()
 
 
 async def main():
