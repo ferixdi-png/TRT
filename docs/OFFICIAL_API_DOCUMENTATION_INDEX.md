@@ -56,6 +56,11 @@
 
 ### ✅ WAN Models
 
+- [x] **wan/2-5-text-to-video** - `docs/WAN_2_5_TEXT_TO_VIDEO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 800 chars)
+  - Опциональные: `duration` ("5" | "10"), `aspect_ratio` ("16:9" | "9:16" | "1:1"), `resolution` ("720p" | "1080p"), `negative_prompt` (max 500 chars), `enable_prompt_expansion` (boolean), `seed` (number)
+  - Default: `duration="5"`, `aspect_ratio="16:9"`, `resolution="1080p"`, `negative_prompt=""`, `enable_prompt_expansion=true`
+  - Важно: `prompt` максимум 800 символов (в 2-6 было 5000)! `duration` только "5" или "10" (в 2-6 есть "15")!
 - [x] **wan/2-5-image-to-video** - `docs/WAN_2_5_IMAGE_TO_VIDEO_INTEGRATION.md`
   - Обязательные: `prompt` (max 800 chars), `image_url` (string, не массив!)
   - Опциональные: `duration` ("5" | "10"), `resolution` ("720p" | "1080p"), `negative_prompt` (max 500 chars), `enable_prompt_expansion` (boolean), `seed` (number)
