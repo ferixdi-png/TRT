@@ -3161,6 +3161,250 @@ def _validate_recraft_crisp_upscale(
     return True, None
 
 
+def _normalize_image_size_for_ideogram_v3_reframe(value: Any) -> Optional[str]:
+    """
+    Нормализует image_size для ideogram/v3-reframe.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение image_size (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "square", "square_hd",
+        "portrait_4_3", "portrait_16_9",
+        "landscape_4_3", "landscape_16_9"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["square", "sq"]:
+        return "square"
+    elif str_value in ["square_hd", "square-hd", "squarehd", "hd"]:
+        return "square_hd"
+    elif str_value in ["portrait_4_3", "portrait-4-3", "portrait43", "4:3 portrait", "3:4"]:
+        return "portrait_4_3"
+    elif str_value in ["portrait_16_9", "portrait-16-9", "portrait169", "9:16 portrait"]:
+        return "portrait_16_9"
+    elif str_value in ["landscape_4_3", "landscape-4-3", "landscape43", "4:3 landscape"]:
+        return "landscape_4_3"
+    elif str_value in ["landscape_16_9", "landscape-16-9", "landscape169", "16:9 landscape"]:
+        return "landscape_16_9"
+    
+    return None
+
+
+def _normalize_rendering_speed_for_ideogram_v3_reframe(value: Any) -> Optional[str]:
+    """
+    Нормализует rendering_speed для ideogram/v3-reframe.
+    Принимает значение и возвращает нормализованную строку в верхнем регистре.
+    ВАЖНО: Поддерживаются только "TURBO", "BALANCED", "QUALITY"!
+    
+    Args:
+        value: Значение rendering_speed (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().upper()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["TURBO", "BALANCED", "QUALITY"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["turbo", "fast", "speed"]:
+        return "TURBO"
+    elif str_lower in ["balanced", "balance", "normal", "medium"]:
+        return "BALANCED"
+    elif str_lower in ["quality", "high", "best"]:
+        return "QUALITY"
+    
+    return None
+
+
+def _normalize_style_for_ideogram_v3_reframe(value: Any) -> Optional[str]:
+    """
+    Нормализует style для ideogram/v3-reframe.
+    Принимает значение и возвращает нормализованную строку в верхнем регистре.
+    ВАЖНО: Поддерживаются только "AUTO", "GENERAL", "REALISTIC", "DESIGN"!
+    
+    Args:
+        value: Значение style (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().upper()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["AUTO", "GENERAL", "REALISTIC", "DESIGN"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["auto", "automatic", "default"]:
+        return "AUTO"
+    elif str_lower in ["general", "generic", "standard"]:
+        return "GENERAL"
+    elif str_lower in ["realistic", "real", "photo", "photorealistic"]:
+        return "REALISTIC"
+    elif str_lower in ["design", "graphic", "artistic"]:
+        return "DESIGN"
+    
+    return None
+
+
+def _normalize_num_images_for_ideogram_v3_reframe(value: Any) -> Optional[str]:
+    """
+    Нормализует num_images для ideogram/v3-reframe.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Поддерживаются только "1", "2", "3", "4"!
+    
+    Args:
+        value: Значение num_images (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["1", "2", "3", "4"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания (числа)
+    try:
+        num = int(float(str_value))
+        if 1 <= num <= 4:
+            return str(num)
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _validate_ideogram_v3_reframe(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для ideogram/v3-reframe согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - image_size (обязательный, enum, default "square_hd")
+    - rendering_speed (опциональный, enum, default "BALANCED")
+    - style (опциональный, enum, default "AUTO")
+    - num_images (опциональный, enum, default "1")
+    - seed (опциональный, number, default 0)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["ideogram/v3-reframe", "ideogram-v3-reframe", "ideogram/v3-reframe"]:
+        return True, None
+    
+    # Валидация image_url: обязательный
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для рефрейминга изображения. Загрузите изображение."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация image_size: обязательный, enum
+    image_size = normalized_input.get('image_size')
+    if not image_size:
+        return False, "Поле 'image_size' обязательно для рефрейминга изображения. Укажите размер выходного изображения."
+    
+    normalized_size = _normalize_image_size_for_ideogram_v3_reframe(image_size)
+    if normalized_size is None:
+        valid_values = [
+            "square", "square_hd",
+            "portrait_4_3", "portrait_16_9",
+            "landscape_4_3", "landscape_16_9"
+        ]
+        return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+    normalized_input['image_size'] = normalized_size
+    
+    # Валидация rendering_speed: опциональный, enum
+    rendering_speed = normalized_input.get('rendering_speed')
+    if rendering_speed is not None:
+        normalized_speed = _normalize_rendering_speed_for_ideogram_v3_reframe(rendering_speed)
+        if normalized_speed is None:
+            valid_values = ["TURBO", "BALANCED", "QUALITY"]
+            return False, f"Поле 'rendering_speed' должно быть одним из: {', '.join(valid_values)} (получено: {rendering_speed})"
+        normalized_input['rendering_speed'] = normalized_speed
+    
+    # Валидация style: опциональный, enum
+    style = normalized_input.get('style')
+    if style is not None:
+        normalized_style = _normalize_style_for_ideogram_v3_reframe(style)
+        if normalized_style is None:
+            valid_values = ["AUTO", "GENERAL", "REALISTIC", "DESIGN"]
+            return False, f"Поле 'style' должно быть одним из: {', '.join(valid_values)} (получено: {style})"
+        normalized_input['style'] = normalized_style
+    
+    # Валидация num_images: опциональный, enum
+    num_images = normalized_input.get('num_images')
+    if num_images is not None:
+        normalized_num = _normalize_num_images_for_ideogram_v3_reframe(num_images)
+        if normalized_num is None:
+            valid_values = ["1", "2", "3", "4"]
+            return False, f"Поле 'num_images' должно быть одним из: {', '.join(valid_values)} (получено: {num_images})"
+        normalized_input['num_images'] = normalized_num
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))  # Поддерживаем и int и float
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

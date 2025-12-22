@@ -45,9 +45,11 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'style',
         'mode',
         'quality',
-        'image_size',  # Для bytedance/seedream-v4-edit
+        'image_size',  # Для bytedance/seedream-v4-edit и ideogram/v3-reframe
         'image_resolution',  # Для bytedance/seedream-v4-edit
-        'max_images'  # Для bytedance/seedream-v4-edit
+        'max_images',  # Для bytedance/seedream-v4-edit
+        'rendering_speed',  # Для ideogram/v3-reframe
+        'num_images'  # Для ideogram/v3-reframe
     },
     
     # Text-to-Video

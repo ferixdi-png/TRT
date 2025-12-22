@@ -179,6 +179,11 @@
   - Опциональные: нет
   - Default: нет (параметр обязательный)
   - Важно: Параметр называется `image` (не `image_url`)! Только один параметр - нет scale, upscale_factor и т.д.! `image_url` или `image_base64` автоматически нормализуются в `image`!
+- [x] **ideogram/v3-reframe** - `docs/IDEOGRAM_V3_REFrame_INTEGRATION.md`
+  - Обязательные: `image_url`, `image_size` (enum, 6 значений)
+  - Опциональные: `rendering_speed` ("TURBO" | "BALANCED" | "QUALITY"), `style` ("AUTO" | "GENERAL" | "REALISTIC" | "DESIGN"), `num_images` ("1" | "2" | "3" | "4"), `seed` (number)
+  - Default: `image_size="square_hd"`, `rendering_speed="BALANCED"`, `style="AUTO"`, `num_images="1"`, `seed=0`
+  - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
