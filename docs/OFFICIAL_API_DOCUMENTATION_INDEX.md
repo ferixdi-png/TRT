@@ -66,6 +66,11 @@
   - Опциональные: `duration` ("5" | "10"), `resolution` ("720p" | "1080p"), `negative_prompt` (max 500 chars), `enable_prompt_expansion` (boolean), `seed` (number)
   - Default: `image_url="https://file.aiquickdraw.com/..."`, `duration="5"`, `resolution="1080p"`, `negative_prompt=""`, `enable_prompt_expansion=true`
   - Важно: `image_url` - это string, а не массив! `prompt` максимум 800 символов (в 2-6 было 5000)!
+- [x] **wan/2-2-animate-move** - `docs/WAN_2_2_ANIMATE_MOVE_INTEGRATION.md`
+  - Обязательные: `video_url` (string, не массив!), `image_url` (string)
+  - Опциональные: `resolution` ("480p" | "580p" | "720p")
+  - Default: `video_url="https://file.aiquickdraw.com/..."`, `image_url="https://file.aiquickdraw.com/..."`, `resolution="480p"`
+  - Важно: Требует оба параметра: `video_url` И `image_url`! НЕТ параметра `prompt` и `duration`!
 - [x] **wan/2-6-text-to-video** - `docs/WAN_2_6_TEXT_TO_VIDEO_INTEGRATION.md`
 - [x] **wan/2-6-image-to-video** - `docs/WAN_2_6_IMAGE_TO_VIDEO_INTEGRATION.md`
 - [x] **wan/2-6-video-to-video** - `docs/WAN_2_6_VIDEO_TO_VIDEO_INTEGRATION.md`
