@@ -2498,6 +2498,93 @@ def _validate_kling_v2_1_pro(
     return True, None
 
 
+def _validate_kling_v2_1_master_text_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling/v2-1-master-text-to-video согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - duration (опциональный, enum, default "5")
+    - aspect_ratio (опциональный, enum, default "16:9")
+    - negative_prompt (опциональный, макс 500 символов, default "blur, distort, and low quality")
+    - cfg_scale (опциональный, number, диапазон 0-1, шаг 0.1, default 0.5)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["kling/v2-1-master-text-to-video", "kling-v2-1-master-text-to-video", "v2-1-master-text-to-video"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация duration: опциональный, enum
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        # Может быть строкой "5" или "10", или числом 5 или 10
+        if isinstance(duration, str):
+            if duration not in ["5", "10"]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = duration
+        elif isinstance(duration, (int, float)):
+            if duration not in [5, 10]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = str(int(duration))
+        else:
+            return False, f"Поле 'duration' должно быть строкой или числом (получено: {duration})"
+    
+    # Валидация aspect_ratio: опциональный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        valid_aspect_ratios = ["16:9", "9:16", "1:1"]
+        if aspect_ratio not in valid_aspect_ratios:
+            return False, f"Поле 'aspect_ratio' должно быть одним из: 16:9, 9:16, 1:1 (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = aspect_ratio
+    
+    # Валидация negative_prompt: опциональный, string, макс 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 500)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация cfg_scale: опциональный, number, диапазон 0-1, шаг 0.1
+    cfg_scale = normalized_input.get('cfg_scale')
+    if cfg_scale is not None:
+        try:
+            cfg_scale_num = float(cfg_scale)
+            if cfg_scale_num < 0 or cfg_scale_num > 1:
+                return False, f"Поле 'cfg_scale' должно быть в диапазоне от 0 до 1 (получено: {cfg_scale})"
+            # Округляем до 1 знака после запятой (шаг 0.1)
+            cfg_scale_num = round(cfg_scale_num, 1)
+            normalized_input['cfg_scale'] = cfg_scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'cfg_scale' должно быть числом от 0 до 1 (получено: {cfg_scale})"
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
