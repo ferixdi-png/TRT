@@ -245,8 +245,8 @@ DEFAULT_VALUES: Dict[str, Dict[str, any]] = {
         'height': 1024
     },
     't2v': {
-        'duration': 5.0,
-        'fps': 24,
+        # Примечание: для wan/2-6-text-to-video duration должен быть строкой "5", "10" или "15"
+        # Дефолт применяется только если не указан явно и не извлечён из notes
         'with_audio': False
     },
     'i2v': {

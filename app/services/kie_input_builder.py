@@ -141,6 +141,127 @@ def _check_required_fields(
     return True, None
 
 
+def _normalize_duration_for_wan_2_6(value: Any) -> Optional[str]:
+    """
+    Нормализует duration для wan/2-6-text-to-video.
+    Принимает числа (5, 10, 15) или строки ("5", "10", "15") и возвращает строку.
+    
+    Args:
+        value: Значение duration (может быть int, float, str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Убираем "s" или "seconds" в конце, если есть
+    if str_value.lower().endswith('seconds'):
+        str_value = str_value[:-7].strip()
+    elif str_value.lower().endswith('s'):
+        str_value = str_value[:-1].strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["5", "10", "15"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем конвертировать число в строку
+    try:
+        num_value = float(str_value)
+        if num_value == 5.0 or num_value == 5:
+            return "5"
+        elif num_value == 10.0 or num_value == 10:
+            return "10"
+        elif num_value == 15.0 or num_value == 15:
+            return "15"
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _normalize_resolution_for_wan_2_6(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для wan/2-6-text-to-video.
+    Принимает строки ("720p", "1080p") и возвращает нормализованную строку.
+    
+    Args:
+        value: Значение resolution
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    str_value = str(value).strip().lower()
+    
+    # Убеждаемся что есть суффикс "p"
+    if not str_value.endswith('p'):
+        str_value = str_value + 'p'
+    
+    # Проверяем что это валидное значение
+    valid_values = ["720p", "1080p"]
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _validate_wan_2_6_text_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для wan/2-6-text-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "wan/2-6-text-to-video":
+        return True, None
+    
+    # Валидация prompt: обязательный, 1-5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len < 1:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация duration: опциональный, "5" | "10" | "15", default "5"
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_wan_2_6(duration)
+        if normalized_duration is None:
+            return False, f"Поле 'duration' должно быть '5', '10' или '15' (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+    
+    # Валидация resolution: опциональный, "720p" | "1080p", default "1080p"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_wan_2_6(resolution)
+        if normalized_resolution is None:
+            return False, f"Поле 'resolution' должно быть '720p' или '1080p' (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    return True, None
+
+
 def build_input(
     model_spec: ModelSpec,
     user_payload: Dict[str, Any],
@@ -219,13 +340,29 @@ def build_input(
             if 'duration' not in normalized_input:
                 duration = _parse_duration_from_notes(mode.notes)
                 if duration is not None:
-                    normalized_input['duration'] = duration
+                    # Для wan/2-6-text-to-video duration должен быть строкой
+                    if model_id == "wan/2-6-text-to-video":
+                        normalized_input['duration'] = str(int(duration))
+                    else:
+                        normalized_input['duration'] = duration
             
             # Парсим resolution из notes
             if 'resolution' not in normalized_input:
                 resolution = _parse_resolution_from_notes(mode.notes)
                 if resolution is not None:
                     normalized_input['resolution'] = resolution
+    
+    # Специфичная валидация для wan/2-6-text-to-video
+    is_valid, error_msg = _validate_wan_2_6_text_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Применяем дефолты для wan/2-6-text-to-video
+    if model_id == "wan/2-6-text-to-video":
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "1080p"  # Default согласно документации
     
     # Валидируем обязательные поля
     is_valid, error_msg = _check_required_fields(model_type, normalized_input, required_fields)
