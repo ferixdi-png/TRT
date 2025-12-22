@@ -4318,6 +4318,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для bytedance/seedream-v4-text-to-image
+    is_valid, error_msg = _validate_bytedance_seedream_v4_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для seedream/4.5-edit
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
