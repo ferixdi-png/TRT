@@ -3109,6 +3109,58 @@ def _validate_recraft_remove_background(
     return True, None
 
 
+def _validate_recraft_crisp_upscale(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для recraft/crisp-upscale согласно документации API.
+    
+    ВАЖНО: Эта модель требует:
+    - image (обязательный, макс 10MB, PNG/JPG/WEBP)
+    
+    Параметр называется 'image' (не 'image_url'), но может быть нормализован из 'image_url' или 'image_base64'.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["recraft/crisp-upscale", "recraft-crisp-upscale", "recraft/crisp-upscaler"]:
+        return True, None
+    
+    # Валидация image: обязательный
+    # Модель использует параметр 'image', но мы можем принимать 'image_url', 'image_base64', или 'image'
+    image = normalized_input.get('image') or normalized_input.get('image_url') or normalized_input.get('image_base64')
+    if not image:
+        return False, "Поле 'image' обязательно для апскейла изображения. Загрузите изображение."
+    
+    if not isinstance(image, str):
+        image = str(image)
+    
+    image = image.strip()
+    if len(image) == 0:
+        return False, "Поле 'image' не может быть пустым"
+    
+    # Нормализуем: если был передан image_url или image_base64, переименовываем в image
+    if 'image_url' in normalized_input and 'image' not in normalized_input:
+        normalized_input['image'] = normalized_input.pop('image_url')
+    elif 'image_base64' in normalized_input and 'image' not in normalized_input:
+        normalized_input['image'] = normalized_input.pop('image_base64')
+    elif 'image' not in normalized_input:
+        normalized_input['image'] = image
+    
+    # Удаляем лишние параметры, если они были
+    if 'image_url' in normalized_input and normalized_input.get('image') != normalized_input.get('image_url'):
+        del normalized_input['image_url']
+    if 'image_base64' in normalized_input and normalized_input.get('image') != normalized_input.get('image_base64'):
+        del normalized_input['image_base64']
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
@@ -4677,6 +4729,11 @@ def build_input(
     
     # Специфичная валидация для recraft/remove-background
     is_valid, error_msg = _validate_recraft_remove_background(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для recraft/crisp-upscale
+    is_valid, error_msg = _validate_recraft_crisp_upscale(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     

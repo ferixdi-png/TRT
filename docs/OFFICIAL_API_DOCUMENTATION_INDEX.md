@@ -174,6 +174,11 @@
   - Опциональные: нет
   - Default: нет (параметр обязательный)
   - Важно: Параметр называется `image` (не `image_url`)! Более строгие ограничения: макс 5MB (вместо 10MB), макс 16MP, макс 4096px, мин 256px! `image_url` или `image_base64` автоматически нормализуются в `image`!
+- [x] **recraft/crisp-upscale** - `docs/RECRAFT_CRISP_UPSCALE_INTEGRATION.md`
+  - Обязательные: `image` (string, макс 10MB, PNG/JPG/WEBP)
+  - Опциональные: нет
+  - Default: нет (параметр обязательный)
+  - Важно: Параметр называется `image` (не `image_url`)! Только один параметр - нет scale, upscale_factor и т.д.! `image_url` или `image_base64` автоматически нормализуются в `image`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
