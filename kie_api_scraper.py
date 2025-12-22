@@ -48,6 +48,17 @@ class KieApiScraper:
         self.enable_cache = enable_cache
         self.cache = {} if enable_cache else None
         
+        # Метрики производительности
+        self.metrics = {
+            'start_time': None,
+            'end_time': None,
+            'total_requests': 0,
+            'cached_requests': 0,
+            'failed_requests': 0,
+            'total_models_processed': 0,
+            'categories': {}
+        }
+        
         # Настройка сессии с retry механизмом
         self.session = requests.Session()
         retry_strategy = Retry(
@@ -332,15 +343,14 @@ class KieApiScraper:
         try:
             # Проверка кэша
             if self.enable_cache and model_url in self.cache:
-                print(f"    💾 Использован кэш для {model_name}")
+                self.metrics['cached_requests'] += 1
                 cached_data = self.cache[model_url]
                 resp_text = cached_data['text']
                 soup = BeautifulSoup(resp_text, 'html.parser')
             else:
-                print(f"    📥 Загрузка страницы модели...")
+                self.metrics['total_requests'] += 1
                 resp = self.session.get(model_url, timeout=10)
                 resp.raise_for_status()
-                print(f"    ✅ ОТВЕТ: Страница загружена (статус {resp.status_code})")
                 resp_text = resp.text
                 soup = BeautifulSoup(resp_text, 'html.parser')
                 
@@ -421,15 +431,15 @@ class KieApiScraper:
             if not model_info['category']:
                 model_info['category'] = 'other'
             
-            print(f"    ✅ ОТВЕТ: Категория определена: {model_info['category']}")
+            # Обновление метрик по категориям
+            cat = model_info['category']
+            self.metrics['categories'][cat] = self.metrics['categories'].get(cat, 0) + 1
             
             # Валидация структуры модели перед добавлением
-            print(f"    🔍 ОТВЕТ: Проверка структуры модели...")
             if self._validate_model_structure(model_info):
                 self.models.append(model_info)
-                print(f"    ✅ ОТВЕТ: Модель '{model_name}' успешно добавлена в коллекцию")
             else:
-                print(f"    ❌ ОТВЕТ: Модель '{model_name}' не прошла валидацию структуры")
+                self.metrics['failed_requests'] += 1
         except requests.RequestException as e:
             print(f"    ❌ ОТВЕТ: Ошибка при парсинге {model_name}: {e}")
         except Exception as e:
@@ -658,8 +668,47 @@ class KieApiScraper:
             print(f"\n⚠️ ОТВЕТ: Обнаружено {invalid_count} моделей с проблемами из {len(self.models)}")
             return False
     
+    def _print_progress(self, current, total, prefix="Прогресс"):
+        """Печать прогресс-бара"""
+        percent = (current / total) * 100 if total > 0 else 0
+        bar_length = 40
+        filled = int(bar_length * current / total) if total > 0 else 0
+        bar = "█" * filled + "░" * (bar_length - filled)
+        print(f"\r  {prefix}: [{bar}] {current}/{total} ({percent:.1f}%)", end="", flush=True)
+    
+    def _get_statistics(self):
+        """Получение статистики по моделям"""
+        stats = {
+            'total': len(self.models),
+            'by_category': {},
+            'with_endpoints': 0,
+            'with_params': 0,
+            'with_examples': 0
+        }
+        
+        for model in self.models:
+            # По категориям
+            cat = model.get('category', 'other')
+            stats['by_category'][cat] = stats['by_category'].get(cat, 0) + 1
+            
+            # С endpoint
+            if model.get('endpoint'):
+                stats['with_endpoints'] += 1
+            
+            # С параметрами
+            if model.get('params'):
+                stats['with_params'] += 1
+            
+            # С примерами
+            if model.get('example'):
+                stats['with_examples'] += 1
+        
+        return stats
+    
     def run_full_scrape(self):
         """Полный сбор всех моделей с ответами на каждое действие"""
+        self.metrics['start_time'] = time.time()
+        
         print("=" * 60)
         print("🚀 ЗАПУСК АВТОМАТИЧЕСКОГО СБОРЩИКА МОДЕЛЕЙ KIE.AI")
         print("=" * 60)
@@ -680,6 +729,7 @@ class KieApiScraper:
         print(f"✅ ОТВЕТ: Начинаем парсинг {max_models} моделей (параллельно, {self.max_workers} потоков)")
         
         # Параллельная обработка
+        print(f"\n  📊 Прогресс обработки:")
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
                 executor.submit(self.scrape_model_docs, model['url'], model['name']): model 
@@ -687,16 +737,27 @@ class KieApiScraper:
             }
             
             completed = 0
+            successful = 0
+            failed = 0
+            
             for future in as_completed(futures):
                 completed += 1
                 model = futures[future]
                 try:
                     future.result()  # Получаем результат (может выбросить исключение)
-                    print(f"  ✅ ОТВЕТ: Обработка {completed}/{max_models}: '{model['name']}' завершена")
+                    successful += 1
+                    self.metrics['total_models_processed'] += 1
                 except Exception as e:
-                    print(f"  ❌ ОТВЕТ: Ошибка при обработке '{model['name']}': {e}")
+                    failed += 1
+                    self.metrics['failed_requests'] += 1
+                    print(f"\n  ❌ Ошибка при обработке '{model['name']}': {e}")
+                
+                # Обновление прогресс-бара
+                self._print_progress(completed, max_models, "Обработка моделей")
         
-        print(f"\n✅ ОТВЕТ: Парсинг завершен. Обработано {len(self.models)} моделей")
+        print()  # Новая строка после прогресс-бара
+        print(f"\n✅ ОТВЕТ: Парсинг завершен")
+        print(f"   📊 Успешно: {successful}, Ошибок: {failed}, Всего: {len(self.models)}")
         
         # Действие 3: Валидация всех моделей
         print("\n" + "=" * 60)
@@ -724,12 +785,29 @@ class KieApiScraper:
             print(f"   📋 Детали: {traceback.format_exc()}")
             return []
         
+        # Статистика и метрики
+        self.metrics['end_time'] = time.time()
+        elapsed_time = self.metrics['end_time'] - self.metrics['start_time']
+        stats = self._get_statistics()
+        
         # Финальный ответ
         print("\n" + "=" * 60)
         print("🎉 ФИНАЛЬНЫЙ ОТВЕТ:")
         print(f"   ✅ Собрано моделей: {len(self.models)}")
         print(f"   ✅ Валидация: {'ПРОЙДЕНА' if is_valid else 'ЕСТЬ ОШИБКИ'}")
         print(f"   ✅ Файл сохранен: {output_file}")
+        print("\n📊 СТАТИСТИКА:")
+        print(f"   ⏱️ Время выполнения: {elapsed_time:.2f} сек")
+        print(f"   📡 Всего запросов: {self.metrics['total_requests']}")
+        print(f"   💾 Кэшированных: {self.metrics['cached_requests']}")
+        print(f"   ❌ Ошибок: {self.metrics['failed_requests']}")
+        print(f"\n📂 По категориям:")
+        for cat, count in sorted(stats['by_category'].items(), key=lambda x: x[1], reverse=True):
+            print(f"   - {cat}: {count}")
+        print(f"\n📋 Детали:")
+        print(f"   - С endpoint: {stats['with_endpoints']}")
+        print(f"   - С параметрами: {stats['with_params']}")
+        print(f"   - С примерами: {stats['with_examples']}")
         print("=" * 60)
         
         return self.models
