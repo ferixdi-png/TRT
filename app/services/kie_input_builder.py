@@ -9137,6 +9137,17 @@ def build_input(
         if 'seed' not in normalized_input:
             normalized_input['seed'] = ""  # Default согласно документации (пустая строка! ВАЖНО: string, а не number!)
     
+    # Применяем дефолты для google/imagen4
+    if model_id in ["google/imagen4", "google-imagen4", "imagen4"]:
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка!)
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации (ВАЖНО: "1:1", а не "16:9"!)
+        if 'num_images' not in normalized_input:
+            normalized_input['num_images'] = "1"  # Default согласно документации
+        if 'seed' not in normalized_input:
+            normalized_input['seed'] = ""  # Default согласно документации (пустая строка! ВАЖНО: string, а не number!)
+    
     # Применяем дефолты для google/nano-banana
     if model_id in ["google/nano-banana", "google-nano-banana", "nano-banana"]:
         if 'output_format' not in normalized_input:
