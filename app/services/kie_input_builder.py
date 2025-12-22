@@ -3320,6 +3320,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для kling/v2-5-turbo-text-to-video-pro
+    is_valid, error_msg = _validate_kling_v2_5_turbo_text_to_video_pro(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -3466,6 +3471,17 @@ def build_input(
         if 'upscale_factor' not in normalized_input:
             normalized_input['upscale_factor'] = "2"  # Default согласно документации
     
+    # Применяем дефолты для kling/v2-5-turbo-text-to-video-pro
+    if model_id in ["kling/v2-5-turbo-text-to-video-pro", "kling/v2-5-turbo-t2v-pro", "kling/v2.5-turbo-text-to-video-pro"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
+    
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
         if 'sound' not in normalized_input:
@@ -3481,6 +3497,17 @@ def build_input(
             normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
         if 'duration' not in normalized_input:
             normalized_input['duration'] = "5"  # Default согласно документации
+    
+    # Применяем дефолты для kling/v2-5-turbo-text-to-video-pro
+    if model_id in ["kling/v2-5-turbo-text-to-video-pro", "kling/v2-5-turbo-t2v-pro", "kling/v2.5-turbo-text-to-video-pro"]:
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "16:9"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blur, distort, and low quality"  # Default согласно документации
+        if 'cfg_scale' not in normalized_input:
+            normalized_input['cfg_scale'] = 0.5  # Default согласно документации
     
     # Применяем дефолты для seedream/4.5-text-to-image
     if model_id == "seedream/4.5-text-to-image":

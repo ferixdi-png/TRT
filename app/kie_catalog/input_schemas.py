@@ -58,7 +58,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'negative_prompt',
         'motion',
         'style',
-        'aspect_ratio'
+        'aspect_ratio',
+        'cfg_scale'  # Для kling/v2-5-turbo-text-to-video-pro
     },
     
     # Image-to-Video
