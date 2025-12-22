@@ -582,6 +582,19 @@ def build_input(
             if not value:
                 continue
         
+        # Для video_urls сохраняем как массив (для wan/2-6-video-to-video)
+        if normalized_key == 'video_urls':
+            # Если это строка, конвертируем в массив
+            if isinstance(value, str) and value.strip():
+                value = [value.strip()]
+            # Если это массив, оставляем как есть
+            elif isinstance(value, list):
+                # Фильтруем пустые элементы
+                value = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+            # Если пустое, пропускаем
+            if not value:
+                continue
+        
         if normalized_key in ['video_url', 'video']:
             if isinstance(value, list) and len(value) > 0:
                 value = value[0]
