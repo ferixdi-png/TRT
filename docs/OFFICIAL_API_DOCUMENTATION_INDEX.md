@@ -184,6 +184,11 @@
   - Опциональные: `rendering_speed` ("TURBO" | "BALANCED" | "QUALITY"), `style` ("AUTO" | "GENERAL" | "REALISTIC" | "DESIGN"), `num_images` ("1" | "2" | "3" | "4"), `seed` (number)
   - Default: `image_size="square_hd"`, `rendering_speed="BALANCED"`, `style="AUTO"`, `num_images="1"`, `seed=0`
   - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
+- [x] **elevenlabs/audio-isolation** - `docs/ELEVENLABS_AUDIO_ISOLATION_INTEGRATION.md`
+  - Обязательные: `audio_url` (string, макс 10MB, mpeg/wav/aac/mp4/ogg)
+  - Опциональные: нет
+  - Default: нет (параметр обязательный)
+  - Важно: Только один параметр - `audio_url`! НЕТ дополнительных параметров (mode, strength и т.д.)! `audio` автоматически нормализуется в `audio_url`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)

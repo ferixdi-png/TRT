@@ -3405,6 +3405,52 @@ def _validate_ideogram_v3_reframe(
     return True, None
 
 
+def _validate_elevenlabs_audio_isolation(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для elevenlabs/audio-isolation согласно документации API.
+    
+    ВАЖНО: Эта модель требует:
+    - audio_url (обязательный, макс 10MB, mpeg/wav/aac/mp4/ogg)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["elevenlabs/audio-isolation", "elevenlabs-audio-isolation", "elevenlabs/audio-isolation"]:
+        return True, None
+    
+    # Валидация audio_url: обязательный
+    # Модель использует параметр 'audio_url', но мы можем принимать 'audio' или 'audio_url'
+    audio_url = normalized_input.get('audio_url') or normalized_input.get('audio')
+    if not audio_url:
+        return False, "Поле 'audio_url' обязательно для изоляции голоса. Загрузите аудио файл."
+    
+    if not isinstance(audio_url, str):
+        audio_url = str(audio_url)
+    
+    audio_url = audio_url.strip()
+    if len(audio_url) == 0:
+        return False, "Поле 'audio_url' не может быть пустым"
+    
+    # Нормализуем: если был передан 'audio', переименовываем в 'audio_url'
+    if 'audio' in normalized_input and 'audio_url' not in normalized_input:
+        normalized_input['audio_url'] = normalized_input.pop('audio')
+    elif 'audio_url' not in normalized_input:
+        normalized_input['audio_url'] = audio_url
+    
+    # Удаляем лишний параметр, если он был
+    if 'audio' in normalized_input and normalized_input.get('audio_url') != normalized_input.get('audio'):
+        del normalized_input['audio']
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
