@@ -52,16 +52,17 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'style',
         'mode',
         'quality',
-        'image_size',  # Для bytedance/seedream-v4-edit, ideogram/v3-reframe и google/nano-banana-edit
+        'image_size',  # Для bytedance/seedream-v4-edit, ideogram/v3-reframe, google/nano-banana-edit и qwen/image-edit
         'image_resolution',  # Для bytedance/seedream-v4-edit
         'max_images',  # Для bytedance/seedream-v4-edit
         'rendering_speed',  # Для ideogram/v3-reframe
-        'num_images',  # Для ideogram/v3-reframe
-        'output_format',  # Для qwen/image-to-image и google/nano-banana-edit
-        'acceleration',  # Для qwen/image-to-image
-        'num_inference_steps',  # Для qwen/image-to-image
-        'guidance_scale',  # Для qwen/image-to-image
-        'enable_safety_checker'  # Для qwen/image-to-image
+        'num_images',  # Для ideogram/v3-reframe и qwen/image-edit
+        'output_format',  # Для qwen/image-to-image, google/nano-banana-edit и qwen/image-edit
+        'acceleration',  # Для qwen/image-to-image и qwen/image-edit
+        'num_inference_steps',  # Для qwen/image-to-image и qwen/image-edit
+        'guidance_scale',  # Для qwen/image-to-image и qwen/image-edit
+        'enable_safety_checker',  # Для qwen/image-to-image и qwen/image-edit
+        'sync_mode'  # Для qwen/image-edit
     },
     
     # Text-to-Video

@@ -4669,6 +4669,230 @@ def _validate_google_nano_banana_edit(
     return True, None
 
 
+def _normalize_image_size_for_qwen_image_edit(value: Any) -> Optional[str]:
+    """
+    Нормализует image_size для qwen/image-edit.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре с подчеркиваниями.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение image_size (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "square", "square_hd", "portrait_4_3", "portrait_16_9",
+        "landscape_4_3", "landscape_16_9"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _normalize_num_images_for_qwen_image_edit(value: Any) -> Optional[str]:
+    """
+    Нормализует num_images для qwen/image-edit.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Поддерживаются только указанные значения из документации (1, 2, 3, 4)!
+    
+    Args:
+        value: Значение num_images (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["1", "2", "3", "4"]
+    
+    # Проверяем точное совпадение
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать числа
+    try:
+        num = int(float(str_value))
+        if num >= 1 and num <= 4:
+            return str(num)
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _validate_qwen_image_edit(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для qwen/image-edit согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 2000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - acceleration (опциональный, enum, default "none")
+    - image_size (опциональный, enum, 6 значений, default "landscape_4_3")
+    - num_inference_steps (опциональный, number, 2-49, default 25)
+    - seed (опциональный, number)
+    - guidance_scale (опциональный, number, 0-20, default 4)
+    - sync_mode (опциональный, boolean, default false)
+    - num_images (опциональный, string enum, default не указан)
+    - enable_safety_checker (опциональный, boolean, default true)
+    - output_format (опциональный, enum, default "png")
+    - negative_prompt (опциональный, string, макс 500 символов, default "blurry, ugly")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["qwen/image-edit", "qwen-image-edit", "qwen/edit"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 2000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для редактирования изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 2000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 2000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для редактирования изображения. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация acceleration: опциональный, enum
+    acceleration = normalized_input.get('acceleration')
+    if acceleration is not None:
+        normalized_accel = _normalize_acceleration_for_qwen_i2i(acceleration)  # Переиспользуем функцию из i2i
+        if normalized_accel is None:
+            return False, f"Поле 'acceleration' должно быть одним из: none, regular, high (получено: {acceleration})"
+        normalized_input['acceleration'] = normalized_accel
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_qwen_image_edit(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd", "portrait_4_3", "portrait_16_9",
+                "landscape_4_3", "landscape_16_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация num_inference_steps: опциональный, number, 2-49
+    num_inference_steps = normalized_input.get('num_inference_steps')
+    if num_inference_steps is not None:
+        try:
+            steps_num = int(float(num_inference_steps))
+            if steps_num < 2 or steps_num > 49:
+                return False, f"Поле 'num_inference_steps' должно быть в диапазоне от 2 до 49 (получено: {num_inference_steps})"
+            normalized_input['num_inference_steps'] = steps_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'num_inference_steps' должно быть числом от 2 до 49 (получено: {num_inference_steps})"
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация guidance_scale: опциональный, number, 0-20
+    guidance_scale = normalized_input.get('guidance_scale')
+    if guidance_scale is not None:
+        try:
+            scale_num = float(guidance_scale)
+            if scale_num < 0 or scale_num > 20:
+                return False, f"Поле 'guidance_scale' должно быть в диапазоне от 0 до 20 (получено: {guidance_scale})"
+            normalized_input['guidance_scale'] = scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'guidance_scale' должно быть числом от 0 до 20 (получено: {guidance_scale})"
+    
+    # Валидация sync_mode: опциональный, boolean
+    sync_mode = normalized_input.get('sync_mode')
+    if sync_mode is not None:
+        normalized_bool = _normalize_boolean(sync_mode)
+        if normalized_bool is None:
+            return False, f"Поле 'sync_mode' должно быть boolean (true/false) (получено: {sync_mode})"
+        normalized_input['sync_mode'] = normalized_bool
+    
+    # Валидация num_images: опциональный, string enum
+    num_images = normalized_input.get('num_images')
+    if num_images is not None:
+        normalized_num = _normalize_num_images_for_qwen_image_edit(num_images)
+        if normalized_num is None:
+            return False, f"Поле 'num_images' должно быть одним из: 1, 2, 3, 4 (получено: {num_images})"
+        normalized_input['num_images'] = normalized_num
+    
+    # Валидация enable_safety_checker: опциональный, boolean
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+    
+    # Валидация output_format: опциональный, enum
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        # Для qwen/image-edit используется jpeg, а не jpg
+        str_format = str(output_format).strip().lower()
+        if str_format == "jpg":
+            str_format = "jpeg"
+        if str_format not in ["png", "jpeg"]:
+            return False, f"Поле 'output_format' должно быть одним из: png, jpeg (получено: {output_format})"
+        normalized_input['output_format'] = str_format
+    
+    # Валидация negative_prompt: опциональный, string, макс 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 500)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

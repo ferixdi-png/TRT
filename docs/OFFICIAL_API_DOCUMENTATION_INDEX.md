@@ -219,6 +219,11 @@
   - Опциональные: `strength` (0-1), `output_format` (enum: png/jpeg), `acceleration` (enum: none/regular/high), `negative_prompt` (max 500), `seed`, `num_inference_steps` (2-250), `guidance_scale` (0-20), `enable_safety_checker` (boolean)
   - Default: `strength=0.8`, `output_format="png"`, `acceleration="none"`, `negative_prompt="blurry, ugly"`, `num_inference_steps=30`, `guidance_scale=2.5`, `enable_safety_checker=true`
   - Важно: Использует `num_inference_steps` вместо стандартного `steps`! Использует `guidance_scale` вместо стандартного `guidance`! Уникальные параметры: `output_format`, `acceleration`, `enable_safety_checker`! НЕТ параметров `width`, `height`, `steps`, `guidance`, `style`!
+- [x] **qwen/image-edit** - `docs/QWEN_IMAGE_EDIT_INTEGRATION.md`
+  - Обязательные: `prompt` (max 2000), `image_url` (max 10MB, jpeg/png/webp)
+  - Опциональные: `acceleration` (enum: none/regular/high), `image_size` (enum, 6 значений), `num_inference_steps` (2-49), `seed`, `guidance_scale` (0-20), `sync_mode` (boolean), `num_images` (string enum: 1/2/3/4), `enable_safety_checker` (boolean), `output_format` (enum: png/jpeg), `negative_prompt` (max 500)
+  - Default: `acceleration="none"`, `image_size="landscape_4_3"`, `num_inference_steps=25`, `guidance_scale=4`, `sync_mode=false`, `enable_safety_checker=true`, `output_format="png"`, `negative_prompt="blurry, ugly"`
+  - Важно: `prompt` имеет максимум 2000 символов (меньше чем у qwen/image-to-image, где 5000)! `num_inference_steps` имеет диапазон 2-49 и default 25 (меньше чем у qwen/image-to-image, где 2-250 и default 30)! `guidance_scale` имеет default 4 (больше чем у qwen/image-to-image, где default 2.5)! Использует `image_size` вместо стандартных `width`/`height`! Уникальные параметры: `sync_mode` (boolean), `num_images` (string enum)! НЕТ параметра `strength` (есть в qwen/image-to-image)!
 - [x] **qwen/text-to-image** - `docs/QWEN_TEXT_TO_IMAGE_INTEGRATION.md`
   - Обязательные: `prompt` (max 5000)
   - Опциональные: `image_size` (enum, 6 значений), `num_inference_steps` (2-250), `seed`, `guidance_scale` (0-20), `enable_safety_checker` (boolean), `output_format` (enum: png/jpeg), `negative_prompt` (max 500), `acceleration` (enum: none/regular/high)
