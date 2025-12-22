@@ -247,4 +247,3 @@ if __name__ == "__main__":
         logger.error(f"Application error: {e}", exc_info=True)
         sys.exit(1)
 
-
