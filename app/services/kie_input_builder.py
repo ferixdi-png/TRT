@@ -573,6 +573,88 @@ def _validate_seedream_4_5_text_to_image(
     return True, None
 
 
+def _validate_seedream_4_5_edit(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для seedream/4.5-edit согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "seedream/4.5-edit":
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 3000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для редактирования изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 3000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 3000)"
+    
+    # Валидация image_urls: обязательный массив
+    # Проверяем различные варианты имени поля
+    image_urls = None
+    if 'image_urls' in normalized_input:
+        image_urls = normalized_input['image_urls']
+    elif 'image_url' in normalized_input:
+        # Конвертируем image_url в image_urls
+        image_urls = normalized_input['image_url']
+    elif 'image' in normalized_input:
+        image_urls = normalized_input['image']
+    
+    if not image_urls:
+        return False, "Поле 'image_urls' обязательно для редактирования изображения"
+    
+    # Нормализуем image_urls
+    normalized_image_urls = _normalize_image_urls_for_wan_2_6(image_urls)  # Используем ту же функцию
+    if not normalized_image_urls:
+        return False, "Поле 'image_urls' должно содержать хотя бы один валидный URL изображения"
+    
+    # Проверяем что все URL начинаются с http:// или https://
+    for idx, url in enumerate(normalized_image_urls):
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return False, f"URL изображения #{idx + 1} должен начинаться с http:// или https://"
+    
+    # Сохраняем нормализованное значение
+    normalized_input['image_urls'] = normalized_image_urls
+    
+    # Валидация aspect_ratio: обязательный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if not aspect_ratio:
+        return False, "Поле 'aspect_ratio' обязательно для редактирования изображения"
+    
+    normalized_aspect_ratio = _normalize_aspect_ratio_for_seedream_4_5(aspect_ratio)
+    if normalized_aspect_ratio is None:
+        valid_values = ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"]
+        return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+    normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация quality: обязательный, enum
+    quality = normalized_input.get('quality')
+    if not quality:
+        return False, "Поле 'quality' обязательно для редактирования изображения"
+    
+    normalized_quality = _normalize_quality_for_seedream_4_5(quality)
+    if normalized_quality is None:
+        return False, f"Поле 'quality' должно быть 'basic' или 'high' (получено: {quality})"
+    normalized_input['quality'] = normalized_quality
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -759,8 +841,20 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для seedream/4.5-edit
+    is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для seedream/4.5-text-to-image
     if model_id == "seedream/4.5-text-to-image":
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
+        if 'quality' not in normalized_input:
+            normalized_input['quality'] = "basic"  # Default согласно документации
+    
+    # Применяем дефолты для seedream/4.5-edit
+    if model_id == "seedream/4.5-edit":
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
         if 'quality' not in normalized_input:
