@@ -89,6 +89,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
     'v2v': {
         'video_url',
         'video_urls',  # Для wan/2-6-video-to-video
+        'image_url',  # Для wan/2-2-animate-move
         'video',
         'prompt',
         'duration',

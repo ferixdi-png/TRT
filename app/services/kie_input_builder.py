@@ -675,6 +675,113 @@ def _validate_wan_2_6_image_to_video(
     return True, None
 
 
+def _normalize_resolution_for_wan_2_2_animate_move(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для wan/2-2-animate-move.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре.
+    ВАЖНО: Для wan/2-2-animate-move поддерживаются только "480p", "580p" и "720p"!
+    
+    Args:
+        value: Значение resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["480p", "580p", "720p"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["480", "480p"]:
+        return "480p"
+    elif str_value in ["580", "580p"]:
+        return "580p"
+    elif str_value in ["720", "720p", "hd"]:
+        return "720p"
+    
+    return None
+
+
+def _validate_wan_2_2_animate_move(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для wan/2-2-animate-move согласно документации API.
+    
+    ВАЖНО: Эта модель требует и video_url, и image_url (оба обязательны)!
+    Это уникальная модель, которая анимирует изображение на основе движения из видео.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["wan/2-2-animate-move", "wan/2.2-animate-move"]:
+        return True, None
+    
+    # Валидация video_url: обязательный string
+    video_url = normalized_input.get('video_url')
+    if not video_url:
+        return False, "Поле 'video_url' обязательно для генерации видео. Укажите URL входного видео"
+    
+    if not isinstance(video_url, str):
+        video_url = str(video_url)
+    
+    video_url = video_url.strip()
+    if not video_url:
+        return False, "Поле 'video_url' не может быть пустым"
+    
+    # Проверяем что это валидный URL
+    if not video_url.startswith(('http://', 'https://')):
+        return False, "Поле 'video_url' должно быть валидным URL (начинается с http:// или https://)"
+    
+    normalized_input['video_url'] = video_url
+    
+    # Валидация image_url: обязательный string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL входного изображения"
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if not image_url:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Проверяем что это валидный URL
+    if not image_url.startswith(('http://', 'https://')):
+        return False, "Поле 'image_url' должно быть валидным URL (начинается с http:// или https://)"
+    
+    normalized_input['image_url'] = image_url
+    
+    # ВАЖНО: Удаляем video_urls если он был передан (для этой модели нужен только video_url как string!)
+    if 'video_urls' in normalized_input:
+        logger.warning(f"Parameter 'video_urls' is not supported for wan/2-2-animate-move (use 'video_url' as string), removing it")
+        del normalized_input['video_urls']
+    
+    # Валидация resolution: опциональный, "480p" | "580p" | "720p", default "480p"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_wan_2_2_animate_move(resolution)
+        if normalized_resolution is None:
+            valid_values = ["480p", "580p", "720p"]
+            return False, f"Поле 'resolution' должно быть одним из: {', '.join(valid_values)} (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    return True, None
+
+
 def _validate_wan_2_6_video_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -3592,6 +3699,11 @@ def build_input(
     
     # Специфичная валидация для wan/2-6-image-to-video
     is_valid, error_msg = _validate_wan_2_6_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для wan/2-2-animate-move
+    is_valid, error_msg = _validate_wan_2_2_animate_move(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     
