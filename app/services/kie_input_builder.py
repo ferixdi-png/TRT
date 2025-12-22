@@ -4243,6 +4243,19 @@ def build_input(
             normalized_input['prompt_optimizer'] = True  # Default согласно документации
         # end_image_url опциональный, default "" (пустая строка) - не добавляем если не указан
     
+    # Применяем дефолты для hailuo/02-image-to-video-standard
+    if model_id in ["hailuo/02-image-to-video-standard", "hailuo/02-i2v-standard", "hailuo/0.2-image-to-video-standard"]:
+        if 'image_url' not in normalized_input:
+            normalized_input['image_url'] = "https://file.aiquickdraw.com/custom-page/akr/section-images/17585207681646umf3lz8.png"  # Default согласно документации
+        if 'end_image_url' not in normalized_input:
+            normalized_input['end_image_url'] = "https://file.aiquickdraw.com/custom-page/akr/section-images/1758521423357w8586uq8.png"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "10"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "768P"  # Default согласно документации
+        if 'prompt_optimizer' not in normalized_input:
+            normalized_input['prompt_optimizer'] = True  # Default согласно документации
+    
     # Применяем дефолты для hailuo/2-3-image-to-video-pro
     if model_id in ["hailuo/2-3-image-to-video-pro", "hailuo/2-3-i2v-pro"]:
         if 'duration' not in normalized_input:
