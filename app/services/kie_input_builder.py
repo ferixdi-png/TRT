@@ -3282,6 +3282,90 @@ def _validate_google_imagen4_ultra(
     return True, None
 
 
+def _validate_google_imagen4(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для google/imagen4 согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - negative_prompt (опциональный, макс 5000 символов, default "")
+    - aspect_ratio (опциональный, enum, default "1:1")
+    - num_images (опциональный, string enum, default "1")
+    - seed (опциональный, string, макс 500 символов, default "")
+    
+    ВАЖНО: seed здесь - это string, а не number!
+    ВАЖНО: aspect_ratio default "1:1" (как в ultra, а не "16:9" как в fast)!
+    ВАЖНО: есть num_images (как в fast, но не в ultra)!
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["google/imagen4", "google-imagen4", "imagen4"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация negative_prompt: опциональный, максимум 5000 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 5000:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 5000)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация aspect_ratio: опциональный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        valid_aspect_ratios = ["1:1", "16:9", "9:16", "3:4", "4:3"]
+        if aspect_ratio not in valid_aspect_ratios:
+            return False, f"Поле 'aspect_ratio' должно быть одним из: 1:1, 16:9, 9:16, 3:4, 4:3 (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = aspect_ratio
+    
+    # Валидация num_images: опциональный, string enum
+    num_images = normalized_input.get('num_images')
+    if num_images is not None:
+        # Переиспользуем функцию из qwen/image-edit
+        normalized_num = _normalize_num_images_for_qwen_image_edit(num_images)
+        if normalized_num is None:
+            valid_values = ["1", "2", "3", "4"]
+            return False, f"Поле 'num_images' должно быть одним из: {', '.join(valid_values)} (получено: {num_images})"
+        normalized_input['num_images'] = normalized_num
+    
+    # Валидация seed: опциональный, string, максимум 500 символов
+    # ВАЖНО: seed здесь - это string, а не number!
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        if not isinstance(seed, str):
+            seed = str(seed)
+        seed = seed.strip()
+        if len(seed) > 500:
+            return False, f"Поле 'seed' слишком длинное: {len(seed)} символов (максимум 500)"
+        normalized_input['seed'] = seed
+    
+    return True, None
+
+
 def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
     """
     Нормализует mode для grok-imagine/image-to-video.
