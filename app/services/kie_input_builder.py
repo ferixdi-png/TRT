@@ -1762,6 +1762,133 @@ def _validate_bytedance_v1_pro_fast_image_to_video(
     return True, None
 
 
+def _normalize_mode_for_grok_imagine(value: Any) -> Optional[str]:
+    """
+    Нормализует mode для grok-imagine/image-to-video.
+    Принимает строку и возвращает нормализованное значение в нижнем регистре.
+    ВАЖНО: Для grok-imagine поддерживаются только "fun", "normal", "spicy"!
+    
+    Args:
+        value: Значение mode (может быть str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы, конвертируем в нижний регистр
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["fun", "normal", "spicy"]
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _validate_grok_imagine_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для grok-imagine/image-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["grok-imagine/image-to-video", "grok/imagine"]:
+        return True, None
+    
+    # ВАЖНО: Все параметры опциональны! Но должны быть валидными если указаны.
+    
+    # Валидация image_urls: опциональный массив (только одно изображение)
+    image_urls = normalized_input.get('image_urls')
+    if image_urls is not None:
+        # Нормализуем image_urls
+        normalized_image_urls = _normalize_image_urls_for_wan_2_6(image_urls)
+        if normalized_image_urls is not None:
+            # Проверяем количество изображений (только одно!)
+            if len(normalized_image_urls) > 1:
+                return False, f"Поле 'image_urls' должно содержать только одно изображение (получено: {len(normalized_image_urls)})"
+            
+            # Проверяем что URL начинается с http:// или https://
+            url = normalized_image_urls[0]
+            if not (url.startswith('http://') or url.startswith('https://')):
+                return False, "URL изображения должен начинаться с http:// или https://"
+            
+            # Сохраняем нормализованное значение
+            normalized_input['image_urls'] = normalized_image_urls
+    
+    # Валидация task_id: опциональный string (максимум 100 символов)
+    task_id = normalized_input.get('task_id')
+    if task_id is not None:
+        if not isinstance(task_id, str):
+            task_id = str(task_id)
+        
+        task_id = task_id.strip()
+        if len(task_id) > 100:
+            return False, f"Поле 'task_id' слишком длинное: {len(task_id)} символов (максимум 100)"
+        
+        normalized_input['task_id'] = task_id
+    
+    # Валидация index: опциональный number (0-5, 0-based)
+    index = normalized_input.get('index')
+    if index is not None:
+        try:
+            index_num = int(index)
+            if index_num < 0 or index_num > 5:
+                return False, f"Поле 'index' должно быть числом от 0 до 5 (получено: {index})"
+            normalized_input['index'] = index_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'index' должно быть числом от 0 до 5 (получено: {index})"
+    
+    # Валидация prompt: опциональный string (максимум 5000 символов)
+    prompt = normalized_input.get('prompt')
+    if prompt is not None:
+        if not isinstance(prompt, str):
+            prompt = str(prompt)
+        
+        prompt_len = len(prompt.strip())
+        if prompt_len > 5000:
+            return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+        
+        normalized_input['prompt'] = prompt.strip() if prompt_len > 0 else None
+    
+    # Валидация mode: опциональный string ("fun", "normal", "spicy")
+    mode = normalized_input.get('mode')
+    if mode is not None:
+        normalized_mode = _normalize_mode_for_grok_imagine(mode)
+        if normalized_mode is None:
+            return False, f"Поле 'mode' должно быть 'fun', 'normal' или 'spicy' (получено: {mode})"
+        normalized_input['mode'] = normalized_mode
+    
+    # ВАЖНО: Проверяем взаимоисключающие параметры
+    # image_urls и task_id не должны использоваться одновременно
+    has_image_urls = normalized_input.get('image_urls') is not None and len(normalized_input.get('image_urls', [])) > 0
+    has_task_id = normalized_input.get('task_id') is not None and normalized_input.get('task_id')
+    
+    if has_image_urls and has_task_id:
+        return False, "Поля 'image_urls' и 'task_id' не могут использоваться одновременно. Используйте либо 'image_urls', либо 'task_id'"
+    
+    # index работает только с task_id
+    has_index = normalized_input.get('index') is not None
+    if has_index and not has_task_id:
+        return False, "Поле 'index' может использоваться только вместе с 'task_id'"
+    
+    # mode "spicy" не поддерживается с внешними изображениями (image_urls)
+    if has_image_urls and normalized_input.get('mode') == 'spicy':
+        return False, "Режим 'spicy' не поддерживается с внешними изображениями (image_urls). Используйте 'task_id' для режима 'spicy'"
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -1998,6 +2125,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для grok-imagine/image-to-video
+    is_valid, error_msg = _validate_grok_imagine_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -2048,6 +2180,13 @@ def build_input(
             normalized_input['resolution'] = "720p"  # Default согласно документации
         if 'duration' not in normalized_input:
             normalized_input['duration'] = "5"  # Default согласно документации
+    
+    # Применяем дефолты для grok-imagine/image-to-video
+    if model_id in ["grok-imagine/image-to-video", "grok/imagine"]:
+        if 'index' not in normalized_input:
+            normalized_input['index'] = 0  # Default согласно документации
+        if 'mode' not in normalized_input:
+            normalized_input['mode'] = "normal"  # Default согласно документации
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
