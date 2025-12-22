@@ -138,9 +138,14 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
     # Sound Effects
     'sfx': {
         'prompt',
+        'text',  # Для elevenlabs/sound-effect-v2
         'duration',
+        'duration_seconds',  # Для elevenlabs/sound-effect-v2
         'style',
-        'seed'
+        'seed',
+        'loop',  # Для elevenlabs/sound-effect-v2
+        'prompt_influence',  # Для elevenlabs/sound-effect-v2
+        'output_format'  # Для elevenlabs/sound-effect-v2
     },
     
     # Audio Isolation

@@ -3451,6 +3451,138 @@ def _validate_elevenlabs_audio_isolation(
     return True, None
 
 
+def _normalize_output_format_for_elevenlabs_sound_effect_v2(value: Any) -> Optional[str]:
+    """
+    Нормализует output_format для elevenlabs/sound-effect-v2.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение output_format (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "mp3_22050_32", "mp3_44100_32", "mp3_44100_64", "mp3_44100_96",
+        "mp3_44100_128", "mp3_44100_192",
+        "pcm_8000", "pcm_16000", "pcm_22050", "pcm_24000", "pcm_44100", "pcm_48000",
+        "ulaw_8000", "alaw_8000",
+        "opus_48000_32", "opus_48000_64", "opus_48000_96", "opus_48000_128", "opus_48000_192"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_elevenlabs_sound_effect_v2(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для elevenlabs/sound-effect-v2 согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - text (обязательный, макс 5000 символов)
+    - loop (опциональный, boolean, default false)
+    - duration_seconds (опциональный, number, 0.5-22)
+    - prompt_influence (опциональный, number, 0-1, default 0.3)
+    - output_format (опциональный, enum, default "mp3_44100_128")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["elevenlabs/sound-effect-v2", "elevenlabs-sound-effect-v2", "elevenlabs/sound-effect-v2"]:
+        return True, None
+    
+    # Валидация text: обязательный, максимум 5000 символов
+    # Модель использует 'text' (не 'prompt'), но мы можем принимать оба
+    text = normalized_input.get('text') or normalized_input.get('prompt')
+    if not text:
+        return False, "Поле 'text' обязательно для генерации звукового эффекта. Введите текстовое описание."
+    
+    if not isinstance(text, str):
+        text = str(text)
+    
+    text_len = len(text.strip())
+    if text_len == 0:
+        return False, "Поле 'text' не может быть пустым"
+    if text_len > 5000:
+        return False, f"Поле 'text' слишком длинное: {text_len} символов (максимум 5000)"
+    
+    # Нормализуем: если был передан 'prompt', переименовываем в 'text'
+    if 'prompt' in normalized_input and 'text' not in normalized_input:
+        normalized_input['text'] = normalized_input.pop('prompt')
+    elif 'text' not in normalized_input:
+        normalized_input['text'] = text
+    
+    # Удаляем лишний параметр, если он был
+    if 'prompt' in normalized_input and normalized_input.get('text') != normalized_input.get('prompt'):
+        del normalized_input['prompt']
+    
+    # Валидация loop: опциональный, boolean
+    loop = normalized_input.get('loop')
+    if loop is not None:
+        normalized_bool = _normalize_boolean(loop)
+        if normalized_bool is None:
+            return False, f"Поле 'loop' должно быть boolean (true/false) (получено: {loop})"
+        normalized_input['loop'] = normalized_bool
+    
+    # Валидация duration_seconds: опциональный, number, 0.5-22
+    duration_seconds = normalized_input.get('duration_seconds')
+    if duration_seconds is not None:
+        try:
+            duration_num = float(duration_seconds)
+            if duration_num < 0.5 or duration_num > 22:
+                return False, f"Поле 'duration_seconds' должно быть в диапазоне от 0.5 до 22 (получено: {duration_seconds})"
+            normalized_input['duration_seconds'] = duration_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'duration_seconds' должно быть числом от 0.5 до 22 (получено: {duration_seconds})"
+    
+    # Валидация prompt_influence: опциональный, number, 0-1
+    prompt_influence = normalized_input.get('prompt_influence')
+    if prompt_influence is not None:
+        try:
+            influence_num = float(prompt_influence)
+            if influence_num < 0 or influence_num > 1:
+                return False, f"Поле 'prompt_influence' должно быть в диапазоне от 0 до 1 (получено: {prompt_influence})"
+            normalized_input['prompt_influence'] = influence_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'prompt_influence' должно быть числом от 0 до 1 (получено: {prompt_influence})"
+    
+    # Валидация output_format: опциональный, enum
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        normalized_format = _normalize_output_format_for_elevenlabs_sound_effect_v2(output_format)
+        if normalized_format is None:
+            valid_values = [
+                "mp3_22050_32", "mp3_44100_32", "mp3_44100_64", "mp3_44100_96",
+                "mp3_44100_128", "mp3_44100_192",
+                "pcm_8000", "pcm_16000", "pcm_22050", "pcm_24000", "pcm_44100", "pcm_48000",
+                "ulaw_8000", "alaw_8000",
+                "opus_48000_32", "opus_48000_64", "opus_48000_96", "opus_48000_128", "opus_48000_192"
+            ]
+            return False, f"Поле 'output_format' должно быть одним из: {', '.join(valid_values)} (получено: {output_format})"
+        normalized_input['output_format'] = normalized_format
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
@@ -5308,6 +5440,15 @@ def build_input(
     if model_id in ["infinitalk/from-audio", "infinitalk-from-audio"]:
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "480p"  # Default согласно документации
+    
+    # Применяем дефолты для elevenlabs/sound-effect-v2
+    if model_id in ["elevenlabs/sound-effect-v2", "elevenlabs-sound-effect-v2"]:
+        if 'loop' not in normalized_input:
+            normalized_input['loop'] = False  # Default согласно документации
+        if 'prompt_influence' not in normalized_input:
+            normalized_input['prompt_influence'] = 0.3  # Default согласно документации
+        if 'output_format' not in normalized_input:
+            normalized_input['output_format'] = "mp3_44100_128"  # Default согласно документации
     
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:

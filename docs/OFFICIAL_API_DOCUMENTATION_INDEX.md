@@ -189,6 +189,11 @@
   - Опциональные: нет
   - Default: нет (параметр обязательный)
   - Важно: Только один параметр - `audio_url`! НЕТ дополнительных параметров (mode, strength и т.д.)! `audio` автоматически нормализуется в `audio_url`!
+- [x] **elevenlabs/sound-effect-v2** - `docs/ELEVENLABS_SOUND_EFFECT_V2_INTEGRATION.md`
+  - Обязательные: `text` (max 5000 chars)
+  - Опциональные: `loop` (boolean), `duration_seconds` (0.5-22), `prompt_influence` (0-1), `output_format` (enum, 18 значений)
+  - Default: `loop=false`, `prompt_influence=0.3`, `output_format="mp3_44100_128"`
+  - Важно: Параметр называется `text` (не `prompt`)! Использует `duration_seconds` вместо `duration`! Уникальные параметры: `loop`, `prompt_influence`, `output_format`! НЕТ параметров `style` и `seed`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
