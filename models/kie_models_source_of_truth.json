@@ -1,0 +1,2975 @@
+{
+  "meta": {
+    "generated_at": "2025-12-22T19:34:50.619046",
+    "source": "LOCAL_AND_WEB",
+    "total_models": 72,
+    "yaml_file": "models/kie_models.yaml",
+    "web_parsed": true,
+    "web_pages_parsed": 0
+  },
+  "api": {
+    "base_url": "https://api.kie.ai",
+    "endpoints": {
+      "createTask": {
+        "method": "POST",
+        "path": "/api/v1/jobs/createTask",
+        "confirmed_from": [
+          "kie_client.py"
+        ],
+        "request": {
+          "model": "string (required)",
+          "input": "object (required, model-specific)",
+          "callBackUrl": "string (optional)"
+        },
+        "response": {
+          "code": 200,
+          "data": {
+            "taskId": "string"
+          }
+        }
+      },
+      "recordInfo": {
+        "method": "GET",
+        "path": "/api/v1/jobs/recordInfo",
+        "confirmed_from": [
+          "bot_kie.py",
+          "kie_client.py"
+        ],
+        "query": {
+          "taskId": "string (required)"
+        },
+        "response": {
+          "code": 200,
+          "data": {
+            "state": "waiting|queuing|generating|success|fail",
+            "resultJson": "string (JSON, contains resultUrls/resultWaterMarkUrls)",
+            "resultUrls": "array (optional, deprecated - use resultJson)",
+            "errorMessage": "string (optional, present on fail)",
+            "failCode": "string (optional, present on fail)"
+          }
+        }
+      }
+    },
+    "states": [
+      "waiting",
+      "queuing",
+      "generating",
+      "success",
+      "fail"
+    ],
+    "resultJson_structure": {
+      "resultUrls": "array of strings (required for most models)",
+      "resultWaterMarkUrls": "array of strings (optional, for sora-2-text-to-video when remove_watermark=false)"
+    }
+  },
+  "models": {
+    "z-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "z-image",
+        "input": {
+          "prompt": "example",
+          "aspect_ratio": "1:1"
+        }
+      }
+    },
+    "nano-banana-pro": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 10000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9",
+            "auto"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1K",
+            "2K",
+            "4K"
+          ]
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "png",
+            "jpg"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "nano-banana-pro",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "prompt": "example"
+        }
+      }
+    },
+    "seedream/4.5-text-to-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 3000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16",
+            "2:3",
+            "3:2",
+            "21:9"
+          ]
+        },
+        "quality": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "basic",
+            "high"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "seedream/4.5-text-to-image",
+        "input": {
+          "prompt": "example",
+          "aspect_ratio": "1:1",
+          "quality": "basic"
+        }
+      }
+    },
+    "seedream/4.5-edit": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 3000
+        },
+        "image_urls": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16",
+            "2:3",
+            "3:2",
+            "21:9"
+          ]
+        },
+        "quality": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "basic",
+            "high"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "seedream/4.5-edit",
+        "input": {
+          "prompt": "example",
+          "image_urls": [
+            "https://example.com/image.jpg"
+          ],
+          "aspect_ratio": "1:1",
+          "quality": "basic"
+        }
+      }
+    },
+    "sora-2-pro-image-to-video": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "image_urls": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 10000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "n_frames": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "10",
+            "15"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "standard",
+            "high"
+          ]
+        },
+        "remove_watermark": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "sora-2-pro-image-to-video",
+        "input": {
+          "image_urls": [
+            "https://example.com/image.jpg"
+          ],
+          "prompt": "example"
+        }
+      }
+    },
+    "sora-watermark-remover": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "video_url": {
+          "type": "string",
+          "required": true,
+          "max": 500
+        }
+      },
+      "payload_example": {
+        "model": "sora-watermark-remover",
+        "input": {
+          "video_url": "example"
+        }
+      }
+    },
+    "sora-2-text-to-video": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 10000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "n_frames": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "10",
+            "15"
+          ]
+        },
+        "remove_watermark": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "sora-2-text-to-video",
+        "input": {
+          "prompt": "example",
+          "aspect_ratio": "portrait"
+        }
+      }
+    },
+    "kling-2.6/image-to-video": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "sound": {
+          "type": "boolean",
+          "required": true
+        },
+        "duration": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "5",
+            "10"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "kling-2.6/image-to-video",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "sound": true,
+          "duration": "5"
+        }
+      }
+    },
+    "kling-2.6/text-to-video": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1000
+        },
+        "sound": {
+          "type": "boolean",
+          "required": true
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "16:9",
+            "9:16"
+          ]
+        },
+        "duration": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "5",
+            "10"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "kling-2.6/text-to-video",
+        "input": {
+          "prompt": "example",
+          "sound": true,
+          "aspect_ratio": "1:1",
+          "duration": "5"
+        }
+      }
+    },
+    "flux-2/pro-image-to-image": {
+      "model_type": "image_to_image",
+      "output_type": "image",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000,
+          "min": 3
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16",
+            "3:2",
+            "2:3",
+            "auto"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1K",
+            "2K"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "flux-2/pro-image-to-image",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "aspect_ratio": "1:1",
+          "resolution": "1K"
+        }
+      }
+    },
+    "flux-2/pro-text-to-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000,
+          "min": 3
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16",
+            "3:2",
+            "2:3",
+            "auto"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1K",
+            "2K"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "flux-2/pro-text-to-image",
+        "input": {
+          "prompt": "example",
+          "aspect_ratio": "1:1",
+          "resolution": "1K"
+        }
+      }
+    },
+    "flux-2/flex-image-to-image": {
+      "model_type": "image_to_image",
+      "output_type": "image",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000,
+          "min": 3
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16",
+            "3:2",
+            "2:3",
+            "auto"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1K",
+            "2K"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "flux-2/flex-image-to-image",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "aspect_ratio": "1:1",
+          "resolution": "1K"
+        }
+      }
+    },
+    "flux-2/flex-text-to-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000,
+          "min": 3
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1:1",
+            "4:3",
+            "3:4",
+            "16:9",
+            "9:16",
+            "3:2",
+            "2:3",
+            "auto"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1K",
+            "2K"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "flux-2/flex-text-to-image",
+        "input": {
+          "prompt": "example",
+          "aspect_ratio": "1:1",
+          "resolution": "1K"
+        }
+      }
+    },
+    "topaz/image-upscale": {
+      "model_type": "upscale",
+      "output_type": "image",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "upscale_factor": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "1",
+            "2",
+            "4",
+            "8"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "topaz/image-upscale",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "upscale_factor": "1"
+        }
+      }
+    },
+    "kling/v2-5-turbo-text-to-video-pro": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 2500
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 2500
+        },
+        "cfg_scale": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-5-turbo-text-to-video-pro",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "kling/v2-5-turbo-image-to-video-pro": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 2500
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 2496
+        },
+        "cfg_scale": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-5-turbo-image-to-video-pro",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "wan/2-5-image-to-video": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 800
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "720p",
+            "1080p"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-5-image-to-video",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "wan/2-5-text-to-video": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 800
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "720p",
+            "1080p"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-5-text-to-video",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "wan/2-2-animate-move": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "video_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "480p",
+            "580p",
+            "720p"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-2-animate-move",
+        "input": {
+          "video_input": [
+            "https://example.com/image.jpg"
+          ],
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "wan/2-2-animate-replace": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "video_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "480p",
+            "580p",
+            "720p"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-2-animate-replace",
+        "input": {
+          "video_input": [
+            "https://example.com/image.jpg"
+          ],
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "hailuo/02-text-to-video-pro": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1500
+        },
+        "prompt_optimizer": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "hailuo/02-text-to-video-pro",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "hailuo/02-image-to-video-pro": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1500
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "end_image_url": {
+          "type": "string",
+          "required": false
+        },
+        "prompt_optimizer": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "hailuo/02-image-to-video-pro",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "hailuo/02-image-to-video-standard": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1500
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "end_image_url": {
+          "type": "string",
+          "required": false
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "6",
+            "10"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "512P",
+            "768P"
+          ]
+        },
+        "prompt_optimizer": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "hailuo/02-image-to-video-standard",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "hailuo/02-text-to-video-standard": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 1500
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "6",
+            "10"
+          ]
+        },
+        "prompt_optimizer": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "hailuo/02-text-to-video-standard",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "topaz/video-upscale": {
+      "model_type": "video_upscale",
+      "output_type": "video",
+      "input": {
+        "video_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "upscale_factor": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "4"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "topaz/video-upscale",
+        "input": {
+          "video_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "kling/v1-avatar-standard": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "audio_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        }
+      },
+      "payload_example": {
+        "model": "kling/v1-avatar-standard",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "audio_input": [
+            "https://example.com/image.jpg"
+          ],
+          "prompt": "example"
+        }
+      }
+    },
+    "kling/ai-avatar-v1-pro": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "audio_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        }
+      },
+      "payload_example": {
+        "model": "kling/ai-avatar-v1-pro",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "audio_input": [
+            "https://example.com/image.jpg"
+          ],
+          "prompt": "example"
+        }
+      }
+    },
+    "bytedance/seedream-v4-text-to-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_3_2",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_3_2",
+            "landscape_16_9",
+            "landscape_21_9"
+          ]
+        },
+        "image_resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1K",
+            "2K",
+            "4K"
+          ]
+        },
+        "max_images": {
+          "type": "number",
+          "required": false,
+          "max": 6,
+          "min": 1
+        }
+      },
+      "payload_example": {
+        "model": "bytedance/seedream-v4-text-to-image",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "bytedance/seedream-v4-edit": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_3_2",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_3_2",
+            "landscape_16_9",
+            "landscape_21_9"
+          ]
+        },
+        "image_resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1K",
+            "2K",
+            "4K"
+          ]
+        },
+        "max_images": {
+          "type": "number",
+          "required": false,
+          "max": 6,
+          "min": 1
+        }
+      },
+      "payload_example": {
+        "model": "bytedance/seedream-v4-edit",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "recraft/remove-background": {
+      "model_type": "image_edit",
+      "output_type": "image",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        }
+      },
+      "payload_example": {
+        "model": "recraft/remove-background",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "recraft/crisp-upscale": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        }
+      },
+      "payload_example": {
+        "model": "recraft/crisp-upscale",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "ideogram/v3-reframe": {
+      "model_type": "outpaint",
+      "output_type": "unknown",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "image_size": {
+          "type": "enum",
+          "required": true,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "style": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "AUTO",
+            "GENERAL",
+            "REALISTIC",
+            "DESIGN"
+          ]
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/v3-reframe",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "image_size": "square"
+        }
+      }
+    },
+    "wan/2-2-a14b-speech-to-video-turbo": {
+      "model_type": "speech_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "audio_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "num_frames": {
+          "type": "number",
+          "required": false,
+          "max": 120,
+          "min": 40
+        },
+        "frames_per_second": {
+          "type": "number",
+          "required": false,
+          "max": 60,
+          "min": 4
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "480p",
+            "580p",
+            "720p"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "num_inference_steps": {
+          "type": "number",
+          "required": false,
+          "max": 40,
+          "min": 2
+        },
+        "guidance_scale": {
+          "type": "number",
+          "required": false,
+          "max": 10,
+          "min": 1
+        },
+        "shift": {
+          "type": "number",
+          "required": false,
+          "max": 10,
+          "min": 1
+        },
+        "enable_safety_checker": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-2-a14b-speech-to-video-turbo",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "audio_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "bytedance/seedream": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "guidance_scale": {
+          "type": "number",
+          "required": false,
+          "max": 10,
+          "min": 1
+        },
+        "enable_safety_checker": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "bytedance/seedream",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "qwen/text-to-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "num_inference_steps": {
+          "type": "number",
+          "required": false,
+          "max": 250,
+          "min": 2
+        },
+        "guidance_scale": {
+          "type": "number",
+          "required": false,
+          "max": 20,
+          "min": 0
+        },
+        "enable_safety_checker": {
+          "type": "boolean",
+          "required": false
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "png",
+            "jpeg"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "acceleration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "none",
+            "regular",
+            "high"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "qwen/text-to-image",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "qwen/image-to-image": {
+      "model_type": "image_to_image",
+      "output_type": "image",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "strength": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "png",
+            "jpeg"
+          ]
+        },
+        "acceleration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "none",
+            "regular",
+            "high"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "num_inference_steps": {
+          "type": "number",
+          "required": false,
+          "max": 250,
+          "min": 2
+        },
+        "guidance_scale": {
+          "type": "number",
+          "required": false,
+          "max": 20,
+          "min": 0
+        },
+        "enable_safety_checker": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "qwen/image-to-image",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "qwen/image-edit": {
+      "model_type": "image_edit",
+      "output_type": "image",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 2000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "acceleration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "none",
+            "regular",
+            "high"
+          ]
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "num_inference_steps": {
+          "type": "number",
+          "required": false,
+          "max": 49,
+          "min": 2
+        },
+        "guidance_scale": {
+          "type": "number",
+          "required": false,
+          "max": 20,
+          "min": 0
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "enable_safety_checker": {
+          "type": "boolean",
+          "required": false
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "jpeg",
+            "png"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        }
+      },
+      "payload_example": {
+        "model": "qwen/image-edit",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "ideogram/character-edit": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "mask_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "reference_image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "style": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "AUTO",
+            "REALISTIC",
+            "FICTION"
+          ]
+        },
+        "expand_prompt": {
+          "type": "boolean",
+          "required": false
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/character-edit",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "mask_input": [
+            "https://example.com/image.jpg"
+          ],
+          "reference_image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "ideogram/character-remix": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "reference_image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "style": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "AUTO",
+            "REALISTIC",
+            "FICTION"
+          ]
+        },
+        "expand_prompt": {
+          "type": "boolean",
+          "required": false
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "strength": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0.1
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/character-remix",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "reference_image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "ideogram/character": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "reference_image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "style": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "AUTO",
+            "REALISTIC",
+            "FICTION"
+          ]
+        },
+        "expand_prompt": {
+          "type": "boolean",
+          "required": false
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 5000
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/character",
+        "input": {
+          "prompt": "example",
+          "reference_image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "bytedance/v1-pro-fast-image-to-video": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 10000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "720p",
+            "1080p"
+          ]
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "bytedance/v1-pro-fast-image-to-video",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "kling/v2-1-master-image-to-video": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "cfg_scale": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-1-master-image-to-video",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "kling/v2-1-standard": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "cfg_scale": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-1-standard",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "kling/v2-1-pro": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "cfg_scale": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        },
+        "tail_image_url": {
+          "type": "string",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-1-pro",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "kling/v2-1-master-text-to-video": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "duration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "5",
+            "10"
+          ]
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ]
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "cfg_scale": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-1-master-text-to-video",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "ideogram/v3-text-to-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "style": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "AUTO",
+            "GENERAL",
+            "REALISTIC",
+            "DESIGN"
+          ]
+        },
+        "expand_prompt": {
+          "type": "boolean",
+          "required": false
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 5000
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/v3-text-to-image",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "ideogram/v3-edit": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "mask_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "expand_prompt": {
+          "type": "boolean",
+          "required": false
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/v3-edit",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "mask_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "ideogram/v3-remix": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "rendering_speed": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "TURBO",
+            "BALANCED",
+            "QUALITY"
+          ]
+        },
+        "style": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "AUTO",
+            "GENERAL",
+            "REALISTIC",
+            "DESIGN"
+          ]
+        },
+        "expand_prompt": {
+          "type": "boolean",
+          "required": false
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "square",
+            "square_hd",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false
+        },
+        "strength": {
+          "type": "number",
+          "required": false,
+          "max": 1,
+          "min": 0.01
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 5000
+        }
+      },
+      "payload_example": {
+        "model": "ideogram/v3-remix",
+        "input": {
+          "prompt": "example",
+          "image_input": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "wan/2-2-a14b-text-to-video-turbo": {
+      "model_type": "text_to_video",
+      "output_type": "video",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "480p",
+            "580p",
+            "720p"
+          ]
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean",
+          "required": false
+        },
+        "seed": {
+          "type": "number",
+          "required": false,
+          "max": 2147483647,
+          "min": 0
+        },
+        "acceleration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "none",
+            "regular"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-2-a14b-text-to-video-turbo",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "wan/2-2-a14b-image-to-video-turbo": {
+      "model_type": "image_to_video",
+      "output_type": "video",
+      "input": {
+        "image_input": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "480p",
+            "580p",
+            "720p"
+          ]
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "auto",
+            "16:9",
+            "9:16",
+            "1:1"
+          ]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean",
+          "required": false
+        },
+        "seed": {
+          "type": "number",
+          "required": false,
+          "max": 2147483647,
+          "min": 0
+        },
+        "acceleration": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "none",
+            "regular"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "wan/2-2-a14b-image-to-video-turbo",
+        "input": {
+          "image_input": [
+            "https://example.com/image.jpg"
+          ],
+          "prompt": "example"
+        }
+      }
+    },
+    "google/imagen4-ultra": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 5000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1:1",
+            "16:9",
+            "9:16",
+            "3:4",
+            "4:3"
+          ]
+        },
+        "seed": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        }
+      },
+      "payload_example": {
+        "model": "google/imagen4-ultra",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "google/imagen4-fast": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 5000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1:1",
+            "16:9",
+            "9:16",
+            "3:4",
+            "4:3"
+          ]
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "google/imagen4-fast",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "google/imagen4": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "negative_prompt": {
+          "type": "string",
+          "required": false,
+          "max": 5000
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1:1",
+            "16:9",
+            "9:16",
+            "3:4",
+            "4:3"
+          ]
+        },
+        "num_images": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "seed": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        }
+      },
+      "payload_example": {
+        "model": "google/imagen4",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "google/nano-banana": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "png",
+            "jpeg"
+          ]
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1:1",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "3:2",
+            "2:3",
+            "5:4",
+            "4:5",
+            "21:9",
+            "auto"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "google/nano-banana",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "google/nano-banana-edit": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max": 5000
+        },
+        "image_urls": {
+          "type": "array",
+          "required": true,
+          "item_type": "string"
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "png",
+            "jpeg"
+          ]
+        },
+        "image_size": {
+          "type": "enum",
+          "required": false,
+          "values": [
+            "1:1",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "3:2",
+            "2:3",
+            "5:4",
+            "4:5",
+            "21:9",
+            "auto"
+          ]
+        }
+      },
+      "payload_example": {
+        "model": "google/nano-banana-edit",
+        "input": {
+          "prompt": "example",
+          "image_urls": [
+            "https://example.com/image.jpg"
+          ]
+        }
+      }
+    },
+    "elevenlabs/speech-to-text": {
+      "model_type": "speech_to_text",
+      "output_type": "audio",
+      "input": {
+        "audio_url": {
+          "type": "string",
+          "required": true
+        },
+        "language_code": {
+          "type": "string",
+          "required": false,
+          "max": 500
+        },
+        "tag_audio_events": {
+          "type": "boolean",
+          "required": false
+        },
+        "diarize": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "payload_example": {
+        "model": "elevenlabs/speech-to-text",
+        "input": {
+          "audio_url": "example"
+        }
+      }
+    },
+    "grok/imagine": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "grok/imagine",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "openai/4o-image": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "openai/4o-image",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "flux/kontext": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "flux/kontext",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "google/veo-3": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "google/veo-3",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "google/veo-3.1": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "google/veo-3.1",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "sora-2-pro-storyboard": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "sora-2-pro-storyboard",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "kling/v2-5-turbo": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "kling/v2-5-turbo",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "hailuo/2.3": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "hailuo/2.3",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "infinitalk/from-audio": {
+      "model_type": "audio_to_audio",
+      "output_type": "audio",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "infinitalk/from-audio",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "elevenlabs/audio-isolation": {
+      "model_type": "audio_to_audio",
+      "output_type": "audio",
+      "input": {
+        "audio_url": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "elevenlabs/audio-isolation",
+        "input": {
+          "audio_url": "example"
+        }
+      }
+    },
+    "elevenlabs/sound-effect": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "elevenlabs/sound-effect",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "elevenlabs/text-to-speech": {
+      "model_type": "text_to_speech",
+      "output_type": "audio",
+      "input": {
+        "text": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "elevenlabs/text-to-speech",
+        "input": {
+          "text": "example"
+        }
+      }
+    },
+    "google/nanobanana-gemini-2.5-flash": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "google/nanobanana-gemini-2.5-flash",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "runway/gen-4": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "runway/gen-4",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "suno/v5": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "suno/v5",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    },
+    "midjourney/api": {
+      "model_type": "text_to_image",
+      "output_type": "text",
+      "input": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "payload_example": {
+        "model": "midjourney/api",
+        "input": {
+          "prompt": "example"
+        }
+      }
+    }
+  }
+}
