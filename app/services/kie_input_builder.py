@@ -1400,6 +1400,206 @@ def _validate_flux_2_flex_text_to_image(
     return True, None
 
 
+def _normalize_aspect_ratio_for_nano_banana_pro(value: Any) -> Optional[str]:
+    """
+    Нормализует aspect_ratio для nano-banana-pro.
+    Принимает строку и возвращает нормализованное значение.
+    ВАЖНО: Для nano-banana-pro поддерживаются 11 значений (включая "auto")!
+    
+    Args:
+        value: Значение aspect_ratio (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Извлекаем только соотношение сторон, если есть дополнительные символы
+    if ' ' in str_value:
+        str_value = str_value.split()[0].strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["1:1", "1/1", "1x1", "square"]:
+        return "1:1"
+    elif str_lower in ["2:3", "2/3", "2x3"]:
+        return "2:3"
+    elif str_lower in ["3:2", "3/2", "3x2"]:
+        return "3:2"
+    elif str_lower in ["3:4", "3/4", "3x4"]:
+        return "3:4"
+    elif str_lower in ["4:3", "4/3", "4x3"]:
+        return "4:3"
+    elif str_lower in ["4:5", "4/5", "4x5"]:
+        return "4:5"
+    elif str_lower in ["5:4", "5/4", "5x4"]:
+        return "5:4"
+    elif str_lower in ["9:16", "9/16", "9x16", "portrait", "vertical"]:
+        return "9:16"
+    elif str_lower in ["16:9", "16/9", "16x9", "landscape", "widescreen"]:
+        return "16:9"
+    elif str_lower in ["21:9", "21/9", "21x9", "ultrawide"]:
+        return "21:9"
+    elif str_lower == "auto":
+        return "auto"
+    
+    return None
+
+
+def _normalize_resolution_for_nano_banana_pro(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для nano-banana-pro.
+    Принимает строку и возвращает нормализованное значение.
+    ВАЖНО: Для nano-banana-pro поддерживаются "1K", "2K" и "4K" (3 значения, не 2!)!
+    
+    Args:
+        value: Значение resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы, конвертируем в верхний регистр
+    str_value = str(value).strip().upper()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["1K", "2K", "4K"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["1", "1k", "1000", "1k resolution"]:
+        return "1K"
+    elif str_value in ["2", "2k", "2000", "2k resolution"]:
+        return "2K"
+    elif str_value in ["4", "4k", "4000", "4k resolution"]:
+        return "4K"
+    
+    return None
+
+
+def _normalize_output_format_for_nano_banana_pro(value: Any) -> Optional[str]:
+    """
+    Нормализует output_format для nano-banana-pro.
+    Принимает строку и возвращает нормализованное значение в нижнем регистре.
+    ВАЖНО: Для nano-banana-pro поддерживаются только "png" и "jpg"!
+    
+    Args:
+        value: Значение output_format (может быть str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы, конвертируем в нижний регистр
+    str_value = str(value).strip().lower()
+    
+    # Маппинг jpeg -> jpg
+    if str_value == "jpeg":
+        str_value = "jpg"
+    
+    # Проверяем что это валидное значение
+    valid_values = ["png", "jpg"]
+    if str_value in valid_values:
+        return str_value
+    
+    return None
+
+
+def _validate_nano_banana_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для nano-banana-pro согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["nano-banana-pro", "google/nano-banana-pro"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 10000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    
+    # Валидация image_input: опциональный массив (до 8 изображений)
+    image_input = normalized_input.get('image_input')
+    if image_input is not None:
+        # Нормализуем image_input (используем функцию для Flux, так как логика похожа)
+        normalized_image_input = _normalize_input_urls_for_flux_2_pro(image_input)
+        if normalized_image_input is not None:
+            # Проверяем количество изображений (до 8)
+            if len(normalized_image_input) > 8:
+                return False, f"Поле 'image_input' содержит слишком много изображений: {len(normalized_image_input)} (максимум 8)"
+            
+            # Проверяем что все URL начинаются с http:// или https://
+            for idx, url in enumerate(normalized_image_input):
+                if not (url.startswith('http://') or url.startswith('https://')):
+                    return False, f"URL изображения #{idx + 1} должен начинаться с http:// или https://"
+            
+            # Сохраняем нормализованное значение
+            normalized_input['image_input'] = normalized_image_input
+        else:
+            # Если image_input пустой или невалидный, устанавливаем пустой массив
+            normalized_input['image_input'] = []
+    
+    # Валидация aspect_ratio: опциональный, enum
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        normalized_aspect_ratio = _normalize_aspect_ratio_for_nano_banana_pro(aspect_ratio)
+        if normalized_aspect_ratio is None:
+            valid_values = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"]
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация resolution: опциональный, "1K" | "2K" | "4K"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_nano_banana_pro(resolution)
+        if normalized_resolution is None:
+            return False, f"Поле 'resolution' должно быть '1K', '2K' или '4K' (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    # Валидация output_format: опциональный, "png" | "jpg"
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        normalized_output_format = _normalize_output_format_for_nano_banana_pro(output_format)
+        if normalized_output_format is None:
+            return False, f"Поле 'output_format' должно быть 'png' или 'jpg' (получено: {output_format})"
+        normalized_input['output_format'] = normalized_output_format
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -1626,6 +1826,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для nano-banana-pro
+    is_valid, error_msg = _validate_nano_banana_pro(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -1658,6 +1863,17 @@ def build_input(
             normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "1K"  # Default согласно документации
+    
+    # Применяем дефолты для nano-banana-pro
+    if model_id in ["nano-banana-pro", "google/nano-banana-pro"]:
+        if 'image_input' not in normalized_input:
+            normalized_input['image_input'] = []  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "1K"  # Default согласно документации
+        if 'output_format' not in normalized_input:
+            normalized_input['output_format'] = "png"  # Default согласно документации
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
