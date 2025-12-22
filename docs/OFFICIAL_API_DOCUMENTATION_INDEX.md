@@ -69,6 +69,10 @@
 
 - [x] **kling-2.6/image-to-video** - `docs/KLING_2_6_IMAGE_TO_VIDEO_INTEGRATION.md`
 - [x] **kling-2.6/text-to-video** - `docs/KLING_2_6_TEXT_TO_VIDEO_INTEGRATION.md`
+- [x] **kling/v2-5-turbo-text-to-video-pro** - `docs/KLING_V2_5_TURBO_TEXT_TO_VIDEO_PRO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 2500 chars)
+  - Опциональные: `duration` ("5" | "10"), `aspect_ratio` ("16:9" | "9:16" | "1:1"), `negative_prompt` (max 2500 chars), `cfg_scale` (0-1, step 0.1)
+  - Default: `duration="5"`, `aspect_ratio="16:9"`, `negative_prompt="blur, distort, and low quality"`, `cfg_scale=0.5`
 
 ### ✅ Flux Models
 
