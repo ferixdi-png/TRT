@@ -2023,6 +2023,49 @@ def _validate_grok_imagine_text_to_image(
     return True, None
 
 
+def _validate_grok_imagine_upscale(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для grok-imagine/upscale согласно документации API.
+    
+    ВАЖНО: Эта модель работает только с task_id от предыдущих генераций KIE AI,
+    а не с прямыми URL изображений!
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["grok-imagine/upscale", "grok/imagine-upscale"]:
+        return True, None
+    
+    # Валидация task_id: обязательный, максимум 100 символов
+    task_id = normalized_input.get('task_id')
+    if not task_id:
+        return False, "Поле 'task_id' обязательно для апскейла. Используйте task_id от предыдущей генерации KIE AI (например, от grok-imagine/text-to-image)"
+    
+    if not isinstance(task_id, str):
+        task_id = str(task_id)
+    
+    task_id = task_id.strip()
+    if len(task_id) == 0:
+        return False, "Поле 'task_id' не может быть пустым"
+    if len(task_id) > 100:
+        return False, f"Поле 'task_id' слишком длинное: {len(task_id)} символов (максимум 100)"
+    
+    normalized_input['task_id'] = task_id
+    
+    # ВАЖНО: Эта модель НЕ поддерживает image_url, image_base64 и другие параметры!
+    # Только task_id от предыдущих генераций KIE AI
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -2271,6 +2314,11 @@ def build_input(
     
     # Специфичная валидация для grok-imagine/text-to-image
     is_valid, error_msg = _validate_grok_imagine_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для grok-imagine/upscale
+    is_valid, error_msg = _validate_grok_imagine_upscale(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     

@@ -142,7 +142,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'scale',
         'upscale_factor',
         'model',
-        'quality'
+        'quality',
+        'task_id'  # Для grok-imagine/upscale (только KIE AI task_id)
     },
     
     # Background Remove
