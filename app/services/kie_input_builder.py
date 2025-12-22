@@ -2656,6 +2656,177 @@ def _validate_kling_ai_avatar_v1_pro(
     return True, None
 
 
+def _normalize_image_size_for_seedream_v4(value: Any) -> Optional[str]:
+    """
+    Нормализует image_size для bytedance/seedream-v4-text-to-image.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение image_size (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "square", "square_hd",
+        "portrait_4_3", "portrait_3_2", "portrait_16_9",
+        "landscape_4_3", "landscape_3_2", "landscape_16_9", "landscape_21_9"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["square", "sq"]:
+        return "square"
+    elif str_value in ["square_hd", "square-hd", "squarehd", "hd"]:
+        return "square_hd"
+    elif str_value in ["portrait_4_3", "portrait-4-3", "portrait43", "4:3 portrait", "3:4"]:
+        return "portrait_4_3"
+    elif str_value in ["portrait_3_2", "portrait-3-2", "portrait32", "2:3 portrait"]:
+        return "portrait_3_2"
+    elif str_value in ["portrait_16_9", "portrait-16-9", "portrait169", "9:16 portrait"]:
+        return "portrait_16_9"
+    elif str_value in ["landscape_4_3", "landscape-4-3", "landscape43", "4:3 landscape"]:
+        return "landscape_4_3"
+    elif str_value in ["landscape_3_2", "landscape-3-2", "landscape32", "3:2 landscape"]:
+        return "landscape_3_2"
+    elif str_value in ["landscape_16_9", "landscape-16-9", "landscape169", "16:9 landscape"]:
+        return "landscape_16_9"
+    elif str_value in ["landscape_21_9", "landscape-21-9", "landscape219", "21:9 landscape"]:
+        return "landscape_21_9"
+    
+    return None
+
+
+def _normalize_image_resolution_for_seedream_v4(value: Any) -> Optional[str]:
+    """
+    Нормализует image_resolution для bytedance/seedream-v4-text-to-image.
+    Принимает значение и возвращает нормализованную строку в верхнем регистре.
+    ВАЖНО: Поддерживаются только "1K", "2K", "4K"!
+    
+    Args:
+        value: Значение image_resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().upper()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["1K", "2K", "4K"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["1k", "1", "1000", "1k"]:
+        return "1K"
+    elif str_lower in ["2k", "2", "2000", "2k"]:
+        return "2K"
+    elif str_lower in ["4k", "4", "4000", "4k", "uhd"]:
+        return "4K"
+    
+    return None
+
+
+def _validate_bytedance_seedream_v4_text_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/seedream-v4-text-to-image согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_size (опциональный, enum, default "square_hd")
+    - image_resolution (опциональный, enum, default "1K")
+    - max_images (опциональный, number, 1-6, default 1)
+    - seed (опциональный, number)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["bytedance/seedream-v4-text-to-image", "seedream-v4-text-to-image", "seedream-v4-t2i"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_seedream_v4(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd",
+                "portrait_4_3", "portrait_3_2", "portrait_16_9",
+                "landscape_4_3", "landscape_3_2", "landscape_16_9", "landscape_21_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация image_resolution: опциональный, enum
+    image_resolution = normalized_input.get('image_resolution')
+    if image_resolution is not None:
+        normalized_resolution = _normalize_image_resolution_for_seedream_v4(image_resolution)
+        if normalized_resolution is None:
+            valid_values = ["1K", "2K", "4K"]
+            return False, f"Поле 'image_resolution' должно быть одним из: {', '.join(valid_values)} (получено: {image_resolution})"
+        normalized_input['image_resolution'] = normalized_resolution
+    
+    # Валидация max_images: опциональный, number, 1-6
+    max_images = normalized_input.get('max_images')
+    if max_images is not None:
+        try:
+            max_images_num = int(float(max_images))  # Поддерживаем и int и float
+            if max_images_num < 1 or max_images_num > 6:
+                return False, f"Поле 'max_images' должно быть в диапазоне от 1 до 6 (получено: {max_images})"
+            normalized_input['max_images'] = max_images_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'max_images' должно быть числом от 1 до 6 (получено: {max_images})"
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))  # Поддерживаем и int и float
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

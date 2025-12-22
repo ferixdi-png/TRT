@@ -22,7 +22,10 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'quality',
         'resolution',
         'model',
-        'mode'
+        'mode',
+        'image_size',  # Для bytedance/seedream-v4-text-to-image
+        'image_resolution',  # Для bytedance/seedream-v4-text-to-image
+        'max_images'  # Для bytedance/seedream-v4-text-to-image
     },
     
     # Image-to-Image
