@@ -2594,6 +2594,93 @@ def _normalize_duration_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     return None
 
 
+def _validate_hailuo_02_image_to_video_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для hailuo/02-image-to-video-pro согласно документации API.
+    
+    ВАЖНО: Отличается от других hailuo моделей:
+    - prompt максимум 1500 символов (меньше чем у других)
+    - Есть параметр end_image_url (опциональный string)
+    - Есть параметр prompt_optimizer (boolean)
+    - НЕТ параметров duration, resolution и других
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["hailuo/02-image-to-video-pro", "hailuo/02-i2v-pro", "hailuo/0.2-image-to-video-pro"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 1500 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 1500:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 1500)"
+    
+    # Валидация image_url: обязательный string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения"
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if not image_url:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Проверяем что это валидный URL
+    if not image_url.startswith(('http://', 'https://')):
+        return False, "Поле 'image_url' должно быть валидным URL (начинается с http:// или https://)"
+    
+    normalized_input['image_url'] = image_url
+    
+    # ВАЖНО: Удаляем image_urls если он был передан (для этой модели нужен только image_url как string!)
+    if 'image_urls' in normalized_input:
+        logger.warning(f"Parameter 'image_urls' is not supported for hailuo/02-image-to-video-pro (use 'image_url' as string), removing it")
+        del normalized_input['image_urls']
+    
+    # Валидация end_image_url: опциональный string
+    end_image_url = normalized_input.get('end_image_url')
+    if end_image_url is not None:
+        if not isinstance(end_image_url, str):
+            end_image_url = str(end_image_url)
+        
+        end_image_url = end_image_url.strip()
+        # Если пустая строка, удаляем параметр
+        if not end_image_url:
+            del normalized_input['end_image_url']
+        else:
+            # Проверяем что это валидный URL
+            if not end_image_url.startswith(('http://', 'https://')):
+                return False, "Поле 'end_image_url' должно быть валидным URL (начинается с http:// или https://)"
+            normalized_input['end_image_url'] = end_image_url
+    
+    # Валидация prompt_optimizer: опциональный boolean
+    prompt_optimizer = normalized_input.get('prompt_optimizer')
+    if prompt_optimizer is not None:
+        normalized_bool = _normalize_boolean(prompt_optimizer)
+        if normalized_bool is None:
+            return False, f"Поле 'prompt_optimizer' должно быть boolean (true/false) (получено: {prompt_optimizer})"
+        normalized_input['prompt_optimizer'] = normalized_bool
+    
+    return True, None
+
+
 def _validate_hailuo_2_3_image_to_video_pro(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -3867,6 +3954,11 @@ def build_input(
     
     # Специфичная валидация для hailuo/02-text-to-video-pro
     is_valid, error_msg = _validate_hailuo_02_text_to_video_pro(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для hailuo/02-image-to-video-pro
+    is_valid, error_msg = _validate_hailuo_02_image_to_video_pro(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     
