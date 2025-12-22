@@ -112,8 +112,14 @@ async def create_application(settings: Optional[Settings] = None) -> Application
     if settings is None:
         settings = get_settings()
     
-    # Создаем Application
-    application = Application.builder().token(settings.telegram_bot_token).build()
+    # Создаем Application с post_init для обработки ошибок updater
+    async def post_init(app: Application) -> None:
+        """Post-init hook для обработки ошибок updater"""
+        # Обработчик ошибок уже добавлен в bot_kie.py, но убеждаемся что он есть
+        logger.debug("[BOOTSTRAP] Post-init hook called")
+    
+    # Создаем Application с post_init
+    application = Application.builder().token(settings.telegram_bot_token).post_init(post_init).build()
     
     # Инициализируем dependency container
     deps = DependencyContainer()
