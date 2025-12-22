@@ -1,229 +1,156 @@
 """
-Single instance lock - предотвращение 409 Conflict через единый механизм блокировки
-
-Алгоритм:
-- Если есть DATABASE_URL: использует PostgreSQL advisory lock через удержание соединения (session-level)
-- Если DATABASE_URL нет: file lock в DATA_DIR (или /tmp как fallback)
-
-ВАЖНО: Соединение держится открытым весь runtime для сохранения session-level lock.
+Single instance locking using PostgreSQL advisory locks.
+Prevents multiple bot instances from running simultaneously.
 """
-
 import os
 import sys
 import logging
-import hashlib
-from pathlib import Path
-from typing import Optional, Literal
+import asyncio
+from typing import Optional
 
-from app.utils.logging_config import get_logger
-from app.config import get_settings
+logger = logging.getLogger(__name__)
 
-logger = get_logger(__name__)
-
-# Глобальное состояние lock
-_lock_handle: Optional[object] = None
-_lock_type: Optional[Literal['postgres', 'file']] = None
-_lock_connection: Optional[object] = None  # PostgreSQL connection (для session-level lock)
-
-
-def _get_lock_key() -> int:
-    """Получить ключ для advisory lock (на основе BOT_TOKEN)"""
-    bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '')
-    if not bot_token:
-        raise ValueError("TELEGRAM_BOT_TOKEN not set")
-    
-    # Используем render_singleton_lock логику для совместимости
-    namespace = "telegram_polling"
-    combined = f"{namespace}:{bot_token}".encode('utf-8')
-    
-    # Используем SHA256 и берем первые 8 байт (64 бита) для bigint
-    hash_bytes = hashlib.sha256(combined).digest()[:8]
-    
-    # Конвертируем в unsigned int64, затем приводим к signed bigint
-    unsigned_key = int.from_bytes(hash_bytes, byteorder='big', signed=False)
-    
-    # Приводим к signed bigint
-    MAX_BIGINT = 9223372036854775807
-    lock_key = unsigned_key % (MAX_BIGINT + 1)
-    
-    return lock_key
-
-
-def _acquire_postgres_lock() -> Optional[object]:
-    """
-    Пытается получить PostgreSQL advisory lock через session-level connection.
-    
-    Returns:
-        dict с 'connection' и 'lock_key' если lock получен, None если нет
-    """
+try:
+    import asyncpg
+    HAS_ASYNCPG = True
+except ImportError:
+    HAS_ASYNCPG = False
     try:
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            return None
-        
-        # Пытаемся получить connection pool из database.py (psycopg2)
-        try:
-            from database import get_connection_pool
-            pool = get_connection_pool()
-        except Exception as e:
-            logger.debug(f"[LOCK] Cannot get connection pool from database.py: {e}")
-            return None
-        
-        if pool is None:
-            return None
-        
-        # Используем render_singleton_lock для получения lock
-        try:
-            import render_singleton_lock
-            lock_key = _get_lock_key()
-            conn = render_singleton_lock.acquire_lock_session(pool, lock_key)
-            
-            if conn:
-                logger.info(f"[LOCK] PostgreSQL advisory lock acquired (key={lock_key})")
-                return {'connection': conn, 'pool': pool, 'lock_key': lock_key}
-            else:
-                logger.warning(f"[LOCK] PostgreSQL advisory lock NOT acquired (key={lock_key}) - another instance is running")
-                return None
-        except ImportError:
-            logger.debug("[LOCK] render_singleton_lock not available")
-            return None
-        except Exception as e:
-            logger.warning(f"[LOCK] Failed to acquire PostgreSQL lock: {e}")
-            return None
-    
-    except Exception as e:
-        logger.debug(f"[LOCK] PostgreSQL lock acquisition failed: {e}")
-        return None
-
-
-def _acquire_file_lock() -> Optional[object]:
-    """
-    Пытается получить file lock.
-    
-    Returns:
-        FileLock object если lock получен, None если нет
-    """
-    try:
-        from filelock import FileLock, Timeout
-        
-        # Определяем путь к lock файлу
-        settings = get_settings()
-        data_dir = Path(settings.data_dir) if settings.data_dir else Path('/tmp')
-        
-        # Создаем директорию если не существует
-        data_dir.mkdir(parents=True, exist_ok=True)
-        lock_file = data_dir / 'bot_single_instance.lock'
-        
-        # Пробуем получить lock (non-blocking)
-        lock = FileLock(lock_file, timeout=0.1)
-        
-        try:
-            lock.acquire(timeout=0.1)
-            logger.info(f"[LOCK] File lock acquired: {lock_file}")
-            return lock
-        except Timeout:
-            logger.warning(f"[LOCK] File lock NOT acquired: {lock_file} - another instance is running")
-            return None
-    
+        import psycopg
+        HAS_PSYCOPG = True
     except ImportError:
-        logger.debug("[LOCK] filelock not available, skipping file lock")
-        return None
-    except Exception as e:
-        logger.warning(f"[LOCK] Failed to acquire file lock: {e}")
-        return None
+        HAS_PSYCOPG = False
+
+from app.utils.singleton_lock import (
+    set_lock_acquired,
+    is_lock_acquired,
+    should_exit_on_lock_conflict,
+    get_safe_mode
+)
 
 
-def acquire_single_instance_lock() -> bool:
-    """
-    Попытаться получить single instance lock (PostgreSQL или filelock).
+class SingletonLock:
+    """PostgreSQL advisory lock for single instance enforcement."""
     
-    КРИТИЧНО: Если DATABASE_URL установлен, PostgreSQL lock ОБЯЗАТЕЛЕН.
-    Если PostgreSQL lock не получен (другой инстанс его держит), процесс должен завершиться,
-    даже если file lock получен. Это предотвращает одновременную работу двух инстансов.
+    LOCK_ID = 123456789  # Fixed advisory lock ID
     
-    Returns:
-        True если lock получен, False если нет
+    def __init__(self, dsn: Optional[str] = None):
+        self.dsn = dsn or os.getenv("DATABASE_URL")
+        self._connection = None
+        self._lock_held = False
         
-    Side effect:
-        Сохраняет lock handle в глобальной переменной для последующего освобождения
-    """
-    global _lock_handle, _lock_type, _lock_connection
-    
-    database_url = os.getenv('DATABASE_URL')
-    
-    # Пробуем PostgreSQL advisory lock сначала
-    lock_data = _acquire_postgres_lock()
-    if lock_data:
-        _lock_handle = lock_data
-        _lock_connection = lock_data['connection']
-        _lock_type = 'postgres'
-        return True
-    
-    # КРИТИЧНО: Если DATABASE_URL установлен, но PostgreSQL lock не получен - это конфликт!
-    # Другой инстанс уже держит PostgreSQL lock, и мы НЕ должны запускаться с file lock.
-    if database_url:
-        logger.error("=" * 60)
-        logger.error("[LOCK] CRITICAL: DATABASE_URL is set, but PostgreSQL lock NOT acquired")
-        logger.error("[LOCK] Another bot instance is already running with PostgreSQL lock")
-        logger.error("[LOCK] This instance will exit to prevent 409 Conflict")
-        logger.error("[LOCK] Exiting gracefully (exit code 0) to prevent restart loop")
-        logger.error("=" * 60)
-        return False
-    
-    # Fallback на filelock ТОЛЬКО если DATABASE_URL не установлен
-    lock_handle = _acquire_file_lock()
-    if lock_handle:
-        _lock_handle = lock_handle
-        _lock_connection = None
-        _lock_type = 'file'
-        return True
-    
-    # Lock не получен - другой экземпляр запущен
-    logger.error("=" * 60)
-    logger.error("[LOCK] FAILED: Another bot instance is already running")
-    logger.error("[LOCK] Exiting gracefully (exit code 0) to prevent restart loop")
-    logger.error("=" * 60)
-    return False
-
-
-def release_single_instance_lock():
-    """Освободить single instance lock"""
-    global _lock_handle, _lock_type, _lock_connection
-    
-    if _lock_handle is None:
-        return
-    
-    try:
-        if _lock_type == 'postgres':
-            # Освобождаем PostgreSQL advisory lock
-            lock_data = _lock_handle
-            if isinstance(lock_data, dict):
-                conn = lock_data.get('connection')
-                pool = lock_data.get('pool')
-                lock_key = lock_data.get('lock_key')
+    async def acquire(self, timeout: float = 5.0) -> bool:
+        """
+        Acquire PostgreSQL advisory lock.
+        
+        Args:
+            timeout: Timeout for connection in seconds
+            
+        Returns:
+            True if lock acquired, False if already held by another instance
+        """
+        if not self.dsn:
+            logger.warning("DATABASE_URL not set, skipping singleton lock")
+            # In passive mode, allow startup without lock
+            set_lock_acquired(False)
+            return False
+            
+        try:
+            if HAS_ASYNCPG:
+                self._connection = await asyncio.wait_for(
+                    asyncpg.connect(self.dsn),
+                    timeout=timeout
+                )
+            elif HAS_PSYCOPG:
+                self._connection = await asyncio.wait_for(
+                    psycopg.AsyncConnection.connect(self.dsn),
+                    timeout=timeout
+                )
+            else:
+                logger.warning("No async PostgreSQL driver available, skipping singleton lock")
+                set_lock_acquired(False)
+                return False
                 
-                if conn and pool and lock_key is not None:
-                    try:
-                        import render_singleton_lock
-                        render_singleton_lock.release_lock_session(pool, conn, lock_key)
-                        logger.info("[LOCK] PostgreSQL advisory lock released")
-                    except Exception as e:
-                        logger.warning(f"[LOCK] Failed to release PostgreSQL lock: {e}")
-        
-        elif _lock_type == 'file':
-            # Освобождаем filelock
-            _lock_handle.release()
-            logger.info("[LOCK] File lock released")
+            # Try to acquire advisory lock (non-blocking)
+            if HAS_ASYNCPG:
+                lock_acquired = await self._connection.fetchval(
+                    "SELECT pg_try_advisory_lock($1)",
+                    self.LOCK_ID
+                )
+            else:  # psycopg
+                async with self._connection.cursor() as cur:
+                    await cur.execute(
+                        "SELECT pg_try_advisory_lock(%s)",
+                        (self.LOCK_ID,)
+                    )
+                    result = await cur.fetchone()
+                    lock_acquired = result[0] if result else False
+                    
+            if lock_acquired:
+                self._lock_held = True
+                set_lock_acquired(True)
+                logger.info(f"PostgreSQL advisory lock acquired (ID: {self.LOCK_ID})")
+                return True
+            else:
+                self._lock_held = False
+                set_lock_acquired(False)
+                logger.warning(
+                    f"PostgreSQL advisory lock already held (ID: {self.LOCK_ID}). "
+                    f"Another instance is running."
+                )
+                
+                # Check if we should exit or go to passive mode
+                if should_exit_on_lock_conflict():
+                    logger.info("SINGLETON_LOCK_STRICT=1: Exiting gracefully (exit code 0)")
+                    await self.release()
+                    sys.exit(0)
+                else:
+                    logger.info(
+                        "[LOCK] Passive mode: telegram runner disabled, healthcheck only. "
+                        f"Safe mode: {get_safe_mode()}"
+                    )
+                    return False
+                    
+        except asyncio.TimeoutError:
+            logger.warning(f"Singleton lock acquisition timed out after {timeout}s")
+            set_lock_acquired(False)
+            return False
+        except Exception as e:
+            logger.error(f"Failed to acquire singleton lock: {e}")
+            set_lock_acquired(False)
+            return False
     
-    except Exception as e:
-        logger.warning(f"[LOCK] Failed to release lock: {e}")
-    finally:
-        _lock_handle = None
-        _lock_connection = None
-        _lock_type = None
-
-
-def is_lock_held() -> bool:
-    """Проверить, удерживается ли lock"""
-    return _lock_handle is not None and _lock_type is not None
-
+    async def release(self):
+        """Release PostgreSQL advisory lock."""
+        if not self._connection or not self._lock_held:
+            return
+            
+        try:
+            if HAS_ASYNCPG:
+                await self._connection.execute(
+                    "SELECT pg_advisory_unlock($1)",
+                    self.LOCK_ID
+                )
+            else:  # psycopg
+                async with self._connection.cursor() as cur:
+                    await cur.execute(
+                        "SELECT pg_advisory_unlock(%s)",
+                        (self.LOCK_ID,)
+                    )
+                    
+            self._lock_held = False
+            set_lock_acquired(False)
+            logger.info("PostgreSQL advisory lock released")
+        except Exception as e:
+            logger.error(f"Failed to release singleton lock: {e}")
+        finally:
+            if self._connection:
+                await self._connection.close()
+                self._connection = None
+    
+    async def __aenter__(self):
+        await self.acquire()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.release()

@@ -1,49 +1,45 @@
 """
-DEPRECATED: Этот модуль существует только для обратной совместимости.
-Используйте app.locking.single_instance вместо этого.
-
-Thin wrapper вокруг app.locking.single_instance для обратной совместимости.
+Singleton lock utilities for preventing multiple bot instances.
 """
+import os
+import logging
+from typing import Optional
 
-import sys
-from app.locking.single_instance import (
-    acquire_single_instance_lock,
-    release_single_instance_lock as _release_single_instance_lock,
-    is_lock_held,
-)
-from app.utils.logging_config import get_logger
+logger = logging.getLogger(__name__)
 
-logger = get_logger(__name__)
+# Global state for lock acquisition
+_lock_acquired = False
+_lock_strict_mode = os.getenv("SINGLETON_LOCK_STRICT", "0").lower() in ("1", "true", "yes")
 
 
-def acquire_singleton_lock() -> bool:
+def is_lock_acquired() -> bool:
+    """Check if singleton lock was acquired."""
+    return _lock_acquired
+
+
+def set_lock_acquired(acquired: bool):
+    """Set lock acquisition status."""
+    global _lock_acquired
+    _lock_acquired = acquired
+
+
+def is_strict_mode() -> bool:
+    """Check if strict mode is enabled (exit on lock conflict)."""
+    return _lock_strict_mode
+
+
+def should_exit_on_lock_conflict() -> bool:
+    """Determine if process should exit when lock cannot be acquired."""
+    return _lock_strict_mode
+
+
+def get_safe_mode() -> str:
     """
-    DEPRECATED: Используйте app.locking.single_instance.acquire_single_instance_lock()
-    
-    Попытаться получить singleton lock (PostgreSQL или filelock)
+    Get safe mode status based on lock acquisition.
     
     Returns:
-        True если lock получен, False если нет
-    
-    Side effect:
-        Если lock не получен, вызывает sys.exit(0) (не бесконечные рестарты)
+        "active" if lock acquired, "passive" if not acquired
     """
-    if acquire_single_instance_lock():
-        return True
-    
-    # Lock не получен - другой экземпляр запущен
-    logger.error("=" * 60)
-    logger.error("[LOCK] FAILED: Another bot instance is already running")
-    logger.error("[LOCK] Exiting gracefully (exit code 0) to prevent restart loop")
-    logger.error("=" * 60)
-    sys.exit(0)  # exit(0) чтобы Render не считал это ошибкой
-
-
-def release_singleton_lock():
-    """
-    DEPRECATED: Используйте app.locking.single_instance.release_single_instance_lock()
-    
-    Освободить singleton lock
-    """
-    _release_single_instance_lock()
-
+    if _lock_acquired:
+        return "active"
+    return "passive"
