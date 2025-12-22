@@ -411,6 +411,19 @@ def build_input(
             continue
         
         # Обрабатываем специальные случаи
+        # Для image_urls сохраняем как массив (для wan/2-6-image-to-video)
+        if normalized_key == 'image_urls':
+            # Если это строка, конвертируем в массив
+            if isinstance(value, str) and value.strip():
+                value = [value.strip()]
+            # Если это массив, оставляем как есть
+            elif isinstance(value, list):
+                # Фильтруем пустые элементы
+                value = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+            # Если пустое, пропускаем
+            if not value:
+                continue
+        
         if normalized_key in ['image_url', 'image_base64', 'image']:
             # Если это список, берём первый элемент
             if isinstance(value, list) and len(value) > 0:
