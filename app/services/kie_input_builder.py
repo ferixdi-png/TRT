@@ -2827,6 +2827,119 @@ def _validate_bytedance_seedream_v4_text_to_image(
     return True, None
 
 
+def _validate_bytedance_seedream_v4_edit(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/seedream-v4-edit согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_urls (обязательный, массив, до 10 изображений)
+    - image_size (опциональный, enum, default "square_hd")
+    - image_resolution (опциональный, enum, default "1K")
+    - max_images (опциональный, number, 1-6, default 1)
+    - seed (опциональный, number)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["bytedance/seedream-v4-edit", "seedream-v4-edit", "seedream-v4-i2i"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для редактирования изображения"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_urls: обязательный, массив, до 10 изображений
+    image_urls = normalized_input.get('image_urls')
+    if not image_urls:
+        return False, "Поле 'image_urls' обязательно для редактирования изображения. Загрузите хотя бы одно изображение."
+    
+    # Нормализуем в массив, если передан один URL
+    if isinstance(image_urls, str):
+        image_urls = [image_urls]
+    elif not isinstance(image_urls, list):
+        return False, f"Поле 'image_urls' должно быть массивом URL или одним URL (получено: {type(image_urls).__name__})"
+    
+    if len(image_urls) == 0:
+        return False, "Поле 'image_urls' не может быть пустым массивом. Загрузите хотя бы одно изображение."
+    
+    if len(image_urls) > 10:
+        return False, f"Поле 'image_urls' может содержать максимум 10 изображений (получено: {len(image_urls)})"
+    
+    # Проверяем что все элементы - строки
+    normalized_urls = []
+    for i, url in enumerate(image_urls):
+        if not isinstance(url, str):
+            url = str(url)
+        url = url.strip()
+        if len(url) == 0:
+            return False, f"Элемент {i+1} в 'image_urls' не может быть пустым"
+        normalized_urls.append(url)
+    
+    normalized_input['image_urls'] = normalized_urls
+    
+    # Валидация image_size: опциональный, enum (переиспользуем функцию из text-to-image)
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_seedream_v4(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd",
+                "portrait_4_3", "portrait_3_2", "portrait_16_9",
+                "landscape_4_3", "landscape_3_2", "landscape_16_9", "landscape_21_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация image_resolution: опциональный, enum (переиспользуем функцию из text-to-image)
+    image_resolution = normalized_input.get('image_resolution')
+    if image_resolution is not None:
+        normalized_resolution = _normalize_image_resolution_for_seedream_v4(image_resolution)
+        if normalized_resolution is None:
+            valid_values = ["1K", "2K", "4K"]
+            return False, f"Поле 'image_resolution' должно быть одним из: {', '.join(valid_values)} (получено: {image_resolution})"
+        normalized_input['image_resolution'] = normalized_resolution
+    
+    # Валидация max_images: опциональный, number, 1-6
+    max_images = normalized_input.get('max_images')
+    if max_images is not None:
+        try:
+            max_images_num = int(float(max_images))  # Поддерживаем и int и float
+            if max_images_num < 1 or max_images_num > 6:
+                return False, f"Поле 'max_images' должно быть в диапазоне от 1 до 6 (получено: {max_images})"
+            normalized_input['max_images'] = max_images_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'max_images' должно быть числом от 1 до 6 (получено: {max_images})"
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))  # Поддерживаем и int и float
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
@@ -4320,6 +4433,11 @@ def build_input(
     
     # Специфичная валидация для bytedance/seedream-v4-text-to-image
     is_valid, error_msg = _validate_bytedance_seedream_v4_text_to_image(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для bytedance/seedream-v4-edit
+    is_valid, error_msg = _validate_bytedance_seedream_v4_edit(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     

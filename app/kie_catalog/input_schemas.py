@@ -32,6 +32,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
     'i2i': {
         'prompt',
         'image_url',
+        'image_urls',  # Для bytedance/seedream-v4-edit
         'image_base64',
         'image',
         'strength',
@@ -43,7 +44,10 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'negative_prompt',
         'style',
         'mode',
-        'quality'
+        'quality',
+        'image_size',  # Для bytedance/seedream-v4-edit
+        'image_resolution',  # Для bytedance/seedream-v4-edit
+        'max_images'  # Для bytedance/seedream-v4-edit
     },
     
     # Text-to-Video

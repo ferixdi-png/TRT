@@ -159,6 +159,11 @@
   - Опциональные: `image_size` (enum, 9 значений), `image_resolution` ("1K" | "2K" | "4K"), `max_images` (1-6), `seed` (number)
   - Default: `image_size="square_hd"`, `image_resolution="1K"`, `max_images=1`
   - Важно: Уникальные параметры! Использует `image_size` и `image_resolution` вместо стандартных `width/height`! Финальное разрешение = `image_size` + `image_resolution`!
+- [x] **bytedance/seedream-v4-edit** - `docs/BYTEDANCE_SEEDREAM_V4_EDIT_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000 chars), `image_urls` (array, до 10 изображений)
+  - Опциональные: `image_size` (enum, 9 значений), `image_resolution` ("1K" | "2K" | "4K"), `max_images` (1-6), `seed` (number)
+  - Default: `image_size="square_hd"`, `image_resolution="1K"`, `max_images=1`
+  - Важно: Уникальные параметры! Использует `image_urls` (массив, до 10) вместо стандартного `image_url`! Использует `image_size` и `image_resolution` вместо стандартных `width/height`! Финальное разрешение = `image_size` + `image_resolution`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
