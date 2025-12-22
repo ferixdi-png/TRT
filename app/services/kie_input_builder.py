@@ -8552,6 +8552,13 @@ def build_input(
         if 'reference_mask_urls' not in normalized_input:
             normalized_input['reference_mask_urls'] = ""  # Default согласно документации (пустая строка!)
     
+    # Применяем дефолты для ideogram/v3-edit
+    if model_id in ["ideogram/v3-edit", "ideogram-v3-edit", "v3-edit"]:
+        if 'rendering_speed' not in normalized_input:
+            normalized_input['rendering_speed'] = "BALANCED"  # Default согласно документации
+        if 'expand_prompt' not in normalized_input:
+            normalized_input['expand_prompt'] = True  # Default согласно документации
+    
     # Применяем дефолты для ideogram/character
     if model_id in ["ideogram/character", "ideogram-character", "character"]:
         if 'rendering_speed' not in normalized_input:
