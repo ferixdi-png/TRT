@@ -17,6 +17,10 @@ import time
 from urllib.parse import urljoin
 import re
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Устанавливаем кодировку для вывода (важно для Render)
 if sys.stdout.encoding is None or sys.stdout.encoding.lower() != 'utf-8':
@@ -28,7 +32,7 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != 'utf-8':
         sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
 
 class KieApiScraper:
-    def __init__(self):
+    def __init__(self, max_workers=5, enable_cache=True):
         # Проверка согласованности URL параметров
         self.base_url = "https://api.kie.ai/api/v1"
         self.docs_base = "https://docs.kie.ai"
@@ -40,12 +44,29 @@ class KieApiScraper:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
         self.models = []
+        self.max_workers = max_workers
+        self.enable_cache = enable_cache
+        self.cache = {} if enable_cache else None
+        
+        # Настройка сессии с retry механизмом
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        self.session.headers.update(self.headers)
     
     def get_market_page(self):
         """Улучшенный парсинг главной страницы с моделями"""
         try:
             print(f"   📡 Запрос к {self.market_url}...")
-            resp = requests.get(self.market_url, headers=self.headers, timeout=10)
+            # Используем сессию с retry
+            resp = self.session.get(self.market_url, timeout=10)
             resp.raise_for_status()
             print(f"   ✅ ОТВЕТ: Получен ответ со статусом {resp.status_code}")
             
@@ -309,13 +330,23 @@ class KieApiScraper:
     def scrape_model_docs(self, model_url, model_name):
         """Улучшенный парсинг документации конкретной модели"""
         try:
-            print(f"    📥 Загрузка страницы модели...")
-            resp = requests.get(model_url, headers=self.headers, timeout=10)
-            resp.raise_for_status()
-            print(f"    ✅ ОТВЕТ: Страница загружена (статус {resp.status_code})")
-            
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            print(f"    🔍 ОТВЕТ: Парсинг HTML документации...")
+            # Проверка кэша
+            if self.enable_cache and model_url in self.cache:
+                print(f"    💾 Использован кэш для {model_name}")
+                cached_data = self.cache[model_url]
+                resp_text = cached_data['text']
+                soup = BeautifulSoup(resp_text, 'html.parser')
+            else:
+                print(f"    📥 Загрузка страницы модели...")
+                resp = self.session.get(model_url, timeout=10)
+                resp.raise_for_status()
+                print(f"    ✅ ОТВЕТ: Страница загружена (статус {resp.status_code})")
+                resp_text = resp.text
+                soup = BeautifulSoup(resp_text, 'html.parser')
+                
+                # Сохранение в кэш
+                if self.enable_cache:
+                    self.cache[model_url] = {'text': resp_text}
             
             # Структура model_info согласована с финальным JSON
             model_info = {
@@ -333,12 +364,12 @@ class KieApiScraper:
             
             # Улучшенное извлечение endpoint
             print(f"    🔍 ОТВЕТ: Поиск API endpoint...")
-            model_info['endpoint'] = self._extract_endpoint(resp.text, model_name)
+            model_info['endpoint'] = self._extract_endpoint(resp_text, model_name)
             print(f"    ✅ ОТВЕТ: Endpoint найден: {model_info['endpoint']}")
             
             # Улучшенное извлечение JSON примера
             print(f"    🔍 ОТВЕТ: Поиск примеров JSON...")
-            example_json = self._extract_json_example(soup, resp.text)
+            example_json = self._extract_json_example(soup, resp_text)
             if example_json:
                 model_info['example'] = example_json
                 # Пытаемся распарсить в структурированный формат
@@ -359,7 +390,7 @@ class KieApiScraper:
             
             # Улучшенное извлечение параметров
             print(f"    🔍 ОТВЕТ: Извлечение параметров...")
-            extracted_params = self._extract_parameters(resp.text, soup)
+            extracted_params = self._extract_parameters(resp_text, soup)
             if extracted_params:
                 model_info['params'] = extracted_params
                 print(f"    ✅ ОТВЕТ: Найдено параметров: {', '.join(extracted_params.keys())}")
@@ -370,7 +401,7 @@ class KieApiScraper:
             
             # Извлечение схемы input
             print(f"    🔍 ОТВЕТ: Извлечение схемы input...")
-            model_info['input_schema'] = self._extract_input_schema(resp.text, soup)
+            model_info['input_schema'] = self._extract_input_schema(resp_text, soup)
             print(f"    ✅ ОТВЕТ: Схема input извлечена")
             
             # Определяем категорию модели
@@ -643,16 +674,27 @@ class KieApiScraper:
         
         print(f"✅ ОТВЕТ: Найдено {len(model_links)} моделей на странице маркета")
         
-        # Действие 2: Парсинг документации
+        # Действие 2: Парсинг документации (параллельно)
         print(f"\n📚 ДЕЙСТВИЕ 2: Парсинг документации моделей...")
         max_models = min(50, len(model_links))  # Увеличиваем лимит для большего покрытия
-        print(f"✅ ОТВЕТ: Начинаем парсинг {max_models} моделей")
+        print(f"✅ ОТВЕТ: Начинаем парсинг {max_models} моделей (параллельно, {self.max_workers} потоков)")
         
-        for i, model in enumerate(model_links[:max_models], 1):
-            print(f"\n  🔄 Обработка {i}/{max_models}: {model['name']}")
-            self.scrape_model_docs(model['url'], model['name'])
-            print(f"  ✅ ОТВЕТ: Обработка модели '{model['name']}' завершена")
-            time.sleep(0.5)  # Уменьшаем задержку для ускорения
+        # Параллельная обработка
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {
+                executor.submit(self.scrape_model_docs, model['url'], model['name']): model 
+                for model in model_links[:max_models]
+            }
+            
+            completed = 0
+            for future in as_completed(futures):
+                completed += 1
+                model = futures[future]
+                try:
+                    future.result()  # Получаем результат (может выбросить исключение)
+                    print(f"  ✅ ОТВЕТ: Обработка {completed}/{max_models}: '{model['name']}' завершена")
+                except Exception as e:
+                    print(f"  ❌ ОТВЕТ: Ошибка при обработке '{model['name']}': {e}")
         
         print(f"\n✅ ОТВЕТ: Парсинг завершен. Обработано {len(self.models)} моделей")
         
