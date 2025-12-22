@@ -2767,6 +2767,89 @@ def _validate_sora_2_text_to_video(
     return True, None
 
 
+def _validate_sora_2_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для sora-2-image-to-video согласно документации API.
+    
+    ВАЖНО: Отличается от sora-2-pro-image-to-video:
+    - НЕТ параметра size (в pro версии есть)
+    - Только: prompt, image_urls, aspect_ratio, n_frames, remove_watermark
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["sora-2-image-to-video", "sora-2/i2v", "openai/sora-2-image-to-video"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 10000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    
+    # Валидация image_urls: обязательный массив
+    image_urls = normalized_input.get('image_urls')
+    if not image_urls:
+        return False, "Поле 'image_urls' обязательно для генерации видео. Загрузите изображение"
+    
+    # Переиспользуем функцию нормализации из wan/2-6-image-to-video
+    normalized_image_urls = _normalize_image_urls_for_wan_2_6(image_urls)
+    if normalized_image_urls is None:
+        return False, "Поле 'image_urls' должно быть массивом валидных URL изображений"
+    normalized_input['image_urls'] = normalized_image_urls
+    
+    # Валидация aspect_ratio: опциональный, enum ("portrait" или "landscape")
+    # Переиспользуем функцию нормализации из sora-2-pro-storyboard
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        normalized_aspect_ratio = _normalize_aspect_ratio_for_sora_2_pro_storyboard(aspect_ratio)
+        if normalized_aspect_ratio is None:
+            valid_values = ["portrait", "landscape"]
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация n_frames: опциональный, enum ("10" или "15")
+    # Переиспользуем функцию нормализации из sora-2-pro-text-to-video
+    n_frames = normalized_input.get('n_frames')
+    if n_frames is not None:
+        normalized_n_frames = _normalize_n_frames_for_sora_2_pro_text_to_video(n_frames)
+        if normalized_n_frames is None:
+            valid_values = ["10", "15"]
+            return False, f"Поле 'n_frames' должно быть одним из: {', '.join(valid_values)} (получено: {n_frames})"
+        normalized_input['n_frames'] = normalized_n_frames
+    
+    # Валидация remove_watermark: опциональный boolean
+    remove_watermark = normalized_input.get('remove_watermark')
+    if remove_watermark is not None:
+        normalized_remove_watermark = _normalize_boolean(remove_watermark)
+        if normalized_remove_watermark is None:
+            return False, f"Поле 'remove_watermark' должно быть boolean (true/false) (получено: {remove_watermark})"
+        normalized_input['remove_watermark'] = normalized_remove_watermark
+    
+    # ВАЖНО: Удаляем параметр size если он был передан (в sora-2-image-to-video его нет!)
+    if 'size' in normalized_input:
+        logger.warning(f"Parameter 'size' is not supported for sora-2-image-to-video (only for pro version), removing it")
+        del normalized_input['size']
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -3111,6 +3194,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для sora-2-image-to-video (не pro версия!)
+    is_valid, error_msg = _validate_sora_2_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для sora-2-pro-text-to-video
     is_valid, error_msg = _validate_sora_2_pro_text_to_video(model_id, normalized_input)
     if not is_valid:
@@ -3227,6 +3315,16 @@ def build_input(
         if 'remove_watermark' not in normalized_input:
             normalized_input['remove_watermark'] = True  # Default согласно документации
         # ВАЖНО: НЕТ параметра size в sora-2-text-to-video (только в pro версии!)
+    
+    # Применяем дефолты для sora-2-image-to-video (не pro версия!)
+    if model_id in ["sora-2-image-to-video", "sora-2/i2v", "openai/sora-2-image-to-video"]:
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
+        if 'n_frames' not in normalized_input:
+            normalized_input['n_frames'] = "10"  # Default согласно документации
+        if 'remove_watermark' not in normalized_input:
+            normalized_input['remove_watermark'] = True  # Default согласно документации
+        # ВАЖНО: НЕТ параметра size в sora-2-image-to-video (только в pro версии!)
     
     # Применяем дефолты для sora-2-pro-text-to-video
     if model_id in ["sora-2-pro-text-to-video", "sora-2-pro/t2v", "openai/sora-2-pro-text-to-video"]:
