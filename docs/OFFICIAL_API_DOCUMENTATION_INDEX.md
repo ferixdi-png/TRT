@@ -204,6 +204,11 @@
   - Опциональные: `voice` (enum, 21 значение), `stability` (0-1), `similarity_boost` (0-1), `style` (0-1), `speed` (0.7-1.2), `timestamps` (boolean), `previous_text` (max 5000), `next_text` (max 5000), `language_code` (max 500)
   - Default: `voice="Rachel"`, `stability=0.5`, `similarity_boost=0.75`, `style=0`, `speed=1`, `timestamps=false`, `previous_text=""`, `next_text=""`, `language_code=""`
   - Важно: Уникальные параметры: `stability`, `similarity_boost`, `timestamps`, `previous_text`, `next_text`! Использует `language_code` вместо стандартного `language`! НЕТ параметров `model` и `emotion`!
+- [x] **wan/2-2-a14b-speech-to-video-turbo** - `docs/WAN_2_2_A14B_SPEECH_TO_VIDEO_TURBO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000), `image_url` (max 10MB, jpeg/png/webp), `audio_url` (max 10MB, mp3/wav/ogg/m4a/flac/aac/x-ms-wma/mpeg)
+  - Опциональные: `num_frames` (40-120, кратно 4), `frames_per_second` (4-60), `resolution` (enum: 480p/580p/720p), `negative_prompt` (max 500), `seed`, `num_inference_steps` (2-40), `guidance_scale` (1-10), `shift` (1-10), `enable_safety_checker` (boolean)
+  - Default: `num_frames=80`, `frames_per_second=16`, `resolution="480p"`, `negative_prompt=""`, `num_inference_steps=27`, `guidance_scale=3.5`, `shift=5`, `enable_safety_checker=true`
+  - Важно: ТРИ обязательных параметра: `prompt`, `image_url`, `audio_url`! Использует `num_frames` вместо стандартного `duration`! Уникальные параметры: `num_inference_steps`, `guidance_scale`, `shift`, `enable_safety_checker`! НЕТ параметров `duration`, `with_audio`, `aspect_ratio`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)

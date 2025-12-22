@@ -3832,6 +3832,199 @@ def _validate_elevenlabs_text_to_speech_multilingual_v2(
     return True, None
 
 
+def _normalize_resolution_for_wan_2_2_a14b_speech_to_video_turbo(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для wan/2-2-a14b-speech-to-video-turbo.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре с 'p'.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["480p", "580p", "720p"]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_wan_2_2_a14b_speech_to_video_turbo(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для wan/2-2-a14b-speech-to-video-turbo согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - audio_url (обязательный, макс 10MB, mp3/wav/ogg/m4a/flac/aac/x-ms-wma/mpeg)
+    - num_frames (опциональный, number, 40-120, кратно 4, default 80)
+    - frames_per_second (опциональный, number, 4-60, default 16)
+    - resolution (опциональный, enum, default "480p")
+    - negative_prompt (опциональный, string, макс 500 символов, default "")
+    - seed (опциональный, number)
+    - num_inference_steps (опциональный, number, 2-40, default 27)
+    - guidance_scale (опциональный, number, 1-10, default 3.5)
+    - shift (опциональный, number, 1-10, default 5)
+    - enable_safety_checker (опциональный, boolean, default true)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["wan/2-2-a14b-speech-to-video-turbo", "wan-2-2-a14b-speech-to-video-turbo", "wan/2-2-a14b-speech-to-video-turbo"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация audio_url: обязательный, string
+    audio_url = normalized_input.get('audio_url')
+    if not audio_url:
+        return False, "Поле 'audio_url' обязательно для генерации видео. Укажите URL аудио файла."
+    
+    if not isinstance(audio_url, str):
+        audio_url = str(audio_url)
+    
+    audio_url = audio_url.strip()
+    if len(audio_url) == 0:
+        return False, "Поле 'audio_url' не может быть пустым"
+    
+    # Валидация num_frames: опциональный, number, 40-120, кратно 4
+    num_frames = normalized_input.get('num_frames')
+    if num_frames is not None:
+        try:
+            frames_num = int(float(num_frames))
+            if frames_num < 40 or frames_num > 120:
+                return False, f"Поле 'num_frames' должно быть в диапазоне от 40 до 120 (получено: {num_frames})"
+            if frames_num % 4 != 0:
+                return False, f"Поле 'num_frames' должно быть кратно 4 (получено: {num_frames})"
+            normalized_input['num_frames'] = frames_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'num_frames' должно быть числом от 40 до 120 (кратно 4) (получено: {num_frames})"
+    
+    # Валидация frames_per_second: опциональный, number, 4-60
+    frames_per_second = normalized_input.get('frames_per_second')
+    if frames_per_second is not None:
+        try:
+            fps_num = int(float(frames_per_second))
+            if fps_num < 4 or fps_num > 60:
+                return False, f"Поле 'frames_per_second' должно быть в диапазоне от 4 до 60 (получено: {frames_per_second})"
+            normalized_input['frames_per_second'] = fps_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'frames_per_second' должно быть числом от 4 до 60 (получено: {frames_per_second})"
+    
+    # Валидация resolution: опциональный, enum
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_wan_2_2_a14b_speech_to_video_turbo(resolution)
+        if normalized_resolution is None:
+            return False, f"Поле 'resolution' должно быть одним из: 480p, 580p, 720p (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    # Валидация negative_prompt: опциональный, string, макс 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 500)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация num_inference_steps: опциональный, number, 2-40
+    num_inference_steps = normalized_input.get('num_inference_steps')
+    if num_inference_steps is not None:
+        try:
+            steps_num = int(float(num_inference_steps))
+            if steps_num < 2 or steps_num > 40:
+                return False, f"Поле 'num_inference_steps' должно быть в диапазоне от 2 до 40 (получено: {num_inference_steps})"
+            normalized_input['num_inference_steps'] = steps_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'num_inference_steps' должно быть числом от 2 до 40 (получено: {num_inference_steps})"
+    
+    # Валидация guidance_scale: опциональный, number, 1-10
+    guidance_scale = normalized_input.get('guidance_scale')
+    if guidance_scale is not None:
+        try:
+            scale_num = float(guidance_scale)
+            if scale_num < 1 or scale_num > 10:
+                return False, f"Поле 'guidance_scale' должно быть в диапазоне от 1 до 10 (получено: {guidance_scale})"
+            normalized_input['guidance_scale'] = scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'guidance_scale' должно быть числом от 1 до 10 (получено: {guidance_scale})"
+    
+    # Валидация shift: опциональный, number, 1-10
+    shift = normalized_input.get('shift')
+    if shift is not None:
+        try:
+            shift_num = float(shift)
+            if shift_num < 1 or shift_num > 10:
+                return False, f"Поле 'shift' должно быть в диапазоне от 1 до 10 (получено: {shift})"
+            normalized_input['shift'] = shift_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'shift' должно быть числом от 1 до 10 (получено: {shift})"
+    
+    # Валидация enable_safety_checker: опциональный, boolean
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
