@@ -16,6 +16,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'steps',
         'seed',
         'guidance',
+        'guidance_scale',  # Для bytedance/seedream
         'style',
         'image_count',
         'aspect_ratio',
@@ -23,9 +24,10 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'resolution',
         'model',
         'mode',
-        'image_size',  # Для bytedance/seedream-v4-text-to-image
+        'image_size',  # Для bytedance/seedream-v4-text-to-image и bytedance/seedream
         'image_resolution',  # Для bytedance/seedream-v4-text-to-image
-        'max_images'  # Для bytedance/seedream-v4-text-to-image
+        'max_images',  # Для bytedance/seedream-v4-text-to-image
+        'enable_safety_checker'  # Для bytedance/seedream
     },
     
     # Image-to-Image

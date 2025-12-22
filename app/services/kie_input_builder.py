@@ -4025,6 +4025,119 @@ def _validate_wan_2_2_a14b_speech_to_video_turbo(
     return True, None
 
 
+def _normalize_image_size_for_bytedance_seedream(value: Any) -> Optional[str]:
+    """
+    Нормализует image_size для bytedance/seedream.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре с подчеркиваниями.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение image_size (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "square", "square_hd", "portrait_4_3", "portrait_16_9",
+        "landscape_4_3", "landscape_16_9"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_bytedance_seedream(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/seedream согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_size (опциональный, enum, 6 значений, default "square_hd")
+    - guidance_scale (опциональный, number, 1-10, default 2.5)
+    - seed (опциональный, number)
+    - enable_safety_checker (опциональный, boolean, default true)
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["bytedance/seedream", "bytedance-seedream", "seedream"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_bytedance_seedream(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd", "portrait_4_3", "portrait_16_9",
+                "landscape_4_3", "landscape_16_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация guidance_scale: опциональный, number, 1-10
+    guidance_scale = normalized_input.get('guidance_scale')
+    if guidance_scale is not None:
+        try:
+            scale_num = float(guidance_scale)
+            if scale_num < 1 or scale_num > 10:
+                return False, f"Поле 'guidance_scale' должно быть в диапазоне от 1 до 10 (получено: {guidance_scale})"
+            normalized_input['guidance_scale'] = scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'guidance_scale' должно быть числом от 1 до 10 (получено: {guidance_scale})"
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация enable_safety_checker: опциональный, boolean
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.

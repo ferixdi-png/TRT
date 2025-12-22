@@ -209,6 +209,11 @@
   - Опциональные: `num_frames` (40-120, кратно 4), `frames_per_second` (4-60), `resolution` (enum: 480p/580p/720p), `negative_prompt` (max 500), `seed`, `num_inference_steps` (2-40), `guidance_scale` (1-10), `shift` (1-10), `enable_safety_checker` (boolean)
   - Default: `num_frames=80`, `frames_per_second=16`, `resolution="480p"`, `negative_prompt=""`, `num_inference_steps=27`, `guidance_scale=3.5`, `shift=5`, `enable_safety_checker=true`
   - Важно: ТРИ обязательных параметра: `prompt`, `image_url`, `audio_url`! Использует `num_frames` вместо стандартного `duration`! Уникальные параметры: `num_inference_steps`, `guidance_scale`, `shift`, `enable_safety_checker`! НЕТ параметров `duration`, `with_audio`, `aspect_ratio`!
+- [x] **bytedance/seedream** - `docs/BYTEDANCE_SEEDREAM_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000)
+  - Опциональные: `image_size` (enum, 6 значений), `guidance_scale` (1-10), `seed`, `enable_safety_checker` (boolean)
+  - Default: `image_size="square_hd"`, `guidance_scale=2.5`, `enable_safety_checker=true`
+  - Важно: Использует `guidance_scale` вместо стандартного `guidance`! Использует `image_size` вместо стандартных `width`/`height`! Уникальный параметр: `enable_safety_checker`! НЕТ параметров `negative_prompt`, `width`, `height`, `steps`, `guidance`, `style`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
