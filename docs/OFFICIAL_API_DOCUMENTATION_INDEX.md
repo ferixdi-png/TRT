@@ -120,6 +120,11 @@
   - Опциональные: `prompt_optimizer` (boolean)
   - Default: `prompt_optimizer=true`
   - Важно: `prompt` максимум 1500 символов (меньше чем у других моделей)! НЕТ параметров `duration`, `resolution`, `image_url`!
+- [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
+  - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)
+  - Default: `image_url="https://file.aiquickdraw.com/..."`, `prompt_optimizer=true`
+  - Важно: `prompt` максимум 1500 символов! `image_url` - это string, а не массив! Есть `end_image_url` для последнего кадра! НЕТ параметров `duration`, `resolution`!
 - [x] **hailuo/2-3-image-to-video-pro** - `docs/HAILUO_2_3_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
 - [x] **hailuo/2-3-image-to-video-standard** - `docs/HAILUO_2_3_IMAGE_TO_VIDEO_STANDARD_INTEGRATION.md`
 - [x] **topaz/image-upscale** - `docs/TOPAZ_IMAGE_UPSCALE_INTEGRATION.md`
