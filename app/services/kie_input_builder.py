@@ -2300,6 +2300,135 @@ def _validate_hailuo_2_3_image_to_video_standard(
     return True, None
 
 
+def _normalize_n_frames_for_sora_2_pro_storyboard(value: Any) -> Optional[str]:
+    """
+    Нормализует n_frames для sora-2-pro-storyboard.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Для sora-2-pro-storyboard поддерживаются только "10", "15", "25"!
+    
+    Args:
+        value: Значение n_frames (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["10", "15", "25"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["10", "10s", "10sec", "10 seconds"]:
+        return "10"
+    elif str_lower in ["15", "15s", "15sec", "15 seconds"]:
+        return "15"
+    elif str_lower in ["25", "25s", "25sec", "25 seconds"]:
+        return "25"
+    
+    # Пробуем конвертировать число в строку
+    try:
+        num_value = float(str_value)
+        if num_value == 10.0 or num_value == 10:
+            return "10"
+        elif num_value == 15.0 or num_value == 15:
+            return "15"
+        elif num_value == 25.0 or num_value == 25:
+            return "25"
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _normalize_aspect_ratio_for_sora_2_pro_storyboard(value: Any) -> Optional[str]:
+    """
+    Нормализует aspect_ratio для sora-2-pro-storyboard.
+    Принимает строку и возвращает нормализованное значение в нижнем регистре.
+    ВАЖНО: Для sora-2-pro-storyboard поддерживаются только "portrait" и "landscape"!
+    
+    Args:
+        value: Значение aspect_ratio (может быть str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["portrait", "landscape"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["portrait", "port", "vertical", "vert"]:
+        return "portrait"
+    elif str_value in ["landscape", "land", "horizontal", "horiz"]:
+        return "landscape"
+    
+    return None
+
+
+def _validate_sora_2_pro_storyboard(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для sora-2-pro-storyboard согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["sora-2-pro-storyboard", "sora-2-pro/storyboard", "openai/sora-2-pro-storyboard"]:
+        return True, None
+    
+    # Валидация n_frames: обязательный, enum ("10", "15", "25")
+    n_frames = normalized_input.get('n_frames')
+    if not n_frames:
+        return False, "Поле 'n_frames' обязательно для генерации storyboard. Укажите длительность видео: '10', '15' или '25' секунд"
+    
+    normalized_n_frames = _normalize_n_frames_for_sora_2_pro_storyboard(n_frames)
+    if normalized_n_frames is None:
+        valid_values = ["10", "15", "25"]
+        return False, f"Поле 'n_frames' должно быть одним из: {', '.join(valid_values)} (получено: {n_frames})"
+    normalized_input['n_frames'] = normalized_n_frames
+    
+    # Валидация image_urls: опциональный массив
+    image_urls = normalized_input.get('image_urls')
+    if image_urls is not None:
+        # Нормализуем image_urls
+        normalized_image_urls = _normalize_image_urls_for_wan_2_6(image_urls)
+        if normalized_image_urls is None:
+            return False, "Поле 'image_urls' должно быть массивом валидных URL изображений"
+        normalized_input['image_urls'] = normalized_image_urls
+    
+    # Валидация aspect_ratio: опциональный, enum ("portrait" или "landscape")
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        normalized_aspect_ratio = _normalize_aspect_ratio_for_sora_2_pro_storyboard(aspect_ratio)
+        if normalized_aspect_ratio is None:
+            valid_values = ["portrait", "landscape"]
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+        normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -2563,6 +2692,11 @@ def build_input(
     
     # Специфичная валидация для hailuo/2-3-image-to-video-standard
     is_valid, error_msg = _validate_hailuo_2_3_image_to_video_standard(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Специфичная валидация для sora-2-pro-storyboard
+    is_valid, error_msg = _validate_sora_2_pro_storyboard(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
     
