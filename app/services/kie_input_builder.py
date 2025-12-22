@@ -4330,6 +4330,160 @@ def _validate_qwen_image_to_image(
     return True, None
 
 
+def _normalize_image_size_for_qwen_t2i(value: Any) -> Optional[str]:
+    """
+    Нормализует image_size для qwen/text-to-image.
+    Принимает значение и возвращает нормализованную строку в нижнем регистре с подчеркиваниями.
+    ВАЖНО: Поддерживаются только указанные значения из документации!
+    
+    Args:
+        value: Значение image_size (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = [
+        "square", "square_hd", "portrait_4_3", "portrait_16_9",
+        "landscape_4_3", "landscape_16_9"
+    ]
+    
+    # Проверяем точное совпадение (case-insensitive)
+    for valid in valid_values:
+        if str_value == valid.lower():
+            return valid
+    
+    return None
+
+
+def _validate_qwen_text_to_image(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для qwen/text-to-image согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_size (опциональный, enum, 6 значений, default "square_hd")
+    - num_inference_steps (опциональный, number, 2-250, default 30)
+    - seed (опциональный, number)
+    - guidance_scale (опциональный, number, 0-20, default 2.5)
+    - enable_safety_checker (опциональный, boolean, default true)
+    - output_format (опциональный, enum, default "png")
+    - negative_prompt (опциональный, string, макс 500 символов, default " " (пробел!))
+    - acceleration (опциональный, enum, default "none")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["qwen/text-to-image", "qwen-text-to-image", "qwen/t2i"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_qwen_t2i(image_size)
+        if normalized_size is None:
+            valid_values = [
+                "square", "square_hd", "portrait_4_3", "portrait_16_9",
+                "landscape_4_3", "landscape_16_9"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    # Валидация num_inference_steps: опциональный, number, 2-250
+    num_inference_steps = normalized_input.get('num_inference_steps')
+    if num_inference_steps is not None:
+        try:
+            steps_num = int(float(num_inference_steps))
+            if steps_num < 2 or steps_num > 250:
+                return False, f"Поле 'num_inference_steps' должно быть в диапазоне от 2 до 250 (получено: {num_inference_steps})"
+            normalized_input['num_inference_steps'] = steps_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'num_inference_steps' должно быть числом от 2 до 250 (получено: {num_inference_steps})"
+    
+    # Валидация seed: опциональный, number
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+    
+    # Валидация guidance_scale: опциональный, number, 0-20
+    guidance_scale = normalized_input.get('guidance_scale')
+    if guidance_scale is not None:
+        try:
+            scale_num = float(guidance_scale)
+            if scale_num < 0 or scale_num > 20:
+                return False, f"Поле 'guidance_scale' должно быть в диапазоне от 0 до 20 (получено: {guidance_scale})"
+            normalized_input['guidance_scale'] = scale_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'guidance_scale' должно быть числом от 0 до 20 (получено: {guidance_scale})"
+    
+    # Валидация enable_safety_checker: опциональный, boolean
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+    
+    # Валидация output_format: опциональный, enum
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        normalized_format = _normalize_output_format_for_qwen_i2i(output_format)  # Переиспользуем функцию из i2i
+        if normalized_format is None:
+            return False, f"Поле 'output_format' должно быть одним из: png, jpeg (получено: {output_format})"
+        normalized_input['output_format'] = normalized_format
+    
+    # Валидация negative_prompt: опциональный, string, макс 500 символов
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        negative_prompt = negative_prompt.strip()
+        if len(negative_prompt) > 500:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt)} символов (максимум 500)"
+        normalized_input['negative_prompt'] = negative_prompt
+    
+    # Валидация acceleration: опциональный, enum
+    acceleration = normalized_input.get('acceleration')
+    if acceleration is not None:
+        normalized_accel = _normalize_acceleration_for_qwen_i2i(acceleration)  # Переиспользуем функцию из i2i
+        if normalized_accel is None:
+            return False, f"Поле 'acceleration' должно быть одним из: none, regular, high (получено: {acceleration})"
+        normalized_input['acceleration'] = normalized_accel
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
