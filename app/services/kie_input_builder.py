@@ -2934,6 +2934,107 @@ def _normalize_video_url_for_sora_watermark_remover(video_url: Any) -> Optional[
     return video_url
 
 
+def _normalize_upscale_factor_for_topaz(value: Any) -> Optional[str]:
+    """
+    Нормализует upscale_factor для topaz/image-upscale.
+    Принимает значение и возвращает нормализованную строку.
+    ВАЖНО: Для topaz/image-upscale поддерживаются только "1", "2", "4", "8"!
+    
+    Args:
+        value: Значение upscale_factor (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["1", "2", "4", "8"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["1", "1x", "1.0", "1.0x"]:
+        return "1"
+    elif str_lower in ["2", "2x", "2.0", "2.0x"]:
+        return "2"
+    elif str_lower in ["4", "4x", "4.0", "4.0x"]:
+        return "4"
+    elif str_lower in ["8", "8x", "8.0", "8.0x"]:
+        return "8"
+    
+    # Пробуем конвертировать число в строку
+    try:
+        num_value = float(str_value)
+        if num_value == 1.0 or num_value == 1:
+            return "1"
+        elif num_value == 2.0 or num_value == 2:
+            return "2"
+        elif num_value == 4.0 or num_value == 4:
+            return "4"
+        elif num_value == 8.0 or num_value == 8:
+            return "8"
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _validate_topaz_image_upscale(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для topaz/image-upscale согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Проверяем оба возможных ID модели
+    if model_id not in ["topaz/image-upscale", "topaz/image-upscaler", "topaz/upscale"]:
+        return True, None
+    
+    # Валидация image_url: обязательный string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для увеличения изображения. Укажите URL изображения"
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if not image_url:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Проверяем что это валидный URL
+    if not image_url.startswith(('http://', 'https://')):
+        return False, "Поле 'image_url' должно быть валидным URL (начинается с http:// или https://)"
+    
+    normalized_input['image_url'] = image_url
+    
+    # Валидация upscale_factor: обязательный, enum ("1", "2", "4", "8")
+    upscale_factor = normalized_input.get('upscale_factor')
+    if not upscale_factor:
+        return False, "Поле 'upscale_factor' обязательно для увеличения изображения. Укажите коэффициент увеличения: '1', '2', '4' или '8'"
+    
+    normalized_upscale_factor = _normalize_upscale_factor_for_topaz(upscale_factor)
+    if normalized_upscale_factor is None:
+        valid_values = ["1", "2", "4", "8"]
+        return False, f"Поле 'upscale_factor' должно быть одним из: {', '.join(valid_values)} (получено: {upscale_factor})"
+    normalized_input['upscale_factor'] = normalized_upscale_factor
+    
+    return True, None
+
+
 def _validate_sora_watermark_remover(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -3214,6 +3315,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для topaz/image-upscale
+    is_valid, error_msg = _validate_topaz_image_upscale(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -3352,6 +3458,13 @@ def build_input(
     if model_id in ["sora-watermark-remover", "openai/sora-watermark-remover", "sora-2-watermark-remover"]:
         if 'video_url' not in normalized_input:
             normalized_input['video_url'] = "https://sora.chatgpt.com/p/s_68e83bd7eee88191be79d2ba7158516f"  # Default согласно документации
+    
+    # Применяем дефолты для topaz/image-upscale
+    if model_id in ["topaz/image-upscale", "topaz/image-upscaler", "topaz/upscale"]:
+        if 'image_url' not in normalized_input:
+            normalized_input['image_url'] = "https://static.aiquickdraw.com/tools/example/1762752805607_mErUj1KR.png"  # Default согласно документации
+        if 'upscale_factor' not in normalized_input:
+            normalized_input['upscale_factor'] = "2"  # Default согласно документации
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
