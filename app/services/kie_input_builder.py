@@ -5258,6 +5258,19 @@ def build_input(
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "480p"  # Default согласно документации
     
+    # Применяем дефолты для ideogram/v3-reframe
+    if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "square_hd"  # Default согласно документации
+        if 'rendering_speed' not in normalized_input:
+            normalized_input['rendering_speed'] = "BALANCED"  # Default согласно документации
+        if 'style' not in normalized_input:
+            normalized_input['style'] = "AUTO"  # Default согласно документации
+        if 'num_images' not in normalized_input:
+            normalized_input['num_images'] = "1"  # Default согласно документации
+        if 'seed' not in normalized_input:
+            normalized_input['seed'] = 0  # Default согласно документации
+    
     # Применяем дефолты для topaz/image-upscale
     if model_id in ["topaz/image-upscale", "topaz/image-upscaler", "topaz/upscale"]:
         if 'image_url' not in normalized_input:
