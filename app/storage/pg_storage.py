@@ -149,3 +149,6 @@ class PGStorage:
 
 # Compatibility alias
 PostgresStorage = PGStorage
+
+# Explicit export for importlib compatibility
+__all__ = ['PGStorage', 'PostgresStorage', 'async_check_pg', 'sync_check_pg']

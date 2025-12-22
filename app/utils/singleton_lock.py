@@ -86,3 +86,15 @@ async def release_singleton_lock() -> None:
             logger.error(f"Failed to release singleton lock: {e}")
         finally:
             _singleton_lock_instance = None
+
+
+# Explicit export for importlib compatibility
+__all__ = [
+    'is_lock_acquired',
+    'set_lock_acquired',
+    'is_strict_mode',
+    'should_exit_on_lock_conflict',
+    'get_safe_mode',
+    'acquire_singleton_lock',
+    'release_singleton_lock'
+]
