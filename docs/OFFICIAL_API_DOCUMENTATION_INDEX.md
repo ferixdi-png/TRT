@@ -193,6 +193,11 @@
   - Опциональные: `rendering_speed` (enum: TURBO/BALANCED/QUALITY), `style` (enum: AUTO/REALISTIC/FICTION), `expand_prompt` (boolean), `image_size` (enum, 6 значений), `num_images` (string enum: 1/2/3/4), `seed`, `strength` (0.1-1), `negative_prompt` (max 500), `image_urls` (массив, max 10MB общий размер, jpeg/png/webp), `reference_mask_urls` (string, max 10MB, jpeg/png/webp)
   - Default: `rendering_speed="BALANCED"`, `style="AUTO"`, `expand_prompt=true`, `image_size="square_hd"`, `num_images="1"`, `strength=0.8`, `negative_prompt=""`, `image_urls=[]`, `reference_mask_urls=""`
   - Важно: Модель для ремикса персонажей! Использует `reference_image_urls` для указания референсов персонажа (только 1 изображение поддерживается, остальные игнорируются)! Использует `image_size` вместо стандартных `width`/`height`! Уникальные параметры: `strength`, `negative_prompt`, `image_urls`, `reference_mask_urls`! НЕТ параметра `mask_url` (есть в ideogram/character-edit)!
+- [x] **ideogram/character** - `docs/IDEOGRAM_CHARACTER_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000), `reference_image_urls` (массив, max 10MB общий размер, jpeg/png/webp, только 1 поддерживается)
+  - Опциональные: `rendering_speed` (enum: TURBO/BALANCED/QUALITY), `style` (enum: AUTO/REALISTIC/FICTION), `expand_prompt` (boolean), `num_images` (string enum: 1/2/3/4), `image_size` (enum, 6 значений), `seed`, `negative_prompt` (max 5000!)
+  - Default: `rendering_speed="BALANCED"`, `style="AUTO"`, `expand_prompt=true`, `num_images="1"`, `image_size="square_hd"`, `negative_prompt=""`
+  - Важно: Модель для генерации персонажей из текста с character reference! Использует `reference_image_urls` для указания референсов персонажа (только 1 изображение поддерживается, остальные игнорируются)! Использует `image_size` вместо стандартных `width`/`height`! Уникальные параметры: `reference_image_urls`, `rendering_speed`, `expand_prompt`, `num_images`! `negative_prompt` имеет максимум 5000 символов (не 500!)! НЕТ параметров `image_url`, `width`, `height`, `steps`, `guidance`, `guidance_scale`!
   - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
 - [x] **elevenlabs/audio-isolation** - `docs/ELEVENLABS_AUDIO_ISOLATION_INTEGRATION.md`
   - Обязательные: `audio_url` (string, макс 10MB, mpeg/wav/aac/mp4/ogg)

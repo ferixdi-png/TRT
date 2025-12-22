@@ -24,7 +24,7 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'resolution',
         'model',
         'mode',
-        'image_size',  # Для bytedance/seedream-v4-text-to-image, bytedance/seedream, qwen/text-to-image и google/nano-banana
+        'image_size',  # Для bytedance/seedream-v4-text-to-image, bytedance/seedream, qwen/text-to-image, google/nano-banana и ideogram/character
         'image_resolution',  # Для bytedance/seedream-v4-text-to-image
         'max_images',  # Для bytedance/seedream-v4-text-to-image
         'enable_safety_checker',  # Для bytedance/seedream и qwen/text-to-image
@@ -32,7 +32,11 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'acceleration',  # Для qwen/text-to-image
         'num_inference_steps',  # Для qwen/text-to-image
         'image_input',  # Для nano-banana-pro
-        'resolution'  # Для nano-banana-pro (1K, 2K, 4K)
+        'resolution',  # Для nano-banana-pro (1K, 2K, 4K)
+        'reference_image_urls',  # Для ideogram/character
+        'rendering_speed',  # Для ideogram/character
+        'expand_prompt',  # Для ideogram/character
+        'num_images'  # Для ideogram/character
     },
     
     # Image-to-Image
