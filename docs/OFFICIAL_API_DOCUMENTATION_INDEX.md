@@ -198,6 +198,11 @@
   - Опциональные: `rendering_speed` (enum: TURBO/BALANCED/QUALITY), `style` (enum: AUTO/REALISTIC/FICTION), `expand_prompt` (boolean), `num_images` (string enum: 1/2/3/4), `image_size` (enum, 6 значений), `seed`, `negative_prompt` (max 5000!)
   - Default: `rendering_speed="BALANCED"`, `style="AUTO"`, `expand_prompt=true`, `num_images="1"`, `image_size="square_hd"`, `negative_prompt=""`
   - Важно: Модель для генерации персонажей из текста с character reference! Использует `reference_image_urls` для указания референсов персонажа (только 1 изображение поддерживается, остальные игнорируются)! Использует `image_size` вместо стандартных `width`/`height`! Уникальные параметры: `reference_image_urls`, `rendering_speed`, `expand_prompt`, `num_images`! `negative_prompt` имеет максимум 5000 символов (не 500!)! НЕТ параметров `image_url`, `width`, `height`, `steps`, `guidance`, `guidance_scale`!
+- [x] **bytedance/v1-lite-text-to-video** - `docs/BYTEDANCE_V1_LITE_TEXT_TO_VIDEO_INTEGRATION.md`
+  - Обязательные: `prompt` (max 10000)
+  - Опциональные: `aspect_ratio` (enum, 6 значений), `resolution` (enum: 480p/720p/1080p), `duration` (enum: "5"/"10"), `camera_fixed` (boolean), `seed` (может быть -1), `enable_safety_checker` (boolean)
+  - Default: `aspect_ratio="16:9"`, `resolution="720p"`, `duration="5"`, `camera_fixed=false`, `enable_safety_checker=true`
+  - Важно: Модель для генерации видео из текста! Использует `camera_fixed` для управления позицией камеры (уникальный параметр)! Использует `duration` как string enum ("5" или "10")! `seed` может быть -1 для случайного seed! `prompt` имеет максимум 10000 символов (больше, чем у большинства других моделей)! НЕТ параметров `fps`, `with_audio`, `width`, `height`, `guidance`, `steps`, `negative_prompt`, `motion`, `style`!
   - Важно: `image_size` обязательный (в отличие от других моделей)! НЕТ параметра `prompt`! `num_images` - string (не number)!
 - [x] **elevenlabs/audio-isolation** - `docs/ELEVENLABS_AUDIO_ISOLATION_INTEGRATION.md`
   - Обязательные: `audio_url` (string, макс 10MB, mpeg/wav/aac/mp4/ogg)

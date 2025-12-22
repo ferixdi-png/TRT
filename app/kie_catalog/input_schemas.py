@@ -98,7 +98,8 @@ INPUT_SCHEMAS: Dict[str, Set[str]] = {
         'num_inference_steps',  # Для wan/2-2-a14b-speech-to-video-turbo
         'guidance_scale',  # Для wan/2-2-a14b-speech-to-video-turbo
         'shift',  # Для wan/2-2-a14b-speech-to-video-turbo
-        'enable_safety_checker'  # Для wan/2-2-a14b-speech-to-video-turbo
+        'enable_safety_checker',  # Для wan/2-2-a14b-speech-to-video-turbo и bytedance/v1-lite-text-to-video
+        'camera_fixed'  # Для bytedance/v1-lite-text-to-video
     },
     
     # Image-to-Video
