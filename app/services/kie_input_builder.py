@@ -4092,6 +4092,15 @@ def build_input(
         if 'resolution' not in normalized_input:
             normalized_input['resolution'] = "1080p"  # Default согласно документации
     
+    # Применяем дефолты для wan/2-2-animate-move
+    if model_id in ["wan/2-2-animate-move", "wan/2.2-animate-move"]:
+        if 'video_url' not in normalized_input:
+            normalized_input['video_url'] = "https://file.aiquickdraw.com/custom-page/akr/section-images/17586254974931y2hottk.mp4"  # Default согласно документации
+        if 'image_url' not in normalized_input:
+            normalized_input['image_url'] = "https://file.aiquickdraw.com/custom-page/akr/section-images/1758625466310wpehpbnf.png"  # Default согласно документации
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "480p"  # Default согласно документации
+    
     # Применяем дефолты для wan/2-6-video-to-video
     if model_id == "wan/2-6-video-to-video":
         if 'duration' not in normalized_input:
