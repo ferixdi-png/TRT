@@ -2143,6 +2143,12 @@ def _validate_bytedance_v1_pro_fast_image_to_video(
     """
     Специфичная валидация для bytedance/v1-pro-fast-image-to-video согласно документации API.
     
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 10000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - resolution (опциональный, enum, только 720p/1080p, НЕТ 480p!, default "720p")
+    - duration (опциональный, enum, default "5")
+    
     Args:
         model_id: ID модели
         normalized_input: Нормализованные входные данные
@@ -2150,13 +2156,13 @@ def _validate_bytedance_v1_pro_fast_image_to_video(
     Returns:
         (is_valid, error_message)
     """
-    if model_id != "bytedance/v1-pro-fast-image-to-video":
+    if model_id not in ["bytedance/v1-pro-fast-image-to-video", "bytedance-v1-pro-fast-image-to-video", "v1-pro-fast-image-to-video"]:
         return True, None
     
     # Валидация prompt: обязательный, максимум 10000 символов
     prompt = normalized_input.get('prompt')
     if not prompt:
-        return False, "Поле 'prompt' обязательно для генерации видео"
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
     
     if not isinstance(prompt, str):
         prompt = str(prompt)
@@ -2167,59 +2173,40 @@ def _validate_bytedance_v1_pro_fast_image_to_video(
     if prompt_len > 10000:
         return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
     
-    # Валидация image_url: обязательный (строка, не массив!)
-    # ВАЖНО: Для v1-pro-fast используется image_url (строка), а не image_urls (массив)!
-    image_url = None
-    if 'image_url' in normalized_input:
-        image_url = normalized_input['image_url']
-    elif 'image_urls' in normalized_input:
-        # Если передан массив, берем первый элемент
-        image_urls = normalized_input['image_urls']
-        if isinstance(image_urls, list) and len(image_urls) > 0:
-            image_url = image_urls[0]
-        elif isinstance(image_urls, str):
-            image_url = image_urls
-    elif 'image_input' in normalized_input:
-        # Если передан image_input, берем первый элемент если это массив
-        image_input = normalized_input['image_input']
-        if isinstance(image_input, list) and len(image_input) > 0:
-            image_url = image_input[0]
-        elif isinstance(image_input, str):
-            image_url = image_input
-    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
     if not image_url:
-        return False, "Поле 'image_url' обязательно для генерации видео из изображения"
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения."
     
-    # Проверяем что это строка
     if not isinstance(image_url, str):
         image_url = str(image_url)
     
     image_url = image_url.strip()
-    if not image_url:
+    if len(image_url) == 0:
         return False, "Поле 'image_url' не может быть пустым"
     
-    # Проверяем что URL начинается с http:// или https://
-    if not (image_url.startswith('http://') or image_url.startswith('https://')):
-        return False, "Поле 'image_url' должно начинаться с http:// или https://"
-    
-    # Сохраняем нормализованное значение
-    normalized_input['image_url'] = image_url
-    
-    # Валидация resolution: опциональный, "720p" | "1080p"
+    # Валидация resolution: опциональный, enum (только 720p/1080p, НЕТ 480p!)
     resolution = normalized_input.get('resolution')
     if resolution is not None:
-        normalized_resolution = _normalize_resolution_for_v1_pro_fast(resolution)
-        if normalized_resolution is None:
-            return False, f"Поле 'resolution' должно быть '720p' или '1080p' (получено: {resolution})"
-        normalized_input['resolution'] = normalized_resolution
+        valid_resolutions = ["720p", "1080p"]  # ВАЖНО: только 2 значения, НЕТ 480p!
+        if resolution not in valid_resolutions:
+            return False, f"Поле 'resolution' должно быть одним из: 720p, 1080p (получено: {resolution})"
+        normalized_input['resolution'] = resolution
     
-    # Валидация duration: опциональный, "5" | "10"
+    # Валидация duration: опциональный, enum
     duration = normalized_input.get('duration')
     if duration is not None:
-        normalized_duration = _normalize_duration_for_v1_pro_fast(duration)
-        if normalized_duration is None:
-            return False, f"Поле 'duration' должно быть '5' или '10' (получено: {duration})"
-        normalized_input['duration'] = normalized_duration
+        # Может быть строкой "5" или "10", или числом 5 или 10
+        if isinstance(duration, str):
+            if duration not in ["5", "10"]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = duration
+        elif isinstance(duration, (int, float)):
+            if duration not in [5, 10]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = str(int(duration))
+        else:
+            return False, f"Поле 'duration' должно быть строкой или числом (получено: {duration})"
     
     return True, None
 
@@ -5733,6 +5720,81 @@ def _validate_bytedance_v1_pro_image_to_video(
         if normalized_bool is None:
             return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
         normalized_input['enable_safety_checker'] = normalized_bool
+    
+    return True, None
+
+
+def _validate_bytedance_v1_pro_fast_image_to_video_updated(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/v1-pro-fast-image-to-video согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 10000 символов)
+    - image_url (обязательный, макс 10MB, jpeg/png/webp)
+    - resolution (опциональный, enum, только 720p/1080p, НЕТ 480p!, default "720p")
+    - duration (опциональный, enum, default "5")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["bytedance/v1-pro-fast-image-to-video", "bytedance-v1-pro-fast-image-to-video", "v1-pro-fast-image-to-video"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 10000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    
+    # Валидация image_url: обязательный, string
+    image_url = normalized_input.get('image_url')
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео. Укажите URL изображения."
+    
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if len(image_url) == 0:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Валидация resolution: опциональный, enum (только 720p/1080p, НЕТ 480p!)
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        valid_resolutions = ["720p", "1080p"]  # ВАЖНО: только 2 значения, НЕТ 480p!
+        if resolution not in valid_resolutions:
+            return False, f"Поле 'resolution' должно быть одним из: 720p, 1080p (получено: {resolution})"
+        normalized_input['resolution'] = resolution
+    
+    # Валидация duration: опциональный, enum
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        # Может быть строкой "5" или "10", или числом 5 или 10
+        if isinstance(duration, str):
+            if duration not in ["5", "10"]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = duration
+        elif isinstance(duration, (int, float)):
+            if duration not in [5, 10]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = str(int(duration))
+        else:
+            return False, f"Поле 'duration' должно быть строкой или числом (получено: {duration})"
     
     return True, None
 
