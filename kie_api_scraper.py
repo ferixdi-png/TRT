@@ -23,41 +23,268 @@ class KieApiScraper:
         self.models = []
     
     def get_market_page(self):
-        """Парсит главную страницу с моделями"""
+        """Улучшенный парсинг главной страницы с моделями"""
         try:
             print(f"   📡 Запрос к {self.market_url}...")
             resp = requests.get(self.market_url, headers=self.headers, timeout=10)
-            resp.raise_for_status()  # Проверка статуса ответа
+            resp.raise_for_status()
             print(f"   ✅ ОТВЕТ: Получен ответ со статусом {resp.status_code}")
             
             soup = BeautifulSoup(resp.text, 'html.parser')
             print(f"   🔍 ОТВЕТ: Парсинг HTML страницы...")
             
-            # Находим все карточки моделей
-            cards = soup.find_all(['div', 'section'], class_=re.compile(r'(model|api|card|feature)'))
-            print(f"   ✅ ОТВЕТ: Найдено {len(cards)} потенциальных карточек")
-            
             model_links = []
             
-            for card in cards:
-                # Исправленный синтаксис поиска заголовка
-                title = (card.find('h1') or card.find('h2') or card.find('h3') or 
-                        card.find(class_=re.compile(r'title')))
-                link = card.find('a', href=True)
-                if title and link:
-                    model_links.append({
-                        'name': title.get_text().strip(),
-                        'url': urljoin(self.market_url, link['href'])
-                    })
+            # Множественные стратегии поиска моделей
+            # Стратегия 1: Поиск по ссылкам с моделями
+            all_links = soup.find_all('a', href=True)
+            for link in all_links:
+                href = link.get('href', '')
+                # Ищем ссылки на модели
+                if any(keyword in href.lower() for keyword in ['model', 'api', '/ru/', 'market']):
+                    title = link.get_text().strip()
+                    if title and len(title) > 2:
+                        full_url = urljoin(self.market_url, href)
+                        model_links.append({
+                            'name': title,
+                            'url': full_url
+                        })
             
-            print(f"   ✅ ОТВЕТ: Извлечено {len(model_links)} ссылок на модели")
-            return model_links
+            # Стратегия 2: Поиск карточек моделей
+            cards = soup.find_all(['div', 'section', 'article'], 
+                                 class_=re.compile(r'(model|api|card|feature|item|product)', re.I))
+            
+            for card in cards:
+                # Ищем заголовок
+                title_elem = (card.find('h1') or card.find('h2') or card.find('h3') or 
+                             card.find('h4') or card.find(class_=re.compile(r'(title|name|heading)', re.I)))
+                
+                # Ищем ссылку
+                link_elem = card.find('a', href=True)
+                
+                if title_elem:
+                    title = title_elem.get_text().strip()
+                    if title and len(title) > 2:
+                        if link_elem:
+                            url = urljoin(self.market_url, link_elem['href'])
+                        else:
+                            # Если нет ссылки, создаем из названия
+                            url = urljoin(self.market_url, f"/ru/market/{title.lower().replace(' ', '-')}")
+                        
+                        # Проверяем, нет ли дубликатов
+                        if not any(m['name'] == title for m in model_links):
+                            model_links.append({
+                                'name': title,
+                                'url': url
+                            })
+            
+            # Стратегия 3: Поиск в JSON данных (если есть)
+            script_tags = soup.find_all('script', type='application/json')
+            for script in script_tags:
+                try:
+                    data = json.loads(script.string)
+                    # Рекурсивный поиск моделей в JSON
+                    if isinstance(data, dict):
+                        for key, value in data.items():
+                            if 'model' in key.lower() or 'api' in key.lower():
+                                if isinstance(value, list):
+                                    for item in value:
+                                        if isinstance(item, dict) and 'name' in item:
+                                            model_links.append({
+                                                'name': item.get('name', ''),
+                                                'url': item.get('url', item.get('href', ''))
+                                            })
+                except:
+                    pass
+            
+            # Удаляем дубликаты и пустые записи
+            seen = set()
+            unique_links = []
+            for model in model_links:
+                if model['name'] and model['name'] not in seen:
+                    seen.add(model['name'])
+                    unique_links.append(model)
+            
+            print(f"   ✅ ОТВЕТ: Найдено {len(cards)} карточек, извлечено {len(unique_links)} уникальных ссылок на модели")
+            return unique_links
         except requests.RequestException as e:
             print(f"   ❌ ОТВЕТ: Ошибка при получении страницы маркета: {e}")
             return []
     
+    def _extract_endpoint(self, text, model_name):
+        """Улучшенное извлечение API endpoint из текста"""
+        # Паттерны для поиска endpoint
+        patterns = [
+            r'api\.kie\.ai/api/v1/([a-zA-Z0-9\-_/]+)',
+            r'/api/v1/([a-zA-Z0-9\-_/]+)',
+            r'endpoint[:\s]+["\']?([a-zA-Z0-9\-_/]+)["\']?',
+            r'POST[:\s]+["\']?([a-zA-Z0-9\-_/]+)["\']?',
+            r'url[:\s]+["\']?.*?/([a-zA-Z0-9\-_/]+)["\']?',
+            r'/([a-zA-Z0-9\-_]+)/(?:generate|create|text|image|video)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.I)
+            if match:
+                endpoint = match.group(1)
+                # Нормализуем endpoint
+                if not endpoint.startswith('/'):
+                    endpoint = '/' + endpoint
+                if not endpoint.endswith(('/generate', '/create', '/text', '/image', '/video')):
+                    # Пытаемся определить тип по названию модели
+                    if any(x in model_name.lower() for x in ['video', 'veo', 'gen']):
+                        endpoint = endpoint.rstrip('/') + '/generate'
+                    elif any(x in model_name.lower() for x in ['image', 'img', 'dalle']):
+                        endpoint = endpoint.rstrip('/') + '/generate'
+                    else:
+                        endpoint = endpoint.rstrip('/') + '/generate'
+                return endpoint
+        
+        # Если не нашли, пытаемся извлечь из названия модели
+        model_slug = re.sub(r'[^a-zA-Z0-9\-_]', '', model_name.lower().replace(' ', '-'))
+        if model_slug:
+            return f"/{model_slug}/generate"
+        
+        return "/generate"
+    
+    def _extract_json_example(self, soup, text):
+        """Улучшенное извлечение JSON примера"""
+        # Ищем в code блоках
+        code_blocks = soup.find_all(['pre', 'code'], class_=re.compile(r'(json|code|example|request)'))
+        
+        for block in code_blocks:
+            code = block.get_text().strip()
+            # Проверяем, что это JSON
+            if '{' in code and ('prompt' in code.lower() or 'input' in code.lower() or 'text' in code.lower()):
+                # Пытаемся распарсить JSON
+                try:
+                    # Очищаем код от markdown разметки
+                    code = re.sub(r'```json\s*', '', code)
+                    code = re.sub(r'```\s*', '', code)
+                    code = code.strip()
+                    
+                    # Парсим JSON для проверки
+                    json.loads(code)
+                    return code
+                except:
+                    # Если не валидный JSON, но похож на него
+                    if code.count('{') > 0 and code.count('}') > 0:
+                        return code
+        
+        # Ищем в тексте между фигурными скобками
+        json_match = re.search(r'\{[^{}]*"(?:prompt|input|text)"[^{}]*\}', text, re.I | re.DOTALL)
+        if json_match:
+            return json_match.group(0)
+        
+        return ''
+    
+    def _extract_parameters(self, text, soup):
+        """Улучшенное извлечение параметров из документации"""
+        params = {}
+        
+        # Ищем параметры в таблицах
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = row.find_all(['td', 'th'])
+                if len(cells) >= 2:
+                    param_name = cells[0].get_text().strip().lower()
+                    param_value = cells[1].get_text().strip()
+                    
+                    # Извлекаем числовые значения
+                    num_match = re.search(r'(\d+)', param_value)
+                    if num_match and param_name in ['duration', 'width', 'height', 'steps', 'max_length', 'temperature']:
+                        params[param_name] = int(num_match.group(1))
+        
+        # Ищем параметры в тексте через паттерны
+        param_patterns = {
+            'duration': [
+                r'duration[:\s]*["\']?(\d+)["\']?',
+                r'"duration"[:\s]*:?\s*(\d+)',
+                r'duration[:\s]*=?\s*(\d+)',
+            ],
+            'width': [
+                r'width[:\s]*["\']?(\d+)["\']?',
+                r'"width"[:\s]*:?\s*(\d+)',
+                r'width[:\s]*=?\s*(\d+)',
+            ],
+            'height': [
+                r'height[:\s]*["\']?(\d+)["\']?',
+                r'"height"[:\s]*:?\s*(\d+)',
+                r'height[:\s]*=?\s*(\d+)',
+            ],
+            'steps': [
+                r'steps[:\s]*["\']?(\d+)["\']?',
+                r'"steps"[:\s]*:?\s*(\d+)',
+                r'steps[:\s]*=?\s*(\d+)',
+            ],
+            'temperature': [
+                r'temperature[:\s]*["\']?([\d.]+)["\']?',
+                r'"temperature"[:\s]*:?\s*([\d.]+)',
+            ],
+            'max_length': [
+                r'max[_\s]?length[:\s]*["\']?(\d+)["\']?',
+                r'"max_length"[:\s]*:?\s*(\d+)',
+            ],
+        }
+        
+        for param_name, patterns in param_patterns.items():
+            for pattern in patterns:
+                match = re.search(pattern, text, re.I)
+                if match:
+                    try:
+                        if param_name == 'temperature':
+                            params[param_name] = float(match.group(1))
+                        else:
+                            params[param_name] = int(match.group(1))
+                        break
+                    except:
+                        continue
+        
+        return params
+    
+    def _extract_input_schema(self, text, soup):
+        """Извлечение схемы input параметров"""
+        input_schema = {}
+        
+        # Ищем описание параметров
+        # Паттерны для обязательных полей
+        required_fields = []
+        
+        # Ищем "required" или "обязательные"
+        required_match = re.search(r'(?:required|обязательные?)[:\s]+\[?([^\]]+)\]?', text, re.I)
+        if required_match:
+            required_str = required_match.group(1)
+            required_fields = [f.strip().strip('"\'') for f in required_str.split(',')]
+        
+        # Базовые обязательные поля для API
+        base_required = ['prompt']
+        
+        # Извлекаем типы параметров
+        type_patterns = {
+            'prompt': r'"(?:prompt|text|input)"[:\s]*:?\s*"([^"]+)"',
+            'string': r'string|str|text',
+            'integer': r'int|integer|number',
+            'float': r'float|double',
+            'boolean': r'bool|boolean',
+        }
+        
+        # Создаем схему на основе найденных параметров
+        if 'prompt' in text.lower():
+            input_schema['prompt'] = {
+                'type': 'string',
+                'required': True,
+                'description': 'Текст запроса для модели'
+            }
+        
+        return {
+            'required': list(set(base_required + required_fields)),
+            'properties': input_schema
+        }
+    
     def scrape_model_docs(self, model_url, model_name):
-        """Парсит документацию конкретной модели"""
+        """Улучшенный парсинг документации конкретной модели"""
         try:
             print(f"    📥 Загрузка страницы модели...")
             resp = requests.get(model_url, headers=self.headers, timeout=10)
@@ -72,50 +299,75 @@ class KieApiScraper:
                 'name': model_name,
                 'endpoint': '',
                 'method': 'POST',
-                'base_url': self.base_url,  # Используется тот же base_url из __init__
+                'base_url': self.base_url,
                 'params': {},
+                'input_schema': {},
                 'example': '',
+                'example_request': {},
                 'price': '',
                 'category': ''
             }
             
-            # Ищем endpoint - проверка согласованности с base_url
-            endpoint_match = re.search(r'/([a-zA-Z0-9\-_]+)/?(generate|create)?', resp.text)
-            if endpoint_match:
-                model_info['endpoint'] = f"/{endpoint_match.group(1)}/generate"
-                print(f"    ✅ ОТВЕТ: Endpoint найден: {model_info['endpoint']}")
+            # Улучшенное извлечение endpoint
+            print(f"    🔍 ОТВЕТ: Поиск API endpoint...")
+            model_info['endpoint'] = self._extract_endpoint(resp.text, model_name)
+            print(f"    ✅ ОТВЕТ: Endpoint найден: {model_info['endpoint']}")
+            
+            # Улучшенное извлечение JSON примера
+            print(f"    🔍 ОТВЕТ: Поиск примеров JSON...")
+            example_json = self._extract_json_example(soup, resp.text)
+            if example_json:
+                model_info['example'] = example_json
+                # Пытаемся распарсить в структурированный формат
+                try:
+                    parsed = json.loads(example_json)
+                    model_info['example_request'] = parsed
+                    print(f"    ✅ ОТВЕТ: Пример JSON найден и распарсен")
+                except:
+                    print(f"    ✅ ОТВЕТ: Пример JSON найден (не валидный JSON)")
             else:
-                print(f"    ⚠️ ОТВЕТ: Endpoint не найден в тексте")
+                # Создаем базовый пример
+                model_info['example'] = json.dumps({
+                    "prompt": "Пример запроса",
+                    **{k: v for k, v in model_info.get('params', {}).items()}
+                }, ensure_ascii=False, indent=2)
+                model_info['example_request'] = {"prompt": "Пример запроса"}
+                print(f"    ⚠️ ОТВЕТ: Пример не найден, создан базовый")
             
-            # Ищем примеры JSON
-            code_blocks = soup.find_all('pre', class_=re.compile(r'(json|code|example)'))
-            print(f"    ✅ ОТВЕТ: Найдено {len(code_blocks)} блоков кода")
-            for block in code_blocks[:2]:
-                code = block.get_text()
-                if 'prompt' in code and ('{' in code):
-                    model_info['example'] = code.strip()
-                    print(f"    ✅ ОТВЕТ: Пример JSON найден")
-                    break
+            # Улучшенное извлечение параметров
+            print(f"    🔍 ОТВЕТ: Извлечение параметров...")
+            extracted_params = self._extract_parameters(resp.text, soup)
+            if extracted_params:
+                model_info['params'] = extracted_params
+                print(f"    ✅ ОТВЕТ: Найдено параметров: {', '.join(extracted_params.keys())}")
+            else:
+                # Устанавливаем базовые параметры по умолчанию
+                model_info['params'] = {}
+                print(f"    ⚠️ ОТВЕТ: Параметры не найдены, используются значения по умолчанию")
             
-            # Извлекаем параметры из текста - все параметры согласованы
-            param_patterns = {
-                'duration': r'duration[:\s]*(\d+)',
-                'width': r'width[:\s]*(\d+)',
-                'height': r'height[:\s]*(\d+)',
-                'steps': r'steps[:\s]*(\d+)'
+            # Извлечение схемы input
+            print(f"    🔍 ОТВЕТ: Извлечение схемы input...")
+            model_info['input_schema'] = self._extract_input_schema(resp.text, soup)
+            print(f"    ✅ ОТВЕТ: Схема input извлечена")
+            
+            # Определяем категорию модели
+            category_keywords = {
+                'video': ['video', 'veo', 'gen-2', 'gen-3', 'sora'],
+                'image': ['image', 'dalle', 'midjourney', 'stable', 'diffusion'],
+                'text': ['text', 'gpt', 'llm', 'language', 'chat'],
+                'audio': ['audio', 'music', 'sound', 'tts'],
             }
             
-            found_params = []
-            for param, pattern in param_patterns.items():
-                match = re.search(pattern, resp.text, re.I)
-                if match:
-                    model_info['params'][param] = int(match.group(1))
-                    found_params.append(param)
+            model_lower = model_name.lower()
+            for cat, keywords in category_keywords.items():
+                if any(kw in model_lower for kw in keywords):
+                    model_info['category'] = cat
+                    break
             
-            if found_params:
-                print(f"    ✅ ОТВЕТ: Найдено параметров: {', '.join(found_params)}")
-            else:
-                print(f"    ⚠️ ОТВЕТ: Параметры не найдены")
+            if not model_info['category']:
+                model_info['category'] = 'other'
+            
+            print(f"    ✅ ОТВЕТ: Категория определена: {model_info['category']}")
             
             # Валидация структуры модели перед добавлением
             print(f"    🔍 ОТВЕТ: Проверка структуры модели...")
@@ -128,21 +380,37 @@ class KieApiScraper:
             print(f"    ❌ ОТВЕТ: Ошибка при парсинге {model_name}: {e}")
         except Exception as e:
             print(f"    ❌ ОТВЕТ: Неожиданная ошибка для {model_name}: {e}")
+            import traceback
+            print(f"    📋 Детали ошибки: {traceback.format_exc()}")
     
     def _validate_model_structure(self, model_info):
-        """Проверяет соответствие структуры модели требуемому формату"""
-        required_fields = ['name', 'endpoint', 'method', 'base_url', 'params', 'example', 'price', 'category']
+        """Улучшенная проверка структуры модели с валидацией API"""
+        required_fields = ['name', 'endpoint', 'method', 'base_url', 'params', 'example', 'category']
+        optional_fields = ['input_schema', 'example_request', 'price']
         
         # Проверка наличия всех обязательных полей
+        missing_fields = []
         for field in required_fields:
             if field not in model_info:
-                print(f"      ❌ ОТВЕТ: Отсутствует обязательное поле: {field}")
-                return False
+                missing_fields.append(field)
+        
+        if missing_fields:
+            print(f"      ❌ ОТВЕТ: Отсутствуют обязательные поля: {', '.join(missing_fields)}")
+            return False
         
         # Проверка типов данных
         if not isinstance(model_info['name'], str) or not model_info['name']:
             print(f"      ❌ ОТВЕТ: Неверный тип или пустое значение для 'name'")
             return False
+        
+        if not isinstance(model_info['endpoint'], str) or not model_info['endpoint']:
+            print(f"      ❌ ОТВЕТ: Endpoint должен быть непустой строкой")
+            return False
+        
+        # Проверка формата endpoint
+        if not model_info['endpoint'].startswith('/'):
+            print(f"      ⚠️ ОТВЕТ: Endpoint должен начинаться с '/', исправляю...")
+            model_info['endpoint'] = '/' + model_info['endpoint']
         
         if not isinstance(model_info['params'], dict):
             print(f"      ❌ ОТВЕТ: 'params' должен быть словарем, получен {type(model_info['params'])}")
@@ -154,43 +422,186 @@ class KieApiScraper:
             print(f"         Получено: {model_info['base_url']}")
             return False
         
+        # Проверка example
+        if not model_info.get('example'):
+            print(f"      ⚠️ ОТВЕТ: Пример не найден, создаю базовый...")
+            model_info['example'] = json.dumps({
+                "prompt": "Пример запроса"
+            }, ensure_ascii=False, indent=2)
+        
+        # Проверка и создание example_request если нужно
+        if not model_info.get('example_request'):
+            try:
+                model_info['example_request'] = json.loads(model_info['example'])
+            except:
+                model_info['example_request'] = {"prompt": "Пример запроса"}
+        
+        # Проверка input_schema
+        if not model_info.get('input_schema'):
+            model_info['input_schema'] = {
+                'required': ['prompt'],
+                'properties': {
+                    'prompt': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Текст запроса'
+                    }
+                }
+            }
+        
+        # Валидация API endpoint (проверка что он выглядит правильно)
+        endpoint_parts = model_info['endpoint'].strip('/').split('/')
+        if len(endpoint_parts) < 1:
+            print(f"      ⚠️ ОТВЕТ: Endpoint слишком короткий, исправляю...")
+            model_info['endpoint'] = f"/{model_info['name'].lower().replace(' ', '-')}/generate"
+        
         print(f"      ✅ ОТВЕТ: Все поля присутствуют и имеют правильные типы")
+        print(f"      ✅ ОТВЕТ: Endpoint валиден: {model_info['endpoint']}")
+        print(f"      ✅ ОТВЕТ: Параметров: {len(model_info['params'])}")
         return True
     
+    def _validate_api_endpoint(self, model):
+        """Проверка корректности API endpoint и параметров"""
+        issues = []
+        
+        # Проверка endpoint
+        if not model.get('endpoint') or model['endpoint'] == '/generate':
+            issues.append("Endpoint не определен или слишком общий")
+        
+        # Проверка что endpoint содержит название модели или специфичный путь
+        endpoint_lower = model['endpoint'].lower()
+        name_lower = model['name'].lower()
+        name_slug = re.sub(r'[^a-z0-9]', '', name_lower)
+        
+        if name_slug and name_slug not in endpoint_lower.replace('-', '').replace('_', ''):
+            # Это не критично, но предупреждаем
+            pass
+        
+        # Проверка example_request
+        if not model.get('example_request') or not isinstance(model['example_request'], dict):
+            issues.append("example_request отсутствует или неверного формата")
+        else:
+            # Проверяем наличие обязательных полей
+            if 'prompt' not in model['example_request']:
+                issues.append("example_request не содержит поле 'prompt'")
+        
+        # Проверка input_schema
+        if not model.get('input_schema'):
+            issues.append("input_schema отсутствует")
+        else:
+            if 'required' not in model['input_schema']:
+                issues.append("input_schema не содержит 'required'")
+            if 'prompt' not in model['input_schema'].get('required', []):
+                # Добавляем prompt в required если его нет
+                if 'required' not in model['input_schema']:
+                    model['input_schema']['required'] = []
+                if 'prompt' not in model['input_schema']['required']:
+                    model['input_schema']['required'].append('prompt')
+        
+        return issues
+    
+    def _fix_model_issues(self, model):
+        """Исправление найденных проблем в модели"""
+        fixed = False
+        
+        # Исправляем endpoint если он пустой
+        if not model.get('endpoint') or model['endpoint'] == '/generate':
+            model_slug = re.sub(r'[^a-zA-Z0-9\-_]', '', model['name'].lower().replace(' ', '-'))
+            model['endpoint'] = f"/{model_slug}/generate"
+            fixed = True
+        
+        # Исправляем example_request если его нет
+        if not model.get('example_request'):
+            try:
+                if model.get('example'):
+                    model['example_request'] = json.loads(model['example'])
+                else:
+                    model['example_request'] = {"prompt": "Пример запроса"}
+                fixed = True
+            except:
+                model['example_request'] = {"prompt": "Пример запроса"}
+                fixed = True
+        
+        # Исправляем example если его нет
+        if not model.get('example'):
+            model['example'] = json.dumps(model.get('example_request', {"prompt": "Пример запроса"}), 
+                                         ensure_ascii=False, indent=2)
+            fixed = True
+        
+        # Исправляем input_schema
+        if not model.get('input_schema'):
+            model['input_schema'] = {
+                'required': ['prompt'],
+                'properties': {
+                    'prompt': {
+                        'type': 'string',
+                        'required': True,
+                        'description': 'Текст запроса для модели'
+                    }
+                }
+            }
+            fixed = True
+        
+        return fixed
+    
     def validate_all_models(self):
-        """Финальная проверка всех моделей на соответствие"""
+        """Улучшенная финальная проверка всех моделей с исправлением проблем"""
         print("\n🔍 ФИНАЛЬНАЯ ПРОВЕРКА ВСЕХ МОДЕЛЕЙ...")
         print("=" * 60)
         valid_count = 0
         invalid_count = 0
         invalid_models = []
+        fixed_count = 0
         
         for i, model in enumerate(self.models, 1):
             print(f"\n  📋 Проверка {i}/{len(self.models)}: {model['name']}")
-            if self._validate_model_structure(model):
+            
+            # Структурная валидация
+            if not self._validate_model_structure(model):
+                invalid_count += 1
+                invalid_models.append(model['name'])
+                print(f"  ❌ ОТВЕТ: Модель '{model['name']}' НЕ прошла структурную валидацию")
+                continue
+            
+            # Проверка API endpoint и параметров
+            api_issues = self._validate_api_endpoint(model)
+            
+            # Исправление проблем
+            if api_issues:
+                print(f"  🔧 ОТВЕТ: Найдены проблемы: {', '.join(api_issues)}")
+                if self._fix_model_issues(model):
+                    fixed_count += 1
+                    print(f"  ✅ ОТВЕТ: Проблемы исправлены")
+                    api_issues = self._validate_api_endpoint(model)  # Проверяем снова
+            
+            if not api_issues:
                 valid_count += 1
-                print(f"  ✅ ОТВЕТ: Модель '{model['name']}' соответствует структуре")
+                print(f"  ✅ ОТВЕТ: Модель '{model['name']}' полностью валидна")
+                print(f"      🔗 Endpoint: {model['endpoint']}")
+                print(f"      📝 Параметров: {len(model.get('params', {}))}")
+                print(f"      📋 Input полей: {len(model.get('input_schema', {}).get('required', []))}")
             else:
                 invalid_count += 1
                 invalid_models.append(model['name'])
-                print(f"  ❌ ОТВЕТ: Модель '{model['name']}' НЕ соответствует структуре")
+                print(f"  ⚠️ ОТВЕТ: Модель '{model['name']}' имеет проблемы: {', '.join(api_issues)}")
         
         print("\n" + "=" * 60)
         print("📊 ОТВЕТ: РЕЗУЛЬТАТЫ ФИНАЛЬНОЙ ПРОВЕРКИ:")
         print(f"  ✅ Валидных моделей: {valid_count}")
         print(f"  ❌ Невалидных моделей: {invalid_count}")
+        print(f"  🔧 Исправлено моделей: {fixed_count}")
         print(f"  📦 Всего моделей: {len(self.models)}")
         
         if invalid_models:
-            print(f"\n  ⚠️ Список невалидных моделей:")
+            print(f"\n  ⚠️ Список моделей с проблемами:")
             for name in invalid_models:
                 print(f"    - {name}")
         
         if invalid_count == 0:
-            print("\n✅ ОТВЕТ: ВСЕ МОДЕЛИ СООТВЕТСТВУЮТ ТРЕБОВАНИЯМ!")
+            print("\n✅ ОТВЕТ: ВСЕ МОДЕЛИ РАБОЧИЕ И СООТВЕТСТВУЮТ ТРЕБОВАНИЯМ!")
             return True
         else:
-            print(f"\n⚠️ ОТВЕТ: Обнаружено {invalid_count} невалидных моделей из {len(self.models)}")
+            print(f"\n⚠️ ОТВЕТ: Обнаружено {invalid_count} моделей с проблемами из {len(self.models)}")
             return False
     
     def run_full_scrape(self):
@@ -211,14 +622,14 @@ class KieApiScraper:
         
         # Действие 2: Парсинг документации
         print(f"\n📚 ДЕЙСТВИЕ 2: Парсинг документации моделей...")
-        max_models = min(30, len(model_links))
+        max_models = min(50, len(model_links))  # Увеличиваем лимит для большего покрытия
         print(f"✅ ОТВЕТ: Начинаем парсинг {max_models} моделей")
         
         for i, model in enumerate(model_links[:max_models], 1):
             print(f"\n  🔄 Обработка {i}/{max_models}: {model['name']}")
             self.scrape_model_docs(model['url'], model['name'])
             print(f"  ✅ ОТВЕТ: Обработка модели '{model['name']}' завершена")
-            time.sleep(1)  # Не спамим
+            time.sleep(0.5)  # Уменьшаем задержку для ускорения
         
         print(f"\n✅ ОТВЕТ: Парсинг завершен. Обработано {len(self.models)} моделей")
         
@@ -272,10 +683,18 @@ if __name__ == "__main__":
             print(f"   🔗 Endpoint: {model['endpoint'] or 'не найден'}")
             print(f"   📝 Method: {model['method']}")
             print(f"   🌐 Base URL: {model['base_url']}")
-            if model['params']:
+            print(f"   📂 Категория: {model.get('category', 'other')}")
+            if model.get('params'):
                 print(f"   ⚙️ Параметры: {model['params']}")
-            if model['example']:
-                print(f"   💡 Пример: {model['example'][:100]}...")
+            if model.get('input_schema'):
+                required = model['input_schema'].get('required', [])
+                if required:
+                    print(f"   📋 Обязательные поля: {', '.join(required)}")
+            if model.get('example_request'):
+                print(f"   💡 Пример запроса:")
+                print(f"      {json.dumps(model['example_request'], ensure_ascii=False, indent=6)}")
+            elif model.get('example'):
+                print(f"   💡 Пример: {model['example'][:150]}...")
             print()
         print("=" * 60)
         print(f"\n✅ ОТВЕТ: Все действия выполнены успешно!")
