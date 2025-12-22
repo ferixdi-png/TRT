@@ -2974,6 +2974,17 @@ def build_input(
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
     
+    # Применяем дефолты для sora-2-pro-text-to-video
+    if model_id in ["sora-2-pro-text-to-video", "sora-2-pro/t2v", "openai/sora-2-pro-text-to-video"]:
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
+        if 'n_frames' not in normalized_input:
+            normalized_input['n_frames'] = "10"  # Default согласно документации
+        if 'size' not in normalized_input:
+            normalized_input['size'] = "high"  # Default согласно документации
+        if 'remove_watermark' not in normalized_input:
+            normalized_input['remove_watermark'] = True  # Default согласно документации
+    
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
         if 'sound' not in normalized_input:
