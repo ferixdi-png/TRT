@@ -655,6 +655,162 @@ def _validate_seedream_4_5_edit(
     return True, None
 
 
+def _normalize_sound_for_kling_2_6(value: Any) -> Optional[bool]:
+    """
+    Нормализует sound для kling-2.6/image-to-video.
+    Принимает boolean, строку или число и возвращает boolean.
+    
+    Args:
+        value: Значение sound (может быть bool, str, int, None)
+    
+    Returns:
+        Нормализованный boolean или None
+    """
+    if value is None:
+        return None
+    
+    # Если это уже boolean, возвращаем как есть
+    if isinstance(value, bool):
+        return value
+    
+    # Если это строка, конвертируем в boolean
+    if isinstance(value, str):
+        str_value = str(value).strip().lower()
+        if str_value in ['true', '1', 'yes', 'on']:
+            return True
+        elif str_value in ['false', '0', 'no', 'off']:
+            return False
+    
+    # Если это число, конвертируем в boolean
+    if isinstance(value, (int, float)):
+        return bool(value)
+    
+    return None
+
+
+def _normalize_duration_for_kling_2_6(value: Any) -> Optional[str]:
+    """
+    Нормализует duration для kling-2.6/image-to-video.
+    Принимает числа (5, 10) или строки ("5", "10") и возвращает строку.
+    ВАЖНО: Для kling-2.6 поддерживаются только "5" и "10"!
+    
+    Args:
+        value: Значение duration (может быть int, float, str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Убираем "s" или "seconds" в конце, если есть
+    if str_value.lower().endswith('seconds'):
+        str_value = str_value[:-7].strip()
+    elif str_value.lower().endswith('s'):
+        str_value = str_value[:-1].strip()
+    
+    # Проверяем что это валидное значение (только 5 и 10 для kling-2.6!)
+    valid_values = ["5", "10"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем конвертировать число в строку
+    try:
+        num_value = float(str_value)
+        if num_value == 5.0 or num_value == 5:
+            return "5"
+        elif num_value == 10.0 or num_value == 10:
+            return "10"
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _validate_kling_2_6_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling-2.6/image-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "kling-2.6/image-to-video":
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 1000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 1000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 1000)"
+    
+    # Валидация image_urls: обязательный массив
+    # Проверяем различные варианты имени поля
+    image_urls = None
+    if 'image_urls' in normalized_input:
+        image_urls = normalized_input['image_urls']
+    elif 'image_url' in normalized_input:
+        # Конвертируем image_url в image_urls
+        image_urls = normalized_input['image_url']
+    elif 'image' in normalized_input:
+        image_urls = normalized_input['image']
+    
+    if not image_urls:
+        return False, "Поле 'image_urls' обязательно для генерации видео из изображения"
+    
+    # Нормализуем image_urls
+    normalized_image_urls = _normalize_image_urls_for_wan_2_6(image_urls)  # Используем ту же функцию
+    if not normalized_image_urls:
+        return False, "Поле 'image_urls' должно содержать хотя бы один валидный URL изображения"
+    
+    # Проверяем что все URL начинаются с http:// или https://
+    for idx, url in enumerate(normalized_image_urls):
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return False, f"URL изображения #{idx + 1} должен начинаться с http:// или https://"
+    
+    # Сохраняем нормализованное значение
+    normalized_input['image_urls'] = normalized_image_urls
+    
+    # Валидация sound: обязательный boolean
+    sound = normalized_input.get('sound')
+    if sound is None:
+        return False, "Поле 'sound' обязательно для генерации видео"
+    
+    normalized_sound = _normalize_sound_for_kling_2_6(sound)
+    if normalized_sound is None:
+        return False, f"Поле 'sound' должно быть boolean (true/false) (получено: {sound})"
+    normalized_input['sound'] = normalized_sound
+    
+    # Валидация duration: обязательный, "5" | "10", default "5"
+    duration = normalized_input.get('duration')
+    if not duration:
+        return False, "Поле 'duration' обязательно для генерации видео"
+    
+    normalized_duration = _normalize_duration_for_kling_2_6(duration)
+    if normalized_duration is None:
+        return False, f"Поле 'duration' должно быть '5' или '10' (получено: {duration})"
+    normalized_input['duration'] = normalized_duration
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -845,6 +1001,18 @@ def build_input(
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
         return {}, error_msg
+    
+    # Специфичная валидация для kling-2.6/image-to-video
+    is_valid, error_msg = _validate_kling_2_6_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
+    # Применяем дефолты для kling-2.6/image-to-video
+    if model_id == "kling-2.6/image-to-video":
+        if 'sound' not in normalized_input:
+            normalized_input['sound'] = False  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
     
     # Применяем дефолты для seedream/4.5-text-to-image
     if model_id == "seedream/4.5-text-to-image":
