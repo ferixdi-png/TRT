@@ -7187,6 +7187,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для bytedance/v1-lite-image-to-video
+    is_valid, error_msg = _validate_bytedance_v1_lite_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для seedream/4.5-edit
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
@@ -7767,6 +7772,21 @@ def build_input(
             normalized_input['seed'] = -1  # Default согласно документации (случайный seed)
         if 'enable_safety_checker' not in normalized_input:
             normalized_input['enable_safety_checker'] = True  # Default согласно документации
+    
+    # Применяем дефолты для bytedance/v1-lite-image-to-video
+    if model_id in ["bytedance/v1-lite-image-to-video", "bytedance-v1-lite-image-to-video", "v1-lite-image-to-video"]:
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "720p"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+        if 'camera_fixed' not in normalized_input:
+            normalized_input['camera_fixed'] = False  # Default согласно документации
+        if 'seed' not in normalized_input:
+            normalized_input['seed'] = -1  # Default согласно документации (случайный seed)
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+        if 'end_image_url' not in normalized_input:
+            normalized_input['end_image_url'] = ""  # Default согласно документации (пустая строка!)
     
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
