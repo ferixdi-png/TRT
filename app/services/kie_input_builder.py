@@ -811,6 +811,106 @@ def _validate_kling_2_6_image_to_video(
     return True, None
 
 
+def _normalize_aspect_ratio_for_kling_2_6(value: Any) -> Optional[str]:
+    """
+    Нормализует aspect_ratio для kling-2.6/text-to-video.
+    Принимает строку и возвращает нормализованное значение.
+    ВАЖНО: Для kling-2.6 поддерживаются только "1:1", "16:9", "9:16"!
+    
+    Args:
+        value: Значение aspect_ratio (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Проверяем что это валидное значение (только 3 значения для kling-2.6!)
+    valid_values = ["1:1", "16:9", "9:16"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    str_lower = str_value.lower()
+    if str_lower in ["1:1", "1/1", "1x1", "square"]:
+        return "1:1"
+    elif str_lower in ["16:9", "16/9", "16x9", "landscape", "wide"]:
+        return "16:9"
+    elif str_lower in ["9:16", "9/16", "9x16", "portrait", "vertical"]:
+        return "9:16"
+    
+    return None
+
+
+def _validate_kling_2_6_text_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для kling-2.6/text-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "kling-2.6/text-to-video":
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 1000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 1000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 1000)"
+    
+    # Валидация sound: обязательный boolean
+    sound = normalized_input.get('sound')
+    if sound is None:
+        return False, "Поле 'sound' обязательно для генерации видео"
+    
+    normalized_sound = _normalize_sound_for_kling_2_6(sound)
+    if normalized_sound is None:
+        return False, f"Поле 'sound' должно быть boolean (true/false) (получено: {sound})"
+    normalized_input['sound'] = normalized_sound
+    
+    # Валидация aspect_ratio: обязательный, "1:1" | "16:9" | "9:16"
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if not aspect_ratio:
+        return False, "Поле 'aspect_ratio' обязательно для генерации видео"
+    
+    normalized_aspect_ratio = _normalize_aspect_ratio_for_kling_2_6(aspect_ratio)
+    if normalized_aspect_ratio is None:
+        valid_values = ["1:1", "16:9", "9:16"]
+        return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_values)} (получено: {aspect_ratio})"
+    normalized_input['aspect_ratio'] = normalized_aspect_ratio
+    
+    # Валидация duration: обязательный, "5" | "10", default "5"
+    duration = normalized_input.get('duration')
+    if not duration:
+        return False, "Поле 'duration' обязательно для генерации видео"
+    
+    normalized_duration = _normalize_duration_for_kling_2_6(duration)
+    if normalized_duration is None:
+        return False, f"Поле 'duration' должно быть '5' или '10' (получено: {duration})"
+    normalized_input['duration'] = normalized_duration
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -1007,10 +1107,24 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для kling-2.6/text-to-video
+    is_valid, error_msg = _validate_kling_2_6_text_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
         if 'sound' not in normalized_input:
             normalized_input['sound'] = False  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
+    
+    # Применяем дефолты для kling-2.6/text-to-video
+    if model_id == "kling-2.6/text-to-video":
+        if 'sound' not in normalized_input:
+            normalized_input['sound'] = False  # Default согласно документации
+        if 'aspect_ratio' not in normalized_input:
+            normalized_input['aspect_ratio'] = "1:1"  # Default согласно документации
         if 'duration' not in normalized_input:
             normalized_input['duration'] = "5"  # Default согласно документации
     
