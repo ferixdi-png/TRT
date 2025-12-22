@@ -229,6 +229,11 @@
   - Опциональные: `output_format` (enum: png/jpeg), `image_size` (enum, 11 значений)
   - Default: `output_format="png"`, `image_size="1:1"`
   - Важно: Использует `image_size` вместо стандартных `width`/`height`! Уникальный параметр: `output_format`! НЕТ параметров `negative_prompt`, `width`, `height`, `steps`, `seed`, `guidance`, `guidance_scale`, `style`!
+- [x] **google/nano-banana-edit** - `docs/GOOGLE_NANO_BANANA_EDIT_INTEGRATION.md`
+  - Обязательные: `prompt` (max 5000), `image_urls` (массив, до 10 изображений, max 10MB каждое, jpeg/png/webp)
+  - Опциональные: `output_format` (enum: png/jpeg), `image_size` (enum, 11 значений)
+  - Default: `output_format="png"`, `image_size="1:1"`
+  - Важно: Использует `image_urls` (массив, до 10) вместо стандартного `image_url`! Использует `image_size` вместо стандартных `width`/`height`! Уникальный параметр: `output_format`! Нормализует `image_url` в `image_urls`! НЕТ параметров `strength`, `negative_prompt`, `width`, `height`, `steps`, `seed`, `guidance`, `guidance_scale`, `style`!
 - [x] **hailuo/02-image-to-video-pro** - `docs/HAILUO_02_IMAGE_TO_VIDEO_PRO_INTEGRATION.md`
   - Обязательные: `prompt` (max 1500 chars), `image_url` (string, не массив!)
   - Опциональные: `end_image_url` (string), `prompt_optimizer` (boolean)

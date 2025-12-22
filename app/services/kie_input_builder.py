@@ -4573,6 +4573,102 @@ def _validate_google_nano_banana(
     return True, None
 
 
+def _validate_google_nano_banana_edit(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для google/nano-banana-edit согласно документации API.
+    
+    ВАЖНО: Эта модель имеет специфичные параметры:
+    - prompt (обязательный, макс 5000 символов)
+    - image_urls (обязательный, массив URL изображений, до 10 изображений, макс 10MB каждое, форматы: jpeg/png/webp)
+    - output_format (опциональный, enum, default "png")
+    - image_size (опциональный, enum, 11 значений, default "1:1")
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id not in ["google/nano-banana-edit", "google-nano-banana-edit", "nano-banana-edit"]:
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 5000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для редактирования изображения. Введите текстовое описание."
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 5000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 5000)"
+    
+    # Валидация image_urls: обязательный, массив URL изображений, до 10 изображений
+    image_urls = normalized_input.get('image_urls')
+    if not image_urls:
+        # Проверяем альтернативные поля
+        image_url = normalized_input.get('image_url')
+        if image_url:
+            # Нормализуем image_url в image_urls
+            if isinstance(image_url, str):
+                normalized_input['image_urls'] = [image_url]
+                image_urls = [image_url]
+            elif isinstance(image_url, list):
+                normalized_input['image_urls'] = image_url
+                image_urls = image_url
+            else:
+                return False, "Поле 'image_urls' обязательно для редактирования изображения. Загрузите изображение."
+        else:
+            return False, "Поле 'image_urls' обязательно для редактирования изображения. Загрузите изображение."
+    
+    # Проверяем что image_urls это массив
+    if not isinstance(image_urls, list):
+        return False, "Поле 'image_urls' должно быть массивом URL изображений"
+    
+    # Проверяем количество изображений (до 10)
+    if len(image_urls) == 0:
+        return False, "Поле 'image_urls' не может быть пустым. Загрузите хотя бы одно изображение."
+    if len(image_urls) > 10:
+        return False, f"Поле 'image_urls' содержит слишком много изображений: {len(image_urls)} (максимум 10)"
+    
+    # Проверяем что все элементы - строки (URL)
+    for idx, url in enumerate(image_urls):
+        if not isinstance(url, str):
+            return False, f"Элемент {idx} в 'image_urls' должен быть строкой (URL)"
+        if not url.strip():
+            return False, f"Элемент {idx} в 'image_urls' не может быть пустым"
+    
+    normalized_input['image_urls'] = image_urls
+    
+    # Валидация output_format: опциональный, enum
+    output_format = normalized_input.get('output_format')
+    if output_format is not None:
+        normalized_format = _normalize_output_format_for_qwen_i2i(output_format)  # Переиспользуем функцию из i2i
+        if normalized_format is None:
+            return False, f"Поле 'output_format' должно быть одним из: png, jpeg (получено: {output_format})"
+        normalized_input['output_format'] = normalized_format
+    
+    # Валидация image_size: опциональный, enum
+    image_size = normalized_input.get('image_size')
+    if image_size is not None:
+        normalized_size = _normalize_image_size_for_google_nano_banana(image_size)  # Переиспользуем функцию из t2i
+        if normalized_size is None:
+            valid_values = [
+                "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9", "auto"
+            ]
+            return False, f"Поле 'image_size' должно быть одним из: {', '.join(valid_values)} (получено: {image_size})"
+        normalized_input['image_size'] = normalized_size
+    
+    return True, None
+
+
 def _normalize_resolution_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
     """
     Нормализует resolution для hailuo/2-3-image-to-video-pro.
