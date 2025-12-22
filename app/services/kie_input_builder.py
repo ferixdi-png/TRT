@@ -8528,6 +8528,19 @@ def build_input(
         if 'enable_safety_checker' not in normalized_input:
             normalized_input['enable_safety_checker'] = True  # Default согласно документации
     
+    # Применяем дефолты для ideogram/v3-text-to-image
+    if model_id in ["ideogram/v3-text-to-image", "ideogram-v3-text-to-image", "ideogram/v3-t2i", "v3-text-to-image"]:
+        if 'rendering_speed' not in normalized_input:
+            normalized_input['rendering_speed'] = "BALANCED"  # Default согласно документации
+        if 'style' not in normalized_input:
+            normalized_input['style'] = "AUTO"  # Default согласно документации
+        if 'expand_prompt' not in normalized_input:
+            normalized_input['expand_prompt'] = True  # Default согласно документации
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "square_hd"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка!)
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
