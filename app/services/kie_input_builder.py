@@ -1600,6 +1600,168 @@ def _validate_nano_banana_pro(
     return True, None
 
 
+def _normalize_resolution_for_v1_pro_fast(value: Any) -> Optional[str]:
+    """
+    Нормализует resolution для bytedance/v1-pro-fast-image-to-video.
+    Принимает строку и возвращает нормализованное значение.
+    ВАЖНО: Для v1-pro-fast поддерживаются только "720p" и "1080p" (не "480p"!)!
+    
+    Args:
+        value: Значение resolution (может быть str, int, float)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы, конвертируем в нижний регистр
+    str_value = str(value).strip().lower()
+    
+    # Проверяем что это валидное значение
+    valid_values = ["720p", "1080p"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем нормализовать варианты написания
+    if str_value in ["720", "720p", "hd"]:
+        return "720p"
+    elif str_value in ["1080", "1080p", "full hd", "fhd"]:
+        return "1080p"
+    
+    return None
+
+
+def _normalize_duration_for_v1_pro_fast(value: Any) -> Optional[str]:
+    """
+    Нормализует duration для bytedance/v1-pro-fast-image-to-video.
+    Принимает числа (5, 10) или строки ("5", "10", "5s", "10s") и возвращает строку.
+    ВАЖНО: Для v1-pro-fast поддерживаются только "5" и "10"!
+    
+    Args:
+        value: Значение duration (может быть int, float, str)
+    
+    Returns:
+        Нормализованная строка или None
+    """
+    if value is None:
+        return None
+    
+    # Конвертируем в строку и убираем пробелы
+    str_value = str(value).strip()
+    
+    # Убираем "s" или "seconds" в конце, если есть
+    if str_value.lower().endswith('seconds'):
+        str_value = str_value[:-7].strip()
+    elif str_value.lower().endswith('s'):
+        str_value = str_value[:-1].strip()
+    
+    # Проверяем что это валидное значение (только 5 и 10 для v1-pro-fast!)
+    valid_values = ["5", "10"]
+    if str_value in valid_values:
+        return str_value
+    
+    # Пробуем конвертировать число в строку
+    try:
+        num_value = float(str_value)
+        if num_value == 5.0 or num_value == 5:
+            return "5"
+        elif num_value == 10.0 or num_value == 10:
+            return "10"
+    except (ValueError, TypeError):
+        pass
+    
+    return None
+
+
+def _validate_bytedance_v1_pro_fast_image_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/v1-pro-fast-image-to-video согласно документации API.
+    
+    Args:
+        model_id: ID модели
+        normalized_input: Нормализованные входные данные
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if model_id != "bytedance/v1-pro-fast-image-to-video":
+        return True, None
+    
+    # Валидация prompt: обязательный, максимум 10000 символов
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео"
+    
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    
+    # Валидация image_url: обязательный (строка, не массив!)
+    # ВАЖНО: Для v1-pro-fast используется image_url (строка), а не image_urls (массив)!
+    image_url = None
+    if 'image_url' in normalized_input:
+        image_url = normalized_input['image_url']
+    elif 'image_urls' in normalized_input:
+        # Если передан массив, берем первый элемент
+        image_urls = normalized_input['image_urls']
+        if isinstance(image_urls, list) and len(image_urls) > 0:
+            image_url = image_urls[0]
+        elif isinstance(image_urls, str):
+            image_url = image_urls
+    elif 'image_input' in normalized_input:
+        # Если передан image_input, берем первый элемент если это массив
+        image_input = normalized_input['image_input']
+        if isinstance(image_input, list) and len(image_input) > 0:
+            image_url = image_input[0]
+        elif isinstance(image_input, str):
+            image_url = image_input
+    
+    if not image_url:
+        return False, "Поле 'image_url' обязательно для генерации видео из изображения"
+    
+    # Проверяем что это строка
+    if not isinstance(image_url, str):
+        image_url = str(image_url)
+    
+    image_url = image_url.strip()
+    if not image_url:
+        return False, "Поле 'image_url' не может быть пустым"
+    
+    # Проверяем что URL начинается с http:// или https://
+    if not (image_url.startswith('http://') or image_url.startswith('https://')):
+        return False, "Поле 'image_url' должно начинаться с http:// или https://"
+    
+    # Сохраняем нормализованное значение
+    normalized_input['image_url'] = image_url
+    
+    # Валидация resolution: опциональный, "720p" | "1080p"
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_v1_pro_fast(resolution)
+        if normalized_resolution is None:
+            return False, f"Поле 'resolution' должно быть '720p' или '1080p' (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+    
+    # Валидация duration: опциональный, "5" | "10"
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_v1_pro_fast(duration)
+        if normalized_duration is None:
+            return False, f"Поле 'duration' должно быть '5' или '10' (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+    
+    return True, None
+
+
 def _validate_wan_2_6_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -1831,6 +1993,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для bytedance/v1-pro-fast-image-to-video
+    is_valid, error_msg = _validate_bytedance_v1_pro_fast_image_to_video(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Применяем дефолты для z-image
     if model_id == "z-image":
         if 'aspect_ratio' not in normalized_input:
@@ -1874,6 +2041,13 @@ def build_input(
             normalized_input['resolution'] = "1K"  # Default согласно документации
         if 'output_format' not in normalized_input:
             normalized_input['output_format'] = "png"  # Default согласно документации
+    
+    # Применяем дефолты для bytedance/v1-pro-fast-image-to-video
+    if model_id == "bytedance/v1-pro-fast-image-to-video":
+        if 'resolution' not in normalized_input:
+            normalized_input['resolution'] = "720p"  # Default согласно документации
+        if 'duration' not in normalized_input:
+            normalized_input['duration'] = "5"  # Default согласно документации
     
     # Применяем дефолты для kling-2.6/image-to-video
     if model_id == "kling-2.6/image-to-video":
