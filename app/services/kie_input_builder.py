@@ -6419,6 +6419,11 @@ def build_input(
     if not is_valid:
         return {}, error_msg
     
+    # Специфичная валидация для qwen/image-edit
+    is_valid, error_msg = _validate_qwen_image_edit(model_id, normalized_input)
+    if not is_valid:
+        return {}, error_msg
+    
     # Специфичная валидация для seedream/4.5-edit
     is_valid, error_msg = _validate_seedream_4_5_edit(model_id, normalized_input)
     if not is_valid:
@@ -6905,6 +6910,25 @@ def build_input(
             normalized_input['output_format'] = "png"  # Default согласно документации
         if 'image_size' not in normalized_input:
             normalized_input['image_size'] = "1:1"  # Default согласно документации
+    
+    # Применяем дефолты для qwen/image-edit
+    if model_id in ["qwen/image-edit", "qwen-image-edit", "qwen/edit"]:
+        if 'acceleration' not in normalized_input:
+            normalized_input['acceleration'] = "none"  # Default согласно документации
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "landscape_4_3"  # Default согласно документации
+        if 'num_inference_steps' not in normalized_input:
+            normalized_input['num_inference_steps'] = 25  # Default согласно документации
+        if 'guidance_scale' not in normalized_input:
+            normalized_input['guidance_scale'] = 4  # Default согласно документации
+        if 'sync_mode' not in normalized_input:
+            normalized_input['sync_mode'] = False  # Default согласно документации
+        if 'enable_safety_checker' not in normalized_input:
+            normalized_input['enable_safety_checker'] = True  # Default согласно документации
+        if 'output_format' not in normalized_input:
+            normalized_input['output_format'] = "png"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = "blurry, ugly"  # Default согласно документации
     
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
