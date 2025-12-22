@@ -7902,6 +7902,61 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             model_id = parts[1]
+            user_lang = get_user_language(user_id)
+            
+            # Пробуем получить из нового каталога
+            from app.kie_catalog import get_model as get_model_from_catalog
+            catalog_model = get_model_from_catalog(model_id)
+            
+            if catalog_model:
+                # Используем новый каталог для примера
+                mode = catalog_model.modes[0] if catalog_model.modes else None
+                if user_lang == 'ru':
+                    example_text = (
+                        f"📸 <b>Пример запроса для {catalog_model.title_ru}</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>Тип генерации:</b> {catalog_model.type}\n\n"
+                    )
+                else:
+                    example_text = (
+                        f"📸 <b>Example request for {catalog_model.title_ru}</b>\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>Generation type:</b> {catalog_model.type}\n\n"
+                    )
+                
+                if mode and mode.notes:
+                    example_text += f"⚙️ <b>Режим:</b> {mode.notes}\n\n" if user_lang == 'ru' else f"⚙️ <b>Mode:</b> {mode.notes}\n\n"
+                
+                if user_lang == 'ru':
+                    example_text += (
+                        f"💡 <b>Совет:</b> После начала генерации вы сможете настроить все параметры пошагово.\n\n"
+                        f"🚀 <b>Готовы начать?</b> Нажмите кнопку ниже!"
+                    )
+                else:
+                    example_text += (
+                        f"💡 <b>Tip:</b> After starting generation, you'll be able to configure all parameters step by step.\n\n"
+                        f"🚀 <b>Ready to start?</b> Click the button below!"
+                    )
+                
+                keyboard = [
+                    [InlineKeyboardButton("🚀 Сгенерировать" if user_lang == 'ru' else "🚀 Generate", callback_data=f"select_model:{model_id}")],
+                    [InlineKeyboardButton("ℹ️ Инфо" if user_lang == 'ru' else "ℹ️ Info", callback_data=f"info:{model_id}")],
+                    [InlineKeyboardButton("⬅️ Назад" if user_lang == 'ru' else "⬅️ Back", callback_data=f"model:{model_id}")]
+                ]
+                
+                try:
+                    await query.edit_message_text(
+                        text=example_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='HTML'
+                    )
+                    return SELECTING_MODEL
+                except Exception as e:
+                    logger.error(f"Error showing example from catalog: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка при загрузке примера", show_alert=True)
+                    return ConversationHandler.END
+            
+            # Fallback на старый код
             model = get_model_by_id(model_id)
             
             if not model:
@@ -7952,7 +8007,111 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
-            return ConversationHandler.END
+            return SELECTING_MODEL
+        
+        # Handle info: callback - shows detailed model information
+        if data.startswith("info:"):
+            try:
+                await query.answer()
+            except:
+                pass
+            
+            parts = data.split(":", 1)
+            if len(parts) < 2:
+                user_lang = get_user_language(user_id)
+                await query.answer(t('error_invalid_model', lang=user_lang, default="❌ Ошибка: неверный формат запроса"), show_alert=True)
+                return ConversationHandler.END
+            
+            model_id = parts[1]
+            user_lang = get_user_language(user_id)
+            
+            # Пробуем получить из нового каталога
+            from app.kie_catalog import get_model as get_model_from_catalog
+            catalog_model = get_model_from_catalog(model_id)
+            
+            if catalog_model:
+                # Используем новый каталог для отображения информации
+                from app.helpers.models_menu import build_model_card_text
+                card_text, keyboard_markup = build_model_card_text(catalog_model, 0, user_lang)
+                try:
+                    await query.edit_message_text(
+                        card_text,
+                        reply_markup=keyboard_markup,
+                        parse_mode='HTML'
+                    )
+                    return SELECTING_MODEL
+                except Exception as e:
+                    logger.error(f"Error showing model info: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка при загрузке информации о модели", show_alert=True)
+                    return ConversationHandler.END
+            
+            # Fallback на старый код
+            model = get_model_by_id(model_id)
+            if not model:
+                user_lang = get_user_language(user_id)
+                await query.answer(t('error_model_not_found', lang=user_lang, default="❌ Модель не найдена"), show_alert=True)
+                return ConversationHandler.END
+            
+            # Нормализуем модель
+            try:
+                from kie_models import normalize_model_for_api
+                normalized = normalize_model_for_api(model)
+            except:
+                normalized = model
+            
+            user_lang = get_user_language(user_id)
+            input_schema = normalized.get('input_schema') or normalized.get('input_params', {})
+            
+            # Формируем детальную информацию о модели
+            if user_lang == 'ru':
+                info_text = (
+                    f"ℹ️ <b>Информация о модели: {normalized.get('title', model_id)}</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                )
+            else:
+                info_text = (
+                    f"ℹ️ <b>Model Information: {normalized.get('title', model_id)}</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                )
+            
+            if normalized.get('description'):
+                info_text += f"📝 <b>Описание:</b>\n{normalized.get('description')}\n\n"
+            
+            if input_schema:
+                if user_lang == 'ru':
+                    info_text += f"⚙️ <b>Параметры:</b>\n"
+                else:
+                    info_text += f"⚙️ <b>Parameters:</b>\n"
+                
+                for param_name, param_info in input_schema.items():
+                    if isinstance(param_info, dict):
+                        param_type = param_info.get('type', 'string')
+                        param_desc = param_info.get('description', '')
+                        required = param_info.get('required', False)
+                        req_text = " (обязательный)" if required else " (опциональный)"
+                        if user_lang != 'ru':
+                            req_text = " (required)" if required else " (optional)"
+                        info_text += f"• <b>{param_name}</b>: {param_type}{req_text}\n"
+                        if param_desc:
+                            info_text += f"  {param_desc}\n"
+                    else:
+                        info_text += f"• <b>{param_name}</b>: {param_info}\n"
+            
+            if normalized.get('help'):
+                info_text += f"\n💡 <b>Совет:</b>\n{normalized.get('help')}\n"
+            
+            keyboard = [
+                [InlineKeyboardButton("🚀 Сгенерировать" if user_lang == 'ru' else "🚀 Generate", callback_data=f"select_model:{model_id}")],
+                [InlineKeyboardButton("📸 Пример" if user_lang == 'ru' else "📸 Example", callback_data=f"example:{model_id}")],
+                [InlineKeyboardButton("⬅️ Назад" if user_lang == 'ru' else "⬅️ Back", callback_data=f"model:{model_id}")]
+            ]
+            
+            await query.edit_message_text(
+                text=info_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return SELECTING_MODEL
         
         # Handle model: callback - shows model card with "Start" button (canonical format for tests)
         if data.startswith("model:") or data.startswith("modelk:"):
@@ -8165,19 +8324,42 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             model_id = parts[1]
             logger.info(f"🔥🔥🔥 SELECT_MODEL: Parsed model_id={model_id}, user_id={user_id}")
             
-            # Get model from registry
-            model_info = get_model_by_id_from_registry(model_id)
-            logger.info(f"🔥🔥🔥 SELECT_MODEL: Model lookup result: found={bool(model_info)}, model_name={model_info.get('name', 'N/A') if model_info else 'N/A'}, user_id={user_id}")
+            # Сначала пробуем получить из нового каталога
+            model_info = None
+            catalog_model = None
+            try:
+                from app.kie_catalog import get_model as get_model_from_catalog
+                catalog_model = get_model_from_catalog(model_id)
+                if catalog_model:
+                    # Преобразуем catalog_model в формат model_info для совместимости
+                    model_info = {
+                        'id': catalog_model.id,
+                        'name': catalog_model.title_ru,
+                        'emoji': '🤖',  # Будет определено позже
+                        'description': catalog_model.title_ru,
+                        'category': catalog_model.type,
+                        'coming_soon': False
+                    }
+                    logger.info(f"✅ SELECT_MODEL: Found in catalog: model_id={model_id}, name={catalog_model.title_ru}, user_id={user_id}")
+            except Exception as e:
+                logger.warning(f"⚠️ SELECT_MODEL: Error loading from catalog: {e}, trying registry")
+            
+            # Если не нашли в каталоге, пробуем старый реестр
+            if not model_info:
+                model_info = get_model_by_id_from_registry(model_id)
+                logger.info(f"🔥🔥🔥 SELECT_MODEL: Model lookup result: found={bool(model_info)}, model_name={model_info.get('name', 'N/A') if model_info else 'N/A'}, user_id={user_id}")
             
             if not model_info:
                 logger.error(f"❌❌❌ MODEL NOT FOUND: model_id={model_id}, user_id={user_id}")
+                user_lang = get_user_language(user_id)
+                error_msg = t('error_model_not_found', lang=user_lang, default=f"❌ Модель {model_id} не найдена")
                 try:
-                    await query.edit_message_text(f"❌ Модель {model_id} не найдена.")
+                    await query.edit_message_text(error_msg)
                 except:
                     try:
-                        await query.message.reply_text(f"❌ Модель {model_id} не найдена.")
+                        await query.message.reply_text(error_msg)
                     except:
-                        pass
+                        await query.answer(error_msg, show_alert=True)
                 return ConversationHandler.END
             
             # Check if model is coming soon - НЕ показываем пользователю, просто возвращаем в меню
@@ -25087,6 +25269,11 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, pattern='^help_menu$'),
             CallbackQueryHandler(button_callback, pattern='^support_contact$'),
             CallbackQueryHandler(button_callback, pattern='^select_model:'),
+            CallbackQueryHandler(button_callback, pattern='^model:'),
+            CallbackQueryHandler(button_callback, pattern='^modelk:'),
+            CallbackQueryHandler(button_callback, pattern='^start:'),
+            CallbackQueryHandler(button_callback, pattern='^example:'),
+            CallbackQueryHandler(button_callback, pattern='^info:'),
             CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
             CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
             CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
@@ -25209,6 +25396,11 @@ async def _register_all_handlers_internal(application: Application):
                 MessageHandler(filters.Document.ALL, input_parameters),
                 MessageHandler(filters.AUDIO | filters.VOICE, input_parameters),
                 CallbackQueryHandler(button_callback, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, pattern='^model:'),
+                CallbackQueryHandler(button_callback, pattern='^modelk:'),
+                CallbackQueryHandler(button_callback, pattern='^start:'),
+                CallbackQueryHandler(button_callback, pattern='^example:'),
+                CallbackQueryHandler(button_callback, pattern='^info:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
@@ -25477,6 +25669,11 @@ async def main():
             CallbackQueryHandler(button_callback, pattern='^help_menu$'),
             CallbackQueryHandler(button_callback, pattern='^support_contact$'),
             CallbackQueryHandler(button_callback, pattern='^select_model:'),
+            CallbackQueryHandler(button_callback, pattern='^model:'),
+            CallbackQueryHandler(button_callback, pattern='^modelk:'),
+            CallbackQueryHandler(button_callback, pattern='^start:'),
+            CallbackQueryHandler(button_callback, pattern='^example:'),
+            CallbackQueryHandler(button_callback, pattern='^info:'),
             CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
             CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
             CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
@@ -25557,6 +25754,11 @@ async def main():
             CONFIRMING_GENERATION: [
                 CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
                 CallbackQueryHandler(button_callback, pattern='^retry_generate:'),
+                CallbackQueryHandler(button_callback, pattern='^model:'),
+                CallbackQueryHandler(button_callback, pattern='^modelk:'),
+                CallbackQueryHandler(button_callback, pattern='^start:'),
+                CallbackQueryHandler(button_callback, pattern='^example:'),
+                CallbackQueryHandler(button_callback, pattern='^info:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
@@ -25605,6 +25807,11 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^image_done$'),
                 CallbackQueryHandler(button_callback, pattern='^add_audio$'),
                 CallbackQueryHandler(button_callback, pattern='^skip_audio$'),
+                CallbackQueryHandler(button_callback, pattern='^model:'),
+                CallbackQueryHandler(button_callback, pattern='^modelk:'),
+                CallbackQueryHandler(button_callback, pattern='^start:'),
+                CallbackQueryHandler(button_callback, pattern='^example:'),
+                CallbackQueryHandler(button_callback, pattern='^info:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
