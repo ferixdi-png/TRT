@@ -5723,6 +5723,27 @@ def build_input(
         if 'diarize' not in normalized_input:
             normalized_input['diarize'] = True  # Default согласно документации
     
+    # Применяем дефолты для elevenlabs/text-to-speech-multilingual-v2
+    if model_id in ["elevenlabs/text-to-speech-multilingual-v2", "elevenlabs-text-to-speech-multilingual-v2"]:
+        if 'voice' not in normalized_input:
+            normalized_input['voice'] = "Rachel"  # Default согласно документации
+        if 'stability' not in normalized_input:
+            normalized_input['stability'] = 0.5  # Default согласно документации
+        if 'similarity_boost' not in normalized_input:
+            normalized_input['similarity_boost'] = 0.75  # Default согласно документации
+        if 'style' not in normalized_input:
+            normalized_input['style'] = 0  # Default согласно документации
+        if 'speed' not in normalized_input:
+            normalized_input['speed'] = 1  # Default согласно документации
+        if 'timestamps' not in normalized_input:
+            normalized_input['timestamps'] = False  # Default согласно документации
+        if 'previous_text' not in normalized_input:
+            normalized_input['previous_text'] = ""  # Default согласно документации
+        if 'next_text' not in normalized_input:
+            normalized_input['next_text'] = ""  # Default согласно документации
+        if 'language_code' not in normalized_input:
+            normalized_input['language_code'] = ""  # Default согласно документации
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
