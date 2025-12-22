@@ -7496,6 +7496,21 @@ def build_input(
         if 'reference_mask_urls' not in normalized_input:
             normalized_input['reference_mask_urls'] = ""  # Default согласно документации (пустая строка!)
     
+    # Применяем дефолты для ideogram/character
+    if model_id in ["ideogram/character", "ideogram-character", "character"]:
+        if 'rendering_speed' not in normalized_input:
+            normalized_input['rendering_speed'] = "BALANCED"  # Default согласно документации
+        if 'style' not in normalized_input:
+            normalized_input['style'] = "AUTO"  # Default согласно документации
+        if 'expand_prompt' not in normalized_input:
+            normalized_input['expand_prompt'] = True  # Default согласно документации
+        if 'num_images' not in normalized_input:
+            normalized_input['num_images'] = "1"  # Default согласно документации
+        if 'image_size' not in normalized_input:
+            normalized_input['image_size'] = "square_hd"  # Default согласно документации
+        if 'negative_prompt' not in normalized_input:
+            normalized_input['negative_prompt'] = ""  # Default согласно документации (пустая строка!)
+    
     # Применяем дефолты для ideogram/v3-reframe
     if model_id in ["ideogram/v3-reframe", "ideogram-v3-reframe"]:
         if 'image_size' not in normalized_input:
