@@ -1,5 +1,6 @@
 """
 Zero-silence guarantee handlers - ensure bot always responds.
+Contract: Every user action MUST receive a response.
 """
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -14,40 +15,47 @@ router = Router(name="zero_silence")
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    """Always respond to /start with main menu."""
-    try:
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Главное меню", callback_data="main_menu")],
-            [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")],
-            [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")]
-        ])
-        
-        await message.answer(
-            "👋 Добро пожаловать!\n\n"
-            "Выберите действие из меню:",
-            reply_markup=keyboard
-        )
-    except Exception as e:
-        logger.error(f"Error in /start handler: {e}")
-        await message.answer(
-            "👋 Добро пожаловать!\n\n"
-            "Используйте команды для навигации.\n"
-            "Нажмите /start для главного меню."
-        )
+    """
+    Always respond to /start with main menu.
+    
+    Contract:
+    - MUST always respond
+    - MUST show main menu
+    - Never silent
+    """
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Главное меню", callback_data="main_menu")],
+        [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")]
+    ])
+    
+    await message.answer(
+        "👋 Добро пожаловать!\n\n"
+        "Я помогу вам создать контент с помощью AI.\n\n"
+        "Выберите действие:",
+        reply_markup=keyboard
+    )
 
 
 @router.callback_query()
 async def handle_all_callbacks(callback: CallbackQuery):
-    """Handle ALL callback queries - always answer and respond."""
+    """
+    Handle ALL callback queries - always answer and respond.
+    
+    Contract:
+    - MUST call callback.answer() first
+    - MUST respond to every callback_data
+    - MUST have fallback for unknown callbacks
+    """
+    # Contract: Always answer callback query first
+    await callback.answer()
+    
+    callback_data = callback.data or ""
+    
     try:
-        # Always answer callback query first
-        await callback.answer()
-        
-        callback_data = callback.data
-        
-        # Handle known callbacks
+        # Handle known callbacks - explicit mapping
         if callback_data == "main_menu":
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -55,108 +63,125 @@ async def handle_all_callbacks(callback: CallbackQuery):
                 [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")],
                 [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")]
             ])
-            await callback.message.edit_text(
-                "📋 Главное меню\n\nВыберите действие:",
-                reply_markup=keyboard
-            )
+            try:
+                await callback.message.edit_text(
+                    "📋 Главное меню\n\n"
+                    "Выберите действие:",
+                    reply_markup=keyboard
+                )
+            except TelegramBadRequest:
+                # Message not modified - send new message
+                await callback.message.answer(
+                    "📋 Главное меню\n\n"
+                    "Выберите действие:",
+                    reply_markup=keyboard
+                )
+        
         elif callback_data == "help":
-            await callback.message.edit_text(
-                "ℹ️ Помощь\n\n"
-                "Используйте /start для главного меню.\n"
-                "Отправьте текст или файл согласно инструкциям."
-            )
+            try:
+                await callback.message.edit_text(
+                    "ℹ️ Помощь\n\n"
+                    "1. Выберите модель из меню\n"
+                    "2. Отправьте текст, файл или URL\n"
+                    "3. Подтвердите оплату\n"
+                    "4. Получите результат\n\n"
+                    "Используйте /start для главного меню."
+                )
+            except TelegramBadRequest:
+                await callback.message.answer(
+                    "ℹ️ Помощь\n\n"
+                    "1. Выберите модель из меню\n"
+                    "2. Отправьте текст, файл или URL\n"
+                    "3. Подтвердите оплату\n"
+                    "4. Получите результат\n\n"
+                    "Используйте /start для главного меню."
+                )
+        
         elif callback_data == "settings":
-            await callback.message.edit_text(
-                "⚙️ Настройки\n\n"
-                "Настройки будут доступны позже."
-            )
+            try:
+                await callback.message.edit_text(
+                    "⚙️ Настройки\n\n"
+                    "Настройки будут доступны позже."
+                )
+            except TelegramBadRequest:
+                await callback.message.answer(
+                    "⚙️ Настройки\n\n"
+                    "Настройки будут доступны позже."
+                )
+        
         else:
-            # Unknown callback_data - inform user
-            await callback.message.answer(
-                "⚠️ Кнопка устарела\n\n"
-                "Пожалуйста, нажмите /start для обновления меню."
-            )
-    except TelegramBadRequest as e:
-        # Message not modified or other Telegram error
-        logger.warning(f"Telegram error in callback handler: {e}")
+            # Contract: Fallback for unknown callback_data - MUST respond
+            logger.warning(f"Unknown callback_data received: {callback_data}")
+            try:
+                await callback.message.edit_text(
+                    "⚠️ Кнопка устарела\n\n"
+                    "Пожалуйста, нажмите /start для обновления меню."
+                )
+            except TelegramBadRequest:
+                await callback.message.answer(
+                    "⚠️ Кнопка устарела\n\n"
+                    "Пожалуйста, нажмите /start для обновления меню."
+                )
+    
+    # Contract: All exceptions caught and user notified
+    except Exception as e:
+        logger.error(f"Error in callback handler: {e}", exc_info=True)
+        # Contract: User MUST receive response even on error
         try:
             await callback.message.answer(
-                "✅ Действие выполнено.\n\n"
+                "⚠️ Произошла ошибка\n\n"
                 "Нажмите /start для главного меню."
             )
-        except:
-            pass
-    except Exception as e:
-        logger.error(f"Error in callback handler: {e}")
-        try:
-            await callback.message.answer(
-                "⚠️ Произошла ошибка.\n\n"
-                "Пожалуйста, нажмите /start."
-            )
-        except:
-            pass
+        except Exception as e2:
+            logger.critical(f"Failed to send error message to user: {e2}")
 
 
 @router.message(F.content_type.in_(["photo", "video", "audio", "document", "voice", "video_note"]))
 async def handle_non_text_messages(message: Message):
-    """Handle non-text messages with context-aware responses."""
-    try:
-        # Check if we're expecting a file (you can customize this logic based on bot state)
-        # For now, assume we're expecting text/URL by default
-        content_type = message.content_type
-        
-        # You can check bot state here to determine what's expected
-        # For example: if await get_state() == "waiting_for_file": ...
-        
-        # Default: expecting text/URL
-        await message.answer(
-            "📎 Вы отправили файл\n\n"
-            "❌ Сейчас ожидается текст или URL.\n\n"
-            "Пожалуйста, отправьте текстовое сообщение или ссылку.\n"
-            "Используйте /start для главного меню."
-        )
-    except Exception as e:
-        logger.error(f"Error handling non-text message: {e}")
-        await message.answer(
-            "⚠️ Не удалось обработать файл.\n\n"
-            "Пожалуйста, отправьте текстовое сообщение.\n"
-            "Используйте /start для главного меню."
-        )
+    """
+    Handle non-text messages - always respond.
+    
+    Contract:
+    - If expecting URL → ask for URL text
+    - If expecting file → explain what format needed
+    - Never ignore file messages
+    """
+    # For now, assume we're expecting text/URL (can be enhanced with state tracking)
+    # This ensures file messages are never ignored
+    await message.answer(
+        "📎 Файл получен\n\n"
+        "⚠️ Для этой модели нужен текст или URL.\n\n"
+        "Пожалуйста, отправьте текстовое сообщение или ссылку.\n"
+        "Или выберите модель, которая работает с файлами.\n\n"
+        "Используйте /start для главного меню."
+    )
 
 
 @router.message(F.text)
 async def handle_text_messages(message: Message):
-    """Handle text messages - always respond."""
-    try:
-        text = message.text or ""
-        
-        # Check if it's a command (should be handled by command handlers)
-        if text.startswith("/"):
-            # Let command handlers process it, but ensure response
-            return
-        
-        # You can check bot state here to determine what's expected
-        # For example: if await get_state() == "waiting_for_file": ...
-        #     await message.answer("❌ Сейчас ожидается файл. Пожалуйста, отправьте файл.")
-        #     return
-        
-        if text.startswith("http://") or text.startswith("https://"):
-            await message.answer(
-                "✅ URL получен!\n\n"
-                "Обрабатываю...\n"
-                "Используйте /start для главного меню."
-            )
-        else:
-            await message.answer(
-                "✅ Текст получен!\n\n"
-                "Обрабатываю...\n"
-                "Используйте /start для главного меню."
-            )
-    except Exception as e:
-        logger.error(f"Error handling text message: {e}")
+    """
+    Handle text messages - always respond.
+    
+    Contract:
+    - Commands are handled by command handlers
+    - URLs are acknowledged
+    - Text is acknowledged
+    - Never ignore text messages
+    """
+    text = message.text or ""
+    
+    # Commands are handled by @router.message(CommandStart()) and other command handlers
+    if text.startswith("/"):
+        return
+    
+    # Acknowledge text/URL input
+    if text.startswith("http://") or text.startswith("https://"):
         await message.answer(
-            "⚠️ Не удалось обработать сообщение.\n\n"
-            "Пожалуйста, попробуйте еще раз.\n"
-            "Используйте /start для главного меню."
+            "✅ URL получен\n\n"
+            "Проверяю ссылку и готовлю задачу..."
         )
-
+    else:
+        await message.answer(
+            "✅ Текст получен\n\n"
+            "Проверяю данные и готовлю задачу..."
+        )

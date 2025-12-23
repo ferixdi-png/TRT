@@ -1,9 +1,9 @@
 """
 Global error handler - user-friendly error messages.
+Contract: All errors caught, user always gets response.
 """
 from aiogram import Router
-from aiogram.types import ErrorEvent, Message, CallbackQuery
-from aiogram.exceptions import TelegramAPIError
+from aiogram.types import ErrorEvent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,44 +13,46 @@ router = Router(name="error_handler")
 
 @router.error()
 async def global_error_handler(event: ErrorEvent):
-    """Global error handler - always respond to user."""
+    """
+    Global error handler - always respond to user.
+    
+    Contract:
+    - User gets friendly message (no stacktrace)
+    - Suggests /start as next step
+    - Never silent
+    """
     exception = event.exception
     update = event.update
     
-    # Log error for debugging
+    # Log error for debugging (with full stacktrace)
     logger.error(f"Error in update {update.update_id}: {exception}", exc_info=exception)
+    
+    # User-friendly error message (no stacktrace)
+    error_message = (
+        "⚠️ Произошла ошибка\n\n"
+        "Попробуйте еще раз или нажмите /start для главного меню."
+    )
     
     # Determine update type and respond accordingly
     try:
         if update.message:
-            message = update.message
-            await message.answer(
-                "⚠️ Произошла ошибка при обработке сообщения.\n\n"
-                "Пожалуйста, попробуйте еще раз или нажмите /start для главного меню."
-            )
+            await update.message.answer(error_message)
         elif update.callback_query:
             callback = update.callback_query
+            await callback.answer("⚠️ Ошибка")
             try:
-                await callback.answer("⚠️ Произошла ошибка. Попробуйте еще раз.")
+                await callback.message.answer(error_message)
             except:
-                pass
-            try:
-                await callback.message.answer(
-                    "⚠️ Произошла ошибка.\n\n"
-                    "Пожалуйста, нажмите /start для главного меню."
-                )
-            except:
-                pass
+                # If edit fails, try to send new message
+                try:
+                    await callback.message.answer(error_message)
+                except:
+                    pass
         elif update.edited_message:
-            message = update.edited_message
-            await message.answer(
-                "⚠️ Произошла ошибка.\n\n"
-                "Пожалуйста, нажмите /start для главного меню."
-            )
+            await update.edited_message.answer(error_message)
     except Exception as e:
-        # Last resort - log and hope for the best
+        # Last resort - log but don't crash
         logger.critical(f"Failed to send error message to user: {e}")
     
     # Don't re-raise - we've handled it
     return True
-
