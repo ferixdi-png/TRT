@@ -53,8 +53,8 @@ def check_entrypoint():
             content = f.read()
             if 'create_bot_application' not in content:
                 return ["create_bot_application not found in main_render.py"]
-            if 'acquire_singleton_lock' not in content:
-                return ["acquire_singleton_lock not found in main_render.py"]
+            if 'SingletonLock' not in content or 'singleton_lock.acquire' not in content:
+                return ["SingletonLock not properly used in main_render.py"]
     except Exception as e:
         return [f"Error reading main_render.py: {e}"]
     

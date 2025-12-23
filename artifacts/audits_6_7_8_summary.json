@@ -1,0 +1,35 @@
+{
+  "audit_6_admin": {
+    "status": "COMPLETE",
+    "features": {
+      "User list": "cb_admin_users",
+      "Balances": "cb_admin_analytics (revenue_stats)",
+      "Generations": "cb_admin_analytics (activity_stats)",
+      "Models enable/disable": "cb_admin_models",
+      "Manual credits": "AdminService.adjust_balance",
+      "Error logs": "cb_admin_analytics_errors"
+    },
+    "coverage": "6/6"
+  },
+  "audit_7_singleton": {
+    "status": "COMPLETE",
+    "features": {
+      "Single polling": "app/locking/single_instance.py::acquire()",
+      "Graceful shutdown": "app/locking/single_instance.py::release()",
+      "Passive mode": "main_render.py::lock acquisition retry",
+      "TTL": "LOCK_TTL = 10s"
+    },
+    "coverage": "4/4"
+  },
+  "audit_8_ux": {
+    "status": "PARTIAL",
+    "features": {
+      "Categories": "bot/handlers/marketing.py",
+      "Model cards": "app/ui/marketing_menu.py",
+      "Search": "\u23f3 Not implemented",
+      "Filters": "\u23f3 Not implemented",
+      "All callbacks registered": "\u2705 via routers"
+    },
+    "coverage": "3/5"
+  }
+}

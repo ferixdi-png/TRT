@@ -1,0 +1,56 @@
+{
+  "handler_files": {
+    "total": 5,
+    "existing": 5,
+    "missing": []
+  },
+  "critical_components": {
+    "/start command": false,
+    "Category selection": true,
+    "Model selection": true,
+    "Confirm/Generate": true,
+    "Balance/Payment": true,
+    "Admin panel": true,
+    "History": true
+  },
+  "service_integrations": {
+    "Database": true,
+    "Pricing": true,
+    "Free Manager": true,
+    "Payments": true,
+    "KIE Client": false,
+    "OCR": false
+  },
+  "handlers_analysis": {
+    "bot/handlers/flow.py": {
+      "commands": 0,
+      "callbacks": 22,
+      "message_handlers": 3,
+      "functions": 28
+    },
+    "bot/handlers/marketing.py": {
+      "commands": 0,
+      "callbacks": 6,
+      "message_handlers": 2,
+      "functions": 9
+    },
+    "bot/handlers/balance.py": {
+      "commands": 0,
+      "callbacks": 4,
+      "message_handlers": 2,
+      "functions": 8
+    },
+    "bot/handlers/admin.py": {
+      "commands": 0,
+      "callbacks": 12,
+      "message_handlers": 4,
+      "functions": 16
+    },
+    "bot/handlers/history.py": {
+      "commands": 0,
+      "callbacks": 2,
+      "message_handlers": 0,
+      "functions": 2
+    }
+  }
+}
