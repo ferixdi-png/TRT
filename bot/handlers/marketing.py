@@ -644,24 +644,53 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
             if not is_free:
                 refund_ref = f"refund_{job_id}"
                 await wallet_service.refund(user_id, user_price, refund_ref, hold_ref=hold_ref)
-                refund_text = f"💰 Средства возвращены: {format_price_rub(user_price)}"
+                # Enhanced refund message with reason
+                refund_reason = "генерация не удалась"
+                if error_code == "TIMEOUT":
+                    refund_reason = "превышено время ожидания"
+                elif error_code == "INVALID_INPUT":
+                    refund_reason = "некорректные параметры"
+                elif error_code:
+                    refund_reason = f"ошибка: {error_code}"
+                
+                refund_text = (
+                    f"💰 <b>Средства возвращены</b>: {format_price_rub(user_price)}\n"
+                    f"Причина: {refund_reason}"
+                )
             else:
                 # Don't count failed free attempt against limits
                 if free_manager:
                     # Delete the usage record to allow retry
                     logger.info(f"Free usage NOT counted due to failure: job {job_id}")
-                refund_text = "🎁 Бесплатная попытка не засчитана"
+                refund_text = "🎁 Бесплатная попытка не засчитана (ошибка не по вашей вине)"
             
             await job_service.update_status(job_id, "failed")
             await job_service.update_result(job_id, result)
             
-            # Format error message
+            # Format error message with helpful hints
             if error_code == "TIMEOUT":
-                error_text = "⏱️ Превышено время ожидания (5 минут)"
+                error_text = (
+                    "⏱️ Превышено время ожидания (5 минут)\n\n"
+                    "Возможные причины:\n"
+                    "• Сложная генерация требует больше времени\n"
+                    "• Перегрузка Kie.ai API\n\n"
+                    "💡 Попробуйте упростить промпт или повторить позже"
+                )
+            elif error_code == "INVALID_INPUT":
+                error_text = (
+                    f"❌ Некорректные параметры\n\n"
+                    f"Причина: {error_message}\n\n"
+                    f"💡 Проверьте формат ввода и попробуйте снова"
+                )
+            elif error_code == "INSUFFICIENT_BALANCE":
+                error_text = (
+                    "💳 Недостаточно средств\n\n"
+                    "Пополните баланс и попробуйте снова"
+                )
             elif error_message:
-                error_text = f"Ошибка: {error_message}"
+                error_text = f"❌ Ошибка: {error_message}\n\n💡 Попробуйте изменить параметры"
             else:
-                error_text = "Неизвестная ошибка KIE API"
+                error_text = "❌ Неизвестная ошибка KIE API\n\n💡 Попробуйте позже"
             
             fail_text = (
                 f"❌ <b>Генерация не удалась</b>\n\n"

@@ -40,7 +40,19 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
     result['state'] = state
     
     if state == 'waiting':
-        result['message'] = "⏳ Задача обрабатывается, пожалуйста подождите..."
+        # Extract progress info if available
+        progress_percent = record_info.get('progress', 0)
+        eta_seconds = record_info.get('eta')
+        
+        if progress_percent and progress_percent > 0:
+            result['message'] = f"⏳ Генерация: {progress_percent}% готово"
+        elif eta_seconds:
+            result['message'] = f"⏳ Генерация... (осталось ~{eta_seconds}с)"
+        else:
+            result['message'] = "⏳ Генерация в процессе..."
+        
+        result['progress'] = progress_percent
+        result['eta'] = eta_seconds
         return result
     
     elif state == 'success':

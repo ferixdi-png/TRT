@@ -148,6 +148,39 @@ class FreeModelManager:
         
         logger.info(f"Free usage logged: user={user_id}, model={model_id}, job={job_id}")
     
+    async def get_daily_usage(self, user_id: int, model_id: str) -> int:
+        """Get daily usage count for a user and model."""
+        from datetime import datetime, timezone, timedelta
+        
+        day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        async with self.db_service.get_connection() as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM free_usage
+                WHERE user_id = $1 AND model_id = $2 AND created_at >= $3
+                """,
+                user_id, model_id, day_start
+            )
+        
+        return count or 0
+    
+    async def get_hourly_usage(self, user_id: int, model_id: str) -> int:
+        """Get hourly usage count for a user and model."""
+        from datetime import datetime, timezone, timedelta
+        
+        hour_start = datetime.now(timezone.utc) - timedelta(hours=1)
+        
+        async with self.db_service.get_connection() as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM free_usage
+                WHERE user_id = $1 AND model_id = $2 AND created_at >= $3
+                """,
+                user_id, model_id, hour_start
+            )
+        
+        return count or 0
     async def get_all_free_models(self) -> List[Dict[str, Any]]:
         """Get all enabled free models."""
         async with self.db_service.get_connection() as conn:

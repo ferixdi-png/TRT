@@ -215,13 +215,26 @@ class KieGenerator:
                     time_since_heartbeat = (datetime.now() - last_heartbeat).total_seconds()
                     if time_since_heartbeat >= self._heartbeat_interval:
                         if progress_callback:
-                            # Estimate remaining time (rough estimate)
-                            estimated_total = min(timeout, 60)  # Assume max 60s for estimate
-                            remaining = max(0, estimated_total - elapsed)
-                            progress_callback(
-                                f"⏳ Обрабатываю... (примерно {int(remaining)} сек осталось)\n"
-                                f"Пожалуйста, подождите."
-                            )
+                            # Use real progress from Kie.ai if available
+                            progress_percent = parsed.get('progress', 0)
+                            eta_seconds = parsed.get('eta')
+                            
+                            if progress_percent and progress_percent > 0:
+                                progress_callback(
+                                    f"⏳ Генерация: {progress_percent}% готово\n"
+                                    f"Пожалуйста, подождите."
+                                )
+                            elif eta_seconds:
+                                progress_callback(
+                                    f"⏳ Генерация... (осталось ~{eta_seconds}с)\n"
+                                    f"Пожалуйста, подождите."
+                                )
+                            else:
+                                # Fallback: show elapsed time
+                                progress_callback(
+                                    f"⏳ Генерация в процессе... ({int(elapsed)}с)\n"
+                                    f"Пожалуйста, подождите."
+                                )
                         last_heartbeat = datetime.now()
                     
                     # Wait before next check
