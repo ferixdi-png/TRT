@@ -2,6 +2,8 @@ import importlib
 import os
 import sys
 
+import pytest
+
 
 def test_main_render_imports_aiogram_only():
     os.environ.setdefault("DRY_RUN", "1")
@@ -28,3 +30,50 @@ def test_bot_mode_webhook_disables_polling(monkeypatch):
     assert dp is not None
     assert bot is not None
     assert preflight_webhook is not None
+
+
+@pytest.mark.asyncio
+async def test_lock_failure_skips_polling(monkeypatch):
+    import main_render
+
+    monkeypatch.setenv("BOT_MODE", "polling")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example")
+    monkeypatch.setenv("DRY_RUN", "0")
+    monkeypatch.setenv("PORT", "0")
+
+    async def fake_acquire_lock(*_args, **_kwargs):
+        return False
+
+    class DummyStorage:
+        async def initialize(self):
+            return None
+
+        async def close(self):
+            return None
+
+    class DummySession:
+        async def close(self):
+            return None
+
+    class DummyBot:
+        session = DummySession()
+
+    start_polling_called = False
+
+    class DummyDispatcher:
+        async def start_polling(self, *_args, **_kwargs):
+            nonlocal start_polling_called
+            start_polling_called = True
+
+    class DummyEvent:
+        async def wait(self):
+            return None
+
+    monkeypatch.setattr(main_render, "acquire_singleton_lock", fake_acquire_lock)
+    monkeypatch.setattr(main_render, "PostgresStorage", lambda *_args, **_kwargs: DummyStorage())
+    monkeypatch.setattr(main_render, "build_application", lambda: (DummyDispatcher(), DummyBot()))
+    monkeypatch.setattr(main_render.asyncio, "Event", lambda: DummyEvent())
+
+    await main_render.main()
+
+    assert start_polling_called is False
