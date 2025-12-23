@@ -5,6 +5,8 @@ Contract: Every user action MUST receive a response.
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandStart
+from aiogram.fsm.state import State
+from aiogram.filters import StateFilter
 from aiogram.exceptions import TelegramBadRequest
 import logging
 
@@ -39,7 +41,7 @@ async def cmd_start(message: Message):
     )
 
 
-@router.callback_query()
+@router.callback_query(F.data.in_({"main_menu", "help", "settings"}))
 async def handle_all_callbacks(callback: CallbackQuery):
     """
     Handle ALL callback queries - always answer and respond.
@@ -110,18 +112,7 @@ async def handle_all_callbacks(callback: CallbackQuery):
                 )
         
         else:
-            # Contract: Fallback for unknown callback_data - MUST respond
-            logger.warning(f"Unknown callback_data received: {callback_data}")
-            try:
-                await callback.message.edit_text(
-                    "⚠️ Кнопка устарела\n\n"
-                    "Пожалуйста, нажмите /start для обновления меню."
-                )
-            except TelegramBadRequest:
-                await callback.message.answer(
-                    "⚠️ Кнопка устарела\n\n"
-                    "Пожалуйста, нажмите /start для обновления меню."
-                )
+            return
     
     # Contract: All exceptions caught and user notified
     except Exception as e:
@@ -136,7 +127,7 @@ async def handle_all_callbacks(callback: CallbackQuery):
             logger.critical(f"Failed to send error message to user: {e2}")
 
 
-@router.message(F.content_type.in_(["photo", "video", "audio", "document", "voice", "video_note"]))
+@router.message(StateFilter(None), F.content_type.in_(["photo", "video", "audio", "document", "voice", "video_note"]))
 async def handle_non_text_messages(message: Message):
     """
     Handle non-text messages - always respond.
@@ -157,7 +148,7 @@ async def handle_non_text_messages(message: Message):
     )
 
 
-@router.message(F.text)
+@router.message(StateFilter(None), F.text)
 async def handle_text_messages(message: Message):
     """
     Handle text messages - always respond.
