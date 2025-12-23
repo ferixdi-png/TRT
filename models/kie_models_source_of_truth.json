@@ -193,7 +193,8 @@
       "output_type": "json",
       "description": "ByteDance Seedance - image-to-video",
       "price": 80.0,
-      "name": "Bytedance Seedance"
+      "name": "Bytedance Seedance",
+      "is_pricing_known": true
     },
     {
       "model_id": "bytedance/seedream",
@@ -206,7 +207,8 @@
       "output_type": "json",
       "description": "ByteDance Seedream - text-to-image",
       "price": 10.0,
-      "name": "Bytedance Seedream"
+      "name": "Bytedance Seedream",
+      "is_pricing_known": true
     },
     {
       "model_id": "bytedance/seedream-v4-edit",
@@ -219,7 +221,9 @@
       "output_type": "json",
       "description": "Bytedance Seedream V4 Edit - AI processing",
       "name": "Bytedance Seedream V4 Edit",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "bytedance/seedream-v4-text-to-image",
@@ -232,7 +236,8 @@
       "output_type": "json",
       "description": "Bytedance Seedream V4 Text To Image - AI processing",
       "price": 12.0,
-      "name": "Bytedance Seedream V4 Text To Image"
+      "name": "Bytedance Seedream V4 Text To Image",
+      "is_pricing_known": true
     },
     {
       "model_id": "bytedance/v1-lite-image-to-video",
@@ -245,7 +250,8 @@
       "output_type": "json",
       "description": "Bytedance V1 Lite Image To Video - AI processing",
       "price": 60.0,
-      "name": "Bytedance V1 Lite Image To Video"
+      "name": "Bytedance V1 Lite Image To Video",
+      "is_pricing_known": true
     },
     {
       "model_id": "bytedance/v1-lite-text-to-video",
@@ -258,7 +264,9 @@
       "output_type": "json",
       "description": "Bytedance V1 Lite Text To Video - AI processing",
       "name": "Bytedance V1 Lite Text To Video",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "bytedance/v1-pro-fast-image-to-video",
@@ -271,7 +279,9 @@
       "output_type": "json",
       "description": "Bytedance V1 Pro Fast Image To Video - image-to-video animation",
       "name": "Bytedance V1 Pro Fast Image To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "bytedance/v1-pro-image-to-video",
@@ -284,7 +294,8 @@
       "output_type": "json",
       "description": "Bytedance V1 Pro Image To Video - AI processing",
       "price": 100.0,
-      "name": "Bytedance V1 Pro Image To Video"
+      "name": "Bytedance V1 Pro Image To Video",
+      "is_pricing_known": true
     },
     {
       "model_id": "bytedance/v1-pro-text-to-video",
@@ -297,7 +308,9 @@
       "output_type": "json",
       "description": "Bytedance V1 Pro Text To Video - AI processing",
       "name": "Bytedance V1 Pro Text To Video",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "cheap_models_test_results",
@@ -322,7 +335,8 @@
       "output_type": "json",
       "description": "Isolate vocals or instruments",
       "price": 5.0,
-      "name": "Audio Isolation"
+      "name": "Audio Isolation",
+      "is_pricing_known": true
     },
     {
       "model_id": "elevenlabs/sound-effect",
@@ -335,7 +349,8 @@
       "output_type": "json",
       "description": "AI sound effects generation",
       "price": 8.0,
-      "name": "ElevenLabs SFX"
+      "name": "ElevenLabs SFX",
+      "is_pricing_known": true
     },
     {
       "model_id": "elevenlabs/sound-effect-v2",
@@ -348,7 +363,8 @@
       "output_type": "json",
       "description": "Elevenlabs Sound Effect V2 - AI processing",
       "price": 8.0,
-      "name": "Elevenlabs Sound Effect V2"
+      "name": "Elevenlabs Sound Effect V2",
+      "is_pricing_known": true
     },
     {
       "model_id": "elevenlabs/speech-to-text",
@@ -361,7 +377,8 @@
       "output_type": "json",
       "description": "ElevenLabs STT - accurate transcription",
       "price": 3.0,
-      "name": "ElevenLabs STT"
+      "name": "ElevenLabs STT",
+      "is_pricing_known": true
     },
     {
       "model_id": "elevenlabs/text-to-speech",
@@ -374,7 +391,8 @@
       "output_type": "json",
       "description": "ElevenLabs TTS - natural voice synthesis",
       "price": 5.0,
-      "name": "ElevenLabs TTS"
+      "name": "ElevenLabs TTS",
+      "is_pricing_known": true
     },
     {
       "model_id": "elevenlabs/text-to-speech-multilingual-v2",
@@ -387,7 +405,8 @@
       "output_type": "json",
       "description": "Elevenlabs Text To Speech Multilingual V2 - AI processing",
       "price": 5.0,
-      "name": "Elevenlabs Text To Speech Multilingual V2"
+      "name": "Elevenlabs Text To Speech Multilingual V2",
+      "is_pricing_known": true
     },
     {
       "model_id": "flux-2/flex-image-to-image",
@@ -400,7 +419,8 @@
       "output_type": "json",
       "description": "Flex Flux 2 image-to-image processing",
       "price": 12.0,
-      "name": "Flux 2 Flex (Image)"
+      "name": "Flux 2 Flex (Image)",
+      "is_pricing_known": true
     },
     {
       "model_id": "flux-2/flex-text-to-image",
@@ -413,7 +433,8 @@
       "output_type": "json",
       "description": "Flex Flux 2 - balanced quality and speed",
       "price": 10.0,
-      "name": "Flux 2 Flex (Text)"
+      "name": "Flux 2 Flex (Text)",
+      "is_pricing_known": true
     },
     {
       "model_id": "flux-2/pro-image-to-image",
@@ -426,7 +447,8 @@
       "output_type": "json",
       "description": "Flux 2 Pro image editing and transformation",
       "price": 18.0,
-      "name": "Flux 2 Pro (Image)"
+      "name": "Flux 2 Pro (Image)",
+      "is_pricing_known": true
     },
     {
       "model_id": "flux-2/pro-text-to-image",
@@ -439,7 +461,8 @@
       "output_type": "json",
       "description": "Flux 2 Pro - advanced text-to-image",
       "price": 15.0,
-      "name": "Flux 2 Pro (Text)"
+      "name": "Flux 2 Pro (Text)",
+      "is_pricing_known": true
     },
     {
       "model_id": "flux/kontext",
@@ -452,7 +475,9 @@
       "output_type": "json",
       "description": "Flux Kontext - text-to-image generation",
       "name": "Flux Kontext",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "generation_test_results_20251217_170008",
@@ -489,7 +514,9 @@
       "output_type": "json",
       "description": "Google Imagen4 - text-to-image generation",
       "name": "Google Imagen4",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "google/imagen4-fast",
@@ -502,7 +529,9 @@
       "output_type": "json",
       "description": "Google Imagen4 Fast - text-to-image generation",
       "name": "Google Imagen4 Fast",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "google/imagen4-ultra",
@@ -515,7 +544,9 @@
       "output_type": "json",
       "description": "Google Imagen4 Ultra - text-to-image generation",
       "name": "Google Imagen4 Ultra",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "google/nano-banana",
@@ -528,7 +559,9 @@
       "output_type": "json",
       "description": "Google Nano Banana - text-to-image generation",
       "name": "Google Nano Banana",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "google/nano-banana-edit",
@@ -541,7 +574,9 @@
       "output_type": "json",
       "description": "Google Nano Banana Edit - image-to-image transformation",
       "name": "Google Nano Banana Edit",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "google/nano-banana-pro",
@@ -554,7 +589,9 @@
       "output_type": "json",
       "description": "Google Nano Banana Pro - text-to-image generation",
       "name": "Google Nano Banana Pro",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "google/veo-3",
@@ -567,7 +604,8 @@
       "output_type": "json",
       "description": "Google Veo 3 - advanced text-to-video",
       "price": 150.0,
-      "name": "Google Veo 3"
+      "name": "Google Veo 3",
+      "is_pricing_known": true
     },
     {
       "model_id": "google/veo-3.1",
@@ -580,7 +618,8 @@
       "output_type": "json",
       "description": "Google Veo 3.1 - latest video generation",
       "price": 180.0,
-      "name": "Google Veo 3.1"
+      "name": "Google Veo 3.1",
+      "is_pricing_known": true
     },
     {
       "model_id": "grok-imagine/image-to-video",
@@ -593,7 +632,9 @@
       "output_type": "json",
       "description": "Grok Imagine Image To Video - AI processing",
       "name": "Grok Imagine Image To Video",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "grok-imagine/text-to-image",
@@ -606,7 +647,9 @@
       "output_type": "json",
       "description": "Grok Imagine Text To Image - AI processing",
       "name": "Grok Imagine Text To Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "grok-imagine/text-to-video",
@@ -619,7 +662,9 @@
       "output_type": "json",
       "description": "Grok Imagine Text To Video - AI processing",
       "name": "Grok Imagine Text To Video",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "grok/imagine",
@@ -632,7 +677,9 @@
       "output_type": "json",
       "description": "Grok Imagine - image-to-video animation",
       "name": "Grok Imagine",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "hailuo/02-image-to-video-pro",
@@ -645,7 +692,9 @@
       "output_type": "json",
       "description": "Hailuo 02 Image To Video Pro - AI processing",
       "name": "Hailuo 02 Image To Video Pro",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "hailuo/02-image-to-video-standard",
@@ -658,7 +707,9 @@
       "output_type": "json",
       "description": "Hailuo 02 Image To Video Standard - image-to-video animation",
       "name": "Hailuo 02 Image To Video Standard",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "hailuo/02-text-to-video-pro",
@@ -671,7 +722,9 @@
       "output_type": "json",
       "description": "Hailuo 02 Text To Video Pro - AI processing",
       "name": "Hailuo 02 Text To Video Pro",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "hailuo/02-text-to-video-standard",
@@ -684,7 +737,8 @@
       "output_type": "json",
       "description": "Hailuo 02 Text To Video Standard - text-to-video generation",
       "price": 90.0,
-      "name": "Hailuo 02 Text To Video Standard"
+      "name": "Hailuo 02 Text To Video Standard",
+      "is_pricing_known": true
     },
     {
       "model_id": "hailuo/2-3-image-to-video-pro",
@@ -697,7 +751,9 @@
       "output_type": "json",
       "description": "Hailuo 2 3 Image To Video Pro - AI processing",
       "name": "Hailuo 2 3 Image To Video Pro",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "hailuo/2-3-image-to-video-standard",
@@ -710,7 +766,9 @@
       "output_type": "json",
       "description": "Hailuo 2 3 Image To Video Standard - AI processing",
       "name": "Hailuo 2 3 Image To Video Standard",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "hailuo/2.3",
@@ -723,7 +781,9 @@
       "output_type": "json",
       "description": "Hailuo 2.3 - image-to-video animation",
       "name": "Hailuo 2.3",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/character",
@@ -736,7 +796,9 @@
       "output_type": "json",
       "description": "Ideogram Character - text-to-image generation",
       "name": "Ideogram Character",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/character-edit",
@@ -749,7 +811,9 @@
       "output_type": "json",
       "description": "Ideogram Character Edit - image-to-image transformation",
       "name": "Ideogram Character Edit",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/character-remix",
@@ -762,7 +826,9 @@
       "output_type": "json",
       "description": "Ideogram Character Remix - image-to-image transformation",
       "name": "Ideogram Character Remix",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/v3-edit",
@@ -775,7 +841,9 @@
       "output_type": "json",
       "description": "Ideogram V3 Edit - image-to-image transformation",
       "name": "Ideogram V3 Edit",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/v3-reframe",
@@ -788,7 +856,9 @@
       "output_type": "json",
       "description": "Ideogram V3 Reframe - image-to-image transformation",
       "name": "Ideogram V3 Reframe",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/v3-remix",
@@ -801,7 +871,9 @@
       "output_type": "json",
       "description": "Ideogram V3 Remix - image-to-image transformation",
       "name": "Ideogram V3 Remix",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "ideogram/v3-text-to-image",
@@ -814,7 +886,9 @@
       "output_type": "json",
       "description": "Ideogram V3 Text To Image - text-to-image generation",
       "name": "Ideogram V3 Text To Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "infinitalk/from-audio",
@@ -827,7 +901,9 @@
       "output_type": "json",
       "description": "Infinitalk From Audio - AI processing",
       "name": "Infinitalk From Audio",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling-2.6/image-to-video",
@@ -840,7 +916,9 @@
       "output_type": "json",
       "description": "Kling 2.6 Image To Video - image-to-video animation",
       "name": "Kling 2.6 Image To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling-2.6/text-to-video",
@@ -853,7 +931,9 @@
       "output_type": "json",
       "description": "Kling 2.6 Text To Video - text-to-video generation",
       "name": "Kling 2.6 Text To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/ai-avatar-v1-pro",
@@ -866,7 +946,9 @@
       "output_type": "json",
       "description": "Kling Ai Avatar V1 Pro - AI processing",
       "name": "Kling Ai Avatar V1 Pro",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v1-avatar-standard",
@@ -879,7 +961,9 @@
       "output_type": "json",
       "description": "Kling V1 Avatar Standard - AI processing",
       "name": "Kling V1 Avatar Standard",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v2-1-master-image-to-video",
@@ -892,7 +976,9 @@
       "output_type": "json",
       "description": "Kling V2 1 Master Image To Video - image-to-video animation",
       "name": "Kling V2 1 Master Image To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v2-1-master-text-to-video",
@@ -905,7 +991,9 @@
       "output_type": "json",
       "description": "Kling V2 1 Master Text To Video - text-to-video generation",
       "name": "Kling V2 1 Master Text To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v2-1-pro",
@@ -918,7 +1006,9 @@
       "output_type": "json",
       "description": "Kling V2 1 Pro - text-to-video generation",
       "name": "Kling V2 1 Pro",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v2-1-standard",
@@ -931,7 +1021,9 @@
       "output_type": "json",
       "description": "Kling V2 1 Standard - text-to-video generation",
       "name": "Kling V2 1 Standard",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v2-5-turbo-image-to-video-pro",
@@ -944,7 +1036,9 @@
       "output_type": "json",
       "description": "Kling V2 5 Turbo Image To Video Pro - image-to-video animation",
       "name": "Kling V2 5 Turbo Image To Video Pro",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "kling/v2-5-turbo-text-to-video-pro",
@@ -957,7 +1051,9 @@
       "output_type": "json",
       "description": "Kling V2 5 Turbo Text To Video Pro - text-to-video generation",
       "name": "Kling V2 5 Turbo Text To Video Pro",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "midjourney/api",
@@ -970,7 +1066,9 @@
       "output_type": "json",
       "description": "Midjourney Api - text-to-image generation",
       "name": "Midjourney Api",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "nano-banana-pro",
@@ -983,7 +1081,9 @@
       "output_type": "json",
       "description": "Nano Banana Pro - AI processing",
       "name": "Nano Banana Pro",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "openai/4o-image",
@@ -996,7 +1096,9 @@
       "output_type": "json",
       "description": "Openai 4O Image - text-to-image generation",
       "name": "Openai 4O Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "qwen/image-edit",
@@ -1009,7 +1111,9 @@
       "output_type": "json",
       "description": "Qwen Image Edit - image-to-image transformation",
       "name": "Qwen Image Edit",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "qwen/image-to-image",
@@ -1022,7 +1126,9 @@
       "output_type": "json",
       "description": "Qwen Image To Image - image-to-image transformation",
       "name": "Qwen Image To Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "qwen/text-to-image",
@@ -1035,7 +1141,9 @@
       "output_type": "json",
       "description": "Qwen Text To Image - text-to-image generation",
       "name": "Qwen Text To Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "recraft/crisp-upscale",
@@ -1048,7 +1156,8 @@
       "output_type": "json",
       "description": "AI upscaling with crisp details",
       "price": 12.0,
-      "name": "Recraft Crisp Upscale"
+      "name": "Recraft Crisp Upscale",
+      "is_pricing_known": true
     },
     {
       "model_id": "recraft/remove-background",
@@ -1061,7 +1170,8 @@
       "output_type": "json",
       "description": "Automatic background removal",
       "price": 8.0,
-      "name": "Recraft Background Remove"
+      "name": "Recraft Background Remove",
+      "is_pricing_known": true
     },
     {
       "model_id": "runway/gen-4",
@@ -1074,7 +1184,9 @@
       "output_type": "json",
       "description": "Runway Gen 4 - image-to-video animation",
       "name": "Runway Gen 4",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "seedream/4.5-edit",
@@ -1087,7 +1199,9 @@
       "output_type": "json",
       "description": "Seedream 4.5 Edit - image-to-image transformation",
       "name": "Seedream 4.5 Edit",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "seedream/4.5-text-to-image",
@@ -1100,7 +1214,9 @@
       "output_type": "json",
       "description": "Seedream 4.5 Text To Image - text-to-image generation",
       "name": "Seedream 4.5 Text To Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "sora-2-image-to-video",
@@ -1113,7 +1229,9 @@
       "output_type": "json",
       "description": "Sora 2 Image To Video - AI processing",
       "name": "Sora 2 Image To Video",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "sora-2-pro-image-to-video",
@@ -1126,7 +1244,9 @@
       "output_type": "json",
       "description": "Sora 2 Pro Image To Video - image-to-video animation",
       "name": "Sora 2 Pro Image To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "sora-2-pro-storyboard",
@@ -1139,7 +1259,9 @@
       "output_type": "json",
       "description": "Sora 2 Pro Storyboard - text-to-image generation",
       "name": "Sora 2 Pro Storyboard",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "sora-2-pro-text-to-video",
@@ -1152,7 +1274,9 @@
       "output_type": "json",
       "description": "Sora 2 Pro Text To Video - text-to-video generation",
       "name": "Sora 2 Pro Text To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "sora-2-text-to-video",
@@ -1165,7 +1289,9 @@
       "output_type": "json",
       "description": "Sora 2 Text To Video - text-to-video generation",
       "name": "Sora 2 Text To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "sora-watermark-remover",
@@ -1178,7 +1304,9 @@
       "output_type": "json",
       "description": "Sora Watermark Remover - AI processing",
       "name": "Sora Watermark Remover",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "source",
@@ -1191,7 +1319,9 @@
       "output_type": "json",
       "description": "Source - AI processing",
       "name": "Source",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "suno/v5",
@@ -1204,7 +1334,8 @@
       "output_type": "json",
       "description": "Suno V5 - AI music generation",
       "price": 25.0,
-      "name": "Suno V5"
+      "name": "Suno V5",
+      "is_pricing_known": true
     },
     {
       "model_id": "topaz/image-upscale",
@@ -1217,7 +1348,8 @@
       "output_type": "json",
       "description": "Topaz AI image upscaling",
       "price": 15.0,
-      "name": "Topaz Image Upscale"
+      "name": "Topaz Image Upscale",
+      "is_pricing_known": true
     },
     {
       "model_id": "topaz/video-upscale",
@@ -1230,7 +1362,8 @@
       "output_type": "json",
       "description": "Topaz AI video upscaling",
       "price": 50.0,
-      "name": "Topaz Video Upscale"
+      "name": "Topaz Video Upscale",
+      "is_pricing_known": true
     },
     {
       "model_id": "wan/2-2-a14b-image-to-video-turbo",
@@ -1243,7 +1376,9 @@
       "output_type": "json",
       "description": "Wan 2 2 A14B Image To Video Turbo - image-to-video animation",
       "name": "Wan 2 2 A14B Image To Video Turbo",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-2-a14b-speech-to-video-turbo",
@@ -1256,7 +1391,9 @@
       "output_type": "json",
       "description": "Wan 2 2 A14B Speech To Video Turbo - text-to-video generation",
       "name": "Wan 2 2 A14B Speech To Video Turbo",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-2-a14b-text-to-video-turbo",
@@ -1269,7 +1406,9 @@
       "output_type": "json",
       "description": "Wan 2 2 A14B Text To Video Turbo - text-to-video generation",
       "name": "Wan 2 2 A14B Text To Video Turbo",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-2-animate-move",
@@ -1282,7 +1421,9 @@
       "output_type": "json",
       "description": "Wan 2 2 Animate Move - text-to-video generation",
       "name": "Wan 2 2 Animate Move",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-2-animate-replace",
@@ -1295,7 +1436,9 @@
       "output_type": "json",
       "description": "Wan 2 2 Animate Replace - AI processing",
       "name": "Wan 2 2 Animate Replace",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-5-image-to-video",
@@ -1308,7 +1451,9 @@
       "output_type": "json",
       "description": "Wan 2 5 Image To Video - image-to-video animation",
       "name": "Wan 2 5 Image To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-5-text-to-video",
@@ -1321,7 +1466,9 @@
       "output_type": "json",
       "description": "Wan 2 5 Text To Video - text-to-video generation",
       "name": "Wan 2 5 Text To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-6-image-to-video",
@@ -1334,7 +1481,9 @@
       "output_type": "json",
       "description": "Wan 2 6 Image To Video - image-to-video animation",
       "name": "Wan 2 6 Image To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-6-text-to-video",
@@ -1347,7 +1496,9 @@
       "output_type": "json",
       "description": "Wan 2 6 Text To Video - text-to-video generation",
       "name": "Wan 2 6 Text To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "wan/2-6-video-to-video",
@@ -1360,7 +1511,9 @@
       "output_type": "json",
       "description": "Wan 2 6 Video To Video - video-to-video transformation",
       "name": "Wan 2 6 Video To Video",
-      "price": 80.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     },
     {
       "model_id": "z-image",
@@ -1373,7 +1526,9 @@
       "output_type": "json",
       "description": "Z Image - text-to-image generation",
       "name": "Z Image",
-      "price": 10.0
+      "price": null,
+      "is_pricing_known": false,
+      "disabled_reason": "Цена не подтверждена провайдером"
     }
   ]
 }

@@ -18,7 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Explicit imports - no try/except, no importlib, no fallbacks
-from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock
+from app.locking.single_instance import SingletonLock
+from app.utils.config import get_config, validate_env
 from app.utils.healthcheck import start_healthcheck_server, stop_healthcheck_server, set_health_state
 from app.storage.pg_storage import PGStorage, PostgresStorage
 from bot.handlers import flow_router, zero_silence_router, error_handler_router
@@ -45,10 +46,14 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     Raises:
         ValueError: If TELEGRAM_BOT_TOKEN is not set
     """
+    config = get_config()
     dry_run = os.getenv("DRY_RUN", "0").lower() in {"1", "true", "yes"}
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
-    if dry_run and (not bot_token or ":" not in bot_token):
+    
+    if dry_run and (not config.telegram_bot_token or ":" not in config.telegram_bot_token):
         bot_token = "123456:TEST"
+    else:
+        bot_token = config.telegram_bot_token
+    
     if not bot_token:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
     
@@ -77,6 +82,11 @@ async def main():
     """
     logger.info("Starting bot application...")
     
+    # Validate environment
+    config = get_config()
+    config.print_summary()
+    validate_env()
+    
     # Shutdown event for graceful termination
     shutdown_event = asyncio.Event()
     
@@ -99,10 +109,13 @@ async def main():
     bot_mode = os.getenv("BOT_MODE", "polling").lower()
 
     # Step 1: Acquire singleton lock (if DATABASE_URL provided and not DRY_RUN)
+    singleton_lock = None
     lock_acquired = False
     database_url = os.getenv("DATABASE_URL")
     if database_url and not dry_run:
-        lock_acquired = await acquire_singleton_lock(dsn=database_url, timeout=5.0)
+        instance_name = config.instance_name
+        singleton_lock = SingletonLock(dsn=database_url, instance_name=instance_name)
+        lock_acquired = await singleton_lock.acquire(timeout=5.0)
         if not lock_acquired:
             logger.warning("Singleton lock not acquired - another instance is running. Running in passive mode (healthcheck only).")
             set_health_state("passive", "lock_not_acquired")
@@ -150,17 +163,19 @@ async def main():
         await bot.session.close()
         if storage:
             await storage.close()
-        await release_singleton_lock()
+        if singleton_lock:
+            await singleton_lock.release()
         stop_healthcheck_server(healthcheck_server)
         return
 
     # Step 4: Check BOT_MODE guard
     if bot_mode != "polling":
-        logger.info(f"BOT_MODE={bot_mode} is not ''polling'' - skipping polling startup")
+        logger.info(f"BOT_MODE={bot_mode} is not 'polling' - skipping polling startup")
         await bot.session.close()
         if storage:
             await storage.close()
-        await release_singleton_lock()
+        if singleton_lock:
+            await singleton_lock.release()
         stop_healthcheck_server(healthcheck_server)
         return
 
@@ -204,7 +219,8 @@ async def main():
         # Cleanup
         if storage:
             await storage.close()
-        await release_singleton_lock()
+        if singleton_lock:
+            await singleton_lock.release()
         await bot.session.close()
         stop_healthcheck_server(healthcheck_server)
         logger.info("Bot shutdown complete")

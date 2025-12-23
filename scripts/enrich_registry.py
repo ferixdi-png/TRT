@@ -158,23 +158,16 @@ def enrich_model(model: Dict[str, Any]) -> Dict[str, Any]:
     if any(x in model_id.lower() for x in ["processor", "test"]) or model_id.isupper():
         return model
     
-    # Add price if known
-    if model_id in OFFICIAL_PRICES_RUB and "price" not in model:
+    # CRITICAL: Only add price if KNOWN from official sources
+    # NO fallback/default prices allowed - must be explicit
+    if model_id in OFFICIAL_PRICES_RUB:
         model["price"] = OFFICIAL_PRICES_RUB[model_id]
-    elif "price" not in model or model.get("price") is None:
-        # FALLBACK: estimated price by category
-        if category in ["t2v", "i2v", "v2v"]:
-            model["price"] = 80.0  # Video is expensive
-        elif category in ["upscale"]:
-            model["price"] = 15.0
-        elif category in ["t2i", "i2i"]:
-            model["price"] = 10.0
-        elif category in ["tts", "stt", "audio_isolation"]:
-            model["price"] = 5.0
-        elif category == "music":
-            model["price"] = 25.0
-        else:
-            model["price"] = 10.0  # Default
+        model["is_pricing_known"] = True
+    else:
+        # NO DEFAULT PRICE - mark as unknown
+        model["price"] = None
+        model["is_pricing_known"] = False
+        model["disabled_reason"] = "Цена не подтверждена провайдером"
     
     # Add description if known
     if model_id in MODEL_DESCRIPTIONS and not model.get("description"):
@@ -225,6 +218,8 @@ def main():
     
     models = data.get("models", [])
     enriched_count = 0
+    known_pricing = 0
+    unknown_pricing = 0
     
     for i, model in enumerate(models):
         original = model.copy()
@@ -234,6 +229,13 @@ def main():
         if enriched != original:
             enriched_count += 1
             models[i] = enriched
+        
+        # Count pricing status
+        if enriched.get("is_pricing_known"):
+            known_pricing += 1
+        elif not any(x in enriched.get("model_id", "").lower() for x in ["processor", "test"]):
+            if not enriched.get("model_id", "").isupper():
+                unknown_pricing += 1
     
     data["models"] = models
     
@@ -242,7 +244,13 @@ def main():
         json.dump(data, f, indent=2, ensure_ascii=False)
     
     print(f"✅ Enriched {enriched_count} models")
+    print(f"💰 Known pricing: {known_pricing} models")
+    print(f"⚠️  Unknown pricing: {unknown_pricing} models (DISABLED)")
     print(f"📝 Updated registry: {registry_path}")
+    print()
+    if unknown_pricing > 0:
+        print("⚠️  Models without pricing will be disabled in UI")
+        print("    Users will see: 'Модель временно недоступна'")
     print()
     print("Run 'python scripts/kie_truth_audit.py' to verify")
 

@@ -77,11 +77,15 @@ def callback(user, chat, message):
 
 def test_model_filtering():
     """Test that invalid models are filtered out."""
-    # Valid models have vendor/name format
-    assert _is_valid_model({"model_id": "flux/pro"}) is True
-    assert _is_valid_model({"model_id": "kling/v1"}) is True
+    # Valid models have vendor/name format AND confirmed pricing
+    assert _is_valid_model({"model_id": "flux/pro", "is_pricing_known": True}) is True
+    assert _is_valid_model({"model_id": "kling/v1", "is_pricing_known": True}) is True
     
-    # Invalid models
+    # Invalid: no pricing confirmation (P0 requirement - NO fallback prices)
+    assert _is_valid_model({"model_id": "flux/pro", "is_pricing_known": False}) is False
+    assert _is_valid_model({"model_id": "flux/pro"}) is False  # Missing is_pricing_known
+    
+    # Invalid: wrong format
     assert _is_valid_model({"model_id": "ARCHITECTURE"}) is False
     assert _is_valid_model({"model_id": "image_processor"}) is False
     assert _is_valid_model({"model_id": ""}) is False

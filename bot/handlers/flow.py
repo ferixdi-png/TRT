@@ -60,6 +60,9 @@ def _is_valid_model(model: Dict[str, Any]) -> bool:
     # Skip processor entries
     if model_id.endswith("_processor"):
         return False
+    # CRITICAL: Skip models without confirmed pricing
+    if not model.get("is_pricing_known", False):
+        return False
     # Prefer vendor/name format
     return "/" in model_id
 

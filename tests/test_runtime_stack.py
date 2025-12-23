@@ -27,6 +27,7 @@ def test_bot_mode_webhook_disables_polling(monkeypatch):
     monkeypatch.setenv("BOT_MODE", "webhook")
     monkeypatch.setenv("DRY_RUN", "1")  # Set DRY_RUN to avoid real token requirement
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TEST")
+    monkeypatch.setenv("KIE_API_KEY", "kie_test_key")
     dp, bot = create_bot_application()
     assert dp is not None
     assert bot is not None
@@ -42,6 +43,7 @@ async def test_lock_failure_skips_polling(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "0")
     monkeypatch.setenv("PORT", "0")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TEST")
+    monkeypatch.setenv("KIE_API_KEY", "kie_test_key")
 
     async def fake_acquire_lock(*_args, **_kwargs):
         return False
@@ -71,7 +73,13 @@ async def test_lock_failure_skips_polling(monkeypatch):
         async def wait(self):
             return None
 
-    monkeypatch.setattr(main_render, "acquire_singleton_lock", fake_acquire_lock)
+    class DummyLock:
+        async def acquire(self, *args, **kwargs):
+            return await fake_acquire_lock(*args, **kwargs)
+        async def release(self):
+            pass
+
+    monkeypatch.setattr(main_render, "SingletonLock", lambda *_args, **_kwargs: DummyLock())
     monkeypatch.setattr(main_render, "PostgresStorage", lambda *_args, **_kwargs: DummyStorage())
     monkeypatch.setattr(main_render, "create_bot_application", lambda: (DummyDispatcher(), DummyBot()))
     monkeypatch.setattr(main_render.asyncio, "Event", lambda: DummyEvent())
