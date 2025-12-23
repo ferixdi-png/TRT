@@ -1376,6 +1376,9 @@ class KieApiScraper:
             self.metrics['end_time'] = time.time()
             elapsed_time = self.metrics['end_time'] - self.metrics['start_time']
             
+            # Получаем статистику
+            stats = self._get_statistics()
+            
             # Генерация резюме
             summary = self.generate_summary()
             
@@ -1438,7 +1441,9 @@ class KieApiScraper:
         if self.metrics['end_time'] is None:
             self.metrics['end_time'] = time.time()
         elapsed_time = self.metrics['end_time'] - self.metrics['start_time']
-        stats = self._get_statistics()
+        # stats уже вычислен выше, если нет - вычисляем здесь
+        if 'stats' not in locals():
+            stats = self._get_statistics()
         
         # Дополнительный экспорт по категориям (опционально)
         export_categories = os.getenv('EXPORT_BY_CATEGORY', 'false').lower() == 'true'
