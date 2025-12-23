@@ -1,4 +1,4 @@
-# Простой Dockerfile для Render (если требуется)
+# Production Dockerfile for Render
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -9,11 +9,9 @@ COPY requirements.txt .
 # Устанавливаем зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем скрипт
-COPY kie_api_scraper.py .
+# Копируем весь проект
+COPY . .
 
-# Не запускаем парсинг автоматически при деплое
-# Парсинг должен быть выполнен один раз локально
-# Результаты сохраняются в kie_full_api.json
-CMD ["python", "-c", "print('✅ Сервис готов. Используйте данные из kie_full_api.json')"]
+# Production entrypoint - Telegram bot
+CMD ["python", "main_render.py"]
 
