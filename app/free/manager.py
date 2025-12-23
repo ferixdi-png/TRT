@@ -7,6 +7,7 @@ Free Model Manager - управление бесплатными моделям�
 - Имеют лимиты (daily, hourly)
 - Логируется каждое использование
 """
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
@@ -223,7 +224,7 @@ class FreeModelManager:
                     meta = EXCLUDED.meta,
                     updated_at = NOW()
                 """,
-                model_id, daily_limit, hourly_limit, meta or {}
+                model_id, daily_limit, hourly_limit, json.dumps(meta or {})
             )
         
         logger.info(f"Free model configured: {model_id} (daily={daily_limit}, hourly={hourly_limit})")
