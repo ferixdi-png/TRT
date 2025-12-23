@@ -1,6 +1,6 @@
 # Model Coverage Report
 
-Generated: 2025-12-23T16:53:16.983430
+Generated: 2025-12-23T17:10:23.788924
 
 ## Summary
 
