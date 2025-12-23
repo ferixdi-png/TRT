@@ -113,14 +113,14 @@ def verify_project() -> bool:
         errors.append("Source of truth contains no models")
         return False
     
-    logger.info(f"✅ Source of truth: {len(source_model_ids)} models")
+    logger.info(f"[OK] Source of truth: {len(source_model_ids)} models")
     
     ui_model_ids = get_ui_models()
     registry_model_ids = get_registry_models()
     
-    logger.info(f"📊 UI models: {len(ui_model_ids)}")
-    logger.info(f"📊 Registry models: {len(registry_model_ids)}")
-    logger.info(f"📊 Source of truth models: {len(source_model_ids)}")
+    logger.info(f"[INFO] UI models: {len(ui_model_ids)}")
+    logger.info(f"[INFO] Registry models: {len(registry_model_ids)}")
+    logger.info(f"[INFO] Source of truth models: {len(source_model_ids)}")
     
     if ui_model_ids and len(ui_model_ids) != len(source_model_ids):
         warnings.append(
@@ -149,17 +149,17 @@ def verify_project() -> bool:
             warnings.append(f"Models in source_of_truth but not in registry: {source_only}")
     
     if errors:
-        logger.error("❌ ERRORS:")
+        logger.error("[ERROR] ERRORS:")
         for error in errors:
             logger.error(f"  - {error}")
         return False
     
     if warnings:
-        logger.warning("⚠️ WARNINGS:")
+        logger.warning("[WARNING] WARNINGS:")
         for warning in warnings:
             logger.warning(f"  - {warning}")
     else:
-        logger.info("✅ All invariants satisfied!")
+        logger.info("[OK] All invariants satisfied!")
     
     return True
 
