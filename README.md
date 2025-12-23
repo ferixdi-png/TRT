@@ -72,6 +72,28 @@ python main_render.py
 | `INSTANCE_NAME` | ❌ | Имя инстанса | `prod-bot-1` |
 | `LOG_LEVEL` | ❌ | `DEBUG`/`INFO`/`WARNING` | `INFO` |
 | `RENDER_EXTERNAL_URL` | ❌ | Автоматически (Render) | - |
+| **`ADMIN_IDS`** | ❌ | **Альтернатива ADMIN_ID (CSV)** | `111,222,333` |
+| **`CURRENCY`** | ❌ | **Валюта отображения** | `RUB` (default) |
+| **`KIE_STUB`** | ❌ | **Stub режим для тестов** | `true` или `false` |
+| **`PAYMENT_BANK`** | ❌ | **Банк для оплаты** | `Тинькофф` |
+| **`PAYMENT_CARD`** | ❌ | **Номер карты** | `5536 9137 XXXX YYYY` |
+| **`PAYMENT_CARD_HOLDER`** | ❌ | **Владелец карты** | `IVAN IVANOV` |
+| **`PAYMENT_PHONE`** | ❌ | **Телефон для оплаты** | `+7 900 123-45-67` |
+| **`PRICING_MARKUP`** | ❌ | **Множитель цены (default: 2.0)** | `2.0` |
+| **`STORAGE_MODE`** | ❌ | **Режим хранения** | `local` или `s3` |
+| **`SUPPORT_TELEGRAM`** | ❌ | **Telegram поддержки** | `@support_bot` |
+| **`SUPPORT_TEXT`** | ❌ | **Текст поддержки** | `Напишите нам` |
+| **`TEST_DATABASE_URL`** | ❌ | **БД для тестов** | `postgresql://...` |
+| **`TEST_MODE`** | ❌ | **Тестовый режим** | `true` или `false` |
+| **`WELCOME_BALANCE_RUB`** | ❌ | **Стартовый баланс новых пользователей** | `100` (₽) |
+
+### Pricing Formula (MASTER PROMPT compliance):
+```python
+price_rub = price_usd * 78.0 * PRICING_MARKUP
+```
+- **USD_TO_RUB rate:** 78.0 ₽/USD (фиксированный)
+- **MARKUP:** 2.0 (можно переопределить через `PRICING_MARKUP`)
+- **Формула:** строго соблюдается во всех модулях
 
 ---
 

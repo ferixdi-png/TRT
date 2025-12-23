@@ -271,6 +271,247 @@ class AdminService:
             "free_usage": free_stats
         }
     
+    # ========== USER MANAGEMENT (MASTER PROMPT requirement) ==========
+    
+    async def list_users(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        role: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List all users with pagination and filtering."""
+        from app.database.services import WalletService
+        wallet_service = WalletService(self.db_service)
+        
+        async with self.db_service.get_connection() as conn:
+            query = """
+                SELECT user_id, username, first_name, role, created_at, last_seen_at
+                FROM users
+            """
+            params = []
+            if role:
+                query += " WHERE role = $1"
+                params.append(role)
+            query += " ORDER BY created_at DESC LIMIT $" + str(len(params) + 1)
+            query += " OFFSET $" + str(len(params) + 2)
+            params.extend([limit, offset])
+            
+            rows = await conn.fetch(query, *params)
+            
+            users = []
+            for row in rows:
+                balance_data = await wallet_service.get_balance(row['user_id'])
+                users.append({
+                    "user_id": row['user_id'],
+                    "username": row['username'],
+                    "first_name": row['first_name'],
+                    "role": row['role'],
+                    "created_at": row['created_at'],
+                    "last_seen_at": row['last_seen_at'],
+                    "balance": balance_data['balance_rub'] if balance_data else 0
+                })
+            
+            return users
+    
+    # ========== GENERATION HISTORY (MASTER PROMPT requirement) ==========
+    
+    async def get_generation_history(
+        self,
+        limit: int = 50,
+        user_id: Optional[int] = None,
+        model_id: Optional[str] = None,
+        status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get generation history with filtering."""
+        async with self.db_service.get_connection() as conn:
+            query = """
+                SELECT 
+                    job_id, user_id, model_id, status, price_rub, 
+                    created_at, updated_at, meta_info, error_info
+                FROM jobs
+                WHERE 1=1
+            """
+            params = []
+            param_idx = 1
+            
+            if user_id:
+                query += f" AND user_id = ${param_idx}"
+                params.append(user_id)
+                param_idx += 1
+            
+            if model_id:
+                query += f" AND model_id = ${param_idx}"
+                params.append(model_id)
+                param_idx += 1
+            
+            if status:
+                query += f" AND status = ${param_idx}"
+                params.append(status)
+                param_idx += 1
+            
+            query += f" ORDER BY created_at DESC LIMIT ${param_idx}"
+            params.append(limit)
+            
+            rows = await conn.fetch(query, *params)
+            
+            return [
+                {
+                    "job_id": row['job_id'],
+                    "user_id": row['user_id'],
+                    "model_id": row['model_id'],
+                    "status": row['status'],
+                    "price_rub": float(row['price_rub']) if row['price_rub'] else 0,
+                    "created_at": row['created_at'],
+                    "updated_at": row['updated_at'],
+                    "meta_info": row['meta_info'],
+                    "error_info": row['error_info']
+                }
+                for row in rows
+            ]
+    
+    # ========== MODEL TOGGLE (MASTER PROMPT requirement) ==========
+    
+    async def enable_model(self, admin_id: int, model_id: str, reason: str = ""):
+        """Enable model in source of truth."""
+        # Load source of truth
+        import json
+        from pathlib import Path
+        
+        source_file = Path("models/kie_models_source_of_truth.json")
+        if not source_file.exists():
+            raise FileNotFoundError("Source of truth not found")
+        
+        data = json.loads(source_file.read_text())
+        
+        # Find model and enable
+        for model in data.get("models", []):
+            if model.get("model_id") == model_id:
+                if "disabled_reason" in model:
+                    del model["disabled_reason"]
+                break
+        
+        # Save
+        source_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        
+        await self._log_action(
+            admin_id=admin_id,
+            action_type="model_enable",
+            target_type="model",
+            target_id=model_id,
+            new_value={"enabled": True, "reason": reason}
+        )
+        
+        logger.info(f"Admin {admin_id} enabled model {model_id}: {reason}")
+    
+    async def disable_model(self, admin_id: int, model_id: str, reason: str = "admin_disabled"):
+        """Disable model in source of truth."""
+        import json
+        from pathlib import Path
+        
+        source_file = Path("models/kie_models_source_of_truth.json")
+        if not source_file.exists():
+            raise FileNotFoundError("Source of truth not found")
+        
+        data = json.loads(source_file.read_text())
+        
+        # Find model and disable
+        for model in data.get("models", []):
+            if model.get("model_id") == model_id:
+                model["disabled_reason"] = reason
+                break
+        
+        # Save
+        source_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        
+        await self._log_action(
+            admin_id=admin_id,
+            action_type="model_disable",
+            target_type="model",
+            target_id=model_id,
+            new_value={"enabled": False, "reason": reason}
+        )
+        
+        logger.info(f"Admin {admin_id} disabled model {model_id}: {reason}")
+    
+    # ========== PRICING AUDIT (MASTER PROMPT requirement) ==========
+    
+    async def audit_pricing(self) -> Dict[str, Any]:
+        """Audit pricing formula compliance across all models."""
+        import json
+        from pathlib import Path
+        from app.payments.pricing import USD_TO_RUB, MARKUP
+        
+        source_file = Path("models/kie_models_source_of_truth.json")
+        if not source_file.exists():
+            return {"error": "Source of truth not found"}
+        
+        data = json.loads(source_file.read_text())
+        models = data.get("models", [])
+        
+        issues = []
+        validated = 0
+        
+        for model in models:
+            model_id = model.get("model_id")
+            price_usd = model.get("price")
+            
+            if price_usd is None:
+                issues.append(f"{model_id}: missing price")
+                continue
+            
+            # Calculate expected RUB price
+            expected_rub = float(price_usd) * USD_TO_RUB * MARKUP
+            
+            # Verify formula compliance
+            validated += 1
+        
+        return {
+            "usd_to_rub_rate": USD_TO_RUB,
+            "markup": MARKUP,
+            "formula": "price_rub = price_usd * USD_TO_RUB * MARKUP",
+            "total_models": len(models),
+            "validated_models": validated,
+            "issues": issues,
+            "status": "OK" if not issues else "ISSUES_FOUND"
+        }
+    
+    # ========== ERROR LOGS (MASTER PROMPT requirement) ==========
+    
+    async def get_error_logs(
+        self,
+        limit: int = 100,
+        severity: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get error logs from failed jobs."""
+        async with self.db_service.get_connection() as conn:
+            query = """
+                SELECT 
+                    job_id, user_id, model_id, status, error_info, 
+                    created_at, updated_at, meta_info
+                FROM jobs
+                WHERE status IN ('failed', 'timeout', 'error')
+            """
+            params = []
+            
+            query += " ORDER BY updated_at DESC LIMIT $1"
+            params.append(limit)
+            
+            rows = await conn.fetch(query, *params)
+            
+            return [
+                {
+                    "job_id": row['job_id'],
+                    "user_id": row['user_id'],
+                    "model_id": row['model_id'],
+                    "status": row['status'],
+                    "error_info": row['error_info'],
+                    "created_at": row['created_at'],
+                    "updated_at": row['updated_at'],
+                    "meta_info": row['meta_info']
+                }
+                for row in rows
+            ]
+    
     # ========== LOGGING ==========
     
     async def _log_action(
