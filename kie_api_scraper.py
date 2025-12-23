@@ -144,6 +144,32 @@ class KieApiScraper:
             time.sleep(self.request_delay - time_since_last)
         self.last_request_time = time.time()
     
+    def _extract_models_from_json(self, data, model_links):
+        """Рекурсивное извлечение моделей из JSON структуры"""
+        if isinstance(data, dict):
+            for key, value in data.items():
+                key_lower = key.lower()
+                # Ищем ключи связанные с моделями
+                if any(kw in key_lower for kw in ['model', 'api', 'item', 'product', 'service']):
+                    if isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, dict):
+                                name = item.get('name') or item.get('title') or item.get('label')
+                                url = item.get('url') or item.get('href') or item.get('link')
+                                if name and url:
+                                    full_url = urljoin(self.market_url, url)
+                                    if self._validate_url(full_url) and not any(m['name'] == name for m in model_links):
+                                        model_links.append({
+                                            'name': str(name),
+                                            'url': full_url
+                                        })
+                else:
+                    # Рекурсивный поиск
+                    self._extract_models_from_json(value, model_links)
+        elif isinstance(data, list):
+            for item in data:
+                self._extract_models_from_json(item, model_links)
+    
     def _validate_url(self, url):
         """Валидация URL перед запросом"""
         if not url or not isinstance(url, str):
@@ -219,81 +245,185 @@ class KieApiScraper:
             
             model_links = []
             
+            # Отладочная информация
+            logger.info(f"Размер HTML страницы: {len(resp_text)} символов")
+            
             # Множественные стратегии поиска моделей
-            # Стратегия 1: Поиск по ссылкам с моделями
+            # Стратегия 1: Поиск по ссылкам с моделями (расширенный)
             all_links = soup.find_all('a', href=True)
+            logger.info(f"Найдено ссылок на странице: {len(all_links)}")
+            
             for link in all_links:
                 href = link.get('href', '')
-                # Ищем ссылки на модели
-                if any(keyword in href.lower() for keyword in ['model', 'api', '/ru/', 'market']):
-                    title = link.get_text().strip()
-                    if title and len(title) > 2:
-                        full_url = urljoin(self.market_url, href)
+                title = link.get_text().strip()
+                
+                # Расширенные паттерны для поиска моделей
+                href_lower = href.lower()
+                title_lower = title.lower() if title else ''
+                
+                # Ищем ссылки на модели (более широкий поиск)
+                is_model_link = (
+                    any(keyword in href_lower for keyword in ['model', 'api', '/ru/', 'market', 'kie.ai', '/docs/']) or
+                    any(keyword in title_lower for keyword in ['model', 'api', 'generate', 'create', 'text', 'image', 'video']) or
+                    '/ru/' in href_lower or
+                    href_lower.startswith('/') and len(href_lower) > 3
+                )
+                
+                if is_model_link and title and len(title) > 2 and len(title) < 100:
+                    full_url = urljoin(self.market_url, href)
+                    # Проверяем что URL валидный
+                    if self._validate_url(full_url):
                         model_links.append({
                             'name': title,
                             'url': full_url
                         })
             
-            # Стратегия 2: Поиск карточек моделей
-            cards = soup.find_all(['div', 'section', 'article'], 
-                                 class_=re.compile(r'(model|api|card|feature|item|product)', re.I))
+            # Стратегия 2: Поиск карточек моделей (расширенный)
+            # Ищем по классам, id, data-атрибутам
+            card_selectors = [
+                ['div', 'section', 'article', 'li'],
+                {'class': re.compile(r'(model|api|card|feature|item|product|service|tool)', re.I)},
+                {'id': re.compile(r'(model|api|card)', re.I)},
+                {'data-*': re.compile(r'(model|api)', re.I)}
+            ]
+            
+            cards = []
+            # Поиск по классам
+            cards.extend(soup.find_all(['div', 'section', 'article', 'li'], 
+                                      class_=re.compile(r'(model|api|card|feature|item|product|service|tool)', re.I)))
+            # Поиск по id
+            cards.extend(soup.find_all(['div', 'section', 'article'], 
+                                      id=re.compile(r'(model|api|card)', re.I)))
+            # Поиск любых элементов с data-атрибутами
+            cards.extend(soup.find_all(attrs={'data-model': True}))
+            cards.extend(soup.find_all(attrs={'data-api': True}))
+            
+            logger.info(f"Найдено карточек: {len(cards)}")
             
             for card in cards:
-                # Ищем заголовок
-                title_elem = (card.find('h1') or card.find('h2') or card.find('h3') or 
-                             card.find('h4') or card.find(class_=re.compile(r'(title|name|heading)', re.I)))
+                # Ищем заголовок (расширенный поиск)
+                title_elem = (
+                    card.find('h1') or card.find('h2') or card.find('h3') or 
+                    card.find('h4') or card.find('h5') or card.find('h6') or
+                    card.find(class_=re.compile(r'(title|name|heading|model-name|api-name)', re.I)) or
+                    card.find(attrs={'data-title': True}) or
+                    card.find(attrs={'data-name': True})
+                )
                 
                 # Ищем ссылку
                 link_elem = card.find('a', href=True)
                 
                 if title_elem:
                     title = title_elem.get_text().strip()
-                    if title and len(title) > 2:
+                    # Также проверяем data-атрибуты
+                    if not title and title_elem.get('data-title'):
+                        title = title_elem.get('data-title')
+                    if not title and title_elem.get('data-name'):
+                        title = title_elem.get('data-name')
+                    
+                    if title and len(title) > 2 and len(title) < 100:
                         if link_elem:
                             url = urljoin(self.market_url, link_elem['href'])
                         else:
                             # Если нет ссылки, создаем из названия
-                            url = urljoin(self.market_url, f"/ru/market/{title.lower().replace(' ', '-')}")
+                            url = urljoin(self.market_url, f"/ru/market/{title.lower().replace(' ', '-').replace('_', '-')}")
                         
                         # Проверяем, нет ли дубликатов
                         if not any(m['name'] == title for m in model_links):
-                            model_links.append({
-                                'name': title,
-                                'url': url
-                            })
+                            if self._validate_url(url):
+                                model_links.append({
+                                    'name': title,
+                                    'url': url
+                                })
             
-            # Стратегия 3: Поиск в JSON данных (если есть)
-            script_tags = soup.find_all('script', type='application/json')
+            # Стратегия 3: Поиск в JSON данных (расширенный)
+            # Ищем все script теги, не только с type='application/json'
+            script_tags = soup.find_all('script')
+            logger.info(f"Найдено script тегов: {len(script_tags)}")
+            
             for script in script_tags:
                 try:
-                    # Проверяем что script.string не None
-                    if script.string is None:
+                    script_text = script.string or script.get_text()
+                    if not script_text or len(script_text) < 10:
                         continue
-                    data = json.loads(script.string)
-                    # Рекурсивный поиск моделей в JSON
-                    if isinstance(data, dict):
-                        for key, value in data.items():
-                            if 'model' in key.lower() or 'api' in key.lower():
-                                if isinstance(value, list):
-                                    for item in value:
-                                        if isinstance(item, dict) and 'name' in item:
-                                            model_links.append({
-                                                'name': item.get('name', ''),
-                                                'url': item.get('url', item.get('href', ''))
-                                            })
-                except (json.JSONDecodeError, AttributeError, TypeError) as e:
-                    # Игнорируем ошибки парсинга JSON
+                    
+                    # Пытаемся найти JSON в тексте
+                    # Ищем паттерны типа window.__INITIAL_STATE__ или подобные
+                    json_patterns = [
+                        r'window\.__[A-Z_]+__\s*=\s*({.+?});',
+                        r'var\s+\w+\s*=\s*({.+?});',
+                        r'const\s+\w+\s*=\s*({.+?});',
+                        r'({[^{}]*"models?"[^{}]*})',
+                        r'({[^{}]*"items?"[^{}]*})',
+                    ]
+                    
+                    for pattern in json_patterns:
+                        matches = re.finditer(pattern, script_text, re.DOTALL)
+                        for match in matches:
+                            try:
+                                json_str = match.group(1)
+                                data = json.loads(json_str)
+                                # Рекурсивный поиск моделей в JSON
+                                self._extract_models_from_json(data, model_links)
+                            except (json.JSONDecodeError, ValueError, IndexError):
+                                continue
+                    
+                    # Прямой парсинг если это JSON
+                    if script.get('type') == 'application/json' or 'json' in script.get('type', '').lower():
+                        try:
+                            data = json.loads(script_text)
+                            self._extract_models_from_json(data, model_links)
+                        except json.JSONDecodeError:
+                            pass
+                            
+                except (AttributeError, TypeError) as e:
+                    # Игнорируем ошибки
                     pass
+            
+            # Стратегия 4: Поиск по тексту страницы (fallback)
+            if len(model_links) == 0:
+                logger.warning("Модели не найдены стандартными методами, используем fallback поиск")
+                # Ищем любые упоминания моделей в тексте
+                page_text = soup.get_text()
+                # Ищем паттерны типа "Model Name" или ссылки
+                model_patterns = [
+                    r'([A-Z][a-zA-Z0-9\s\-_]+(?:Model|API|Generator|Creator))',
+                    r'https?://[^\s]+/([a-zA-Z0-9\-_]+)',
+                ]
+                for pattern in model_patterns:
+                    matches = re.finditer(pattern, page_text)
+                    for match in matches:
+                        name = match.group(1).strip()
+                        if name and len(name) > 3 and len(name) < 50:
+                            # Создаем URL из названия
+                            url = urljoin(self.market_url, f"/ru/market/{name.lower().replace(' ', '-')}")
+                            if not any(m['name'] == name for m in model_links):
+                                model_links.append({
+                                    'name': name,
+                                    'url': url
+                                })
             
             # Удаляем дубликаты и пустые записи
             seen = set()
             unique_links = []
             for model in model_links:
-                if model['name'] and model['name'] not in seen:
+                if model['name'] and model['name'] not in seen and self._validate_url(model.get('url', '')):
                     seen.add(model['name'])
                     unique_links.append(model)
             
+            logger.info(f"Итого найдено уникальных моделей: {len(unique_links)}")
             print(f"   ✅ ОТВЕТ: Найдено {len(cards)} карточек, извлечено {len(unique_links)} уникальных ссылок на модели")
+            
+            # Если все еще нет моделей, выводим отладочную информацию
+            if len(unique_links) == 0:
+                logger.warning("Модели не найдены. Отладочная информация:")
+                logger.warning(f"  - Размер HTML: {len(resp_text)} символов")
+                logger.warning(f"  - Найдено ссылок: {len(all_links)}")
+                logger.warning(f"  - Найдено карточек: {len(cards)}")
+                logger.warning(f"  - Найдено script тегов: {len(script_tags) if 'script_tags' in locals() else 0}")
+                # Сохраняем HTML для отладки (первые 1000 символов)
+                logger.debug(f"  - Первые 1000 символов HTML: {resp_text[:1000]}")
+            
             return unique_links
         except requests.RequestException as e:
             self.metrics['failed_requests'] += 1
