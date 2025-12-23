@@ -26,6 +26,13 @@ class ChargeManager:
         self._pending_charges: Dict[str, Dict[str, Any]] = {}  # task_id -> charge_info
         self._committed_charges: Set[str] = set()  # task_id set for idempotency
         self._released_charges: Set[str] = set()  # task_id set for released charges
+        self._balances: Dict[int, float] = {}
+
+    def get_user_balance(self, user_id: int) -> float:
+        return self._balances.get(user_id, 0.0)
+
+    def adjust_balance(self, user_id: int, delta: float) -> None:
+        self._balances[user_id] = self.get_user_balance(user_id) + delta
     
     async def create_pending_charge(
         self,
@@ -324,4 +331,3 @@ def get_charge_manager(storage=None) -> ChargeManager:
     if _charge_manager is None:
         _charge_manager = ChargeManager(storage)
     return _charge_manager
-
