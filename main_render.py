@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from app.locking.single_instance import SingletonLock
 from app.utils.config import get_config, validate_env
 from app.utils.healthcheck import start_healthcheck_server, stop_healthcheck_server, set_health_state
+from app.utils.startup_validation import validate_startup, StartupValidationError
 from app.storage.pg_storage import PGStorage, PostgresStorage
 from bot.handlers import flow_router, zero_silence_router, error_handler_router
 from bot.handlers.marketing import router as marketing_router, set_database_service as marketing_set_db, set_free_manager as marketing_set_free
@@ -286,6 +287,20 @@ async def main():
 
     # Step 5: Preflight - delete webhook before polling
     await preflight_webhook(bot)
+
+    # Step 5.5: Startup validation - verify source_of_truth and pricing
+    try:
+        validate_startup()
+    except StartupValidationError as e:
+        logger.error(f"❌ Startup validation failed: {e}")
+        logger.error("Бот НЕ будет запущен из-за ошибок валидации")
+        await bot.session.close()
+        if storage:
+            await storage.close()
+        if singleton_lock:
+            await singleton_lock.release()
+        stop_healthcheck_server(healthcheck_server)
+        sys.exit(1)
 
     # Step 6: Start polling
     try:

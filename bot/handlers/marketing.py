@@ -20,7 +20,7 @@ from app.ui.marketing_menu import (
     get_category_info,
     get_model_by_id
 )
-from app.payments.pricing import calculate_user_price, format_price_rub
+from app.payments.pricing import calculate_user_price, calculate_kie_cost, format_price_rub
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +228,9 @@ def _build_models_keyboard(cat_key: str, models: list) -> InlineKeyboardMarkup:
         # For now, just show price or badge
         price = model.get("price")
         if price:
-            user_price = calculate_user_price(Decimal(str(price)))
+            # CORRECT FORMULA: price_usd × 78 (USD→RUB) × 2 (markup)
+            kie_cost_rub = calculate_kie_cost(model, {}, None)
+            user_price = calculate_user_price(kie_cost_rub)
             price_text = f" • {format_price_rub(user_price)}"
         else:
             price_text = ""
@@ -275,7 +277,9 @@ async def cb_model_details(callback: CallbackQuery, state: FSMContext):
     # Get price
     price = model.get("price")
     if price:
-        user_price = calculate_user_price(Decimal(str(price)))
+        # CORRECT FORMULA: price_usd × 78 (USD→RUB) × 2 (markup)
+        kie_cost_rub = calculate_kie_cost(model, {}, None)
+        user_price = calculate_user_price(kie_cost_rub)
         price_text = format_price_rub(user_price)
     else:
         price_text = "Цена не определена"
@@ -383,7 +387,9 @@ async def process_prompt(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    user_price = calculate_user_price(Decimal(str(price)))
+    # CORRECT FORMULA: price_usd × 78 (USD→RUB) × 2 (markup)
+    kie_cost_rub = calculate_kie_cost(model, {}, None)
+    user_price = calculate_user_price(kie_cost_rub)
     
     # Check if model is free
     free_manager = _get_free_manager()

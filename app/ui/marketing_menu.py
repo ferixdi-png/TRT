@@ -106,27 +106,29 @@ def build_ui_tree() -> Dict[str, List[Dict]]:
     """
     Build UI tree from registry.
     
-    Includes ALL models that are enabled (is_pricing_known=True).
+    Includes ONLY enabled models (without disabled_reason).
     Models without input_schema will use fallback (prompt-only).
     
     MASTER PROMPT compliance:
     - Sort models by price: cheapest first, then medium, then expensive
-    - Show ALL models with known pricing
+    - Show only enabled models (23 from 89 with price)
     """
     registry = load_registry()
     tree = {cat: [] for cat in MARKETING_CATEGORIES.keys()}
     
     for model in registry:
-        # Skip non-model entries
-        if model.get("type") != "model":
+        # Skip non-model entries (processors, etc.)
+        model_id = model.get("model_id", "")
+        if not model_id or model_id.endswith("_processor"):
             continue
         
-        # Skip disabled models without pricing
-        if not model.get("is_pricing_known", False):
+        # CRITICAL FIX: Skip disabled models (unconfirmed pricing)
+        if model.get("disabled_reason"):
             continue
         
-        # REMOVED FILTER: All models with pricing are shown
-        # Models without input_schema will use fallback in builder/validator
+        # Skip models without price
+        if not model.get("price"):
+            continue
         
         mk_cat = map_model_to_marketing_category(model)
         tree[mk_cat].append(model)

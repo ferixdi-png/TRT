@@ -77,9 +77,11 @@ def callback(user, chat, message):
 
 def test_model_filtering():
     """Test that invalid models are filtered out."""
-    # Valid models have vendor/name format AND price (even if disabled_reason present)
+    # Valid models: vendor/name format AND price AND no disabled_reason
     assert _is_valid_model({"model_id": "flux/pro", "price": 15.0}) is True
-    assert _is_valid_model({"model_id": "kling/v1", "price": 100.0, "disabled_reason": "Test"}) is True
+    
+    # Invalid: disabled_reason present (CRITICAL FIX: hide unconfirmed models)
+    assert _is_valid_model({"model_id": "kling/v1", "price": 100.0, "disabled_reason": "Test"}) is False
     
     # Invalid: no price
     assert _is_valid_model({"model_id": "flux/pro", "price": None}) is False

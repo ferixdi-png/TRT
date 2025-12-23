@@ -18,7 +18,7 @@ from app.kie.builder import load_source_of_truth
 from app.kie.validator import validate_input_type, ModelContractError
 from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
-from app.payments.pricing import calculate_user_price, format_price_rub
+from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
 
 router = Router(name="flow")
 
@@ -60,8 +60,10 @@ def _is_valid_model(model: Dict[str, Any]) -> bool:
     # Skip processor entries
     if model_id.endswith("_processor"):
         return False
-    # Include ALL models with price (even if disabled_reason present)
-    # User will see warning in model card
+    # CRITICAL FIX: Skip models with disabled_reason (unconfirmed pricing)
+    if model.get("disabled_reason"):
+        return False
+    # Include only models with confirmed price
     if model.get("price") is None:
         return False
     # Prefer vendor/name format
@@ -992,17 +994,19 @@ async def _show_confirmation(message: Message, state: FSMContext, model: Optiona
     
     model_name = model.get("name") or model.get("model_id")
     
-    # Price formatting - estimated user price (x2 from Kie.ai)
-    price_raw = model.get("price") or 0
+    # Price formatting - CORRECT FORMULA: price_usd × 78 (USD→RUB) × 2 (markup)
+    price_usd = model.get("price") or 0
     try:
-        kie_cost_estimate = float(price_raw)
-        if kie_cost_estimate == 0:
+        if price_usd == 0:
             price_str = "Бесплатно"
         else:
-            user_price_estimate = calculate_user_price(kie_cost_estimate)
-            price_str = format_price_rub(user_price_estimate)
+            # Step 1: Convert USD to RUB (using calculate_kie_cost)
+            kie_cost_rub = calculate_kie_cost(model, {}, None)
+            # Step 2: Apply 2x markup for user price
+            user_price_rub = calculate_user_price(kie_cost_rub)
+            price_str = format_price_rub(user_price_rub)
     except (TypeError, ValueError):
-        price_str = str(price_raw)
+        price_str = "Цена не определена"
     
     # ETA
     eta = model.get("eta")
