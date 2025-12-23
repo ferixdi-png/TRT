@@ -60,8 +60,9 @@ def _is_valid_model(model: Dict[str, Any]) -> bool:
     # Skip processor entries
     if model_id.endswith("_processor"):
         return False
-    # CRITICAL: Skip models without confirmed pricing
-    if not model.get("is_pricing_known", False):
+    # Include ALL models with price (even if disabled_reason present)
+    # User will see warning in model card
+    if model.get("price") is None:
         return False
     # Prefer vendor/name format
     return "/" in model_id
@@ -150,6 +151,11 @@ def _model_detail_text(model: Dict[str, Any]) -> str:
     name = model.get("name") or model.get("model_id")
     model_id = model.get("model_id", "")
     
+    # Check if price is preliminary (disabled_reason exists)
+    price_warning = ""
+    if model.get("disabled_reason"):
+        price_warning = "\n\n⚠️ <i>Цена предварительная, актуализируется автоматически</i>"
+    
     # Human-friendly description
     best_for = model.get("best_for") or model.get("description")
     if not best_for:
@@ -210,6 +216,7 @@ def _model_detail_text(model: Dict[str, Any]) -> str:
         f"<b>Что получите:</b> {example}\n"
         f"<b>Цена:</b> {price_str}\n"
         f"<b>Время:</b> {eta_str}"
+        f"{price_warning}"
     )
 
 
