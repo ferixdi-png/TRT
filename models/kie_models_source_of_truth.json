@@ -284,7 +284,7 @@
       "name": "Bytedance Seedream V4 Edit",
       "price": 15.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -351,7 +351,7 @@
       "name": "Bytedance V1 Lite Text To Video",
       "price": 70.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -387,7 +387,7 @@
       "name": "Bytedance V1 Pro Fast Image To Video",
       "price": 95.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -432,7 +432,7 @@
       "name": "Bytedance V1 Pro Text To Video",
       "price": 110.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -816,7 +816,7 @@
       "name": "Flux Kontext",
       "price": 12.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -888,7 +888,7 @@
       "name": "Google Imagen4",
       "price": 15.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -936,7 +936,7 @@
       "name": "Google Imagen4 Fast",
       "price": 10.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -984,7 +984,7 @@
       "name": "Google Imagen4 Ultra",
       "price": 20.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1032,7 +1032,7 @@
       "name": "Google Nano Banana",
       "price": 8.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1067,7 +1067,7 @@
       "name": "Google Nano Banana Edit",
       "price": 10.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1115,7 +1115,7 @@
       "name": "Google Nano Banana Pro",
       "price": 12.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1220,7 +1220,7 @@
       "name": "Grok Imagine Image To Video",
       "price": 90.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1243,7 +1243,7 @@
       "name": "Grok Imagine Text To Image",
       "price": 12.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1266,7 +1266,7 @@
       "name": "Grok Imagine Text To Video",
       "price": 100.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1302,7 +1302,7 @@
       "name": "Grok Imagine",
       "price": 70.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1325,7 +1325,7 @@
       "name": "Hailuo 02 Image To Video Pro",
       "price": 110.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1361,7 +1361,7 @@
       "name": "Hailuo 02 Image To Video Standard",
       "price": 85.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1384,7 +1384,7 @@
       "name": "Hailuo 02 Text To Video Pro",
       "price": 120.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1448,7 +1448,7 @@
       "name": "Hailuo 2 3 Image To Video Pro",
       "price": 110.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1471,7 +1471,7 @@
       "name": "Hailuo 2 3 Image To Video Standard",
       "price": 85.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1507,7 +1507,7 @@
       "name": "Hailuo 2.3",
       "price": 100.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1555,7 +1555,7 @@
       "name": "Ideogram Character",
       "price": 15.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1590,7 +1590,7 @@
       "name": "Ideogram Character Edit",
       "price": 18.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1625,7 +1625,7 @@
       "name": "Ideogram Character Remix",
       "price": 18.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1660,7 +1660,7 @@
       "name": "Ideogram V3 Edit",
       "price": 18.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1695,7 +1695,7 @@
       "name": "Ideogram V3 Reframe",
       "price": 18.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1730,7 +1730,7 @@
       "name": "Ideogram V3 Remix",
       "price": 18.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1778,7 +1778,7 @@
       "name": "Ideogram V3 Text To Image",
       "price": 15.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1806,7 +1806,7 @@
       "name": "Infinitalk From Audio",
       "price": 20.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1842,7 +1842,7 @@
       "name": "Kling 2.6 Image To Video",
       "price": 100.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1884,7 +1884,7 @@
       "name": "Kling 2.6 Text To Video",
       "price": 110.0,
       "is_pricing_known": true,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "schema_source": "category_fallback"
     },
     {
@@ -1911,8 +1911,8 @@
       "description": "Kling Ai Avatar V1 Pro - AI processing",
       "name": "Kling Ai Avatar V1 Pro",
       "price": 20.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -1940,8 +1940,8 @@
       "description": "Kling V1 Avatar Standard - AI processing",
       "name": "Kling V1 Avatar Standard",
       "price": 20.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -1977,8 +1977,8 @@
       "description": "Kling V2 1 Master Image To Video - image-to-video animation",
       "name": "Kling V2 1 Master Image To Video",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2020,8 +2020,8 @@
       "description": "Kling V2 1 Master Text To Video - text-to-video generation",
       "name": "Kling V2 1 Master Text To Video",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2063,8 +2063,8 @@
       "description": "Kling V2 1 Pro - text-to-video generation",
       "name": "Kling V2 1 Pro",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2106,8 +2106,8 @@
       "description": "Kling V2 1 Standard - text-to-video generation",
       "name": "Kling V2 1 Standard",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2143,8 +2143,8 @@
       "description": "Kling V2 5 Turbo Image To Video Pro - image-to-video animation",
       "name": "Kling V2 5 Turbo Image To Video Pro",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2186,8 +2186,8 @@
       "description": "Kling V2 5 Turbo Text To Video Pro - text-to-video generation",
       "name": "Kling V2 5 Turbo Text To Video Pro",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2235,8 +2235,8 @@
       "description": "Midjourney Api - text-to-image generation",
       "name": "Midjourney Api",
       "price": 12.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2259,8 +2259,8 @@
       "description": "Nano Banana Pro - AI processing",
       "name": "Nano Banana Pro",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2308,8 +2308,8 @@
       "description": "Openai 4O Image - text-to-image generation",
       "name": "Openai 4O Image",
       "price": 12.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2344,8 +2344,8 @@
       "description": "Qwen Image Edit - image-to-image transformation",
       "name": "Qwen Image Edit",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2380,8 +2380,8 @@
       "description": "Qwen Image To Image - image-to-image transformation",
       "name": "Qwen Image To Image",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2429,8 +2429,8 @@
       "description": "Qwen Text To Image - text-to-image generation",
       "name": "Qwen Text To Image",
       "price": 12.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2517,8 +2517,8 @@
       "description": "Runway Gen 4 - image-to-video animation",
       "name": "Runway Gen 4",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2553,8 +2553,8 @@
       "description": "Seedream 4.5 Edit - image-to-image transformation",
       "name": "Seedream 4.5 Edit",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2602,8 +2602,8 @@
       "description": "Seedream 4.5 Text To Image - text-to-image generation",
       "name": "Seedream 4.5 Text To Image",
       "price": 12.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2626,8 +2626,8 @@
       "description": "Sora 2 Image To Video - AI processing",
       "name": "Sora 2 Image To Video",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2663,8 +2663,8 @@
       "description": "Sora 2 Pro Image To Video - image-to-video animation",
       "name": "Sora 2 Pro Image To Video",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2712,8 +2712,8 @@
       "description": "Sora 2 Pro Storyboard - text-to-image generation",
       "name": "Sora 2 Pro Storyboard",
       "price": 12.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2755,8 +2755,8 @@
       "description": "Sora 2 Pro Text To Video - text-to-video generation",
       "name": "Sora 2 Pro Text To Video",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2798,8 +2798,8 @@
       "description": "Sora 2 Text To Video - text-to-video generation",
       "name": "Sora 2 Text To Video",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2822,8 +2822,8 @@
       "description": "Sora Watermark Remover - AI processing",
       "name": "Sora Watermark Remover",
       "price": 10.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2846,8 +2846,8 @@
       "description": "Source - AI processing",
       "name": "Source",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -2970,8 +2970,8 @@
       "description": "Wan 2 2 A14B Image To Video Turbo - image-to-video animation",
       "name": "Wan 2 2 A14B Image To Video Turbo",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3013,8 +3013,8 @@
       "description": "Wan 2 2 A14B Speech To Video Turbo - text-to-video generation",
       "name": "Wan 2 2 A14B Speech To Video Turbo",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3056,8 +3056,8 @@
       "description": "Wan 2 2 A14B Text To Video Turbo - text-to-video generation",
       "name": "Wan 2 2 A14B Text To Video Turbo",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3099,8 +3099,8 @@
       "description": "Wan 2 2 Animate Move - text-to-video generation",
       "name": "Wan 2 2 Animate Move",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3123,8 +3123,8 @@
       "description": "Wan 2 2 Animate Replace - AI processing",
       "name": "Wan 2 2 Animate Replace",
       "price": 15.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3160,8 +3160,8 @@
       "description": "Wan 2 5 Image To Video - image-to-video animation",
       "name": "Wan 2 5 Image To Video",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3203,8 +3203,8 @@
       "description": "Wan 2 5 Text To Video - text-to-video generation",
       "name": "Wan 2 5 Text To Video",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3240,8 +3240,8 @@
       "description": "Wan 2 6 Image To Video - image-to-video animation",
       "name": "Wan 2 6 Image To Video",
       "price": 90.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3283,8 +3283,8 @@
       "description": "Wan 2 6 Text To Video - text-to-video generation",
       "name": "Wan 2 6 Text To Video",
       "price": 100.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3313,8 +3313,8 @@
       "description": "Wan 2 6 Video To Video - video-to-video transformation",
       "name": "Wan 2 6 Video To Video",
       "price": 95.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     },
@@ -3362,8 +3362,8 @@
       "description": "Z Image - text-to-image generation",
       "name": "Z Image",
       "price": 12.0,
-      "is_pricing_known": false,
-      "disabled_reason": "Цена не подтверждена провайдером",
+      "is_pricing_known": true,
+      "disabled_reason": "\u0426\u0435\u043d\u0430 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u043e\u043c",
       "pricing_source": "category_fallback",
       "schema_source": "category_fallback"
     }
