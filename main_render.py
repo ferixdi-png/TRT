@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Production entrypoint for Render deployment.
 Single, explicit initialization path with no fallbacks.
@@ -26,6 +26,12 @@ from bot.handlers import zero_silence_router, error_handler_router
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+
+
+async def preflight_webhook(bot: Bot) -> None:
+    """Delete webhook before starting polling to avoid conflicts."""
+    result = await bot.delete_webhook(drop_pending_updates=False)
+    logger.info("Webhook deleted: %s", result)
 
 
 def create_bot_application() -> Tuple[Dispatcher, Bot]:
@@ -76,20 +82,27 @@ async def main():
         logger.info("Healthcheck server started on port %s", port)
 
     dry_run = os.getenv("DRY_RUN", "0").lower() in {"1", "true", "yes"}
+    bot_mode = os.getenv("BOT_MODE", "polling").lower()
 
-    # Step 1: Acquire singleton lock (if DATABASE_URL provided)
+    # Step 1: Acquire singleton lock (if DATABASE_URL provided and not DRY_RUN)
     database_url = os.getenv("DATABASE_URL")
-    if database_url:
+    if database_url and not dry_run:
         lock_acquired = await acquire_singleton_lock(dsn=database_url, timeout=5.0)
         if not lock_acquired:
             logger.warning("Singleton lock not acquired - another instance may be running")
+    else:
+        if dry_run:
+            logger.info("DRY_RUN enabled - skipping singleton lock")
     
-    # Step 2: Initialize storage (if DATABASE_URL provided)
+    # Step 2: Initialize storage (if DATABASE_URL provided and not DRY_RUN)
     storage = None
-    if database_url:
+    if database_url and not dry_run:
         storage = PostgresStorage(dsn=database_url)
         await storage.initialize()
         logger.info("PostgreSQL storage initialized")
+    else:
+        if dry_run:
+            logger.info("DRY_RUN enabled - skipping storage initialization")
     
     # Step 3: Create bot application
     try:
@@ -110,7 +123,20 @@ async def main():
         stop_healthcheck_server(healthcheck_server)
         return
 
-    # Step 4: Start polling
+    # Step 4: Check BOT_MODE guard
+    if bot_mode != "polling":
+        logger.info(f"BOT_MODE={bot_mode} is not ''polling'' - skipping polling startup")
+        await bot.session.close()
+        if storage:
+            await storage.close()
+        await release_singleton_lock()
+        stop_healthcheck_server(healthcheck_server)
+        return
+
+    # Step 5: Preflight - delete webhook before polling
+    await preflight_webhook(bot)
+
+    # Step 6: Start polling
     try:
         logger.info("Starting bot polling...")
         await dp.start_polling(bot, skip_updates=True)

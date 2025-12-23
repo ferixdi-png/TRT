@@ -1,4 +1,4 @@
-# Kie.ai API Scraper
+﻿# Kie.ai API Scraper
 
 Автоматический сборщик всех моделей Kie.ai с полной документацией API.
 
