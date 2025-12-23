@@ -53,6 +53,7 @@ python main_render.py
 **Optional ENV:**
 - `PORT=10000` (healthcheck listener)
 - `DRY_RUN=0`
+- `KIE_STUB=0`
 - `BOT_MODE=polling`
 - `STORAGE_MODE=auto`
 
