@@ -1,6 +1,7 @@
 """
 Balance and wallet handlers - полная интеграция с DatabaseService.
 """
+import decimal
 import logging
 from decimal import Decimal
 
@@ -150,7 +151,9 @@ async def process_topup_amount(message: Message, state: FSMContext):
         if amount > 100000:
             await message.answer("❌ Максимальная сумма: 100 000₽")
             return
-    except:
+    except (ValueError, decimal.InvalidOperation) as e:
+        # MASTER PROMPT: No bare except - specific exception types for Decimal parsing
+        logger.error(f"Failed to parse amount from '{message.text}': {e}")
         await message.answer("❌ Введите корректную сумму (например: 500)")
         return
     

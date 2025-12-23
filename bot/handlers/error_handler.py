@@ -42,11 +42,14 @@ async def global_error_handler(event: ErrorEvent):
             await callback.answer("⚠️ Ошибка")
             try:
                 await callback.message.answer(error_message)
-            except:
-                # If edit fails, try to send new message
+            except Exception as msg_err:
+                # If edit fails, try to send new message (catch Telegram API errors)
+                # MASTER PROMPT: No bare except - catch Exception for Telegram API failures
+                logger.debug(f"Failed to send error message via callback: {msg_err}")
                 try:
                     await callback.message.answer(error_message)
-                except:
+                except Exception as retry_err:
+                    logger.debug(f"Retry also failed: {retry_err}")
                     pass
         elif update.edited_message:
             await update.edited_message.answer(error_message)

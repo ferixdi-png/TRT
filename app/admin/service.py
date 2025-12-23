@@ -298,9 +298,21 @@ class AdminService:
             
             rows = await conn.fetch(query, *params)
             
+            # FIX #2 (N+1 query): Batch load balances instead of querying in loop
+            user_ids = [row['user_id'] for row in rows]
+            
+            # Load all balances in one query
+            balance_query = """
+                SELECT user_id, balance_rub 
+                FROM wallets 
+                WHERE user_id = ANY($1::bigint[])
+            """
+            balance_rows = await conn.fetch(balance_query, user_ids)
+            balance_map = {row['user_id']: row['balance_rub'] for row in balance_rows}
+            
+            # Build result without additional queries
             users = []
             for row in rows:
-                balance_data = await wallet_service.get_balance(row['user_id'])
                 users.append({
                     "user_id": row['user_id'],
                     "username": row['username'],
@@ -308,7 +320,7 @@ class AdminService:
                     "role": row['role'],
                     "created_at": row['created_at'],
                     "last_seen_at": row['last_seen_at'],
-                    "balance": balance_data['balance_rub'] if balance_data else 0
+                    "balance": balance_map.get(row['user_id'], 0)
                 })
             
             return users

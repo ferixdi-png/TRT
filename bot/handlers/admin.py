@@ -195,7 +195,9 @@ async def process_free_limits(message: Message, state: FSMContext):
     try:
         daily_limit = int(parts[0])
         hourly_limit = int(parts[1]) if len(parts) > 1 else 2
-    except:
+    except (ValueError, IndexError) as e:
+        # MASTER PROMPT: No bare except - specific exception types for parseInt errors
+        logger.error(f"Failed to parse free model limits from '{message.text}': {e}")
         await message.answer("❌ Неверный формат. Попробуйте ещё раз:")
         return
     
@@ -311,7 +313,9 @@ async def process_user_find(message: Message, state: FSMContext):
     
     try:
         user_id = int(message.text.strip())
-    except:
+    except ValueError as e:
+        # MASTER PROMPT: No bare except - specific exception type for parseInt
+        logger.error(f"Failed to parse user_id from '{message.text}': {e}")
         await message.answer("❌ Неверный формат. Введите числовой user_id:")
         return
     
