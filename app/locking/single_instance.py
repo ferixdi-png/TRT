@@ -27,9 +27,9 @@ except ImportError:
     HAS_PSYCOPG = False
 
 
-# Lock TTL in seconds
-LOCK_TTL = 60
-HEARTBEAT_INTERVAL = 20
+# Lock TTL in seconds (reduced for faster rolling deployment)
+LOCK_TTL = 30
+HEARTBEAT_INTERVAL = 10
 
 
 class SingletonLock:
@@ -78,7 +78,10 @@ class SingletonLock:
             logger.warning(f"Could not update heartbeat: {e}")
     
     async def _cleanup_stale_locks(self):
-        """Release stale locks (no heartbeat for LOCK_TTL seconds)."""
+        """
+        Release stale locks (no heartbeat for LOCK_TTL seconds).
+        Also forcefully unlock PostgreSQL advisory lock if stale.
+        """
         if not self._connection:
             return
         
@@ -92,13 +95,27 @@ class SingletonLock:
             """, self._lock_id)
             
             if result:
-                logger.warning(f"Found stale lock from {result['instance_name']} "
-                             f"(last heartbeat: {result['last_heartbeat']})")
+                logger.warning(f"🔓 Found STALE lock from {result['instance_name']} "
+                             f"(last heartbeat: {result['last_heartbeat']}) - force unlocking!")
+                
+                # Force release PostgreSQL advisory lock
+                if HAS_ASYNCPG:
+                    unlocked = await self._connection.fetchval(
+                        "SELECT pg_advisory_unlock_all()"
+                    )
+                    logger.info(f"Advisory lock force released: {unlocked}")
+                else:  # psycopg
+                    async with self._connection.cursor() as cur:
+                        await cur.execute("SELECT pg_advisory_unlock_all()")
+                        result_unlock = await cur.fetchone()
+                        logger.info(f"Advisory lock force released: {result_unlock[0] if result_unlock else False}")
+                
                 # Delete stale heartbeat record
                 await self._connection.execute(
                     "DELETE FROM singleton_heartbeat WHERE lock_id = $1",
                     self._lock_id
                 )
+                logger.info("✅ Stale lock cleaned up - ready for new acquisition")
         except Exception as e:
             logger.warning(f"Could not check stale locks: {e}")
     

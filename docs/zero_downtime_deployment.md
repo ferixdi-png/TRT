@@ -100,7 +100,7 @@ maxShutdownDelaySeconds: 30
 
 ## Timeline сравнение
 
-### ❌ ДО (race condition):
+### ❌ V1 (race condition - было):
 ```
 0s   - Новый контейнер стартует
 1s   - Новый пытается захватить lock → FAIL
@@ -111,7 +111,7 @@ maxShutdownDelaySeconds: 30
 21s  - Новый все еще в passive mode (НЕ РАБОТАЕТ)
 ```
 
-### ✅ ПОСЛЕ (zero-downtime):
+### ✅ V2 (emergency release - было):
 ```
 0s   - Новый контейнер стартует
 5s   - Render отправляет SIGTERM старому
@@ -121,7 +121,20 @@ maxShutdownDelaySeconds: 30
 10s  - Старый завершает cleanup, умирает
 ```
 
-**Результат**: Lock освобождается **за 100ms** вместо 15 секунд.
+**Проблема V2**: Render запускал новый контейнер **до** SIGTERM старому!
+
+### ✅ V3 (AGGRESSIVE RETRY - текущее):
+```
+0s   - Новый контейнер стартует
+0.5s - Попытка 1: lock NOT acquired (старый ещё работает)
+2.5s - Попытка 2: Render отправил SIGTERM старому
+2.6s - Старый СРАЗУ освобождает lock
+2.7s - Попытка 2: lock acquired → active mode ✅
+3s   - Новый начинает polling
+7s   - Старый завершает cleanup
+```
+
+**Результат**: Lock захвачен на попытке 2-3, zero downtime!
 
 ## Гарантии безопасности
 

@@ -139,9 +139,25 @@ async def main():
         instance_name = config.instance_name
         singleton_lock = SingletonLock(dsn=database_url, instance_name=instance_name)
         singleton_lock_ref["lock"] = singleton_lock  # Store reference for signal handler
-        lock_acquired = await singleton_lock.acquire(timeout=5.0)
+        
+        # AGGRESSIVE RETRY: Try to acquire lock multiple times during rolling deployment
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(1, max_retries + 1):
+            logger.info(f"Lock acquisition attempt {attempt}/{max_retries}...")
+            lock_acquired = await singleton_lock.acquire(timeout=5.0)
+            
+            if lock_acquired:
+                break
+            
+            if attempt < max_retries:
+                logger.warning(f"Lock not acquired on attempt {attempt}, waiting {retry_delay}s for old instance to release...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.warning(f"Lock not acquired after {max_retries} attempts - another instance is running. Running in passive mode (healthcheck only).")
+        
         if not lock_acquired:
-            logger.warning("Singleton lock not acquired - another instance is running. Running in passive mode (healthcheck only).")
             set_health_state("passive", "lock_not_acquired")
             # Passive mode: keep healthcheck running, but NO polling
             logger.info("Passive mode: healthcheck available, polling disabled")
