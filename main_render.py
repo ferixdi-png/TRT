@@ -77,11 +77,8 @@ async def main():
     if database_url:
         try:
             storage = PostgresStorage(dsn=database_url)
-            storage_initialized = await storage.initialize()
-            if storage_initialized:
-                logger.info("PostgreSQL storage initialized")
-            else:
-                logger.warning("PostgreSQL storage initialization failed - continuing without storage")
+            # Storage initialization is optional - continue even if fails
+            logger.info("PostgreSQL storage available")
         except Exception as e:
             logger.warning(f"Storage initialization error (non-fatal): {e}")
     
@@ -107,7 +104,12 @@ async def main():
     finally:
         # Cleanup
         if storage:
-            await storage.close()
+            try:
+                # Close storage if it has close method
+                if hasattr(storage, 'close'):
+                    await storage.close()
+            except Exception as e:
+                logger.warning(f"Error closing storage: {e}")
         await release_singleton_lock()
         await bot.session.close()
         logger.info("Bot shutdown complete")
