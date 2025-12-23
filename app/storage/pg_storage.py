@@ -41,18 +41,63 @@ class PostgresStorage(BaseStorage):
             )
         return self._pool
     
+    async def async_test_connection(self) -> bool:
+        """
+        Проверить подключение (async-friendly).
+        
+        ВАЖНО: Используется в runtime когда event loop уже запущен.
+        НЕ использует asyncio.run() или run_until_complete().
+        """
+        if not ASYNCPG_AVAILABLE:
+            return False
+        
+        try:
+            # Пробуем создать временный pool для проверки
+            pool = await asyncpg.create_pool(
+                self.database_url,
+                min_size=1,
+                max_size=1,
+                command_timeout=5  # Короткий таймаут для проверки
+            )
+            if pool:
+                await pool.close()
+                return True
+        except Exception as e:
+            logger.debug(f"PostgreSQL async connection test failed: {e}")
+            return False
+        return False
+    
     def test_connection(self) -> bool:
-        """Проверить подключение (синхронно)"""
+        """
+        Проверить подключение (синхронно, для CLI/тестов).
+        
+        ВАЖНО: НЕ использовать в runtime когда event loop уже запущен!
+        Используйте async_test_connection() вместо этого.
+        """
         if not ASYNCPG_AVAILABLE:
             return False
         
         try:
             import asyncio
+            # Проверяем есть ли уже запущенный loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Если loop уже запущен - это ошибка, нужно использовать async версию
+                logger.warning(
+                    "[WARN] test_connection() called while event loop is running. "
+                    "Use async_test_connection() instead."
+                )
+                return False
+            except RuntimeError:
+                # Нет запущенного loop - можно создать новый
+                pass
+            
+            # Создаем новый loop только если его нет
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 pool = loop.run_until_complete(
-                    asyncpg.create_pool(self.database_url, min_size=1, max_size=1)
+                    asyncpg.create_pool(self.database_url, min_size=1, max_size=1, command_timeout=5)
                 )
                 if pool:
                     loop.run_until_complete(pool.close())
@@ -569,3 +614,7 @@ class PostgresStorage(BaseStorage):
         if self._pool:
             await self._pool.close()
             self._pool = None
+
+
+# Алиас для обратной совместимости
+PGStorage = PostgresStorage

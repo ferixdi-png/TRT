@@ -16,9 +16,11 @@ from app.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def acquire_singleton_lock() -> bool:
+def acquire_singleton_lock_sync() -> bool:
     """
     DEPRECATED: Используйте app.locking.single_instance.acquire_single_instance_lock()
+    
+    Синхронная версия acquire_singleton_lock() для обратной совместимости.
     
     Попытаться получить singleton lock (PostgreSQL или filelock)
     
@@ -39,11 +41,59 @@ def acquire_singleton_lock() -> bool:
     sys.exit(0)  # exit(0) чтобы Render не считал это ошибкой
 
 
-def release_singleton_lock():
+def release_singleton_lock_sync() -> None:
     """
     DEPRECATED: Используйте app.locking.single_instance.release_single_instance_lock()
+    
+    Синхронная версия release_singleton_lock() для обратной совместимости.
     
     Освободить singleton lock
     """
     _release_single_instance_lock()
+
+
+# Module-global для хранения lock объекта (для async обёрток)
+_lock_instance = None
+
+
+async def acquire_singleton_lock() -> bool:
+    """
+    Async обёртка для acquire_singleton_lock().
+    Используется в main_render.py для совместимости.
+    
+    Returns:
+        True если lock получен, False если нет
+    """
+    global _lock_instance
+    
+    # Используем синхронную версию (lock механизм сам по себе синхронный)
+    # Но оборачиваем в async для совместимости с async кодом
+    import asyncio
+    
+    # Запускаем синхронную функцию в executor
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, acquire_singleton_lock_sync)
+    
+    if result:
+        # Сохраняем информацию о lock для последующего release
+        _lock_instance = True
+    
+    return result
+
+
+async def release_singleton_lock() -> None:
+    """
+    Async обёртка для release_singleton_lock().
+    Используется в main_render.py для совместимости.
+    """
+    global _lock_instance
+    
+    if _lock_instance:
+        import asyncio
+        
+        # Запускаем синхронную функцию в executor
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, release_singleton_lock_sync)
+        
+        _lock_instance = None
 

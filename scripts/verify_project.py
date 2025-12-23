@@ -797,6 +797,88 @@ def test_catalog_verification():
         return False
 
 
+def test_build_kie_registry():
+    """Проверяет build_kie_registry.py - генерация registry из документации"""
+    print("\n" + "=" * 60)
+    print("TEST: Build KIE Registry from docs")
+    print("=" * 60)
+    
+    import subprocess
+    
+    try:
+        # Запускаем скрипт построения registry
+        script_path = Path(__file__).parent / "build_kie_registry.py"
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=120  # 2 минуты максимум
+        )
+        
+        # Выводим результат
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print("STDERR:", result.stderr)
+        
+        if result.returncode == 0:
+            print("[OK] KIE Registry built successfully")
+            return True
+        else:
+            print(f"[FAIL] Build registry failed with exit code {result.returncode}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("[FAIL] Build registry timed out (>2 minutes)")
+        return False
+    except Exception as e:
+        print(f"[FAIL] Build registry error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_validate_kie_registry():
+    """Проверяет validate_kie_registry.py - валидация registry"""
+    print("\n" + "=" * 60)
+    print("TEST: Validate KIE Registry")
+    print("=" * 60)
+    
+    import subprocess
+    
+    try:
+        # Запускаем скрипт валидации registry
+        script_path = Path(__file__).parent / "validate_kie_registry.py"
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=60  # 1 минута максимум
+        )
+        
+        # Выводим результат
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print("STDERR:", result.stderr)
+        
+        if result.returncode == 0:
+            print("[OK] KIE Registry validation passed")
+            return True
+        else:
+            print(f"[FAIL] Registry validation failed with exit code {result.returncode}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("[FAIL] Registry validation timed out (>1 minute)")
+        return False
+    except Exception as e:
+        print(f"[FAIL] Registry validation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def main():
     """Главная функция проверки"""
     print("=" * 60)
@@ -805,6 +887,8 @@ def main():
     print()
     
     tests = [
+        ("Build KIE Registry", test_build_kie_registry),
+        ("Validate KIE Registry", test_validate_kie_registry),
         ("Catalog verification", test_catalog_verification),
         ("pytest -q", test_pytest),
         ("Smoke test всех моделей", test_smoke_all_models),
