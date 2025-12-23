@@ -73,6 +73,15 @@ class DatabaseService:
     async def release(self, conn):
         """Release connection back to pool."""
         await self._pool.release(conn)
+    
+    @asynccontextmanager
+    async def get_connection(self):
+        """Get connection context manager (compatible with FreeModelManager, AdminService, etc)."""
+        conn = await self._pool.acquire()
+        try:
+            yield conn
+        finally:
+            await self._pool.release(conn)
 
 
 class UserService:
