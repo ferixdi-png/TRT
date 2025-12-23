@@ -274,6 +274,8 @@ class KieGenerator:
         
         except Exception as e:
             logger.error(f"Error in generate: {e}", exc_info=True)
+            # MASTER PROMPT: Logging - critical event (generation failed)
+            logger.error(f"Generation failed: model={model_id}, error={str(e)}")
             return {
                 'success': False,
                 'message': f"❌ Произошла ошибка: {str(e)}\n\nНажмите /start для возврата в меню.",

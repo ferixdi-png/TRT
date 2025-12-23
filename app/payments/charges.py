@@ -41,6 +41,8 @@ class ChargeManager:
         if user_id in self._welcomed_users:
             return False
         self._welcomed_users.add(user_id)
+        # MASTER PROMPT: Logging - critical event (user registration)
+        logger.info(f"User registered: user_id={user_id}, welcome_credit={amount}₽")
         if amount > 0:
             self.adjust_balance(user_id, amount)
         return True

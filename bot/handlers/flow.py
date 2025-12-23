@@ -1128,6 +1128,9 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
     # Send initial progress message
     # MASTER PROMPT: "7. Прогресс / ETA" - TRANSPARENCY: show model and prompt
+    # SECURITY: Escape user input to prevent XSS (MASTER PROMPT: no vulnerabilities)
+    from app.utils.html import escape_html
+    
     # Initial progress message with model and inputs info
     model_name = _source_of_truth().get("models", [])
     model_display = "Unknown"
@@ -1135,20 +1138,23 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         if m.get("model_id") == flow_ctx.model_id:
             model_display = m.get("name") or flow_ctx.model_id
             break
-    
-    # Format inputs for display
+
+    # Format inputs for display - ESCAPE USER INPUT
     inputs_preview = ""
     if "prompt" in flow_ctx.collected:
         prompt_text = flow_ctx.collected["prompt"]
         if len(prompt_text) > 50:
             prompt_text = prompt_text[:50] + "..."
-        inputs_preview = f"Промпт: {prompt_text}\n"
-    
+        # CRITICAL: Escape HTML to prevent XSS
+        prompt_text_safe = escape_html(prompt_text)
+        inputs_preview = f"Промпт: {prompt_text_safe}\n"
+
     progress_msg = await callback.message.edit_text(
         f"⏳ <b>Генерация запущена</b>\n\n"
-        f"Модель: {model_display}\n"
+        f"Модель: {escape_html(model_display)}\n"
         f"{inputs_preview}"
-        f"Инициализация..."
+        f"Инициализация...",
+        parse_mode="HTML"
     )
 
     # MASTER PROMPT: "7. Прогресс / ETA"
