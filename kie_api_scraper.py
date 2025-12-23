@@ -88,7 +88,9 @@ class KieApiScraper:
             'models_with_input_schema': 0,
             'valid_models_count': 0,
             'invalid_models_count': 0,
-            'fixed_models_count': 0
+            'fixed_models_count': 0,
+            'timeout_errors': 0,
+            'network_errors': 0
         }
         
         # Rate limiting (из конфигурации)
@@ -181,17 +183,25 @@ class KieApiScraper:
                 return resp
                 
             except requests.exceptions.Timeout:
+                self.metrics['failed_requests'] += 1
+                self.metrics['timeout_errors'] += 1
+                logger.warning(f"Таймаут при запросе {url} (попытка {attempt + 1}/{max_retries})")
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 2
                     print(f"    ⏳ Таймаут, повтор через {wait_time} сек...")
                     time.sleep(wait_time)
                     continue
+                logger.error(f"Таймаут после {max_retries} попыток для {url}")
                 raise
             except requests.exceptions.RequestException as e:
+                self.metrics['failed_requests'] += 1
+                self.metrics['network_errors'] += 1
+                logger.warning(f"Ошибка запроса {url} (попытка {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 1
                     time.sleep(wait_time)
                     continue
+                logger.error(f"Не удалось выполнить запрос после {max_retries} попыток для {url}")
                 raise
         
         raise requests.exceptions.RequestException(f"Не удалось выполнить запрос после {max_retries} попыток")
@@ -477,6 +487,19 @@ class KieApiScraper:
                         if param_name and param_name not in base_required:
                             base_required.append(param_name)
         
+        # Дополнительный поиск в коде и примерах
+        code_blocks = soup.find_all(['code', 'pre'])
+        for code in code_blocks:
+            code_text = code.get_text().lower()
+            # Ищем паттерны типа "required: ['field1', 'field2']"
+            required_pattern = r'required[:\s]*\[([^\]]+)\]'
+            matches = re.findall(required_pattern, code_text)
+            for match in matches:
+                fields = [f.strip().strip('"\'') for f in match.split(',')]
+                for field in fields:
+                    if field and field not in base_required:
+                        base_required.append(field)
+        
         # Извлекаем типы параметров
         type_patterns = {
             'prompt': r'"(?:prompt|text|input)"[:\s]*:?\s*"([^"]+)"',
@@ -487,12 +510,30 @@ class KieApiScraper:
         }
         
         # Создаем схему на основе найденных параметров
-        if 'prompt' in text.lower():
+        if 'prompt' in text.lower() or 'prompt' in base_required:
             input_schema['prompt'] = {
                 'type': 'string',
                 'required': True,
                 'description': 'Текст запроса для модели'
             }
+        
+        # Извлекаем дополнительные поля из примеров
+        example_patterns = [
+            r'"(?:prompt|text|input|message|query)"[:\s]*:?\s*"([^"]+)"',
+            r'"(?:width|height|size)"[:\s]*:?\s*(\d+)',
+            r'"(?:temperature|temp)"[:\s]*:?\s*([\d.]+)',
+        ]
+        
+        for pattern in example_patterns:
+            matches = re.finditer(pattern, text, re.I)
+            for match in matches:
+                field_name = match.group(1) if match.lastindex else None
+                if field_name and field_name not in input_schema:
+                    input_schema[field_name] = {
+                        'type': 'string',
+                        'required': field_name in base_required,
+                        'description': f'Параметр {field_name}'
+                    }
         
         return {
             'required': list(set(base_required + required_fields)),
@@ -1065,6 +1106,8 @@ class KieApiScraper:
                     'empty_responses': self.metrics['empty_responses'],
                     'parsing_errors': self.metrics['parsing_errors'],
                     'validation_errors': self.metrics['validation_errors'],
+                    'timeout_errors': self.metrics['timeout_errors'],
+                    'network_errors': self.metrics['network_errors'],
                     'success_rate': f"{(len(self.models) / max_models * 100):.1f}%" if max_models > 0 else "0%",
                     'cache_hit_rate': f"{(self.metrics['cached_requests'] / self.metrics['total_requests'] * 100):.1f}%" if self.metrics['total_requests'] > 0 else "0%"
                 },
@@ -1124,6 +1167,8 @@ class KieApiScraper:
         print(f"   ❌ Ошибок: {self.metrics['failed_requests']}")
         print(f"   📊 Пустых ответов: {self.metrics['empty_responses']}")
         print(f"   🔍 Ошибок парсинга: {self.metrics['parsing_errors']}")
+        print(f"   ⏱️ Таймаутов: {self.metrics['timeout_errors']}")
+        print(f"   🌐 Ошибок сети: {self.metrics['network_errors']}")
         print(f"   ✅ Валидных моделей: {self.metrics['valid_models_count']}")
         print(f"   ❌ Невалидных моделей: {self.metrics['invalid_models_count']}")
         if self.metrics['total_requests'] > 0:
