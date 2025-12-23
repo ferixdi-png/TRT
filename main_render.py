@@ -22,7 +22,7 @@ from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_l
 from app.utils.healthcheck import start_healthcheck_server, stop_healthcheck_server
 from app.utils.runtime_state import runtime_state
 from app.storage.pg_storage import PGStorage, PostgresStorage
-from bot.handlers import zero_silence_router, error_handler_router, diag_router
+from bot.handlers import flow_router, zero_silence_router, error_handler_router, diag_router
 
 # Import aiogram components
 from aiogram import Bot, Dispatcher
@@ -55,9 +55,11 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     )
     
     # Create dispatcher
-    dp = Dispatcher()
+    from aiogram.fsm.storage.memory import MemoryStorage
+    dp = Dispatcher(storage=MemoryStorage())
     
     # Register routers in order
+    dp.include_router(flow_router)
     dp.include_router(zero_silence_router)
     dp.include_router(diag_router)
     dp.include_router(error_handler_router)
