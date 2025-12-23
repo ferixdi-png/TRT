@@ -35,8 +35,9 @@ class MarketingStates(StatesGroup):
     confirm_price = State()
 
 
-# Global database service (будет установлен в main_render.py)
+# Global services (будут установлены в main_render.py)
 _db_service = None
+_free_manager = None
 
 
 def set_database_service(db_service):
@@ -45,9 +46,20 @@ def set_database_service(db_service):
     _db_service = db_service
 
 
+def set_free_manager(free_manager):
+    """Set free model manager for handlers."""
+    global _free_manager
+    _free_manager = free_manager
+
+
 def _get_db_service():
     """Get database service or None if not available."""
     return _db_service
+
+
+def _get_free_manager():
+    """Get free manager or None."""
+    return _free_manager
 
 
 @router.message(Command("marketing"))
@@ -102,6 +114,9 @@ def _build_marketing_menu() -> InlineKeyboardMarkup:
     
     # Additional buttons
     rows.append([
+        InlineKeyboardButton(text="🎁 Бесплатно попробовать", callback_data="marketing:free")
+    ])
+    rows.append([
         InlineKeyboardButton(text="💳 Баланс", callback_data="balance:main"),
         InlineKeyboardButton(text="📜 История", callback_data="history:main")
     ])
@@ -110,6 +125,61 @@ def _build_marketing_menu() -> InlineKeyboardMarkup:
     ])
     
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data == "marketing:free")
+async def cb_marketing_free(callback: CallbackQuery):
+    """Show free models."""
+    free_manager = _get_free_manager()
+    
+    if not free_manager:
+        await callback.answer("Сервис временно недоступен", show_alert=True)
+        return
+    
+    free_models_list = await free_manager.get_all_free_models()
+    
+    if not free_models_list:
+        text = (
+            f"🎁 <b>Бесплатные модели</b>\n\n"
+            f"Сейчас нет доступных бесплатных моделей.\n"
+            f"Следите за обновлениями!"
+        )
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="marketing:main")]
+        ])
+    else:
+        text = (
+            f"🎁 <b>Попробуйте бесплатно!</b>\n\n"
+            f"Эти модели можно использовать без оплаты.\n"
+            f"Идеально для знакомства с сервисом.\n\n"
+            f"Доступно моделей: {len(free_models_list)}"
+        )
+        
+        # Build keyboard with free models
+        rows = []
+        for fm in free_models_list[:10]:
+            model_id = fm['model_id']
+            daily_limit = fm['daily_limit']
+            
+            # Get model info
+            model = get_model_by_id(model_id)
+            if model:
+                name = model.get('name', model_id)
+                button_text = f"🎁 {name} ({daily_limit}/день)"
+                rows.append([
+                    InlineKeyboardButton(
+                        text=button_text,
+                        callback_data=f"mmodel:{model_id}"
+                    )
+                ])
+        
+        rows.append([
+            InlineKeyboardButton(text="◀️ Назад", callback_data="marketing:main")
+        ])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("mcat:"))
@@ -145,14 +215,17 @@ async def cb_marketing_category(callback: CallbackQuery, state: FSMContext):
 
 
 def _build_models_keyboard(cat_key: str, models: list) -> InlineKeyboardMarkup:
-    """Build models selection keyboard."""
+    """Build models selection keyboard with free badges."""
     rows = []
+    
+    free_manager = _get_free_manager()
     
     for model in models[:10]:  # Limit to 10 for now
         model_id = model.get("model_id", "")
         name = model.get("name") or model_id
         
-        # Get price
+        # Check if free (synchronous approach - we'll enhance later)
+        # For now, just show price or badge
         price = model.get("price")
         if price:
             user_price = calculate_user_price(Decimal(str(price)))
@@ -160,7 +233,9 @@ def _build_models_keyboard(cat_key: str, models: list) -> InlineKeyboardMarkup:
         else:
             price_text = ""
         
+        # Add 🎁 badge placeholder (will be populated async in future)
         button_text = f"{name}{price_text}"
+        
         rows.append([
             InlineKeyboardButton(
                 text=button_text,
@@ -278,9 +353,54 @@ async def process_prompt(message: Message, state: FSMContext):
     
     user_price = calculate_user_price(Decimal(str(price)))
     
-    # Check balance
+    # Check if model is free
+    free_manager = _get_free_manager()
+    is_free = False
+    free_limits_info = {}
+    
+    if free_manager:
+        is_free = await free_manager.is_model_free(model_id)
+        
+        if is_free:
+            # Check free limits
+            limits_check = await free_manager.check_limits(message.from_user.id, model_id)
+            free_limits_info = limits_check
+            
+            if not limits_check['allowed']:
+                reason = limits_check['reason']
+                if reason == 'daily_limit_exceeded':
+                    text = (
+                        f"⏰ <b>Лимит исчерпан</b>\n\n"
+                        f"Вы использовали все бесплатные генерации этой модели на сегодня.\n\n"
+                        f"Использовано: {limits_check['daily_used']}/{limits_check['daily_limit']}\n\n"
+                        f"Вы можете:\n"
+                        f"• Подождать до завтра\n"
+                        f"• Пополнить баланс и продолжить\n\n"
+                        f"Стоимость: {format_price_rub(user_price)}"
+                    )
+                elif reason == 'hourly_limit_exceeded':
+                    text = (
+                        f"⏰ <b>Временный лимит</b>\n\n"
+                        f"Достигнут часовой лимит.\n\n"
+                        f"Использовано: {limits_check['hourly_used']}/{limits_check['hourly_limit']}\n\n"
+                        f"Попробуйте через час или пополните баланс."
+                    )
+                else:
+                    text = "❌ Лимит использования исчерпан"
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💳 Пополнить", callback_data="balance:topup")],
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="marketing:main")]
+                ])
+                await message.answer(text, reply_markup=keyboard)
+                await state.clear()
+                return
+    
+    # Check balance (skip for free models)
     db_service = _get_db_service()
-    if db_service:
+    balance_text = ""
+    
+    if not is_free and db_service:
         from app.database.services import UserService, WalletService
         
         user_service = UserService(db_service)
@@ -313,19 +433,27 @@ async def process_prompt(message: Message, state: FSMContext):
             await message.answer(text, reply_markup=keyboard)
             await state.clear()
             return
-    else:
-        balance_text = ""
     
     # Save prompt and show confirmation
-    await state.update_data(prompt=prompt, price=float(user_price))
+    await state.update_data(prompt=prompt, price=float(user_price), is_free=is_free, free_limits=free_limits_info)
     await state.set_state(MarketingStates.confirm_price)
+    
+    # Build confirmation text
+    if is_free:
+        price_text = (
+            f"💰 Стоимость: <b>БЕСПЛАТНО</b> 🎁\n"
+            f"Осталось попыток:\n"
+            f"  • Сегодня: {free_limits_info['daily_limit'] - free_limits_info['daily_used']}/{free_limits_info['daily_limit']}\n"
+            f"  • В час: {free_limits_info['hourly_limit'] - free_limits_info['hourly_used']}/{free_limits_info['hourly_limit']}"
+        )
+    else:
+        price_text = f"💰 Стоимость: {format_price_rub(user_price)}{balance_text}"
     
     text = (
         f"<b>Подтверждение генерации</b>\n\n"
         f"Модель: {model.get('name', model_id)}\n"
-        f"Промпт: {prompt}\n"
-        f"Стоимость: {format_price_rub(user_price)}"
-        f"{balance_text}\n\n"
+        f"Промпт: {prompt}\n\n"
+        f"{price_text}\n\n"
         f"Подтвердите запуск генерации:"
     )
     
@@ -339,7 +467,7 @@ async def process_prompt(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "mgen:confirm")
 async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
-    """Confirm and start actual KIE generation with full database integration."""
+    """Confirm and start actual KIE generation with full database integration + free tier support."""
     import uuid
     from datetime import datetime, timezone
     
@@ -347,11 +475,14 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
     model_id = data.get("model_id")
     prompt = data.get("prompt")
     price_float = data.get("price", 0.0)
+    is_free = data.get("is_free", False)
     user_price = Decimal(str(price_float))
     
     await state.clear()
     
     db_service = _get_db_service()
+    free_manager = _get_free_manager()
+    
     if not db_service:
         await callback.answer("⚠️ База данных недоступна", show_alert=True)
         return
@@ -378,11 +509,28 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
         callback.from_user.first_name
     )
     
-    # Hold balance
+    # Hold balance (SKIP for free models)
     hold_ref = f"hold_{job_id}"
-    hold_ok = await wallet_service.hold_balance(user_id, user_price, hold_ref)
     
-    if not hold_ok:
+    if not is_free:
+        hold_ok = await wallet_service.hold_balance(user_id, user_price, hold_ref)
+        
+        if not hold_ok:
+            text = (
+                f"❌ <b>Недостаточно средств</b>\n\n"
+                f"Стоимость: {format_price_rub(user_price)}\n\n"
+                f"Пополните баланс и попробуйте снова"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💳 Пополнить", callback_data="balance:topup")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="marketing:main")]
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            return
+    else:
+        # Log free usage BEFORE generation
+        if free_manager:
+            await free_manager.log_usage(user_id, model_id, job_id)
         text = (
             f"❌ <b>Недостаточно средств</b>\n\n"
             f"Стоимость: {format_price_rub(user_price)}\n\n"
@@ -438,19 +586,25 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
             file_url = output.get("file_url") or output.get("url")
             text_result = output.get("text")
             
-            # Charge balance
-            charge_ref = f"charge_{job_id}"
-            await wallet_service.charge(user_id, user_price, charge_ref, hold_ref=hold_ref)
+            # Charge balance (SKIP for free models)
+            if not is_free:
+                charge_ref = f"charge_{job_id}"
+                await wallet_service.charge(user_id, user_price, charge_ref, hold_ref=hold_ref)
             
             # Update job
             await job_service.update_status(job_id, "succeeded")
             await job_service.update_result(job_id, result)
             
             # Send result to user
+            if is_free:
+                cost_text = "Стоимость: <b>БЕСПЛАТНО</b> 🎁"
+            else:
+                cost_text = f"Стоимость: {format_price_rub(user_price)}"
+            
             result_text = (
                 f"✅ <b>Генерация завершена!</b>\n\n"
                 f"Модель: {model.get('name', model_id)}\n"
-                f"Стоимость: {format_price_rub(user_price)}\n\n"
+                f"{cost_text}\n\n"
             )
             
             if text_result:
@@ -467,11 +621,15 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
             await callback.message.answer(result_text, reply_markup=keyboard)
         
         else:
-            # Generation failed - refund
+            # Generation failed - refund (SKIP for free models)
             error = result.get("error", "Неизвестная ошибка")
             
-            refund_ref = f"refund_{job_id}"
-            await wallet_service.refund(user_id, user_price, refund_ref, hold_ref=hold_ref)
+            if not is_free:
+                refund_ref = f"refund_{job_id}"
+                await wallet_service.refund(user_id, user_price, refund_ref, hold_ref=hold_ref)
+                refund_text = f"Средства возвращены на баланс: {format_price_rub(user_price)}"
+            else:
+                refund_text = "Бесплатная попытка не засчитана"
             
             await job_service.update_status(job_id, "failed")
             await job_service.update_result(job_id, result)
@@ -480,7 +638,7 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
                 f"❌ <b>Ошибка генерации</b>\n\n"
                 f"Модель: {model.get('name', model_id)}\n"
                 f"Ошибка: {error}\n\n"
-                f"Средства возвращены на баланс: {format_price_rub(user_price)}"
+                f"{refund_text}"
             )
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -493,16 +651,20 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.exception(f"Generation error for job {job_id}")
         
-        # Refund on exception
-        refund_ref = f"refund_{job_id}"
-        await wallet_service.refund(user_id, user_price, refund_ref, hold_ref=hold_ref)
+        # Refund on exception (SKIP for free models)
+        if not is_free:
+            refund_ref = f"refund_{job_id}"
+            await wallet_service.refund(user_id, user_price, refund_ref, hold_ref=hold_ref)
+            refund_text = f"Средства возвращены: {format_price_rub(user_price)}"
+        else:
+            refund_text = "Бесплатная попытка не засчитана"
         
         await job_service.update_status(job_id, "failed")
         
         error_text = (
             f"❌ <b>Произошла ошибка</b>\n\n"
             f"Не удалось выполнить генерацию.\n"
-            f"Средства возвращены: {format_price_rub(user_price)}\n\n"
+            f"{refund_text}\n\n"
             f"Попробуйте позже или обратитесь в поддержку"
         )
         
@@ -514,4 +676,4 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
 
 
 # Export router
-__all__ = ["router", "set_database_service"]
+__all__ = ["router", "set_database_service", "set_free_manager"]

@@ -23,9 +23,10 @@ from app.utils.config import get_config, validate_env
 from app.utils.healthcheck import start_healthcheck_server, stop_healthcheck_server, set_health_state
 from app.storage.pg_storage import PGStorage, PostgresStorage
 from bot.handlers import flow_router, zero_silence_router, error_handler_router
-from bot.handlers.marketing import router as marketing_router, set_database_service as marketing_set_db
+from bot.handlers.marketing import router as marketing_router, set_database_service as marketing_set_db, set_free_manager as marketing_set_free
 from bot.handlers.balance import router as balance_router, set_database_service as balance_set_db
 from bot.handlers.history import router as history_router, set_database_service as history_set_db
+from bot.handlers.admin import router as admin_router, set_services as admin_set_services
 
 # Import aiogram components
 from aiogram import Bot, Dispatcher
@@ -69,7 +70,8 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     # Create dispatcher
     dp = Dispatcher()
     
-    # Register routers in order (marketing first for new UX, then flow for compatibility)
+    # Register routers in order (admin first for access, marketing for new UX, then flow for compatibility)
+    dp.include_router(admin_router)
     dp.include_router(marketing_router)
     dp.include_router(balance_router)
     dp.include_router(history_router)
@@ -147,6 +149,9 @@ async def main():
     # Step 2: Initialize storage (if DATABASE_URL provided and not DRY_RUN)
     storage = None
     db_service = None
+    free_manager = None
+    admin_service = None
+    
     if database_url and not dry_run:
         storage = PostgresStorage(dsn=database_url)
         await storage.initialize()
@@ -154,15 +159,28 @@ async def main():
         
         # Initialize DatabaseService for new handlers
         from app.database.services import DatabaseService
+        from app.free.manager import FreeModelManager
+        from app.admin.service import AdminService
+        
         db_service = DatabaseService(database_url)
         await db_service.initialize()
         logger.info("DatabaseService initialized")
         
-        # Set database service for handlers
+        # Initialize FreeModelManager
+        free_manager = FreeModelManager(db_service)
+        logger.info("FreeModelManager initialized")
+        
+        # Initialize AdminService
+        admin_service = AdminService(db_service, free_manager)
+        logger.info("AdminService initialized")
+        
+        # Set services for handlers
         marketing_set_db(db_service)
+        marketing_set_free(free_manager)
         balance_set_db(db_service)
         history_set_db(db_service)
-        logger.info("DatabaseService injected into handlers")
+        admin_set_services(db_service, admin_service, free_manager)
+        logger.info("Services injected into handlers")
     else:
         if dry_run:
             logger.info("DRY_RUN enabled - skipping storage initialization")

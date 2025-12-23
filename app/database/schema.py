@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY,
     username TEXT,
     first_name TEXT,
+    role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin', 'banned')),
     locale TEXT DEFAULT 'ru',
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 -- Wallets table
 CREATE TABLE IF NOT EXISTS wallets (
@@ -48,6 +50,53 @@ CREATE TABLE IF NOT EXISTS ledger (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ledger_ref ON ledger(ref) WHERE ref IS NOT NULL;
+
+-- Free models configuration
+CREATE TABLE IF NOT EXISTS free_models (
+    model_id TEXT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    daily_limit INT NOT NULL DEFAULT 5,
+    hourly_limit INT DEFAULT 2,
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_free_models_enabled ON free_models(enabled);
+
+-- Free usage tracking
+CREATE TABLE IF NOT EXISTS free_usage (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    model_id TEXT NOT NULL,
+    job_id TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_free_usage_user_model ON free_usage(user_id, model_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_free_usage_created ON free_usage(created_at);
+
+-- Admin actions log
+CREATE TABLE IF NOT EXISTS admin_actions (
+    id BIGSERIAL PRIMARY KEY,
+    admin_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    action_type TEXT NOT NULL CHECK (action_type IN (
+        'model_enable', 'model_disable', 'model_price', 'model_free', 
+        'user_topup', 'user_charge', 'user_ban', 'user_unban',
+        'config_change', 'other'
+    )),
+    target_type TEXT NOT NULL CHECK (target_type IN ('model', 'user', 'config', 'system')),
+    target_id TEXT,
+    old_value JSONB,
+    new_value JSONB,
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_actions_admin ON admin_actions(admin_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_type ON admin_actions(action_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_target ON admin_actions(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_ref ON ledger(ref);
 CREATE INDEX IF NOT EXISTS idx_ledger_status ON ledger(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_idempotency ON ledger(ref) WHERE ref IS NOT NULL AND status = 'done';
