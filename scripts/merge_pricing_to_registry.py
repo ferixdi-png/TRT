@@ -15,14 +15,19 @@ def load_pricing() -> Dict:
     with open(pricing_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
+    # КУРС ФИКСИРОВАННЫЙ: $1 = 79₽
+    FIXED_RATE = 79.0
+    
     # Создаем mapping model_id -> pricing
     pricing_map = {}
     for model in data['models']:
         model_id = model['model_id']
+        usd = model.get('price_usd', 0)
+        
         pricing_map[model_id] = {
-            "credits_per_gen": model.get('price_usd', 0) * 200,  # 1 USD = 200 credits
-            "usd_per_gen": model['price_usd'],
-            "rub_per_gen": model['price_rub'],
+            "credits_per_gen": usd * 200,  # 1 USD = 200 credits (из Kie.ai)
+            "usd_per_gen": usd,
+            "rub_per_gen": usd * FIXED_RATE,  # ИСПРАВЛЕНО: $1 = 79₽
             "is_free": model.get('is_free', False),
             "rank": model['rank']
         }
@@ -47,6 +52,29 @@ def merge_pricing_into_registry():
     print(f"\nRegistry models: {len(registry['models'])}")
     print(f"Pricing models: {len(pricing_map)}")
     
+    # Мануальный маппинг для исправления несовпадений
+    MANUAL_MAPPING = {
+        # Seedream models
+        'seedream/seedream': 'bytedance/seedream',
+        'seedream/seedream-v4-text-to-image': 'bytedance/seedream-v4-text-to-image',
+        'seedream/seedream-v4-edit': 'seedream/4.5-edit',
+        
+        # Flux2 models
+        'flux2/pro-image-to-image': 'flux-2/pro-image-to-image',
+        'flux2/pro-text-to-image': 'flux-2/pro-text-to-image',
+        'flux2/flex-image-to-image': 'flux-2/flex-image-to-image',
+        'flux2/flex-text-to-image': 'flux-2/flex-text-to-image',
+        
+        # Google models
+        'google/pro-image-to-image': 'google/nano-banana-pro',
+        'google/nano-banana-edit': 'google/nano-banana-edit',
+        
+        # Qwen models
+        'z-image/z-image': 'qwen/z-image',
+        'qwen/image-to-image': 'qwen/image-edit',
+        'qwen/text-to-image': 'qwen/z-image',
+    }
+    
     # Мерж
     matched = 0
     unmatched = []
@@ -56,6 +84,15 @@ def merge_pricing_into_registry():
         if model_id in pricing_map:
             model_data['pricing'] = pricing_map[model_id]
             matched += 1
+        # Проверяем мануальный маппинг
+        elif model_id in MANUAL_MAPPING:
+            mapped_id = MANUAL_MAPPING[model_id]
+            if mapped_id in pricing_map:
+                model_data['pricing'] = pricing_map[mapped_id]
+                matched += 1
+                print(f"  ✅ Mapped: {model_id} -> {mapped_id}")
+            else:
+                unmatched.append(model_id)
         else:
             # Пробуем нормализацию
             # Убираем version suffixes и пробуем снова
