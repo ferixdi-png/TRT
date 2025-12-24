@@ -15,16 +15,22 @@ def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[
     Load source of truth file.
     
     Priority:
-    1. kie_models_final_truth.json (v6.2 - merged: pricing + site scraper, 77 models)
-    2. kie_parsed_models.json (v6 - auto-parsed from kie_pricing_raw.txt)
-    3. kie_api_models.json (v5 - from API docs)
-    4. kie_source_of_truth_v4.json (v4 - category-specific)
-    5. kie_source_of_truth.json (v3 - legacy)
+    1. kie_models_v7_source_of_truth.json (v7 - DOCS.KIE.AI, specialized endpoints, TESTED)
+    2. kie_models_final_truth.json (v6.2 - merged: pricing + site scraper, 77 models)
+    3. kie_parsed_models.json (v6 - auto-parsed from kie_pricing_raw.txt)
+    4. kie_api_models.json (v5 - from API docs)
+    5. kie_source_of_truth_v4.json (v4 - category-specific)
+    6. kie_source_of_truth.json (v3 - legacy)
     """
-    # Try v6.2 (merged) first - PRODUCTION
-    v62_path = "models/kie_models_final_truth.json"
-    if os.path.exists(v62_path):
-        logger.info(f"Using V6.2 (merged, 77 models): {v62_path}")
+    # Try v7 FIRST - BASED ON REAL DOCS.KIE.AI
+    v7_path = "models/kie_models_v7_source_of_truth.json"
+    if os.path.exists(v7_path):
+        logger.info(f"✅ Using V7 (DOCS.KIE.AI SOURCE OF TRUTH, tested): {v7_path}")
+        file_path = v7_path
+    # Try v6.2 (merged) - OLD
+    elif os.path.exists("models/kie_models_final_truth.json"):
+        v62_path = "models/kie_models_final_truth.json"
+        logger.warning(f"⚠️  Using V6.2 (OLD, wrong endpoints): {v62_path}")
         file_path = v62_path
     # Try v6 (auto-parsed)
     elif os.path.exists("models/kie_parsed_models.json"):
@@ -59,11 +65,23 @@ def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[
 
 
 def get_model_schema(model_id: str, source_of_truth: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
-    """Get model schema from source of truth."""
+    """
+    Get model schema from source of truth.
+    
+    Supports both formats:
+    - V7: {"models": {model_id: {...}}}  (dict)
+    - V6: {"models": [{model_id: ...}]}  (list)
+    """
     if source_of_truth is None:
         source_of_truth = load_source_of_truth()
     
     models = source_of_truth.get('models', [])
+    
+    # V7 format: dict
+    if isinstance(models, dict):
+        return models.get(model_id)
+    
+    # V6 format: list
     for model in models:
         if model.get('model_id') == model_id:
             return model
@@ -96,16 +114,46 @@ def build_payload(
 
     validate_model_inputs(model_id, model_schema, user_inputs)
 
-    input_schema = model_schema.get('input_schema', {})
+    # V7 format detection: has 'parameters' instead of 'input_schema'
+    is_v7 = 'parameters' in model_schema and 'endpoint' in model_schema
     
-    # CRITICAL: Use api_endpoint for Kie.ai API (not model_id)
-    api_endpoint = model_schema.get('api_endpoint', model_id)
+    if is_v7:
+        # V7: Specialized endpoints, direct parameters (not wrapped in 'input')
+        parameters_schema = model_schema.get('parameters', {})
+        api_endpoint = model_schema.get('endpoint')
+        
+        # V7: параметры идут напрямую в payload (БЕЗ обертки 'input')
+        payload = {}
+        
+        # Добавляем параметры из user_inputs
+        for param_name, param_spec in parameters_schema.items():
+            if param_name in user_inputs:
+                payload[param_name] = user_inputs[param_name]
+            elif param_spec.get('default') is not None:
+                payload[param_name] = param_spec['default']
+            elif param_spec.get('required'):
+                # Для обязательных параметров без значения - пытаемся подобрать
+                if param_name == 'prompt' and 'text' in user_inputs:
+                    payload['prompt'] = user_inputs['text']
+                elif param_name == 'model':
+                    # Используем model_id из schema как default
+                    payload['model'] = model_schema.get('model_id')
+        
+        logger.info(f"V7 payload for {model_id}: {payload}")
+        return payload
     
-    # Build payload based on schema
-    payload = {
-        'model': api_endpoint,  # Use api_endpoint, not model_id
-        'input': {}  # All fields go into 'input' object
-    }
+    else:
+        # V6: Old format with api_endpoint and input_schema
+        input_schema = model_schema.get('input_schema', {})
+        
+        # CRITICAL: Use api_endpoint for Kie.ai API (not model_id)
+        api_endpoint = model_schema.get('api_endpoint', model_id)
+        
+        # Build payload based on schema
+        payload = {
+            'model': api_endpoint,  # Use api_endpoint, not model_id
+            'input': {}  # All fields go into 'input' object
+        }
     
     # Parse input_schema: support BOTH flat and nested formats
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
