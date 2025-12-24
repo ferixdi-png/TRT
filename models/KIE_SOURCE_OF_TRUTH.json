@@ -3,11 +3,11 @@
   "scraped_at": "2025-12-24T19:56:40.127883",
   "source": "docs.kie.ai + page scraping",
   "philosophy": "\nЕДИНСТВЕННЫЙ SOURCE OF TRUTH - docs.kie.ai + страницы моделей.\nСпарсено ОДИН РАЗ с максимальной точностью.\nВозвращаемся к парсингу ТОЛЬКО если модель не работает.\n            ",
-  "total_models": 73,
+  "total_models": 72,
   "pending_models": 5,
   "models": {
-    "seedream/seedream": {
-      "model_id": "seedream/seedream",
+    "bytedance/seedream": {
+      "model_id": "bytedance/seedream",
       "provider": "seedream",
       "category": "image",
       "slug": "market/seedream/seedream",
@@ -116,10 +116,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/seedream/seedream"
+      "source_url": "https://docs.kie.ai/market/seedream/seedream",
+      "old_registry_id": "seedream/seedream"
     },
-    "seedream/seedream-v4-text-to-image": {
-      "model_id": "seedream/seedream-v4-text-to-image",
+    "bytedance/seedream-v4-text-to-image": {
+      "model_id": "bytedance/seedream-v4-text-to-image",
       "provider": "seedream",
       "category": "image",
       "slug": "market/seedream/seedream-v4-text-to-image",
@@ -228,10 +229,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/seedream/seedream-v4-text-to-image"
+      "source_url": "https://docs.kie.ai/market/seedream/seedream-v4-text-to-image",
+      "old_registry_id": "seedream/seedream-v4-text-to-image"
     },
-    "seedream/seedream-v4-edit": {
-      "model_id": "seedream/seedream-v4-edit",
+    "bytedance/seedream-v4-edit": {
+      "model_id": "bytedance/seedream-v4-edit",
       "provider": "seedream",
       "category": "image",
       "slug": "market/seedream/seedream-v4-edit",
@@ -364,10 +366,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/seedream/seedream-v4-edit"
+      "source_url": "https://docs.kie.ai/market/seedream/seedream-v4-edit",
+      "old_registry_id": "seedream/seedream-v4-edit"
     },
-    "z-image/z-image": {
-      "model_id": "z-image/z-image",
+    "z-image": {
+      "model_id": "z-image",
       "provider": "z-image",
       "category": "image",
       "slug": "market/z-image/z-image",
@@ -460,7 +463,8 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/z-image/z-image"
+      "source_url": "https://docs.kie.ai/market/z-image/z-image",
+      "old_registry_id": "z-image/z-image"
     },
     "google/imagen4-fast": {
       "model_id": "google/imagen4-fast",
@@ -1038,8 +1042,8 @@
       ],
       "source_url": "https://docs.kie.ai/market/google/nano-banana"
     },
-    "google/pro-image-to-image": {
-      "model_id": "google/pro-image-to-image",
+    "nano-banana-pro": {
+      "model_id": "nano-banana-pro",
       "provider": "google",
       "category": "image",
       "slug": "market/google/pro-image-to-image",
@@ -1156,10 +1160,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/google/pro-image-to-image"
+      "source_url": "https://docs.kie.ai/market/google/pro-image-to-image",
+      "old_registry_id": "google/pro-image-to-image"
     },
-    "flux2/pro-image-to-image": {
-      "model_id": "flux2/pro-image-to-image",
+    "flux-2/pro-image-to-image": {
+      "model_id": "flux-2/pro-image-to-image",
       "provider": "flux2",
       "category": "image",
       "slug": "market/flux2/pro-image-to-image",
@@ -1292,10 +1297,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/flux2/pro-image-to-image"
+      "source_url": "https://docs.kie.ai/market/flux2/pro-image-to-image",
+      "old_registry_id": "flux2/pro-image-to-image"
     },
-    "flux2/pro-text-to-image": {
-      "model_id": "flux2/pro-text-to-image",
+    "flux-2/pro-text-to-image": {
+      "model_id": "flux-2/pro-text-to-image",
       "provider": "flux2",
       "category": "image",
       "slug": "market/flux2/pro-text-to-image",
@@ -1396,10 +1402,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/flux2/pro-text-to-image"
+      "source_url": "https://docs.kie.ai/market/flux2/pro-text-to-image",
+      "old_registry_id": "flux2/pro-text-to-image"
     },
-    "flux2/flex-image-to-image": {
-      "model_id": "flux2/flex-image-to-image",
+    "flux-2/flex-image-to-image": {
+      "model_id": "flux-2/flex-image-to-image",
       "provider": "flux2",
       "category": "image",
       "slug": "market/flux2/flex-image-to-image",
@@ -1532,10 +1539,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/flux2/flex-image-to-image"
+      "source_url": "https://docs.kie.ai/market/flux2/flex-image-to-image",
+      "old_registry_id": "flux2/flex-image-to-image"
     },
-    "flux2/flex-text-to-image": {
-      "model_id": "flux2/flex-text-to-image",
+    "flux-2/flex-text-to-image": {
+      "model_id": "flux-2/flex-text-to-image",
       "provider": "flux2",
       "category": "image",
       "slug": "market/flux2/flex-text-to-image",
@@ -1636,7 +1644,8 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/flux2/flex-text-to-image"
+      "source_url": "https://docs.kie.ai/market/flux2/flex-text-to-image",
+      "old_registry_id": "flux2/flex-text-to-image"
     },
     "grok-imagine/text-to-image": {
       "model_id": "grok-imagine/text-to-image",
@@ -3414,8 +3423,8 @@
       ],
       "source_url": "https://docs.kie.ai/market/grok-imagine/image-to-video"
     },
-    "kling/text-to-video": {
-      "model_id": "kling/text-to-video",
+    "kling-2.6/text-to-video": {
+      "model_id": "kling-2.6/text-to-video",
       "provider": "kling",
       "category": "video",
       "slug": "market/kling/text-to-video",
@@ -3524,10 +3533,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/kling/text-to-video"
+      "source_url": "https://docs.kie.ai/market/kling/text-to-video",
+      "old_registry_id": "kling/text-to-video"
     },
-    "kling/image-to-video": {
-      "model_id": "kling/image-to-video",
+    "kling-2.6/image-to-video": {
+      "model_id": "kling-2.6/image-to-video",
       "provider": "kling",
       "category": "image",
       "slug": "market/kling/image-to-video",
@@ -3652,7 +3662,8 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/kling/image-to-video"
+      "source_url": "https://docs.kie.ai/market/kling/image-to-video",
+      "old_registry_id": "kling/image-to-video"
     },
     "kling/ai-avatar-v1-pro": {
       "model_id": "kling/ai-avatar-v1-pro",
@@ -5670,8 +5681,8 @@
       ],
       "source_url": "https://docs.kie.ai/market/hailuo/02-image-to-video-standard"
     },
-    "sora2/sora-2-image-to-video": {
-      "model_id": "sora2/sora-2-image-to-video",
+    "sora-2-image-to-video": {
+      "model_id": "sora-2-image-to-video",
       "provider": "sora2",
       "category": "image",
       "slug": "market/sora2/sora-2-image-to-video",
@@ -5828,10 +5839,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/sora2/sora-2-image-to-video"
+      "source_url": "https://docs.kie.ai/market/sora2/sora-2-image-to-video",
+      "old_registry_id": "sora2/sora-2-image-to-video"
     },
-    "sora2/sora-2-text-to-video": {
-      "model_id": "sora2/sora-2-text-to-video",
+    "sora-2-text-to-video": {
+      "model_id": "sora-2-text-to-video",
       "provider": "sora2",
       "category": "video",
       "slug": "market/sora2/sora-2-text-to-video",
@@ -5964,10 +5976,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/sora2/sora-2-text-to-video"
+      "source_url": "https://docs.kie.ai/market/sora2/sora-2-text-to-video",
+      "old_registry_id": "sora2/sora-2-text-to-video"
     },
-    "sora2/sora-2-pro-image-to-video": {
-      "model_id": "sora2/sora-2-pro-image-to-video",
+    "sora-2-pro-image-to-video": {
+      "model_id": "sora-2-pro-image-to-video",
       "provider": "sora2",
       "category": "image",
       "slug": "market/sora2/sora-2-pro-image-to-video",
@@ -6116,10 +6129,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/sora2/sora-2-pro-image-to-video"
+      "source_url": "https://docs.kie.ai/market/sora2/sora-2-pro-image-to-video",
+      "old_registry_id": "sora2/sora-2-pro-image-to-video"
     },
-    "sora2/sora-2-pro-text-to-video": {
-      "model_id": "sora2/sora-2-pro-text-to-video",
+    "sora-2-pro-text-to-video": {
+      "model_id": "sora-2-pro-text-to-video",
       "provider": "sora2",
       "category": "video",
       "slug": "market/sora2/sora-2-pro-text-to-video",
@@ -6260,10 +6274,11 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video"
+      "source_url": "https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video",
+      "old_registry_id": "sora2/sora-2-pro-text-to-video"
     },
-    "sora2/sora-watermark-remover": {
-      "model_id": "sora2/sora-watermark-remover",
+    "sora-watermark-remover": {
+      "model_id": "sora-watermark-remover",
       "provider": "sora2",
       "category": "other",
       "slug": "market/sora2/sora-watermark-remover",
@@ -6348,7 +6363,8 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/sora2/sora-watermark-remover"
+      "source_url": "https://docs.kie.ai/market/sora2/sora-watermark-remover",
+      "old_registry_id": "sora2/sora-watermark-remover"
     },
     "sora-2-pro-storyboard/index": {
       "model_id": "sora-2-pro-storyboard/index",
@@ -6370,8 +6386,8 @@
       "examples": [],
       "source_url": "https://docs.kie.ai/market/sora-2-pro-storyboard/index"
     },
-    "sora2/sora-2-characters": {
-      "model_id": "sora2/sora-2-characters",
+    "sora-2-characters": {
+      "model_id": "sora-2-characters",
       "provider": "sora2",
       "category": "other",
       "slug": "market/sora2/sora-2-characters",
@@ -6488,7 +6504,8 @@
           }
         }
       ],
-      "source_url": "https://docs.kie.ai/market/sora2/sora-2-characters"
+      "source_url": "https://docs.kie.ai/market/sora2/sora-2-characters",
+      "old_registry_id": "sora2/sora-2-characters"
     },
     "wan/2-6-image-to-video": {
       "model_id": "wan/2-6-image-to-video",
@@ -8418,202 +8435,8 @@
       ],
       "source_url": "https://docs.kie.ai/market/kling/v2-5-turbo-text-to-video-pro"
     },
-    "veo3/quality": {
-      "model_id": "veo3/quality",
-      "provider": "google",
-      "category": "video",
-      "slug": "veo3-api/generate-veo-3-video",
-      "display_name": "Generate Veo 3.1 AI Video(Fast&Quality)",
-      "description": "English",
-      "endpoint": "/api/v1/veo/generate",
-      "method": "POST",
-      "input_schema": {
-        "prompt": {
-          "type": "str",
-          "required": true,
-          "examples": [
-            "A dog playing in a park",
-            "A dog playing in a park",
-            "A dog playing in a park",
-            "A dog playing in a park"
-          ]
-        },
-        "imageUrls": {
-          "type": "list",
-          "required": true,
-          "examples": [
-            [
-              "http://example.com/image1.jpg",
-              "http://example.com/image2.jpg"
-            ],
-            [
-              "http://example.com/image1.jpg",
-              "http://example.com/image2.jpg"
-            ],
-            [
-              "http://example.com/image1.jpg",
-              "http://example.com/image2.jpg"
-            ],
-            [
-              "http://example.com/image1.jpg",
-              "http://example.com/image2.jpg"
-            ]
-          ]
-        },
-        "model": {
-          "type": "str",
-          "required": true,
-          "examples": [
-            "veo3_fast",
-            "veo3_fast",
-            "veo3_fast",
-            "veo3_fast"
-          ]
-        },
-        "watermark": {
-          "type": "str",
-          "required": true,
-          "examples": [
-            "MyBrand",
-            "MyBrand",
-            "MyBrand",
-            "MyBrand"
-          ]
-        },
-        "callBackUrl": {
-          "type": "str",
-          "required": true,
-          "examples": [
-            "http://your-callback-url.com/complete",
-            "http://your-callback-url.com/complete",
-            "http://your-callback-url.com/complete",
-            "http://your-callback-url.com/complete"
-          ]
-        },
-        "aspectRatio": {
-          "type": "str",
-          "required": true,
-          "examples": [
-            "16:9",
-            "16:9",
-            "16:9",
-            "16:9"
-          ]
-        },
-        "seeds": {
-          "type": "int",
-          "required": true,
-          "examples": [
-            12345,
-            12345,
-            12345,
-            12345
-          ]
-        },
-        "enableFallback": {
-          "type": "bool",
-          "required": true,
-          "examples": [
-            false,
-            false,
-            false,
-            false
-          ]
-        },
-        "enableTranslation": {
-          "type": "bool",
-          "required": true,
-          "examples": [
-            true,
-            true,
-            true,
-            true
-          ]
-        },
-        "generationType": {
-          "type": "str",
-          "required": true,
-          "examples": [
-            "REFERENCE_2_VIDEO",
-            "REFERENCE_2_VIDEO",
-            "REFERENCE_2_VIDEO",
-            "REFERENCE_2_VIDEO"
-          ]
-        }
-      },
-      "pricing": {
-        "credits_per_gen": 16000.0,
-        "usd_per_gen": 80.0,
-        "rub_per_gen": 6320.0,
-        "is_free": false,
-        "source": "estimated_default"
-      },
-      "examples": [
-        {
-          "prompt": "A dog playing in a park",
-          "imageUrls": [
-            "http://example.com/image1.jpg",
-            "http://example.com/image2.jpg"
-          ],
-          "model": "veo3_fast",
-          "watermark": "MyBrand",
-          "callBackUrl": "http://your-callback-url.com/complete",
-          "aspectRatio": "16:9",
-          "seeds": 12345,
-          "enableFallback": false,
-          "enableTranslation": true,
-          "generationType": "REFERENCE_2_VIDEO"
-        },
-        {
-          "prompt": "A dog playing in a park",
-          "imageUrls": [
-            "http://example.com/image1.jpg",
-            "http://example.com/image2.jpg"
-          ],
-          "model": "veo3_fast",
-          "watermark": "MyBrand",
-          "callBackUrl": "http://your-callback-url.com/complete",
-          "aspectRatio": "16:9",
-          "seeds": 12345,
-          "enableFallback": false,
-          "enableTranslation": true,
-          "generationType": "REFERENCE_2_VIDEO"
-        },
-        {
-          "prompt": "A dog playing in a park",
-          "imageUrls": [
-            "http://example.com/image1.jpg",
-            "http://example.com/image2.jpg"
-          ],
-          "model": "veo3_fast",
-          "watermark": "MyBrand",
-          "callBackUrl": "http://your-callback-url.com/complete",
-          "aspectRatio": "16:9",
-          "seeds": 12345,
-          "enableFallback": false,
-          "enableTranslation": true,
-          "generationType": "REFERENCE_2_VIDEO"
-        },
-        {
-          "prompt": "A dog playing in a park",
-          "imageUrls": [
-            "http://example.com/image1.jpg",
-            "http://example.com/image2.jpg"
-          ],
-          "model": "veo3_fast",
-          "watermark": "MyBrand",
-          "callBackUrl": "http://your-callback-url.com/complete",
-          "aspectRatio": "16:9",
-          "seeds": 12345,
-          "enableFallback": false,
-          "enableTranslation": true,
-          "generationType": "REFERENCE_2_VIDEO"
-        }
-      ],
-      "source_url": "https://docs.kie.ai/veo3-api/generate-veo-3-video"
-    },
-    "veo3/fast": {
-      "model_id": "veo3/fast",
+    "veo3_fast": {
+      "model_id": "veo3_fast",
       "provider": "google",
       "category": "video",
       "slug": "veo3-api/generate-veo-3-video",
@@ -8804,10 +8627,11 @@
           "generationType": "REFERENCE_2_VIDEO"
         }
       ],
-      "source_url": "https://docs.kie.ai/veo3-api/generate-veo-3-video"
+      "source_url": "https://docs.kie.ai/veo3-api/generate-veo-3-video",
+      "old_registry_id": "veo3/fast"
     },
-    "suno/v4": {
-      "model_id": "suno/v4",
+    "V4": {
+      "model_id": "V4",
       "provider": "suno",
       "category": "audio",
       "slug": "suno-api/generate-music",
@@ -9016,7 +8840,8 @@
           "personaId": "persona_123"
         }
       ],
-      "source_url": "https://docs.kie.ai/suno-api/generate-music"
+      "source_url": "https://docs.kie.ai/suno-api/generate-music",
+      "old_registry_id": "suno/v4"
     }
   },
   "pending": [

@@ -1,0 +1,102 @@
+[
+  {
+    "old": "seedream/seedream",
+    "new": "bytedance/seedream",
+    "display_name": "Seedream3.0 - Text to Image"
+  },
+  {
+    "old": "seedream/seedream-v4-text-to-image",
+    "new": "bytedance/seedream-v4-text-to-image",
+    "display_name": "Seedream4.0 - Text to Image"
+  },
+  {
+    "old": "seedream/seedream-v4-edit",
+    "new": "bytedance/seedream-v4-edit",
+    "display_name": "Seedream4.0 - Edit"
+  },
+  {
+    "old": "z-image/z-image",
+    "new": "z-image",
+    "display_name": "z-image"
+  },
+  {
+    "old": "google/pro-image-to-image",
+    "new": "nano-banana-pro",
+    "display_name": "Google - Nano Banana Pro"
+  },
+  {
+    "old": "flux2/pro-image-to-image",
+    "new": "flux-2/pro-image-to-image",
+    "display_name": "Flux-2 - Pro Image to Image"
+  },
+  {
+    "old": "flux2/pro-text-to-image",
+    "new": "flux-2/pro-text-to-image",
+    "display_name": "Flux-2 - Pro Text to Image"
+  },
+  {
+    "old": "flux2/flex-image-to-image",
+    "new": "flux-2/flex-image-to-image",
+    "display_name": "Flux-2 - Image to Image"
+  },
+  {
+    "old": "flux2/flex-text-to-image",
+    "new": "flux-2/flex-text-to-image",
+    "display_name": "Flux-2 - Text to Image"
+  },
+  {
+    "old": "kling/text-to-video",
+    "new": "kling-2.6/text-to-video",
+    "display_name": "Kling-2.6 - Text to Video"
+  },
+  {
+    "old": "kling/image-to-video",
+    "new": "kling-2.6/image-to-video",
+    "display_name": "Kling-2.6 - Image to Video"
+  },
+  {
+    "old": "sora2/sora-2-image-to-video",
+    "new": "sora-2-image-to-video",
+    "display_name": "Sora2 - Image to Video"
+  },
+  {
+    "old": "sora2/sora-2-text-to-video",
+    "new": "sora-2-text-to-video",
+    "display_name": "Sora2 - Text to Video"
+  },
+  {
+    "old": "sora2/sora-2-pro-image-to-video",
+    "new": "sora-2-pro-image-to-video",
+    "display_name": "Sora2 - Pro Image to Video"
+  },
+  {
+    "old": "sora2/sora-2-pro-text-to-video",
+    "new": "sora-2-pro-text-to-video",
+    "display_name": "Sora2 - Pro Text to Video"
+  },
+  {
+    "old": "sora2/sora-watermark-remover",
+    "new": "sora-watermark-remover",
+    "display_name": "Sora2 - Watermark Remover"
+  },
+  {
+    "old": "sora2/sora-2-characters",
+    "new": "sora-2-characters",
+    "display_name": "Sora2 - Characters"
+  },
+  {
+    "old": "veo3/quality",
+    "new": "veo3_fast",
+    "display_name": "Generate Veo 3.1 AI Video(Fast&Quality)"
+  },
+  {
+    "old": "veo3/fast",
+    "new": "veo3_fast",
+    "display_name": "Generate Veo 3.1 AI Video(Fast&Quality)"
+  },
+  {
+    "old": "suno/v4",
+    "new": "V4",
+    "display_name": "Generate Music"
+  }
+]

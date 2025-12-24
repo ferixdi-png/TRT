@@ -69,10 +69,10 @@ MARKETING_CATEGORIES = {
 
 
 def load_registry() -> List[Dict]:
-    """Load KIE models registry."""
+    """Load KIE models registry from SOURCE OF TRUTH."""
     registry_path = os.path.join(
         os.path.dirname(__file__),
-        "../../models/kie_models_final_truth.json"
+        "../../models/KIE_SOURCE_OF_TRUTH.json"
     )
     
     if not os.path.exists(registry_path):
@@ -80,7 +80,9 @@ def load_registry() -> List[Dict]:
     
     with open(registry_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-        return data.get("models", [])
+        # Конвертируем из dict в list
+        models_dict = data.get("models", {})
+        return list(models_dict.values())
 
 
 def map_model_to_marketing_category(model: Dict) -> str:
@@ -124,17 +126,17 @@ def build_ui_tree() -> Dict[str, List[Dict]]:
         if not model.get("enabled", True):
             continue
         
-        # Get price from v6.2 format
+        # Get price from SOURCE OF TRUTH format
         pricing = model.get("pricing", {})
-        if not pricing or not pricing.get("rub_per_generation"):
-            continue
+        # Не требуем обязательное наличие pricing - покажем все модели
         
         mk_cat = map_model_to_marketing_category(model)
         tree[mk_cat].append(model)
     
     # Sort each category by price (cheapest first)
+    # Модели без цены идут в конец
     for cat in tree:
-        tree[cat].sort(key=lambda m: m.get("pricing", {}).get("rub_per_generation", 999999))
+        tree[cat].sort(key=lambda m: m.get("pricing", {}).get("rub_per_gen", 999999))
     
     return tree
 
