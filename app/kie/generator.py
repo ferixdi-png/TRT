@@ -11,12 +11,14 @@ import os
 from app.kie.builder import build_payload, load_source_of_truth
 from app.kie.validator import ModelContractError
 from app.kie.parser import parse_record_info, get_human_readable_error
+from app.kie.router import is_v4_model, build_category_payload
 
 logger = logging.getLogger(__name__)
 
 # Test mode flag
 TEST_MODE = os.getenv('TEST_MODE', 'false').lower() == 'true'
 KIE_STUB = os.getenv('KIE_STUB', 'false').lower() == 'true'
+USE_V4_API = os.getenv('KIE_USE_V4', 'true').lower() == 'true'  # Default to V4
 
 
 class KieGenerator:
@@ -34,14 +36,19 @@ class KieGenerator:
         self._heartbeat_interval = 12  # 10-15 seconds, use 12 as middle
         
     def _get_api_client(self):
-        """Get API client (real or stub)."""
+        """Get API client (real or stub) - V4 or V3."""
         if self.api_client:
             return self.api_client
 
         if TEST_MODE or KIE_STUB:
             return self._get_stub_client()
         
-        # Import real client - explicit, no fallback
+        # Check if using V4 API (new architecture)
+        if USE_V4_API:
+            from app.kie.client_v4 import KieApiClientV4
+            return KieApiClientV4()
+        
+        # Fallback to old V3 client (for compatibility)
         from app.api.kie_client import KieApiClient
         return KieApiClient()
     
@@ -138,15 +145,29 @@ class KieGenerator:
             - error_message: Optional[str]
         """
         try:
-            # Build payload
+            # Load source of truth if needed
             if not self.source_of_truth:
                 self.source_of_truth = load_source_of_truth()
             
-            payload = build_payload(model_id, user_inputs, self.source_of_truth)
+            # Check if this is a V4 model (new architecture)
+            is_v4 = USE_V4_API and is_v4_model(model_id)
+            
+            # Build payload using appropriate builder
+            if is_v4:
+                logger.info(f"Using V4 API for model {model_id}")
+                payload = build_category_payload(model_id, user_inputs)
+            else:
+                logger.info(f"Using V3 API for model {model_id}")
+                payload = build_payload(model_id, user_inputs, self.source_of_truth)
             
             # Create task
             api_client = self._get_api_client()
-            create_response = await api_client.create_task(payload)
+            
+            # For V4, pass model_id to help router
+            if is_v4:
+                create_response = await api_client.create_task(model_id, payload)
+            else:
+                create_response = await api_client.create_task(payload)
             
             # Debug: log response
             logger.info(f"Create task response: {create_response}")
