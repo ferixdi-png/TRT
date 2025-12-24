@@ -337,7 +337,14 @@ async def cb_model_details(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("mgen:start:"))
 async def cb_start_generation(callback: CallbackQuery, state: FSMContext):
-    """Start generation flow - ask for prompt."""
+    """
+    Start generation flow - redirect to flow.py for proper input_schema handling.
+    
+    MASTER PROMPT compliance:
+    - "Ввод ВСЕХ параметров (без автоподстановок)"
+    - flow.py correctly implements input_schema with required and optional fields
+    - marketing.py should NOT duplicate this logic, use flow.py instead
+    """
     model_id = callback.data.split(":", 2)[2]
     model = get_model_by_id(model_id)
     
@@ -345,21 +352,16 @@ async def cb_start_generation(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Модель не найдена", show_alert=True)
         return
     
-    # Save model to state
-    await state.update_data(model_id=model_id)
-    await state.set_state(MarketingStates.enter_prompt)
+    # Clear marketing state and redirect to flow.py handler
+    await state.clear()
     
-    text = (
-        f"<b>Генерация: {model.get('name', model_id)}</b>\n\n"
-        f"Введите текст промпта для генерации:"
-    )
+    # Trigger flow.py's gen: handler by modifying callback data
+    # This ensures proper input_schema handling for ALL parameters
+    callback.data = f"gen:{model_id}"
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="marketing:main")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
+    # Import and call flow.py's generate_cb handler
+    from bot.handlers.flow import generate_cb
+    await generate_cb(callback, state)
 
 
 @router.message(MarketingStates.enter_prompt)
