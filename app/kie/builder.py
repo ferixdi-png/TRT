@@ -10,11 +10,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def load_source_of_truth(file_path: str = "models/kie_models_source_of_truth.json") -> Dict[str, Any]:
-    """Load source of truth file."""
+def load_source_of_truth(file_path: str = "models/kie_source_of_truth.json") -> Dict[str, Any]:
+    """
+    Load source of truth file.
+    
+    Priority: kie_source_of_truth.json (new format) > kie_models_source_of_truth.json (old)
+    """
+    # Try new path first
     if not os.path.exists(file_path):
-        logger.error(f"Source of truth file not found: {file_path}")
-        return {}
+        # Fallback to old
+        old_path = "models/kie_models_source_of_truth.json"
+        if os.path.exists(old_path):
+            logger.warning(f"Using fallback: {old_path}")
+            file_path = old_path
+        else:
+            logger.error(f"Source of truth file not found: {file_path}")
+            return {}
     
     with open(file_path, 'r', encoding='utf-8') as f:
         return json.load(f)

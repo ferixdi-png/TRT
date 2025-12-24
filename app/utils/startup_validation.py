@@ -16,7 +16,8 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-SOURCE_OF_TRUTH_PATH = Path("models/kie_models_source_of_truth.json")
+SOURCE_OF_TRUTH_PATH = Path("models/kie_source_of_truth.json")
+SOURCE_OF_TRUTH_FALLBACK = Path("models/kie_models_source_of_truth.json")
 USD_TO_RUB = 78.0
 MARKUP = 2.0
 MIN_ENABLED_MODELS = 20
@@ -30,13 +31,16 @@ class StartupValidationError(Exception):
 
 def load_source_of_truth() -> Dict[str, Any]:
     """Load and parse source of truth JSON."""
-    if not SOURCE_OF_TRUTH_PATH.exists():
+    # Try new path first, fallback to old
+    path = SOURCE_OF_TRUTH_PATH if SOURCE_OF_TRUTH_PATH.exists() else SOURCE_OF_TRUTH_FALLBACK
+    
+    if not path.exists():
         raise StartupValidationError(
             f"Source of truth не найден: {SOURCE_OF_TRUTH_PATH}"
         )
     
     try:
-        with open(SOURCE_OF_TRUTH_PATH, 'r', encoding='utf-8') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise StartupValidationError(
