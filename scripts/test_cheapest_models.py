@@ -15,6 +15,7 @@ import json
 import logging
 from typing import Dict, Any, List
 from datetime import datetime
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -29,6 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.asyncio
 async def test_cheapest_models():
     """Test the 5 cheapest (FREE) models with real API calls."""
     

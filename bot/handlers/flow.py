@@ -552,9 +552,9 @@ def _validate_field_value(value: Any, field_spec: Dict[str, Any], field_name: st
 
 @router.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext) -> None:
+    """Start command - NO welcome balance, only FREE tier."""
     await state.clear()
-    charge_manager = get_charge_manager()
-    charge_manager.ensure_welcome_credit(message.from_user.id, WELCOME_BALANCE_RUB)
+    # NO welcome credit - only FREE tier (5 cheapest models)
     await message.answer(
         "� <b>Что вы хотите создать сегодня?</b>\n"
         "Я подберу лучшую нейросеть под вашу задачу",

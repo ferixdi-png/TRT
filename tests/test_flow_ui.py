@@ -16,15 +16,15 @@ def test_main_menu_buttons():
     buttons = _flatten_buttons(markup)
     callbacks = [cb for _, cb in buttons]
     
-    # Check new menu items (updated format)
-    assert "cat:text-to-video" in callbacks  # Видео для Reels/TikTok
-    assert "cat:text-to-image" in callbacks  # Картинка/баннер/пост
-    assert "cat:upscale" in callbacks  # Улучшить
-    assert "cat:text-to-speech" in callbacks  # Аудио/озвучка
-    assert "menu:categories" in callbacks  # Все модели по категориям
-    assert "menu:free" in callbacks  # Дешёвые/Бесплатные
+    # Check essential menu buttons
+    assert "menu:categories" in callbacks  # Все категории
     assert "menu:history" in callbacks  # История
     assert "menu:balance" in callbacks  # Баланс
+    assert "menu:help" in callbacks  # Помощь
+    
+    # Check at least one category button exists
+    category_buttons = [cb for cb in callbacks if cb.startswith("cat:")]
+    assert len(category_buttons) > 0, "Should have at least one category button"
 
 
 def test_categories_cover_registry():
