@@ -24,6 +24,11 @@ from app.utils.validation import validate_url, validate_file_url, validate_text_
 router = Router(name="flow")
 
 
+class FlowStates(StatesGroup):
+    """States for flow handlers."""
+    search_query = State()  # Waiting for model search query
+
+
 CATEGORY_LABELS = {
     # Task-oriented categories (production v3.0)
     "creative": "🎨 Креатив (картинки, дизайн)",
@@ -142,6 +147,7 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     - Shows 4 main categories: creative, music, voice, video
     - Dynamic: only shows categories with available models
     - Sorted by priority (creative → music → voice → video)
+    - MASTER PROMPT: Includes "Best models" and "Search model" buttons
     """
     # Get actual categories from registry
     grouped = _models_by_category()
@@ -161,6 +167,12 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     for cat_id, label in priority_map:
         if cat_id in grouped and len(grouped[cat_id]) > 0:
             buttons.append([InlineKeyboardButton(text=label, callback_data=f"cat:{cat_id}")])
+    
+    # MASTER PROMPT: "Лучшие модели (curated)" + "Поиск модели"
+    buttons.append([
+        InlineKeyboardButton(text="⭐ Лучшие модели", callback_data="menu:best"),
+        InlineKeyboardButton(text="🔍 Поиск модели", callback_data="menu:search"),
+    ])
     
     # Browse all categories (if needed)
     if len(grouped) > 4:
@@ -661,6 +673,174 @@ async def help_errors_cb(callback: CallbackQuery) -> None:
         reply_markup=_help_menu_keyboard(),
         parse_mode="Markdown"
     )
+
+
+@router.callback_query(F.data == "menu:best")
+async def best_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Show curated list of best models (MASTER PROMPT requirement).
+    
+    CRITERIA:
+    - Quality: Most popular/reliable models
+    - Use case coverage: Different types (image, video, music, voice)
+    - Price: Mix of FREE and premium
+    """
+    await callback.answer()
+    await state.clear()
+    
+    # Get registry
+    from app.kie.registry import get_model_registry
+    registry = get_model_registry()
+    
+    # Curated best models (manually selected for quality + use case coverage)
+    best_model_ids = [
+        "z-image",           # FREE - best t2i quality/price ratio
+        "flux-pro",          # Premium - highest quality images
+        "kling-video",       # Best video quality
+        "minimax-video",     # Fast video generation
+        "suno-music",        # Best music generation
+        "elevenlabs-tts-turbo",  # Best voice quality
+        "upscale",           # Essential utility
+        "pixart-sigma",      # Good i2i
+    ]
+    
+    # Build keyboard
+    buttons = []
+    for model_id in best_model_ids:
+        model = registry.get(model_id)
+        if not model:
+            continue
+        
+        name = model.get("name", model_id)
+        price = model.get("pricing", {}).get("rub_per_use", 0)
+        
+        # Add price tag
+        if price < 0.5:
+            price_tag = "🆓"
+        elif price < 10:
+            price_tag = "💚"
+        elif price < 50:
+            price_tag = "💛"
+        else:
+            price_tag = "🔴"
+        
+        button_text = f"{price_tag} {name}"
+        buttons.append([InlineKeyboardButton(
+            text=button_text,
+            callback_data=f"model:{model_id}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    
+    await callback.message.edit_text(
+        "⭐ **Лучшие модели**\n\n"
+        "Проверенные модели с лучшим соотношением цена/качество:\n\n"
+        "🆓 - Бесплатно\n"
+        "💚 - Дёшево (<10₽)\n"
+        "💛 - Средняя цена (10-50₽)\n"
+        "🔴 - Премиум (50₽+)\n\n"
+        "Выберите модель:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="Markdown"
+    )
+
+
+@router.callback_query(F.data == "menu:search")
+async def search_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Start model search flow (MASTER PROMPT requirement).
+    
+    FLOW:
+    1. User enters search query
+    2. Bot searches in: model_id, name, description, category
+    3. Shows matching models (max 10)
+    """
+    await callback.answer()
+    await state.set_state(FlowStates.search_query)
+    
+    await callback.message.edit_text(
+        "🔍 **Поиск модели**\n\n"
+        "Введите название модели или описание (например: 'видео', 'музыка', 'flux', 'kling'):\n\n"
+        "Или нажмите 'Отмена' чтобы вернуться.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="main_menu")]
+        ]),
+        parse_mode="Markdown"
+    )
+
+
+@router.message(FlowStates.search_query)
+async def process_search_query(message: Message, state: FSMContext) -> None:
+    """Process model search query."""
+    query = message.text.strip().lower()
+    
+    if len(query) < 2:
+        await message.answer("Введите минимум 2 символа для поиска.")
+        return
+    
+    # Get registry
+    from app.kie.registry import get_model_registry
+    registry = get_model_registry()
+    
+    # Search in all fields
+    matches = []
+    for model_id, model in registry.items():
+        searchable_text = " ".join([
+            model_id,
+            model.get("name", ""),
+            model.get("description", ""),
+            model.get("category", ""),
+        ]).lower()
+        
+        if query in searchable_text:
+            matches.append((model_id, model))
+    
+    # Limit results
+    matches = matches[:10]
+    
+    if not matches:
+        await message.answer(
+            f"❌ По запросу '{query}' ничего не найдено.\n\n"
+            f"Попробуйте другой запрос или вернитесь в меню.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
+            ])
+        )
+        await state.clear()
+        return
+    
+    # Build results keyboard
+    buttons = []
+    for model_id, model in matches:
+        name = model.get("name", model_id)
+        price = model.get("pricing", {}).get("rub_per_use", 0)
+        
+        # Add price tag
+        if price < 0.5:
+            price_tag = "🆓"
+        elif price < 10:
+            price_tag = "💚"
+        elif price < 50:
+            price_tag = "💛"
+        else:
+            price_tag = "🔴"
+        
+        button_text = f"{price_tag} {name}"
+        buttons.append([InlineKeyboardButton(
+            text=button_text,
+            callback_data=f"model:{model_id}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="🔍 Новый поиск", callback_data="menu:search")])
+    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    
+    await message.answer(
+        f"🔍 Найдено моделей: {len(matches)}\n\n"
+        f"По запросу: '{query}'\n\n"
+        f"Выберите модель:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await state.clear()
 
 
 @router.callback_query(F.data == "menu:generate")
