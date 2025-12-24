@@ -19,6 +19,7 @@ from app.kie.validator import validate_input_type, ModelContractError
 from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
 from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
+from app.utils.validation import validate_url, validate_file_url, validate_text_input
 
 router = Router(name="flow")
 
@@ -866,6 +867,18 @@ async def input_message(message: Message, state: FSMContext) -> None:
         elif message.audio:
             file_id = message.audio.file_id
         if not file_id and message.text and message.text.startswith(("http://", "https://")):
+            # Validate URL before accepting
+            is_valid, error = validate_url(message.text)
+            if not is_valid:
+                await message.answer(f"⚠️ Некорректная ссылка: {error}\n\nПопробуйте снова.")
+                return
+            
+            # Additional validation for file URLs
+            is_valid, error = validate_file_url(message.text, file_type="image")
+            if not is_valid:
+                await message.answer(f"⚠️ {error}\n\nПопробуйте снова.")
+                return
+            
             await _save_input_and_continue(message, state, message.text)
             return
         if not file_id:
@@ -874,14 +887,31 @@ async def input_message(message: Message, state: FSMContext) -> None:
         await _save_input_and_continue(message, state, file_id)
         return
 
-    if field_type in {"url", "link", "source_url"} and not message.text:
-        await message.answer("⚠️ Ожидается ссылка (http/https).")
+    if field_type in {"url", "link", "source_url"}:
+        if not message.text:
+            await message.answer("⚠️ Ожидается ссылка (http/https).")
+            return
+        
+        # Validate URL
+        is_valid, error = validate_url(message.text)
+        if not is_valid:
+            await message.answer(f"⚠️ Некорректная ссылка: {error}\n\nПопробуйте снова.")
+            return
+        
+        await _save_input_and_continue(message, state, message.text)
         return
 
     value = message.text
     if value is None:
         await message.answer("⚠️ Ожидается текстовое значение.")
         return
+    
+    # Validate text input length
+    is_valid, error = validate_text_input(value, max_length=10000)
+    if not is_valid:
+        await message.answer(f"⚠️ {error}\n\nПопробуйте снова.")
+        return
+    
     await _save_input_and_continue(message, state, value)
 
 

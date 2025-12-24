@@ -3,11 +3,13 @@ Integration of payments with generation flow.
 Ensures charges are only committed on success.
 """
 import logging
+import time
 from typing import Dict, Any, Optional
 from uuid import uuid4
 
 from app.payments.charges import ChargeManager, get_charge_manager
 from app.kie.generator import KieGenerator
+from app.utils.metrics import track_generation
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,18 @@ async def generate_with_payment(
         }
     
     # Generate
+    start_time = time.time()
     gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+    duration = time.time() - start_time
+    
+    # Track metrics
+    success = gen_result.get('success', False)
+    await track_generation(
+        model_id=model_id,
+        success=success,
+        duration=duration,
+        price_rub=amount if success else 0.0
+    )
     
     # Determine task_id from generation (if available)
     # Commit or release charge based on generation result

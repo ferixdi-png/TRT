@@ -76,6 +76,23 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     dp.update.middleware(RateLimitMiddleware(max_retries=3))
     logger.info("Rate limit middleware registered (max_retries=3)")
     
+    # Register per-user rate limiting middleware for abuse protection
+    from bot.middleware.user_rate_limit import UserRateLimitMiddleware
+    from app.admin.permissions import is_admin
+    
+    # Get admin IDs for exemption
+    admin_ids = set()
+    if config.admin_ids:
+        admin_ids = set(map(int, config.admin_ids.split(',')))
+    
+    dp.update.middleware(UserRateLimitMiddleware(
+        rate=20,  # 20 actions per minute
+        period=60,
+        burst=30,  # Allow bursts of 30
+        exempt_users=admin_ids
+    ))
+    logger.info(f"User rate limit middleware registered (20/min, {len(admin_ids)} admins exempt)")
+    
     # Register routers in order (admin first for access, marketing for new UX, then flow for compatibility)
     dp.include_router(admin_router)
     dp.include_router(marketing_router)
