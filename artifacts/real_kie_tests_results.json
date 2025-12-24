@@ -1,0 +1,128 @@
+{
+  "timestamp": "2025-12-24T21:32:13.324657",
+  "total_tests": 12,
+  "successful": 12,
+  "failed": 0,
+  "results": [
+    {
+      "test_num": 1,
+      "model_id": "z-image",
+      "timestamp": "2025-12-24T21:31:31.749543",
+      "success": true,
+      "error": null,
+      "task_id": "21518c08ce0db8c8413fb9aa2cc279bb",
+      "status": null,
+      "credits_cost": 0.8
+    },
+    {
+      "test_num": 2,
+      "model_id": "qwen/text-to-image",
+      "timestamp": "2025-12-24T21:31:35.270742",
+      "success": true,
+      "error": null,
+      "task_id": "8c4a57ff19cb711d99206ee1bc818d07",
+      "status": null,
+      "credits_cost": 0.8
+    },
+    {
+      "test_num": 3,
+      "model_id": "qwen/image-to-image",
+      "timestamp": "2025-12-24T21:31:38.737173",
+      "success": true,
+      "error": null,
+      "task_id": "20cc13bab87ef1e511dfb46f89b61036",
+      "status": null,
+      "credits_cost": 0.8
+    },
+    {
+      "test_num": 4,
+      "model_id": "qwen/image-edit",
+      "timestamp": "2025-12-24T21:31:42.283033",
+      "success": true,
+      "error": null,
+      "task_id": "1db7048a51b54c9b5b095d60622f0afa",
+      "status": null,
+      "credits_cost": 0.8
+    },
+    {
+      "test_num": 5,
+      "model_id": "elevenlabs/speech-to-text",
+      "timestamp": "2025-12-24T21:31:45.830919",
+      "success": true,
+      "error": null,
+      "task_id": "29072460846890b83818bd1877af5759",
+      "status": null,
+      "credits_cost": 600.0
+    },
+    {
+      "test_num": 6,
+      "model_id": "elevenlabs/text-to-speech-turbo-2-5",
+      "timestamp": "2025-12-24T21:31:49.422443",
+      "success": true,
+      "error": null,
+      "task_id": "47c9a1a3bc4d361df30181f3394806b5",
+      "status": null,
+      "credits_cost": 1000.0
+    },
+    {
+      "test_num": 7,
+      "model_id": "elevenlabs/audio-isolation",
+      "timestamp": "2025-12-24T21:31:52.957719",
+      "success": true,
+      "error": null,
+      "task_id": "cdf03a8b92bb1ef4102a065a3970232f",
+      "status": null,
+      "credits_cost": 1000.0
+    },
+    {
+      "test_num": 8,
+      "model_id": "google/nano-banana",
+      "timestamp": "2025-12-24T21:31:56.652196",
+      "success": true,
+      "error": null,
+      "task_id": "e487f0d9c2f916246151a76b519f2dce",
+      "status": null,
+      "credits_cost": 1600.0
+    },
+    {
+      "test_num": 9,
+      "model_id": "recraft/remove-background",
+      "timestamp": "2025-12-24T21:32:00.217432",
+      "success": true,
+      "error": null,
+      "task_id": "5424cad5fea94d0366079c601d89935a",
+      "status": null,
+      "credits_cost": 1600.0
+    },
+    {
+      "test_num": 10,
+      "model_id": "elevenlabs/sound-effect-v2",
+      "timestamp": "2025-12-24T21:32:03.637275",
+      "success": true,
+      "error": null,
+      "task_id": "019ea3f683c9c77114d23dac1074a403",
+      "status": null,
+      "credits_cost": 1600.0
+    },
+    {
+      "test_num": 11,
+      "model_id": "bytedance/seedream",
+      "timestamp": "2025-12-24T21:32:07.040676",
+      "success": true,
+      "error": null,
+      "task_id": "678279cedadd5d84411234c58cb6f72a",
+      "status": null,
+      "credits_cost": 2000.0
+    },
+    {
+      "test_num": 12,
+      "model_id": "google/imagen4-fast",
+      "timestamp": "2025-12-24T21:32:10.608269",
+      "success": true,
+      "error": null,
+      "task_id": "1a372b44cb1815b89485dcac9aa0baba",
+      "status": null,
+      "credits_cost": 2000.0
+    }
+  ]
+}
