@@ -167,7 +167,7 @@ class SourceOfTruthBuilder:
         suno_endpoint = "https://api.kie.ai/api/v1/generate"
         
         # Из docs мы знаем что Suno использует модель V3_5
-        registry["models"]["suno_v3_5"] = {
+        registry["models"]["V3_5"] = {  # KEY = TECH model_id
             "model_id": "V3_5",  # Точное имя из docs
             "display_name": "Suno V3.5",
             "provider": "Suno",
@@ -199,7 +199,7 @@ class SourceOfTruthBuilder:
         # GPT-4O IMAGE
         gpt4o_endpoint = "https://api.kie.ai/api/v1/gpt4o-image/generate"
         
-        registry["models"]["gpt4o_image"] = {
+        registry["models"]["gpt-4o-image"] = {  # KEY = TECH model_id
             "model_id": "gpt-4o-image",
             "display_name": "GPT-4o Image",
             "provider": "OpenAI",
@@ -227,7 +227,7 @@ class SourceOfTruthBuilder:
         # FLUX KONTEXT
         flux_endpoint = "https://api.kie.ai/api/v1/flux/kontext/generate"
         
-        registry["models"]["flux_kontext_pro"] = {
+        registry["models"]["flux-kontext-pro"] = {  # KEY = TECH model_id
             "model_id": "flux-kontext-pro",  # Точное имя из docs
             "display_name": "Flux Kontext Pro",
             "provider": "Black Forest Labs",

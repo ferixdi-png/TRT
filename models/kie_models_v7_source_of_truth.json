@@ -1,7 +1,7 @@
 {
   "version": "7.0.0-DOCS-SOURCE-OF-TRUTH",
   "source": "docs.kie.ai - official API documentation",
-  "created_at": "2025-12-24T14:58:11.262926",
+  "created_at": "2025-12-24T15:15:18.738760",
   "philosophy": "ТОЛЬКО реальные данные из docs.kie.ai. НЕТ домыслов. НЕТ догадок. ТОЛЬКО ФАКТЫ.",
   "models": {
     "veo3_fast": {
@@ -176,7 +176,7 @@
       "tested": false,
       "enabled": true
     },
-    "suno_v3_5": {
+    "V3_5": {
       "model_id": "V3_5",
       "display_name": "Suno V3.5",
       "provider": "Suno",
@@ -214,7 +214,7 @@
       "tested": false,
       "enabled": true
     },
-    "gpt4o_image": {
+    "gpt-4o-image": {
       "model_id": "gpt-4o-image",
       "display_name": "GPT-4o Image",
       "provider": "OpenAI",
@@ -272,7 +272,7 @@
       "tested": false,
       "enabled": true
     },
-    "flux_kontext_pro": {
+    "flux-kontext-pro": {
       "model_id": "flux-kontext-pro",
       "display_name": "Flux Kontext Pro",
       "provider": "Black Forest Labs",
@@ -331,11 +331,11 @@
         "runway_gen3_alpha"
       ],
       "audio": [
-        "suno_v3_5"
+        "V3_5"
       ],
       "image": [
-        "gpt4o_image",
-        "flux_kontext_pro"
+        "gpt-4o-image",
+        "flux-kontext-pro"
       ]
     }
   }
