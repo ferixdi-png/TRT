@@ -1,5 +1,5 @@
 {
-  "version": "6.2.0",
+  "version": "6.3.0",
   "source": "merged: kie_parsed_models.json + site_scraper",
   "total_models": 77,
   "free_tier_count": 5,
@@ -14,7 +14,7 @@
   "models": [
     {
       "model_id": "wan/2-5-image-to-video",
-      "display_name": "wan 2.5",
+      "display_name": "Wan 2.5 Image-to-Video",
       "category": "image-to-video",
       "variant": "default-5.0s-720p",
       "pricing": {
@@ -63,11 +63,20 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "veo3.1/text-to-video-fast",
-      "display_name": "Google veo 3.1",
+      "display_name": "Google Veo 3.1 Fast",
       "category": "text-to-video",
       "variant": "Fast",
       "pricing": {
@@ -110,11 +119,21 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "grok-imagine/image-to-video",
-      "display_name": "grok-imagine",
+      "display_name": "Grok Imagine (Image→Video)",
       "category": "image-to-video",
       "variant": "6.0s",
       "pricing": {
@@ -163,11 +182,20 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "grok-imagine/text-to-video",
-      "display_name": "grok-imagine",
+      "display_name": "Grok Imagine (Text→Video)",
       "category": "text-to-video",
       "variant": "6.0s",
       "pricing": {
@@ -210,7 +238,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "nano-banana-pro",
@@ -229,7 +267,15 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "nano-banana-pro:default-v2",
@@ -248,11 +294,19 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "qwen/z-image",
-      "display_name": "Qwen z-image",
+      "display_name": "Qwen Z-Image",
       "category": "text-to-image",
       "variant": "1.0s",
       "pricing": {
@@ -294,12 +348,21 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": true
+      "is_free_tier": true,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "flux/2-pro-image-to-image",
       "display_name": "Black Forest Labs flux-2 pro",
-      "category": "image to image",
+      "category": "image-to-image",
       "variant": "1.0s-1K",
       "pricing": {
         "credits_per_generation": 5.0,
@@ -334,7 +397,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "kling/2-6-image-to-video",
@@ -387,11 +459,20 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "wan/2-6-video-to-video",
-      "display_name": "wan 2.6",
+      "display_name": "Wan 2.6 Video-to-Video",
       "category": "video-to-video",
       "variant": "15.0s-1080p",
       "pricing": {
@@ -435,7 +516,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Обработка и трансформация видео",
+      "use_case": "Изменение стиля видео, улучшение качества, спецэффекты. Идеально для постпродакшна, креативной обработки.",
+      "example": "Загрузите видео → примените стиль аниме/киберпанк",
+      "tags": [
+        "обработка",
+        "эффекты",
+        "стилизация",
+        "улучшение"
+      ]
     },
     {
       "model_id": "wan-2-2-animate:1-0s-720p",
@@ -454,7 +544,15 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "wan-2-2-animate:1-0s-580p",
@@ -473,7 +571,15 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "wan-2-2-animate:1-0s-480p",
@@ -492,7 +598,15 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "midjourney/image-to-image",
@@ -544,7 +658,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "midjourney/image-to-image:turbo-v2",
@@ -596,7 +719,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "midjourney/image-to-video",
@@ -649,7 +781,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "midjourney/text-to-image",
@@ -695,7 +836,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "midjourney/text-to-image:turbo-v2",
@@ -741,7 +891,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "midjourney/image-to-image:relaxed-v3",
@@ -793,7 +952,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": true
+      "is_free_tier": true,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "google/imagen4",
@@ -839,7 +1007,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "midjourney/text-to-image:relaxed-v3",
@@ -885,7 +1062,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": true
+      "is_free_tier": true,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "google/imagen4:fast-v2",
@@ -931,7 +1117,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "wan/2-2-image-to-video",
@@ -984,7 +1179,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "google/imagen4:ultra-v3",
@@ -1030,7 +1234,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "wan/2-2-image-to-video:5.0s-720p-v2",
@@ -1083,7 +1296,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "wan/2-2-image-to-video:5.0s-580p-v3",
@@ -1136,7 +1358,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "wan/2-2-text-to-video",
@@ -1183,7 +1414,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "wan/2-2-text-to-video:5.0s-480p-v2",
@@ -1230,7 +1471,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "ideogram/v3-remix",
@@ -1282,7 +1533,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "ideogram/v3-remix:quality-v2",
@@ -1344,7 +1604,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "wan/2-2-text-to-video:5.0s-720p-v3",
@@ -1391,7 +1660,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "ideogram/v3-edit",
@@ -1453,7 +1732,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "ideogram/v3-remix:turbo-v3",
@@ -1505,7 +1793,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "ideogram/v3-edit:balanced-v2",
@@ -1557,7 +1854,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "ideogram/v3",
@@ -1613,7 +1919,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "ideogram/v3-edit:turbo-v3",
@@ -1665,7 +1980,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "ideogram/v3:turbo-v2",
@@ -1711,7 +2035,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "ideogram/v3:balanced-v3",
@@ -1757,7 +2090,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "kling/2-1-video-generation",
@@ -1798,7 +2140,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео с расширенными возможностями",
+      "use_case": "Профессиональное создание видеоконтента с контролем над параметрами. Для креативных проектов, рекламы, контента.",
+      "example": "Опишите сцену → получите видео с нужной длительностью и разрешением",
+      "tags": [
+        "видео",
+        "генерация",
+        "продвинутое",
+        "профессионально"
+      ]
     },
     {
       "model_id": "kling/2-1-text-to-video",
@@ -1855,7 +2206,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "kling/2-1-text-to-video:master-10.0s-v2",
@@ -1912,7 +2273,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "kling/2-1-video-generation:standard-5.0s-v2",
@@ -1953,7 +2324,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео с расширенными возможностями",
+      "use_case": "Профессиональное создание видеоконтента с контролем над параметрами. Для креативных проектов, рекламы, контента.",
+      "example": "Опишите сцену → получите видео с нужной длительностью и разрешением",
+      "tags": [
+        "видео",
+        "генерация",
+        "продвинутое",
+        "профессионально"
+      ]
     },
     {
       "model_id": "kling/2-1-video-generation:standard-10.0s-v3",
@@ -1994,7 +2374,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео с расширенными возможностями",
+      "use_case": "Профессиональное создание видеоконтента с контролем над параметрами. Для креативных проектов, рекламы, контента.",
+      "example": "Опишите сцену → получите видео с нужной длительностью и разрешением",
+      "tags": [
+        "видео",
+        "генерация",
+        "продвинутое",
+        "профессионально"
+      ]
     },
     {
       "model_id": "kling/2-1-video-generation:pro-5.0s-v4",
@@ -2035,7 +2424,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео с расширенными возможностями",
+      "use_case": "Профессиональное создание видеоконтента с контролем над параметрами. Для креативных проектов, рекламы, контента.",
+      "example": "Опишите сцену → получите видео с нужной длительностью и разрешением",
+      "tags": [
+        "видео",
+        "генерация",
+        "продвинутое",
+        "профессионально"
+      ]
     },
     {
       "model_id": "kling/2-1-image-to-video",
@@ -2098,7 +2496,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "kling/2-1-image-to-video:master-10.0s-v2",
@@ -2161,7 +2568,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "elevenlabs/tts-multilingual",
@@ -2180,7 +2596,15 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "elevenlabs/tts-multilingual:default-v2",
@@ -2199,12 +2623,20 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "recraft/crisp-upscale",
       "display_name": "Recraft Crisp Upscale",
-      "category": "image to image",
+      "category": "image-to-image",
       "variant": "default",
       "pricing": {
         "credits_per_generation": 0.5,
@@ -2239,12 +2671,21 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": true
+      "is_free_tier": true,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "recraft/remove-background",
       "display_name": "Recraft Remove Background",
-      "category": "image to image",
+      "category": "image-to-image",
       "variant": "default",
       "pricing": {
         "credits_per_generation": 1.0,
@@ -2279,7 +2720,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": true
+      "is_free_tier": true,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "seedream/4.0-text-to-image",
@@ -2325,7 +2775,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "seedream/4.0-image-to-video",
@@ -2378,7 +2837,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "topaz/video-upscaler",
@@ -2397,7 +2865,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Увеличение разрешения изображений",
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования. Восстановление деталей старых фото.",
+      "example": "Загрузите 720p → получите 4K",
+      "tags": [
+        "улучшение",
+        "качество",
+        "4K",
+        "апскейл"
+      ]
     },
     {
       "model_id": "topaz/image-upscaler",
@@ -2437,7 +2914,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Увеличение разрешения изображений",
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования. Восстановление деталей старых фото.",
+      "example": "Загрузите 720p → получите 4K",
+      "tags": [
+        "улучшение",
+        "качество",
+        "4K",
+        "апскейл"
+      ]
     },
     {
       "model_id": "openai/4o-image",
@@ -2483,7 +2969,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "flux/kontext-pro",
@@ -2529,7 +3024,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "flux/2-flex",
@@ -2575,7 +3079,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "flux/2-pro-text-to-image",
@@ -2621,12 +3134,21 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "flux/2-pro-image-to-image:1.0s-2k-v2",
       "display_name": "Black Forest Labs flux-2 pro",
-      "category": "image to image",
+      "category": "image-to-image",
       "variant": "1.0s-2K",
       "pricing": {
         "credits_per_generation": 7.000000000000001,
@@ -2661,7 +3183,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Трансформация и обработка изображений",
+      "use_case": "Изменение стиля, редактирование, улучшение качества фото. Подходит для редизайна, стилизации, обработки продуктовых фото.",
+      "example": "Загрузите фото → получите в стиле аниме/картины/3D",
+      "tags": [
+        "редактирование",
+        "стилизация",
+        "обработка",
+        "улучшение"
+      ]
     },
     {
       "model_id": "kling/2-6-text-to-video",
@@ -2708,7 +3239,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "kling/2-6-text-to-video:without-audio-10.0s-v2",
@@ -2755,7 +3296,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "kling/2-6-image-to-video:without-audio-10.0s-v2",
@@ -2808,7 +3359,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "seedream/4.5-text-to-image",
@@ -2854,12 +3414,21 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "wan/2-6-text-to-video",
-      "display_name": "wan 2.6",
-      "category": "text to video",
+      "display_name": "Wan 2.6 Text-to-Video",
+      "category": "text-to-video",
       "variant": "5.0s-720p",
       "pricing": {
         "credits_per_generation": 70.0,
@@ -2901,7 +3470,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "wan/2-6-image-to-video",
@@ -2954,7 +3533,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "wan/2-5-text-to-video",
@@ -3001,7 +3589,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "wan/2-5-image-to-video:default-10.0s-720p-v2",
@@ -3054,7 +3652,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "veo3.1/text-to-video-quality",
@@ -3111,7 +3718,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "veo3.1/image-to-video-fast",
@@ -3164,7 +3781,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "hailuo/2.3-image-to-video",
@@ -3217,7 +3843,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "hailuo/02-text-to-video",
@@ -3264,7 +3899,17 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация видео из текстового описания",
+      "use_case": "Создание видеоконтента для Reels, Shorts, TikTok, рекламных роликов. Отлично для маркетинга, презентаций, образовательного контента.",
+      "example": "кот играет с клубком шерсти, замедленная съемка, 1080p",
+      "tags": [
+        "видео",
+        "reels",
+        "shorts",
+        "анимация",
+        "маркетинг"
+      ]
     },
     {
       "model_id": "hailuo/02-image-to-video",
@@ -3317,7 +3962,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Создание видео из статичного изображения",
+      "use_case": "Анимация постеров, оживление иллюстраций, создание динамичных превью. Подходит для соцсетей, презентаций, рекламы.",
+      "example": "Загрузите фото → получите 5-секундное видео с движением",
+      "tags": [
+        "анимация",
+        "видео",
+        "оживление",
+        "динамика"
+      ]
     },
     {
       "model_id": "suno/music-generation",
@@ -3336,7 +3990,15 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "AI генерация контента",
+      "use_case": "Универсальная модель для создания контента с помощью искусственного интеллекта.",
+      "example": "Введите параметры → получите результат",
+      "tags": [
+        "ai",
+        "генерация",
+        "контент"
+      ]
     },
     {
       "model_id": "grok-imagine/text-to-image",
@@ -3382,7 +4044,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "nano-banana",
@@ -3428,7 +4099,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "qwen/z-image:default-v2",
@@ -3474,7 +4154,16 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     },
     {
       "model_id": "bytedance-seedream",
@@ -3520,7 +4209,24 @@
       },
       "enabled": true,
       "source": "kie_pricing_raw.txt",
-      "is_free_tier": false
+      "is_free_tier": false,
+      "description": "Генерация изображений по текстовому описанию",
+      "use_case": "Создание иллюстраций, баннеров, концепт-артов для соцсетей, презентаций, рекламы. Идеально для визуализации идей без навыков рисования.",
+      "example": "космонавт на Марсе, фотореализм, закат, 4K",
+      "tags": [
+        "креатив",
+        "дизайн",
+        "иллюстрация",
+        "визуализация"
+      ]
     }
-  ]
+  ],
+  "enrichment": {
+    "categories_normalized": 5,
+    "display_names_improved": 7,
+    "descriptions_added": 77,
+    "use_cases_added": 77,
+    "examples_added": 77,
+    "tags_added": 77
+  }
 }
