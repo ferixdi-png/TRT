@@ -276,7 +276,7 @@ def _model_detail_text(model: Dict[str, Any]) -> str:
     model_id = model.get("model_id", "")
     vendor = model.get("vendor", "")
     
-    # Description - human-friendly
+    # Description - human-friendly (v6.3.0 enrichment)
     description = model.get("description", "")
     if not description:
         # Fallback description based on category
@@ -295,6 +295,12 @@ def _model_detail_text(model: Dict[str, Any]) -> str:
             description = "Превращает картинку в видео"
         else:
             description = "Генерация и обработка контента"
+    
+    # Use-case from v6.3.0 enrichment
+    use_case = model.get("use_case", "")
+    
+    # Example from v6.3.0 enrichment
+    example = model.get("example", "")
     
     # Pricing - EXACT FORMULA
     from app.pricing.free_models import is_free_model
@@ -346,21 +352,33 @@ def _model_detail_text(model: Dict[str, Any]) -> str:
         f"✨ <b>{name}</b>",
         "",
         f"📝 {description}",
+    ]
+    
+    # Add use-case if available
+    if use_case:
+        lines.append("")
+        lines.append(f"🎯 <b>Для чего:</b> {use_case[:200]}")  # Truncate to 200 chars
+    
+    lines.extend([
         "",
         price_line,
         params_line,
-    ]
+    ])
     
     if vendor_line:
         lines.append(vendor_line)
     
-    # Add example prompt if available
-    examples = model.get("example_prompts", [])
-    if examples:
+    # Add example from v6.3.0 enrichment
+    if example:
         lines.append("")
-        lines.append("💡 <b>Примеры:</b>")
-        for ex in examples[:2]:  # Show max 2 examples
-            lines.append(f"   • {ex}")
+        lines.append(f"💡 <b>Пример:</b> {example[:150]}")  # Truncate to 150 chars
+    
+    # Add tags if available
+    tags = model.get("tags")
+    if tags and isinstance(tags, list):
+        lines.append("")
+        tags_str = " • ".join(f"#{tag}" for tag in tags[:5])
+        lines.append(f"🏷 {tags_str}")
     
     return "\n".join(lines)
 
