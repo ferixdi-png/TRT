@@ -175,12 +175,13 @@ def build_payload(
                     input_schema = {}
                     for field_name, field_value in example_structure.items():
                         # Определяем тип по значению
-                        if isinstance(field_value, str):
+                        # ВАЖНО: bool проверяется FIRST, т.к. bool является подклассом int в Python
+                        if isinstance(field_value, bool):
+                            field_type = 'boolean'
+                        elif isinstance(field_value, str):
                             field_type = 'string'
                         elif isinstance(field_value, (int, float)):
                             field_type = 'number'
-                        elif isinstance(field_value, bool):
-                            field_type = 'boolean'
                         elif isinstance(field_value, dict):
                             field_type = 'object'
                         elif isinstance(field_value, list):
@@ -311,7 +312,16 @@ def build_payload(
                 raise ValueError(f"Required field '{field_name}' is missing")
         else:
             # Type conversion if needed
-            if field_type == 'integer' or field_type == 'int':
+            # ВАЖНО: Проверяем boolean FIRST, т.к. bool является подклассом int в Python
+            if field_type == 'boolean' or field_type == 'bool':
+                if isinstance(value, str):
+                    value = value.lower() in ('true', '1', 'yes', 'on')
+                elif isinstance(value, bool):
+                    # Already boolean, keep as is
+                    pass
+                else:
+                    value = bool(value)
+            elif field_type == 'integer' or field_type == 'int':
                 try:
                     value = int(value)
                 except (ValueError, TypeError):
@@ -321,10 +331,6 @@ def build_payload(
                     value = float(value)
                 except (ValueError, TypeError):
                     raise ValueError(f"Field '{field_name}' must be a number")
-            elif field_type == 'boolean' or field_type == 'bool':
-                if isinstance(value, str):
-                    value = value.lower() in ('true', '1', 'yes', 'on')
-                value = bool(value)
             
             payload['input'][field_name] = value
     
@@ -336,7 +342,16 @@ def build_payload(
         value = user_inputs.get(field_name)
         if value is not None:
             # Type conversion
-            if field_type == 'integer' or field_type == 'int':
+            # ВАЖНО: Проверяем boolean FIRST, т.к. bool является подклассом int в Python
+            if field_type == 'boolean' or field_type == 'bool':
+                if isinstance(value, str):
+                    value = value.lower() in ('true', '1', 'yes', 'on')
+                elif isinstance(value, bool):
+                    # Already boolean, keep as is
+                    pass
+                else:
+                    value = bool(value)
+            elif field_type == 'integer' or field_type == 'int':
                 try:
                     value = int(value)
                 except (ValueError, TypeError):
@@ -346,10 +361,6 @@ def build_payload(
                     value = float(value)
                 except (ValueError, TypeError):
                     continue
-            elif field_type == 'boolean' or field_type == 'bool':
-                if isinstance(value, str):
-                    value = value.lower() in ('true', '1', 'yes', 'on')
-                value = bool(value)
             
             payload['input'][field_name] = value
     
