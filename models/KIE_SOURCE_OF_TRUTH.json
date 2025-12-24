@@ -72,8 +72,7 @@
         "rub_per_gen": 1580.0,
         "credits_per_gen": 2000.0,
         "is_free": false,
-        "rank": 9,
-        "source": "pricing_table"
+        "rank": 9
       },
       "examples": [
         {
@@ -186,8 +185,7 @@
         "rub_per_gen": 1896.0,
         "credits_per_gen": 2400.0,
         "is_free": false,
-        "rank": 13,
-        "source": "pricing_table"
+        "rank": 13
       },
       "examples": [
         {
@@ -312,8 +310,7 @@
         "rub_per_gen": 2370.0,
         "credits_per_gen": 3000.0,
         "is_free": false,
-        "rank": 23,
-        "source": "pricing_table"
+        "rank": 23
       },
       "examples": [
         {
@@ -535,8 +532,7 @@
         "rub_per_gen": 1580.0,
         "credits_per_gen": 2000.0,
         "is_free": false,
-        "rank": 11,
-        "source": "pricing_table"
+        "rank": 11
       },
       "examples": [
         {
@@ -648,8 +644,7 @@
         "rub_per_gen": 3160.0,
         "credits_per_gen": 4000.0,
         "is_free": false,
-        "rank": 39,
-        "source": "pricing_table"
+        "rank": 39
       },
       "examples": [
         {
@@ -765,8 +760,7 @@
         "rub_per_gen": 2370.0,
         "credits_per_gen": 3000.0,
         "is_free": false,
-        "rank": 25,
-        "source": "pricing_table"
+        "rank": 25
       },
       "examples": [
         {
@@ -890,8 +884,7 @@
         "rub_per_gen": 1580.0,
         "credits_per_gen": 2000.0,
         "is_free": false,
-        "rank": 12,
-        "source": "pricing_table"
+        "rank": 12
       },
       "examples": [
         {
@@ -1007,8 +1000,7 @@
         "rub_per_gen": 1264.0,
         "credits_per_gen": 1600.0,
         "is_free": false,
-        "rank": 7,
-        "source": "pricing_table"
+        "rank": 7
       },
       "examples": [
         {
@@ -1250,8 +1242,7 @@
         "rub_per_gen": 2844.0,
         "credits_per_gen": 3600.0,
         "is_free": false,
-        "rank": 33,
-        "source": "pricing_table"
+        "rank": 33
       },
       "examples": [
         {
@@ -1372,8 +1363,7 @@
         "rub_per_gen": 2370.0,
         "credits_per_gen": 3000.0,
         "is_free": false,
-        "rank": 24,
-        "source": "pricing_table"
+        "rank": 24
       },
       "examples": [
         {
@@ -1494,8 +1484,7 @@
         "rub_per_gen": 1896.0,
         "credits_per_gen": 2400.0,
         "is_free": false,
-        "rank": 14,
-        "source": "pricing_table"
+        "rank": 14
       },
       "examples": [
         {
@@ -1616,8 +1605,7 @@
         "rub_per_gen": 1580.0,
         "credits_per_gen": 2000.0,
         "is_free": false,
-        "rank": 10,
-        "source": "pricing_table"
+        "rank": 10
       },
       "examples": [
         {
@@ -1718,8 +1706,7 @@
         "rub_per_gen": 1896.0,
         "credits_per_gen": 2400.0,
         "is_free": false,
-        "rank": 17,
-        "source": "pricing_table"
+        "rank": 17
       },
       "examples": [
         {
@@ -1904,8 +1891,7 @@
         "rub_per_gen": 2370.0,
         "credits_per_gen": 3000.0,
         "is_free": false,
-        "rank": 31,
-        "source": "pricing_table"
+        "rank": 31
       },
       "examples": [
         {
@@ -1997,8 +1983,7 @@
         "rub_per_gen": 1264.0,
         "credits_per_gen": 1600.0,
         "is_free": false,
-        "rank": 8,
-        "source": "pricing_table"
+        "rank": 8
       },
       "examples": [
         {
@@ -2086,8 +2071,7 @@
         "rub_per_gen": 1896.0,
         "credits_per_gen": 2400.0,
         "is_free": false,
-        "rank": 21,
-        "source": "pricing_table"
+        "rank": 21
       },
       "examples": [
         {
@@ -2195,8 +2179,7 @@
         "rub_per_gen": 2844.0,
         "credits_per_gen": 3600.0,
         "is_free": false,
-        "rank": 37,
-        "source": "pricing_table"
+        "rank": 37
       },
       "examples": [
         {
@@ -2340,8 +2323,7 @@
         "rub_per_gen": 2844.0,
         "credits_per_gen": 3600.0,
         "is_free": false,
-        "rank": 34,
-        "source": "pricing_table"
+        "rank": 34
       },
       "examples": [
         {
@@ -2517,8 +2499,7 @@
         "rub_per_gen": 2844.0,
         "credits_per_gen": 3600.0,
         "is_free": false,
-        "rank": 35,
-        "source": "pricing_table"
+        "rank": 35
       },
       "examples": [
         {
@@ -2694,8 +2675,7 @@
         "rub_per_gen": 2370.0,
         "credits_per_gen": 3000.0,
         "is_free": false,
-        "rank": 26,
-        "source": "pricing_table"
+        "rank": 26
       },
       "examples": [
         {
@@ -2843,12 +2823,11 @@
         }
       },
       "pricing": {
-        "usd_per_gen": 12.0,
-        "rub_per_gen": 1896.0,
-        "credits_per_gen": 2400.0,
+        "usd_per_gen": 0.004,
+        "rub_per_gen": 0.63,
+        "credits_per_gen": 0.8,
         "is_free": false,
-        "rank": 20,
-        "source": "pricing_table"
+        "rank": 20
       },
       "examples": [
         {
@@ -2992,12 +2971,11 @@
         }
       },
       "pricing": {
-        "usd_per_gen": 15.0,
-        "rub_per_gen": 2370.0,
-        "credits_per_gen": 3000.0,
+        "usd_per_gen": 0.004,
+        "rub_per_gen": 0.63,
+        "credits_per_gen": 0.8,
         "is_free": false,
-        "rank": 29,
-        "source": "pricing_table"
+        "rank": 29
       },
       "examples": [
         {
@@ -3149,12 +3127,11 @@
         }
       },
       "pricing": {
-        "usd_per_gen": 15.0,
-        "rub_per_gen": 2370.0,
-        "credits_per_gen": 3000.0,
+        "usd_per_gen": 0.004,
+        "rub_per_gen": 0.63,
+        "credits_per_gen": 0.8,
         "is_free": false,
-        "rank": 28,
-        "source": "pricing_table"
+        "rank": 28
       },
       "examples": [
         {
@@ -3286,8 +3263,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 62,
-        "source": "pricing_table"
+        "rank": 62
       },
       "examples": [
         {
@@ -3399,8 +3375,7 @@
         "rub_per_gen": 14220.0,
         "credits_per_gen": 18000.0,
         "is_free": false,
-        "rank": 51,
-        "source": "pricing_table"
+        "rank": 51
       },
       "examples": [
         {
@@ -3516,8 +3491,7 @@
         "rub_per_gen": 17380.0,
         "credits_per_gen": 22000.0,
         "is_free": false,
-        "rank": 77,
-        "source": "pricing_table"
+        "rank": 77
       },
       "examples": [
         {
@@ -3638,8 +3612,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 64,
-        "source": "pricing_table"
+        "rank": 64
       },
       "examples": [
         {
@@ -3756,8 +3729,7 @@
         "rub_per_gen": 3160.0,
         "credits_per_gen": 4000.0,
         "is_free": false,
-        "rank": 41,
-        "source": "pricing_table"
+        "rank": 41
       },
       "examples": [
         {
@@ -3861,8 +3833,7 @@
         "rub_per_gen": 3160.0,
         "credits_per_gen": 4000.0,
         "is_free": false,
-        "rank": 42,
-        "source": "pricing_table"
+        "rank": 42
       },
       "examples": [
         {
@@ -3974,8 +3945,7 @@
         "rub_per_gen": 14220.0,
         "credits_per_gen": 18000.0,
         "is_free": false,
-        "rank": 53,
-        "source": "pricing_table"
+        "rank": 53
       },
       "examples": [
         {
@@ -4095,8 +4065,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 65,
-        "source": "pricing_table"
+        "rank": 65
       },
       "examples": [
         {
@@ -4220,8 +4189,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 66,
-        "source": "pricing_table"
+        "rank": 66
       },
       "examples": [
         {
@@ -4345,8 +4313,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 67,
-        "source": "pricing_table"
+        "rank": 67
       },
       "examples": [
         {
@@ -4462,8 +4429,7 @@
         "rub_per_gen": 15010.0,
         "credits_per_gen": 19000.0,
         "is_free": false,
-        "rank": 59,
-        "source": "pricing_table"
+        "rank": 59
       },
       "examples": [
         {
@@ -4587,8 +4553,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 61,
-        "source": "pricing_table"
+        "rank": 61
       },
       "examples": [
         {
@@ -4724,8 +4689,7 @@
         "rub_per_gen": 17380.0,
         "credits_per_gen": 22000.0,
         "is_free": false,
-        "rank": 74,
-        "source": "pricing_table"
+        "rank": 74
       },
       "examples": [
         {
@@ -4865,8 +4829,7 @@
         "rub_per_gen": 9480.0,
         "credits_per_gen": 12000.0,
         "is_free": false,
-        "rank": 45,
-        "source": "pricing_table"
+        "rank": 45
       },
       "examples": [
         {
@@ -5002,8 +4965,7 @@
         "rub_per_gen": 11060.0,
         "credits_per_gen": 14000.0,
         "is_free": false,
-        "rank": 46,
-        "source": "pricing_table"
+        "rank": 46
       },
       "examples": [
         {
@@ -5123,8 +5085,7 @@
         "rub_per_gen": 17380.0,
         "credits_per_gen": 22000.0,
         "is_free": false,
-        "rank": 76,
-        "source": "pricing_table"
+        "rank": 76
       },
       "examples": [
         {
@@ -5236,8 +5197,7 @@
         "rub_per_gen": 13430.0,
         "credits_per_gen": 17000.0,
         "is_free": false,
-        "rank": 50,
-        "source": "pricing_table"
+        "rank": 50
       },
       "examples": [
         {
@@ -5341,8 +5301,7 @@
         "rub_per_gen": 18960.0,
         "credits_per_gen": 24000.0,
         "is_free": false,
-        "rank": 78,
-        "source": "pricing_table"
+        "rank": 78
       },
       "examples": [
         {
@@ -5442,8 +5401,7 @@
         "rub_per_gen": 14220.0,
         "credits_per_gen": 18000.0,
         "is_free": false,
-        "rank": 52,
-        "source": "pricing_table"
+        "rank": 52
       },
       "examples": [
         {
@@ -5551,8 +5509,7 @@
         "rub_per_gen": 17380.0,
         "credits_per_gen": 22000.0,
         "is_free": false,
-        "rank": 75,
-        "source": "pricing_table"
+        "rank": 75
       },
       "examples": [
         {
@@ -5672,8 +5629,7 @@
         "rub_per_gen": 13430.0,
         "credits_per_gen": 17000.0,
         "is_free": false,
-        "rank": 49,
-        "source": "pricing_table"
+        "rank": 49
       },
       "examples": [
         {
@@ -6627,8 +6583,7 @@
         "rub_per_gen": 14220.0,
         "credits_per_gen": 18000.0,
         "is_free": false,
-        "rank": 58,
-        "source": "pricing_table"
+        "rank": 58
       },
       "examples": [
         {
@@ -6744,8 +6699,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 73,
-        "source": "pricing_table"
+        "rank": 73
       },
       "examples": [
         {
@@ -6861,8 +6815,7 @@
         "rub_per_gen": 15010.0,
         "credits_per_gen": 19000.0,
         "is_free": false,
-        "rank": 60,
-        "source": "pricing_table"
+        "rank": 60
       },
       "examples": [
         {
@@ -6994,8 +6947,7 @@
         "rub_per_gen": 14220.0,
         "credits_per_gen": 18000.0,
         "is_free": false,
-        "rank": 56,
-        "source": "pricing_table"
+        "rank": 56
       },
       "examples": [
         {
@@ -7127,8 +7079,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 70,
-        "source": "pricing_table"
+        "rank": 70
       },
       "examples": [
         {
@@ -7244,8 +7195,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 71,
-        "source": "pricing_table"
+        "rank": 71
       },
       "examples": [
         {
@@ -7349,8 +7299,7 @@
         "rub_per_gen": 2370.0,
         "credits_per_gen": 3000.0,
         "is_free": false,
-        "rank": 32,
-        "source": "pricing_table"
+        "rank": 32
       },
       "examples": [
         {
@@ -7486,8 +7435,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 69,
-        "source": "pricing_table"
+        "rank": 69
       },
       "examples": [
         {
@@ -7619,8 +7567,7 @@
         "rub_per_gen": 7900.0,
         "credits_per_gen": 10000.0,
         "is_free": false,
-        "rank": 44,
-        "source": "pricing_table"
+        "rank": 44
       },
       "examples": [
         {
@@ -7724,8 +7671,7 @@
         "rub_per_gen": 3160.0,
         "credits_per_gen": 4000.0,
         "is_free": false,
-        "rank": 40,
-        "source": "pricing_table"
+        "rank": 40
       },
       "examples": [
         {
@@ -7998,8 +7944,7 @@
         "rub_per_gen": 474.0,
         "credits_per_gen": 600.0,
         "is_free": true,
-        "rank": 1,
-        "source": "pricing_table"
+        "rank": 1
       },
       "examples": [
         {
@@ -8111,8 +8056,7 @@
         "rub_per_gen": 1264.0,
         "credits_per_gen": 1600.0,
         "is_free": false,
-        "rank": 6,
-        "source": "pricing_table"
+        "rank": 6
       },
       "examples": [
         {
@@ -8212,8 +8156,7 @@
         "rub_per_gen": 790.0,
         "credits_per_gen": 1000.0,
         "is_free": true,
-        "rank": 2,
-        "source": "pricing_table"
+        "rank": 2
       },
       "examples": [
         {
@@ -8321,8 +8264,7 @@
         "rub_per_gen": 14220.0,
         "credits_per_gen": 18000.0,
         "is_free": false,
-        "rank": 54,
-        "source": "pricing_table"
+        "rank": 54
       },
       "examples": [
         {
@@ -8446,8 +8388,7 @@
         "rub_per_gen": 15800.0,
         "credits_per_gen": 20000.0,
         "is_free": false,
-        "rank": 68,
-        "source": "pricing_table"
+        "rank": 68
       },
       "examples": [
         {
