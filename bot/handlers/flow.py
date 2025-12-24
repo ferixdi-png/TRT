@@ -888,9 +888,19 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     input_schema = model.get("input_schema", {})
-    required_fields = input_schema.get("required", [])
-    optional_fields = input_schema.get("optional", [])  # MASTER PROMPT: "Ввод ВСЕХ параметров"
-    properties = input_schema.get("properties", {})
+    
+    # Support BOTH flat and nested formats (like builder.py)
+    if 'properties' in input_schema:
+        # Nested format
+        required_fields = input_schema.get("required", [])
+        optional_fields = input_schema.get("optional", [])
+        properties = input_schema.get("properties", {})
+    else:
+        # Flat format (source_of_truth.json) - convert
+        properties = input_schema
+        required_fields = [k for k, v in properties.items() if v.get('required', False)]
+        optional_fields = [k for k in properties.keys() if k not in required_fields]
+    
     ctx = InputContext(
         model_id=model_id,
         required_fields=required_fields,
