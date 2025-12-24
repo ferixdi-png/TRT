@@ -63,6 +63,10 @@ def test_v7_payload_building():
         },
         "flux-kontext-pro": {  # Flux tech ID
             "prompt": "Portrait of a robot",
+        },
+        "flux-kontext-max": {  # Flux Max (new!)
+            "prompt": "Complex architectural interior with intricate details",
+            "promptUpsampling": True
         }
     }
     

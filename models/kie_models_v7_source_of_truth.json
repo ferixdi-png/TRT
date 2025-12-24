@@ -1,5 +1,5 @@
 {
-  "version": "7.0.0-DOCS-SOURCE-OF-TRUTH",
+  "version": "7.1.0-DOCS-SOURCE-OF-TRUTH",
   "source": "docs.kie.ai - official API documentation",
   "created_at": "2025-12-24T15:15:18.738760",
   "philosophy": "ТОЛЬКО реальные данные из docs.kie.ai. НЕТ домыслов. НЕТ догадок. ТОЛЬКО ФАКТЫ.",
@@ -317,6 +317,70 @@
       "pricing": {
         "credits_per_gen": 4,
         "estimated": true
+      },
+      "tested": false,
+      "enabled": true
+    },
+    "flux-kontext-max": {
+      "model_id": "flux-kontext-max",
+      "display_name": "Flux Kontext Max",
+      "provider": "Black Forest Labs",
+      "category": "image",
+      "endpoint": "https://api.kie.ai/api/v1/flux/kontext/generate",
+      "method": "POST",
+      "parameters": {
+        "prompt": {
+          "type": "string",
+          "required": true
+        },
+        "model": {
+          "type": "string",
+          "required": false,
+          "default": "flux-kontext-max",
+          "enum": [
+            "flux-kontext-max",
+            "flux-kontext-pro"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "required": false,
+          "default": 1024
+        },
+        "height": {
+          "type": "integer",
+          "required": false,
+          "default": 1024
+        },
+        "num_outputs": {
+          "type": "integer",
+          "required": false,
+          "default": 1
+        },
+        "output_format": {
+          "type": "string",
+          "required": false,
+          "enum": [
+            "webp",
+            "jpg",
+            "png"
+          ]
+        },
+        "guidance": {
+          "type": "number",
+          "required": false,
+          "default": 3.5
+        },
+        "promptUpsampling": {
+          "type": "boolean",
+          "required": false,
+          "default": false
+        }
+      },
+      "pricing": {
+        "credits_per_gen": 6,
+        "estimated": true,
+        "note": "Higher quality model - estimated higher cost than Pro"
       },
       "tested": false,
       "enabled": true
