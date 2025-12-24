@@ -88,13 +88,37 @@ USE_CASES = {
 
 # Display name improvements
 DISPLAY_NAME_IMPROVEMENTS = {
+    # Wan models
     "wan/2-5-image-to-video": "Wan 2.5 Image-to-Video",
+    "wan/2-5-text-to-video": "Wan 2.5 Text-to-Video",
+    "wan/2-5-image-to-video:default-10.0s-720p-v2": "Wan 2.5 (720p 10s)",
+    "wan/2-2-image-to-video": "Wan 2.2 Image-to-Video",
+    "wan/2-2-image-to-video:5.0s-720p-v2": "Wan 2.2 (720p 5s)",
+    "wan/2-2-image-to-video:5.0s-580p-v3": "Wan 2.2 (580p 5s)",
+    "wan/2-2-text-to-video": "Wan 2.2 Text-to-Video",
+    "wan/2-2-text-to-video:5.0s-480p-v2": "Wan 2.2 (480p 5s)",
+    "wan/2-2-text-to-video:5.0s-720p-v3": "Wan 2.2 (720p 5s)",
+    "wan-2-2-animate:1-0s-720p": "Wan 2.2 Animate (720p)",
+    "wan-2-2-animate:1-0s-580p": "Wan 2.2 Animate (580p)",
+    "wan-2-2-animate:1-0s-480p": "Wan 2.2 Animate (480p)",
+    "wan/2-6-image-to-video": "Wan 2.6 Image-to-Video",
+    "wan/2-6-image-to-video:without-audio-10.0s-v2": "Wan 2.6 (No Audio 10s)",
     "wan/2-6-video-to-video": "Wan 2.6 Video-to-Video",
     "wan/2-6-text-to-video": "Wan 2.6 Text-to-Video",
+    "wan/2-6-text-to-video:without-audio-10.0s-v2": "Wan 2.6 (No Audio 10s)",
+    
+    # Veo
     "veo3.1/text-to-video-fast": "Google Veo 3.1 Fast",
+    
+    # Grok
     "grok-imagine/image-to-video": "Grok Imagine (Image→Video)",
     "grok-imagine/text-to-video": "Grok Imagine (Text→Video)",
+    "grok-imagine/text-to-image": "Grok Imagine (Text→Image)",
+    
+    # Qwen
     "qwen/z-image": "Qwen Z-Image",
+    
+    # Kling
     "kling/2-1-text-to-video:standard-5.0s": "Kling 2.1 Text-to-Video (Standard 5s)",
     "kling/2-1-text-to-video:standard-10.0s": "Kling 2.1 Text-to-Video (Standard 10s)",
     "kling/2-1-image-to-video:standard-5.0s": "Kling 2.1 Image-to-Video (Standard 5s)",
@@ -103,6 +127,50 @@ DISPLAY_NAME_IMPROVEMENTS = {
     "kling/2-1-text-to-video:pro-10.0s": "Kling 2.1 Text-to-Video (Pro 10s)",
     "kling/2-1-text-to-video:master-5.0s": "Kling 2.1 Text-to-Video (Master 5s)",
     "kling/2-1-text-to-video:master-10.0s": "Kling 2.1 Text-to-Video (Master 10s)",
+    "kling/2-6-image-to-video": "Kling 2.6 Image-to-Video",
+    "kling/2-6-text-to-video": "Kling 2.6 Text-to-Video",
+    
+    # Google
+    "google/imagen4": "Google Imagen 4",
+    "google/imagen4:fast-v2": "Google Imagen 4 Fast",
+    "google/imagen4:ultra-v3": "Google Imagen 4 Ultra",
+    
+    # Recraft
+    "recraft/remove-background": "Recraft Remove Background",
+    "recraft/upscale:crisp-v1": "Recraft Crisp Upscale",
+    
+    # Midjourney
+    "midjourney": "Midjourney",
+    "midjourney:relax": "Midjourney Relax",
+    
+    # Hailuo
+    "hailuo-2.3": "Hailuo 2.3",
+    "hailuo/2.3-image-to-video": "Hailuo 2.3 Image-to-Video",
+    "hailuo-video-v2": "Hailuo Video V2",
+    "hailuo/02-text-to-video": "Hailuo 0.2 Text-to-Video",
+    "hailuo/02-image-to-video": "Hailuo 0.2 Image-to-Video",
+    
+    # Sora
+    "sora-2-pro-storyboard": "Sora 2 Pro Storyboard",
+    
+    # Other
+    "nano-banana-pro": "Nano Banana Pro",
+    "suno-v4": "Suno V4",
+    "ideogram/v3-remix": "Ideogram V3 Remix",
+    "ideogram/v3-remix:quality-v2": "Ideogram V3 Remix Quality",
+    "ideogram/v3-remix:turbo-v3": "Ideogram V3 Remix Turbo",
+    "ideogram/v3-edit": "Ideogram V3 Edit",
+    "ideogram/v3-edit:balanced-v2": "Ideogram V3 Edit Balanced",
+    "ideogram/v3-edit:turbo-v3": "Ideogram V3 Edit Turbo",
+    "ideogram/v3": "Ideogram V3",
+    "ideogram/v3:turbo-v2": "Ideogram V3 Turbo",
+    "ideogram/v3:balanced-v3": "Ideogram V3 Balanced",
+    "hunyuan-imagine": "Hunyuan Imagine",
+    "hunyuan-imagine-turbo": "Hunyuan Imagine Turbo",
+    "flux/1.1-pro": "Flux 1.1 Pro",
+    "flux/1.1-pro-ultra": "Flux 1.1 Pro Ultra",
+    "flux/1.1-dev": "Flux 1.1 Dev",
+    "stable-diffusion/ultra": "Stable Diffusion Ultra",
 }
 
 
@@ -194,7 +262,12 @@ def enrich_models():
         # 2. Improve display_name
         old_name = model.get('display_name', model_id)
         new_name = improve_display_name(model_id, old_name)
-        if old_name != new_name:
+        
+        # Update if new name is better (not technical)
+        is_technical_old = '/' in old_name or (old_name and old_name[0].islower())
+        is_technical_new = '/' in new_name or (new_name and new_name[0].islower())
+        
+        if old_name != new_name and (is_technical_old or not is_technical_new):
             model['display_name'] = new_name
             display_names_improved += 1
         
