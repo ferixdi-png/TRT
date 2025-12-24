@@ -17,14 +17,13 @@ def test_main_menu_buttons():
     callbacks = [cb for _, cb in buttons]
     
     # Check essential menu buttons
-    assert "menu:categories" in callbacks  # Все категории
     assert "menu:history" in callbacks  # История
     assert "menu:balance" in callbacks  # Баланс
     assert "menu:help" in callbacks  # Помощь
     
-    # Check at least one category button exists
+    # Check category buttons exist (at least one)
     category_buttons = [cb for cb in callbacks if cb.startswith("cat:")]
-    assert len(category_buttons) > 0, "Should have at least one category button"
+    assert len(category_buttons) >= 3, f"Should have at least 3 category buttons, got {len(category_buttons)}"
 
 
 def test_categories_cover_registry():

@@ -25,7 +25,13 @@ router = Router(name="flow")
 
 
 CATEGORY_LABELS = {
-    # User-friendly, task-oriented labels (not technical)
+    # Task-oriented categories (production v3.0)
+    "creative": "🎨 Креатив (картинки, дизайн)",
+    "music": "🎵 Музыка и аудио",
+    "voice": "🎙️ Голос и озвучка",
+    "video": "🎬 Видео",
+    
+    # Legacy format (backward compatibility)
     "text-to-image": "🎨 Создать картинку",
     "image-to-image": "✏️ Редактировать изображение",
     "text-to-video": "🎬 Создать видео",
@@ -44,15 +50,13 @@ CATEGORY_LABELS = {
     "sound-effects": "🔊 Звуковые эффекты",
     "general": "⭐ Разное",
     "other": "⭐ Другое",
-    
-    # Old format (backward compatibility)
     "t2i": "🎨 Создать картинку",
     "i2i": "✏️ Редактировать изображение",
     "t2v": "🎬 Создать видео",
     "i2v": "🎬 Оживить картинку",
     "v2v": "🎬 Редактировать видео",
     "lip_sync": "🎬 Lip Sync",
-    "music": "🎵 Музыка",
+    "music_old": "🎵 Музыка",
     "sfx": "🔊 Звуковые эффекты",
     "tts": "🎵 Озвучка",
     "stt": "📝 Распознать речь",
@@ -132,12 +136,12 @@ def _category_keyboard() -> InlineKeyboardMarkup:
 
 def _main_menu_keyboard() -> InlineKeyboardMarkup:
     """
-    Main menu keyboard - human-friendly, task-oriented (not technical).
+    Main menu keyboard - task-oriented categories (production v3.0).
     
     ARCHITECTURE:
-    - Categories based on USER TASKS, not technical types
-    - Dynamic: only shows categories that exist in registry
-    - Sorted: cheap/free first
+    - Shows 4 main categories: creative, music, voice, video
+    - Dynamic: only shows categories with available models
+    - Sorted by priority (creative → music → voice → video)
     """
     # Get actual categories from registry
     grouped = _models_by_category()
@@ -145,14 +149,12 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     # Build dynamic menu
     buttons = []
     
-    # Priority mapping: technical category -> user-friendly task
+    # Priority mapping: category -> user-friendly label
     priority_map = [
-        ('text-to-video', '🎬 Видео для Reels/TikTok/Ads'),
-        ('text-to-image', '🎨 Картинки/баннеры/посты'),
-        ('image-to-image', '✏️ Редактировать изображение'),
-        ('upscale', '✨ Улучшить/апскейлить'),
-        ('audio', '🎵 Аудио/музыка/озвучка'),
-        ('image-to-video', '🎬 Изображение → Видео'),
+        ('creative', '🎨 Креатив (картинки, дизайн)'),
+        ('music', '🎵 Музыка и аудио'),
+        ('voice', '🎙️ Голос и озвучка'),
+        ('video', '🎬 Видео'),
     ]
     
     # Add buttons for existing categories
@@ -160,8 +162,9 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
         if cat_id in grouped and len(grouped[cat_id]) > 0:
             buttons.append([InlineKeyboardButton(text=label, callback_data=f"cat:{cat_id}")])
     
-    # Browse all categories
-    buttons.append([InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")])
+    # Browse all categories (if needed)
+    if len(grouped) > 4:
+        buttons.append([InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")])
     
     # Bottom row: balance, history, help
     buttons.append([

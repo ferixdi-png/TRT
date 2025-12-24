@@ -241,12 +241,16 @@ async def main():
         # AUTO-SETUP: Configure 5 cheapest models as free tier (idempotent)
         try:
             import json
-            registry_path = "models/kie_models_source_of_truth.json"
-            with open(registry_path, 'r') as f:
+            registry_path = "models/kie_source_of_truth.json"
+            with open(registry_path, 'r', encoding='utf-8') as f:
                 sot = json.load(f)
             
-            models = [m for m in sot['models'] if m.get('is_pricing_known')]
-            models.sort(key=lambda m: m.get('price', 999999))
+            # Get enabled models with pricing
+            models = [m for m in sot.get('models', []) 
+                     if m.get('enabled', True) and m.get('pricing', {}).get('rub_per_use')]
+            
+            # Sort by RUB price
+            models.sort(key=lambda m: m.get('pricing', {}).get('rub_per_use', 999999))
             cheapest_5 = models[:5]
             
             for model in cheapest_5:
@@ -256,10 +260,10 @@ async def main():
                 if not is_free:
                     await free_manager.add_free_model(
                         model_id=model_id,
-                        daily_limit=10,
-                        hourly_limit=3
+                        daily_limit=5,  # As per docs: 5/day
+                        hourly_limit=2  # As per docs: 2/hour
                     )
-                    logger.info(f"✅ Auto-configured free: {model_id} (10/day, 3/hour)")
+                    logger.info(f"✅ Auto-configured free: {model_id} (5/day, 2/hour)")
             
             logger.info("Free tier auto-setup complete")
         except Exception as e:
