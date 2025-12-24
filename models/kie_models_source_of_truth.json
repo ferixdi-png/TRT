@@ -291,7 +291,9 @@
       "price": 15.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Специализированная AI обработка",
+      "example": "входные данные → результат"
     },
     {
       "model_id": "bytedance/seedream-v4-text-to-image",
@@ -345,7 +347,7 @@
     },
     {
       "model_id": "bytedance/v1-lite-text-to-video",
-      "category": "other",
+      "category": "t2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -364,7 +366,9 @@
       "price": 70.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "текст → короткое видео"
     },
     {
       "model_id": "bytedance/v1-pro-fast-image-to-video",
@@ -400,7 +404,9 @@
       "price": 95.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "bytedance/v1-pro-image-to-video",
@@ -429,7 +435,7 @@
     },
     {
       "model_id": "bytedance/v1-pro-text-to-video",
-      "category": "other",
+      "category": "t2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -448,7 +454,9 @@
       "price": 110.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "текст → короткое видео"
     },
     {
       "model_id": "cheap_models_test_results",
@@ -862,7 +870,9 @@
       "price": 12.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "generation_test_results_20251217_170008",
@@ -934,7 +944,9 @@
       "price": 15.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "google/imagen4-fast",
@@ -982,7 +994,9 @@
       "price": 10.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "google/imagen4-ultra",
@@ -1030,7 +1044,9 @@
       "price": 20.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "google/nano-banana",
@@ -1078,7 +1094,9 @@
       "price": 8.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "google/nano-banana-edit",
@@ -1113,7 +1131,9 @@
       "price": 10.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "google/nano-banana-pro",
@@ -1161,7 +1181,9 @@
       "price": 12.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "google/veo-3",
@@ -1253,7 +1275,7 @@
     },
     {
       "model_id": "grok-imagine/image-to-video",
-      "category": "other",
+      "category": "i2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -1272,11 +1294,13 @@
       "price": 90.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения",
+      "example": "изображение → анимированное видео"
     },
     {
       "model_id": "grok-imagine/text-to-image",
-      "category": "other",
+      "category": "t2i",
       "input_schema": {
         "required": [
           "prompt"
@@ -1295,11 +1319,13 @@
       "price": 12.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "текст → изображение"
     },
     {
       "model_id": "grok-imagine/text-to-video",
-      "category": "other",
+      "category": "t2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -1318,7 +1344,9 @@
       "price": 100.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "текст → короткое видео"
     },
     {
       "model_id": "grok/imagine",
@@ -1354,11 +1382,13 @@
       "price": 70.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "hailuo/02-image-to-video-pro",
-      "category": "other",
+      "category": "i2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -1377,7 +1407,9 @@
       "price": 110.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения",
+      "example": "изображение → анимированное видео"
     },
     {
       "model_id": "hailuo/02-image-to-video-standard",
@@ -1413,11 +1445,13 @@
       "price": 85.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "hailuo/02-text-to-video-pro",
-      "category": "other",
+      "category": "t2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -1436,7 +1470,9 @@
       "price": 120.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "текст → короткое видео"
     },
     {
       "model_id": "hailuo/02-text-to-video-standard",
@@ -1484,7 +1520,7 @@
     },
     {
       "model_id": "hailuo/2-3-image-to-video-pro",
-      "category": "other",
+      "category": "i2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -1503,11 +1539,13 @@
       "price": 110.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения",
+      "example": "изображение → анимированное видео"
     },
     {
       "model_id": "hailuo/2-3-image-to-video-standard",
-      "category": "other",
+      "category": "i2v",
       "input_schema": {
         "required": [
           "prompt"
@@ -1526,7 +1564,9 @@
       "price": 85.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения",
+      "example": "изображение → анимированное видео"
     },
     {
       "model_id": "hailuo/2.3",
@@ -1562,7 +1602,9 @@
       "price": 100.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "ideogram/character",
@@ -1610,7 +1652,9 @@
       "price": 15.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "ideogram/character-edit",
@@ -1645,7 +1689,9 @@
       "price": 18.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "ideogram/character-remix",
@@ -1680,7 +1726,9 @@
       "price": 18.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "ideogram/v3-edit",
@@ -1715,7 +1763,9 @@
       "price": 18.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "ideogram/v3-reframe",
@@ -1750,7 +1800,9 @@
       "price": 18.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "ideogram/v3-remix",
@@ -1785,7 +1837,9 @@
       "price": 18.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "ideogram/v3-text-to-image",
@@ -1833,7 +1887,9 @@
       "price": 15.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "infinitalk/from-audio",
@@ -1861,7 +1917,9 @@
       "price": 20.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Синхронизация губ с аудио для создания говорящих аватаров",
+      "example": "фото + аудио → видео с синхронизированными губами"
     },
     {
       "model_id": "kling-2.6/image-to-video",
@@ -1897,7 +1955,9 @@
       "price": 100.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "kling-2.6/text-to-video",
@@ -1939,7 +1999,9 @@
       "price": 110.0,
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "kling/ai-avatar-v1-pro",
@@ -1968,7 +2030,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Синхронизация губ с аудио для создания говорящих аватаров",
+      "example": "фото + аудио → видео с синхронизированными губами"
     },
     {
       "model_id": "kling/v1-avatar-standard",
@@ -1997,7 +2061,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Синхронизация губ с аудио для создания говорящих аватаров",
+      "example": "фото + аудио → видео с синхронизированными губами"
     },
     {
       "model_id": "kling/v2-1-master-image-to-video",
@@ -2034,7 +2100,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "kling/v2-1-master-text-to-video",
@@ -2077,7 +2145,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "kling/v2-1-pro",
@@ -2120,7 +2190,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "kling/v2-1-standard",
@@ -2163,7 +2235,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "kling/v2-5-turbo-image-to-video-pro",
@@ -2200,7 +2274,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "kling/v2-5-turbo-text-to-video-pro",
@@ -2243,7 +2319,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "midjourney/api",
@@ -2292,7 +2370,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "nano-banana-pro",
@@ -2365,7 +2445,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "qwen/image-edit",
@@ -2401,7 +2483,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "qwen/image-to-image",
@@ -2437,7 +2521,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "qwen/text-to-image",
@@ -2486,7 +2572,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "recraft/crisp-upscale",
@@ -2580,7 +2668,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "seedream/4.5-edit",
@@ -2616,7 +2706,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Редактирование или трансформация изображений",
+      "example": "фото → обработанное фото"
     },
     {
       "model_id": "seedream/4.5-text-to-image",
@@ -2665,7 +2757,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание изображений по текстовому описанию",
+      "example": "описание → картинка"
     },
     {
       "model_id": "sora-2-image-to-video",
@@ -3042,7 +3136,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "wan/2-2-a14b-speech-to-video-turbo",
@@ -3085,7 +3181,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "wan/2-2-a14b-text-to-video-turbo",
@@ -3128,7 +3226,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "wan/2-2-animate-move",
@@ -3171,7 +3271,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "wan/2-2-animate-replace",
@@ -3195,7 +3297,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Специализированная AI обработка",
+      "example": "входные данные → результат"
     },
     {
       "model_id": "wan/2-5-image-to-video",
@@ -3232,7 +3336,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "wan/2-5-text-to-video",
@@ -3275,7 +3381,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "wan/2-6-image-to-video",
@@ -3312,7 +3420,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Создание видео из статичного изображения для соцсетей и рекламы",
+      "example": "фото продукта → анимированная демонстрация"
     },
     {
       "model_id": "wan/2-6-text-to-video",
@@ -3355,7 +3465,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Генерация видео по текстовому описанию для контента",
+      "example": "описание сцены → короткое видео"
     },
     {
       "model_id": "wan/2-6-video-to-video",
@@ -3385,7 +3497,9 @@
       "is_pricing_known": true,
       "disabled_reason": "Цена не подтверждена провайдером",
       "pricing_source": "category_fallback",
-      "schema_source": "category_fallback"
+      "schema_source": "category_fallback",
+      "use_case": "Улучшение или трансформация существующего видео",
+      "example": "исходное видео → улучшенная версия"
     },
     {
       "model_id": "z-image",
