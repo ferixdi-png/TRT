@@ -152,6 +152,48 @@ def build_payload(
         # V6: Old format with api_endpoint and input_schema
         input_schema = model_schema.get('input_schema', {})
         
+        # ВАЖНО: Если schema имеет структуру {model: {...}, callBackUrl: {...}, input: {type: dict, examples: [...]}}
+        # то реальные user fields находятся в examples первого примера для 'input' поля
+        if 'input' in input_schema and isinstance(input_schema['input'], dict):
+            input_field_spec = input_schema['input']
+            
+            # Проверяем: это описание поля (с type/examples) или вложенный объект
+            if 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
+                # Это описание поля - examples показывают структуру user inputs
+                examples = input_field_spec['examples']
+                if examples and isinstance(examples[0], dict):
+                    # Первый example показывает какие поля должны быть в user_inputs
+                    # Преобразуем пример в schema-подобную структуру
+                    example_structure = examples[0]
+                    
+                    # Создаем schema из примера
+                    input_schema = {}
+                    for field_name, field_value in example_structure.items():
+                        # Определяем тип по значению
+                        if isinstance(field_value, str):
+                            field_type = 'string'
+                        elif isinstance(field_value, (int, float)):
+                            field_type = 'number'
+                        elif isinstance(field_value, bool):
+                            field_type = 'boolean'
+                        elif isinstance(field_value, dict):
+                            field_type = 'object'
+                        elif isinstance(field_value, list):
+                            field_type = 'array'
+                        else:
+                            field_type = 'string'
+                        
+                        input_schema[field_name] = {
+                            'type': field_type,
+                            'required': False  # Консервативно
+                        }
+                    
+                    # Для prompt делаем required если он есть
+                    if 'prompt' in input_schema:
+                        input_schema['prompt']['required'] = True
+                    
+                    logger.debug(f"Extracted input schema from examples for {model_id}: {list(input_schema.keys())}")
+        
         # CRITICAL: Use api_endpoint for Kie.ai API (not model_id)
         api_endpoint = model_schema.get('api_endpoint', model_id)
         
@@ -165,6 +207,9 @@ def build_payload(
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
     # NESTED format (old): {"required": [...], "properties": {...}}
     
+    # ВАЖНО: Системные поля добавляются автоматически, НЕ требуются от user
+    SYSTEM_FIELDS = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
+    
     if 'properties' in input_schema:
         # Nested format
         required_fields = input_schema.get('required', [])
@@ -176,6 +221,11 @@ def build_payload(
         properties = input_schema
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
         optional_fields = [k for k in properties.keys() if k not in required_fields]
+    
+    # ФИЛЬТРУЕМ системные поля (они добавляются автоматически в payload)
+    required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
+    optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
+    properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
     
     # If no properties, use FALLBACK logic
     if not properties:

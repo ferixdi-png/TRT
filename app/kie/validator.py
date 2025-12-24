@@ -107,7 +107,53 @@ def validate_model_inputs(
     Raises:
         ModelContractError: If contract is violated
     """
+    # СИСТЕМНЫЕ ПОЛЯ - добавляются автоматически builder'ом, НЕ требуются от юзера
+    SYSTEM_FIELDS = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
+    
     input_schema = model_schema.get('input_schema', {})
+    
+    # ВАЖНО: Если schema имеет структуру {model: {...}, callBackUrl: {...}, input: {type: dict, examples: [...]}}
+    # то реальные user fields находятся внутри examples первого примера для 'input' поля
+    if 'input' in input_schema and isinstance(input_schema['input'], dict):
+        input_field_spec = input_schema['input']
+        
+        # Проверяем: это описание поля (с type/examples) или вложенный объект
+        if 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
+            # Это описание поля - examples показывают структуру user inputs
+            examples = input_field_spec['examples']
+            if examples and isinstance(examples[0], dict):
+                # Первый example показывает какие поля должны быть в user_inputs
+                # Преобразуем пример в schema-подобную структуру
+                example_structure = examples[0]
+                
+                # Создаем schema из примера: каждое поле становится опциональным
+                # (т.к. мы не знаем какие ТОЧНО required без доп. анализа)
+                input_schema = {}
+                for field_name, field_value in example_structure.items():
+                    # Определяем тип по значению
+                    if isinstance(field_value, str):
+                        field_type = 'string'
+                    elif isinstance(field_value, (int, float)):
+                        field_type = 'number'
+                    elif isinstance(field_value, bool):
+                        field_type = 'boolean'
+                    elif isinstance(field_value, dict):
+                        field_type = 'object'
+                    elif isinstance(field_value, list):
+                        field_type = 'array'
+                    else:
+                        field_type = 'string'
+                    
+                    input_schema[field_name] = {
+                        'type': field_type,
+                        'required': False  # Консервативно - делаем все опциональными
+                    }
+                
+                # Для prompt делаем required если он есть в примере
+                if 'prompt' in input_schema:
+                    input_schema['prompt']['required'] = True
+                
+                logger.debug(f"Extracted input schema from examples for {model_id}: {list(input_schema.keys())}")
     
     # Support BOTH flat and nested formats
     if 'properties' in input_schema:
@@ -120,6 +166,11 @@ def validate_model_inputs(
         properties = input_schema
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
         optional_fields = [k for k in properties.keys() if k not in required_fields]
+    
+    # ФИЛЬТРУЕМ системные поля - они НЕ валидируются для user_inputs
+    required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
+    optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
+    properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
     
     # FALLBACK: If no properties defined in schema, validate based on category
     if not properties:
@@ -349,7 +400,49 @@ def validate_payload_before_create_task(
     if not isinstance(input_data, dict):
         raise ModelContractError("Payload 'input' must be a dictionary")
     
+    # СИСТЕМНЫЕ ПОЛЯ - добавляются автоматически, НЕ должны быть в input
+    SYSTEM_FIELDS = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
+    
     input_schema = model_schema.get('input_schema', {})
+    
+    # ВАЖНО: Если schema имеет структуру {model: {...}, callBackUrl: {...}, input: {type: dict, examples: [...]}}
+    # то реальные user fields находятся в examples первого примера для 'input' поля
+    if 'input' in input_schema and isinstance(input_schema['input'], dict):
+        input_field_spec = input_schema['input']
+        
+        # Проверяем: это описание поля (с type/examples) или вложенный объект
+        if 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
+            # Это описание поля - examples показывают структуру user inputs
+            examples = input_field_spec['examples']
+            if examples and isinstance(examples[0], dict):
+                # Первый example показывает какие поля должны быть
+                example_structure = examples[0]
+                
+                # Создаем schema из примера
+                input_schema = {}
+                for field_name, field_value in example_structure.items():
+                    # Определяем тип по значению
+                    if isinstance(field_value, str):
+                        field_type = 'string'
+                    elif isinstance(field_value, (int, float)):
+                        field_type = 'number'
+                    elif isinstance(field_value, bool):
+                        field_type = 'boolean'
+                    elif isinstance(field_value, dict):
+                        field_type = 'object'
+                    elif isinstance(field_value, list):
+                        field_type = 'array'
+                    else:
+                        field_type = 'string'
+                    
+                    input_schema[field_name] = {
+                        'type': field_type,
+                        'required': False  # Консервативно
+                    }
+                
+                # Для prompt делаем required
+                if 'prompt' in input_schema:
+                    input_schema['prompt']['required'] = True
     
     # Support BOTH flat and nested formats
     if 'properties' in input_schema:
@@ -360,6 +453,10 @@ def validate_payload_before_create_task(
         # Flat format - convert
         properties = input_schema
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
+    
+    # ФИЛЬТРУЕМ системные поля - они НЕ должны быть в payload['input']
+    required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
+    properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
     
     # Check all required fields are in payload['input']
     for field_name in required_fields:
