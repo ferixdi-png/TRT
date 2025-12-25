@@ -344,9 +344,9 @@
         "curl --request POST \\\n  --url https://api.kie.ai/api/v1/jobs/createTask \\\n  --header 'Authorization: Bearer <token>' \\\n  --header 'Content-Type: application/json' \\\n  --data '\n{\n  \"model\": \"z-image\",\n  \"callBackUrl\": \"https://your-domain.com/api/callback\",\n  \"input\": {\n    \"prompt\": \"Generate a photorealistic image of a cafe terrace in the Marais district of Paris on a Wednesday morning in March 2025. It is a crisp, cool spring morning with clear skies. Locals are drinking coffee. In sharp focus"
       ],
       "pricing": {
-        "usd_per_gen": 0.004,
-        "rub_per_gen": 0.32,
-        "credits_per_gen": 0.8,
+        "usd_per_gen": 0.0,
+        "rub_per_gen": 0.0,
+        "credits_per_gen": 0.0,
         "is_free": true,
         "source": "screenshot_user_provided"
       },
@@ -2217,9 +2217,9 @@
       },
       "examples": [],
       "pricing": {
-        "usd_per_gen": 0.02,
-        "rub_per_gen": 1.58,
-        "credits_per_gen": 4.0,
+        "usd_per_gen": 0.0,
+        "rub_per_gen": 0.0,
+        "credits_per_gen": 0.0,
         "source": "pricing_table_corrected",
         "is_free": true
       },
@@ -2326,9 +2326,9 @@
       },
       "examples": [],
       "pricing": {
-        "usd_per_gen": 0.02,
-        "rub_per_gen": 1.58,
-        "credits_per_gen": 4.0,
+        "usd_per_gen": 0.0,
+        "rub_per_gen": 0.0,
+        "credits_per_gen": 0.0,
         "source": "pricing_table_corrected",
         "is_free": true
       },
@@ -2439,9 +2439,9 @@
       },
       "examples": [],
       "pricing": {
-        "usd_per_gen": 0.03,
-        "rub_per_gen": 2.37,
-        "credits_per_gen": 6.0,
+        "usd_per_gen": 0.0,
+        "rub_per_gen": 0.0,
+        "credits_per_gen": 0.0,
         "source": "pricing_table_corrected",
         "is_free": true
       },
