@@ -159,12 +159,29 @@ class KieMasterParser:
             'endpoint': None,
             'input_schema': {},
             'examples': [],
-            'pricing': {}
+            'pricing': {},
+            '_metadata': {
+                'source': 'copy_page',
+                'parsed_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'parser_version': '2.1.0'
+            }
         }
         
         soup = BeautifulSoup(html, 'html.parser')
         
-        # 1. Поиск в <script> тегах (Next.js данные)
+        # 1. Поиск endpoint в JSON data (приоритет #1)
+        # Ищем в структуре: {"openapi":"path/to/model.json post /api/v1/jobs/createTask"}
+        openapi_pattern = r'"openapi":\s*"[^"]*?(?:post|POST|get|GET)\s+(/api/v[0-9]+/[a-zA-Z]+(?:/[a-zA-Z]+)*)'
+        openapi_match = re.search(openapi_pattern, html, re.I)
+        if openapi_match:
+            endpoint_raw = openapi_match.group(1)
+            # Debug
+            if model_id == 'z-image':
+                print(f"   DEBUG: Raw match: {repr(endpoint_raw)}")
+            result['endpoint'] = endpoint_raw
+            result['_metadata']['endpoint_source'] = 'openapi_json'
+        
+        # 2. Поиск в <script> тегах (Next.js данные)
         for script in soup.find_all('script'):
             if script.string and 'props' in script.string:
                 # Try to extract JSON
@@ -244,6 +261,7 @@ class KieMasterParser:
                     'credits_per_gen': existing.get('credits_per_gen'),
                     'source': 'pricing_table_corrected'
                 }
+                data['_metadata']['pricing_source'] = 'pricing_table_fallback'
                 print(f"   💾 Pricing (fallback): ${existing.get('usd_per_gen', 0):.3f}")
         
         print(f"   ✅ Endpoint: {data.get('endpoint', 'N/A')}")
