@@ -320,11 +320,18 @@ def main():
     
     # Parse all or specific model
     if len(sys.argv) > 1:
-        model_id = sys.argv[1]
-        parser.parse_model(model_id)
+        if sys.argv[1] == '--all':
+            # Parse ALL models (no limit)
+            parser.parse_all_models(limit=None)
+        else:
+            model_id = sys.argv[1]
+            parser.parse_model(model_id)
     else:
-        # Parse first 10 for testing
-        parser.parse_all_models(limit=10)
+        # Default: parse ALL models
+        print("⚠️  No arguments - parsing ALL 72 models!")
+        print("   Use: python master_kie_parser.py <model_id> for single model")
+        print("   Use: python master_kie_parser.py --all for explicit all\n")
+        parser.parse_all_models(limit=None)
 
 
 if __name__ == '__main__':
