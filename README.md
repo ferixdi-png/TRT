@@ -2,6 +2,13 @@
 
 AI генератор для изображений, видео и аудио через Telegram с монетизацией.
 
+**📚 Документация:**
+- [🚀 Quick Start для разработчиков](./QUICK_START_DEV.md)
+- [🤝 Contributing Guidelines](./CONTRIBUTING.md)
+- [🌐 Deployment на Render](./DEPLOYMENT.md)
+
+**📊 Статус:** Production Ready | 72 модели | PostgreSQL + SQLite
+
 ---
 
 ## 🚀 Quick Start: Deploy to Render
@@ -38,10 +45,11 @@ python main_render.py
 
 ### 🔐 Pricing Protection (P0)
 
-- ❌ **НЕТ default/fallback цен** - только подтвержденные от Kie.ai
-- ✅ **66 моделей отключены** (нет цены)
-- ✅ **23 модели доступны** (цены из API)
-- ✅ **Формула:** `USER_PRICE_RUB = KIE_PRICE_RUB × 2.0`
+- ✅ **72 модели** в SOURCE_OF_TRUTH
+- ✅ **Pricing:** точные цены из Kie.ai
+- ✅ **Формула:** `USER_PRICE_RUB = KIE_PRICE_USD × FX_RATE × 2.0`
+- ✅ **FX auto-update** из ЦБР (78.43 RUB/USD актуальный)
+- ⚠️ **Input schemas:** требуют обновления (см. QUICK_START_DEV.md)
 
 ### 🔒 Singleton Lock
 
