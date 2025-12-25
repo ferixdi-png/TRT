@@ -28,6 +28,8 @@ from bot.handlers.marketing import router as marketing_router, set_database_serv
 from bot.handlers.balance import router as balance_router, set_database_service as balance_set_db
 from bot.handlers.history import router as history_router, set_database_service as history_set_db
 from bot.handlers.admin import router as admin_router, set_services as admin_set_services
+from bot.handlers.gallery import router as gallery_router
+from bot.handlers.quick_actions import router as quick_actions_router
 
 # Import aiogram components
 from aiogram import Bot, Dispatcher
@@ -97,9 +99,11 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     ))
     logger.info(f"User rate limit middleware registered (20/min, {len(admin_ids)} admins exempt)")
     
-    # Register routers in order (admin first for access, marketing for new UX, then flow for compatibility)
+    # Register routers in order (admin first, then marketing, gallery, quick_actions, balance, history, flow)
     dp.include_router(admin_router)
     dp.include_router(marketing_router)
+    dp.include_router(gallery_router)  # NEW: Gallery with examples
+    dp.include_router(quick_actions_router)  # NEW: Quick actions
     dp.include_router(balance_router)
     dp.include_router(history_router)
     dp.include_router(flow_router)
@@ -247,29 +251,34 @@ async def main():
             with open(sot_path, 'r', encoding='utf-8') as f:
                 sot = json.load(f)
             
-            # Get ONLY models with 0 RUB price (real FREE models)
+            # Get 5 cheapest models (as per startup validation requirement)
             models = sot.get('models', {})
-            free_tier_ids = [
-                model_id for model_id, model in models.items()
+            enabled_models = [
+                (model_id, model) for model_id, model in models.items()
                 if model.get('enabled', True)
-                and model.get('pricing', {}).get('rub_per_gen') == 0
+                and model.get('pricing', {}).get('rub_per_gen') is not None
             ]
+            
+            # Sort by price and take top 5 cheapest
+            enabled_models.sort(key=lambda x: x[1].get('pricing', {}).get('rub_per_gen', 999999))
+            free_tier_ids = [model_id for model_id, _ in enabled_models[:5]]
             
             if free_tier_ids:
                 for model_id in free_tier_ids:
                     is_free = await free_manager.is_model_free(model_id)
                     
                     if not is_free:
+                        price = next(m.get('pricing', {}).get('rub_per_gen', 0) for mid, m in enabled_models if mid == model_id)
                         await free_manager.add_free_model(
                             model_id=model_id,
                             daily_limit=10,
                             hourly_limit=3
                         )
-                        logger.info(f"✅ Auto-configured FREE: {model_id} (0 RUB)")
+                        logger.info(f"✅ Auto-configured FREE: {model_id} ({price} RUB)")
                 
                 logger.info(f"Free tier auto-setup: {len(free_tier_ids)} models")
             else:
-                logger.warning("No FREE (0 RUB) models found in SOURCE_OF_TRUTH")
+                logger.warning("No enabled models found in SOURCE_OF_TRUTH")
         except Exception as e:
             logger.warning(f"Free tier auto-setup skipped: {e}")
         

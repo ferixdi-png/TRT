@@ -30,7 +30,7 @@ def _get_db_service():
 
 @router.callback_query(F.data == "history:main")
 async def cb_history_main(callback: CallbackQuery, state: FSMContext):
-    """Show generation history."""
+    """Show generation history with visual gallery."""
     await state.clear()
     
     db_service = _get_db_service()
@@ -46,10 +46,19 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
     text = "📜 <b>История генераций</b>\n\n"
     
     if not jobs:
-        text += "<i>У вас пока нет генераций</i>"
+        text += "<i>У вас пока нет генераций</i>\n\n"
+        text += "💡 Попробуйте создать что-то в разделе ⚡ Быстрые действия!"
     else:
-        for job in jobs:
-            job_id = job.get("id")
+        # Count by status
+        succeeded = sum(1 for j in jobs if j.get("status") == "succeeded")
+        failed = sum(1 for j in jobs if j.get("status") == "failed")
+        running = sum(1 for j in jobs if j.get("status") in ("running", "queued"))
+        
+        text += f"✅ Успешно: {succeeded} | ❌ Ошибки: {failed} | 🔄 В работе: {running}\n\n"
+        
+        # Show recent jobs with clickable details
+        text += "<b>Последние генерации:</b>\n"
+        for idx, job in enumerate(jobs[:5], 1):
             model_id = job.get("model_id", "unknown")
             status = job.get("status", "unknown")
             price = job.get("price_rub", 0)
@@ -57,44 +66,99 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
             
             # Status emoji
             status_emoji = {
-                "draft": "📝",
-                "await_confirm": "⏳",
-                "queued": "⏱️",
-                "running": "🔄",
                 "succeeded": "✅",
                 "failed": "❌",
-                "refunded": "↩️",
-                "cancelled": "🚫"
+                "running": "🔄",
+                "queued": "⏱️",
             }.get(status, "•")
-            
-            status_text = {
-                "draft": "Черновик",
-                "await_confirm": "Ожидает подтверждения",
-                "queued": "В очереди",
-                "running": "Выполняется",
-                "succeeded": "Завершено",
-                "failed": "Ошибка",
-                "refunded": "Возвращено",
-                "cancelled": "Отменено"
-            }.get(status, status)
             
             # Format date
             date_str = created.strftime("%d.%m %H:%M") if created else "—"
             
-            text += (
-                f"\n{status_emoji} <b>{model_id}</b>\n"
-                f"  Статус: {status_text}\n"
-                f"  Стоимость: {format_price_rub(price)}\n"
-                f"  Дата: {date_str}\n"
-            )
+            # Short model name
+            model_name = model_id.split('/')[-1] if '/' in model_id else model_id
+            
+            text += f"\n{idx}. {status_emoji} {model_name} ({format_price_rub(price)}) - {date_str}"
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 История транзакций", callback_data="history:transactions")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="balance:main")]
+    # Build keyboard with gallery option
+    keyboard_rows = []
+    
+    if jobs and any(j.get("status") == "succeeded" for j in jobs):
+        keyboard_rows.append([
+            InlineKeyboardButton(text="🖼️ Просмотр галереи", callback_data="history:gallery")
+        ])
+    
+    keyboard_rows.append([
+        InlineKeyboardButton(text="📊 История транзакций", callback_data="history:transactions")
     ])
+    keyboard_rows.append([
+        InlineKeyboardButton(text="◀️ Назад", callback_data="balance:main")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+
+@router.callback_query(F.data == "history:gallery")
+async def cb_history_gallery(callback: CallbackQuery, state: FSMContext):
+    """Show visual gallery of successful generations."""
+    await callback.answer()
+    
+    db_service = _get_db_service()
+    if not db_service:
+        await callback.answer("⚠️ База данных недоступна", show_alert=True)
+        return
+    
+    from app.database.services import JobService
+    
+    job_service = JobService(db_service)
+    jobs = await job_service.list_user_jobs(callback.from_user.id, limit=20)
+    
+    # Filter only succeeded jobs
+    succeeded_jobs = [j for j in jobs if j.get("status") == "succeeded"]
+    
+    if not succeeded_jobs:
+        await callback.message.edit_text(
+            "🖼️ <b>Галерея генераций</b>\n\n"
+            "<i>У вас пока нет завершённых генераций</i>\n\n"
+            "💡 Создайте что-то крутое через ⚡ Быстрые действия!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="history:main")]
+            ])
+        )
+        return
+    
+    # Build gallery text
+    text = "🖼️ <b>Галерея ваших генераций</b>\n\n"
+    text += f"Всего успешных работ: {len(succeeded_jobs)}\n\n"
+    
+    # Show up to 5 recent succeeded jobs with details
+    for idx, job in enumerate(succeeded_jobs[:5], 1):
+        job_id = job.get("id")
+        model_id = job.get("model_id", "unknown")
+        price = job.get("price_rub", 0)
+        created = job.get("created_at")
+        
+        model_name = model_id.split('/')[-1] if '/' in model_id else model_id
+        date_str = created.strftime("%d.%m.%Y %H:%M") if created else "—"
+        
+        text += (
+            f"{idx}. <b>{model_name}</b>\n"
+            f"   💰 {format_price_rub(price)} | 📅 {date_str}\n\n"
+        )
+    
+    if len(succeeded_jobs) > 5:
+        text += f"<i>...и ещё {len(succeeded_jobs) - 5} работ</i>\n"
+    
+    # Buttons to navigate
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Создать ещё", callback_data="quick:menu")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="history:main")]
+    ])
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "history:transactions")

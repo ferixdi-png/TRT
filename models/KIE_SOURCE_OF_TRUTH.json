@@ -1,6 +1,6 @@
 {
-  "version": "1.2.6-ENDPOINT-FIX",
-  "updated_at": "2025-12-25 02:50:00",
+  "version": "1.2.8-USE-CASES",
+  "updated_at": "2025-12-25 04:00:00",
   "models": {
     "bytedance/seedream": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -77,7 +77,7 @@
       "category": "image",
       "slug": "market/seedream/seedream",
       "display_name": "Seedream3.0 - Text to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Seedream3.0 - Text to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/seedream/seedream",
       "old_registry_id": "seedream/seedream",
@@ -93,7 +93,8 @@
         "A 2D flat art style campsite poster with the text “Kie AI Seedream 3.0 API”. ...",
         "A 2D flat art style campsite poster with the text “Kie AI Seedream 3.0 API”. ...",
         "A 2D flat art style campsite poster with the text “Kie AI Seedream 3.0 API”. ..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "bytedance/seedream-v4-text-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -170,7 +171,7 @@
       "category": "image",
       "slug": "market/seedream/seedream-v4-text-to-image",
       "display_name": "Seedream4.0 - Text to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Seedream4.0 - Text to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/seedream/seedream-v4-text-to-image",
       "old_registry_id": "seedream/seedream-v4-text-to-image",
@@ -186,7 +187,8 @@
         "Draw the following system of binary linear equations and the corresponding so...",
         "Draw the following system of binary linear equations and the corresponding so...",
         "Draw the following system of binary linear equations and the corresponding so..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "bytedance/seedream-v4-edit": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -275,7 +277,7 @@
       "category": "image",
       "slug": "market/seedream/seedream-v4-edit",
       "display_name": "Seedream4.0 - Edit",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Seedream4.0 - Edit",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/seedream/seedream-v4-edit",
       "old_registry_id": "seedream/seedream-v4-edit",
@@ -291,7 +293,8 @@
         "Refer to this logo and create a single visual showcase for an outdoor sports ...",
         "Refer to this logo and create a single visual showcase for an outdoor sports ...",
         "Refer to this logo and create a single visual showcase for an outdoor sports ..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "z-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -360,7 +363,7 @@
       "category": "image",
       "slug": "market/z-image/z-image",
       "display_name": "z-image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью z-image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/z-image/z-image",
       "old_registry_id": "z-image/z-image",
@@ -375,7 +378,8 @@
         "Generate a photorealistic image of a cafe terrace in the Marais district of P...",
         "Generate a photorealistic image of a cafe terrace in the Marais district of P...",
         "Generate a photorealistic image of a cafe terrace in the Marais district of P..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "google/imagen4-fast": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -452,7 +456,7 @@
       "category": "image",
       "slug": "market/google/imagen4-fast",
       "display_name": "Google - imagen4-fast",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Google - imagen4-fast",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/imagen4-fast",
       "tags": [
@@ -467,7 +471,8 @@
         "Create a cinematic, photorealistic medium shot capturing the nostalgic warmth...",
         "Create a cinematic, photorealistic medium shot capturing the nostalgic warmth...",
         "Create a cinematic, photorealistic medium shot capturing the nostalgic warmth..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "google/imagen4-ultra": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -544,7 +549,7 @@
       "category": "image",
       "slug": "market/google/imagen4-ultra",
       "display_name": "Google - imagen4-ultra",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Google - imagen4-ultra",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/imagen4-ultra",
       "tags": [
@@ -559,7 +564,8 @@
         "A lively comic scene where two colleagues are in an office. The first person ...",
         "A lively comic scene where two colleagues are in an office. The first person ...",
         "A lively comic scene where two colleagues are in an office. The first person ..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "google/imagen4": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -640,7 +646,7 @@
       "category": "image",
       "slug": "market/google/imagen4",
       "display_name": "Google - imagen4",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Google - imagen4",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/imagen4",
       "tags": [
@@ -655,7 +661,8 @@
         "A lively comic scene where two colleagues are in an office. The first person ...",
         "A lively comic scene where two colleagues are in an office. The first person ...",
         "A lively comic scene where two colleagues are in an office. The first person ..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "google/nano-banana-edit": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -740,7 +747,7 @@
       "category": "other",
       "slug": "market/google/nano-banana-edit",
       "display_name": "Google - Nano Banana Edit",
-      "description": "English",
+      "description": "AI модель Google - Nano Banana Edit для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/nano-banana-edit",
       "tags": [
@@ -751,7 +758,8 @@
         "turn this photo into a character figure. Behind it, place a box with the char...",
         "turn this photo into a character figure. Behind it, place a box with the char...",
         "turn this photo into a character figure. Behind it, place a box with the char..."
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "google/nano-banana": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -824,7 +832,7 @@
       "category": "other",
       "slug": "market/google/nano-banana",
       "display_name": "Google - Nano Banana",
-      "description": "English",
+      "description": "AI модель Google - Nano Banana для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/nano-banana",
       "tags": [
@@ -835,7 +843,8 @@
         "A surreal painting of a giant banana floating in space, stars and galaxies in...",
         "A surreal painting of a giant banana floating in space, stars and galaxies in...",
         "A surreal painting of a giant banana floating in space, stars and galaxies in..."
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "nano-banana-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -917,7 +926,7 @@
       "category": "image",
       "slug": "market/google/pro-image-to-image",
       "display_name": "Google - Nano Banana Pro",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Google - Nano Banana Pro",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/pro-image-to-image",
       "old_registry_id": "google/pro-image-to-image",
@@ -931,7 +940,8 @@
         "Comic poster: cool banana hero in shades leaps from sci-fi pad. Six panels: 1...",
         "Comic poster: cool banana hero in shades leaps from sci-fi pad. Six panels: 1...",
         "Comic poster: cool banana hero in shades leaps from sci-fi pad. Six panels: 1..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "flux-2/pro-image-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1020,7 +1030,7 @@
       "category": "image",
       "slug": "market/flux2/pro-image-to-image",
       "display_name": "Flux-2 - Pro Image to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Flux-2 - Pro Image to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/flux2/pro-image-to-image",
       "old_registry_id": "flux2/pro-image-to-image",
@@ -1036,7 +1046,8 @@
         "The jar in image 1 is filled with capsules exactly same as image 2 with the e...",
         "The jar in image 1 is filled with capsules exactly same as image 2 with the e...",
         "The jar in image 1 is filled with capsules exactly same as image 2 with the e..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "flux-2/pro-text-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1109,7 +1120,7 @@
       "category": "image",
       "slug": "market/flux2/pro-text-to-image",
       "display_name": "Flux-2 - Pro Text to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Flux-2 - Pro Text to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/flux2/pro-text-to-image",
       "old_registry_id": "flux2/pro-text-to-image",
@@ -1125,7 +1136,8 @@
         "Hyperrealistic supermarket blister pack on clean olive green surface. No shad...",
         "Hyperrealistic supermarket blister pack on clean olive green surface. No shad...",
         "Hyperrealistic supermarket blister pack on clean olive green surface. No shad..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "flux-2/flex-image-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1214,7 +1226,7 @@
       "category": "image",
       "slug": "market/flux2/flex-image-to-image",
       "display_name": "Flux-2 - Image to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Flux-2 - Image to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/flux2/flex-image-to-image",
       "old_registry_id": "flux2/flex-image-to-image",
@@ -1230,7 +1242,8 @@
         "Replace the can in image 2 with the can from image 1",
         "Replace the can in image 2 with the can from image 1",
         "Replace the can in image 2 with the can from image 1"
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "flux-2/flex-text-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1303,7 +1316,7 @@
       "category": "image",
       "slug": "market/flux2/flex-text-to-image",
       "display_name": "Flux-2 - Text to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Flux-2 - Text to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/flux2/flex-text-to-image",
       "old_registry_id": "flux2/flex-text-to-image",
@@ -1319,7 +1332,8 @@
         "A humanoid figure with a vintage television set for a head, featuring a green...",
         "A humanoid figure with a vintage television set for a head, featuring a green...",
         "A humanoid figure with a vintage television set for a head, featuring a green..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "grok-imagine/text-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1388,7 +1402,7 @@
       "category": "image",
       "slug": "market/grok-imagine/text-to-image",
       "display_name": "Grok Imagine - Text to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Grok Imagine - Text to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/grok-imagine/text-to-image",
       "tags": [
@@ -1403,7 +1417,8 @@
         "Cinematic portrait of a woman sitting by a vinyl record player, retro living ...",
         "Cinematic portrait of a woman sitting by a vinyl record player, retro living ...",
         "Cinematic portrait of a woman sitting by a vinyl record player, retro living ..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "grok-imagine/upscale": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1466,7 +1481,7 @@
       "category": "enhance",
       "slug": "market/grok-imagine/upscale",
       "display_name": "Grok Imagine - Image Upscale",
-      "description": "English",
+      "description": "Улучшение качества контента с помощью Grok Imagine - Image Upscale",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/grok-imagine/upscale",
       "tags": [
@@ -1479,7 +1494,8 @@
         "качество",
         "увеличение",
         "улучшение"
-      ]
+      ],
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
     },
     "topaz/image-upscale": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1545,7 +1561,7 @@
       "category": "enhance",
       "slug": "market/topaz/image-upscale",
       "display_name": "Topaz - Image Upscale",
-      "description": "English",
+      "description": "Улучшение качества контента с помощью Topaz - Image Upscale",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/topaz/image-upscale",
       "tags": [
@@ -1559,7 +1575,8 @@
         "картинка",
         "качество",
         "увеличение"
-      ]
+      ],
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
     },
     "recraft/remove-background": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1621,13 +1638,14 @@
       "category": "enhance",
       "slug": "market/recraft/remove-background",
       "display_name": "recraft/remove-background",
-      "description": "English",
+      "description": "Улучшение качества контента с помощью recraft/remove-background",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/recraft/remove-background",
       "tags": [
         "recraft",
         "remove background"
-      ]
+      ],
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
     },
     "recraft/crisp-upscale": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1689,7 +1707,7 @@
       "category": "enhance",
       "slug": "market/recraft/crisp-upscale",
       "display_name": "Recraft - Image Upscale",
-      "description": "English",
+      "description": "Улучшение качества контента с помощью Recraft - Image Upscale",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/recraft/crisp-upscale",
       "tags": [
@@ -1703,7 +1721,8 @@
         "качество",
         "увеличение",
         "улучшение"
-      ]
+      ],
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
     },
     "ideogram/v3-reframe": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1785,13 +1804,14 @@
       "category": "other",
       "slug": "market/ideogram/v3-reframe",
       "display_name": "Ideogram - v3-reframe",
-      "description": "English",
+      "description": "AI модель Ideogram - v3-reframe для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/ideogram/v3-reframe",
       "tags": [
         "ideogram",
         "v3 reframe"
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "ideogram/character-edit": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -1892,7 +1912,7 @@
       "category": "other",
       "slug": "market/ideogram/character-edit",
       "display_name": "Ideogram - character-edit",
-      "description": "English",
+      "description": "AI модель Ideogram - character-edit для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/ideogram/character-edit",
       "tags": [
@@ -1903,7 +1923,8 @@
         "A fabulous look head tilted down, looking forward with a smile\n",
         "A fabulous look head tilted down, looking forward with a smile\n",
         "A fabulous look head tilted down, looking forward with a smile\n"
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "ideogram/character-remix": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2020,7 +2041,7 @@
       "category": "other",
       "slug": "market/ideogram/character-remix",
       "display_name": "Ideogram - character-remix",
-      "description": "English",
+      "description": "AI модель Ideogram - character-remix для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/ideogram/character-remix",
       "tags": [
@@ -2031,7 +2052,8 @@
         "A fisheye lens selfie photograph taken at night on an urban street. The image...",
         "A fisheye lens selfie photograph taken at night on an urban street. The image...",
         "A fisheye lens selfie photograph taken at night on an urban street. The image..."
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "ideogram/character": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2132,7 +2154,7 @@
       "category": "other",
       "slug": "market/ideogram/character",
       "display_name": "Ideogram - character",
-      "description": "English",
+      "description": "AI модель Ideogram - character для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/ideogram/character",
       "tags": [
@@ -2143,7 +2165,8 @@
         "Place the woman from the uploaded portrait, wearing a casual white blouse, in...",
         "Place the woman from the uploaded portrait, wearing a casual white blouse, in...",
         "Place the woman from the uploaded portrait, wearing a casual white blouse, in..."
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "qwen/text-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2234,7 +2257,7 @@
       "category": "image",
       "slug": "market/qwen/text-to-image",
       "display_name": "Qwen - Text to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Qwen - Text to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/qwen/text-to-image",
       "tags": [
@@ -2248,7 +2271,8 @@
       ],
       "ui_example_prompts": [
         "A futuristic cityscape at sunset with flying cars and neon lights"
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "qwen/image-to-image": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2343,7 +2367,7 @@
       "category": "image",
       "slug": "market/qwen/image-to-image",
       "display_name": "Qwen - Image to Image",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Qwen - Image to Image",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/qwen/image-to-image",
       "tags": [
@@ -2357,7 +2381,8 @@
       ],
       "ui_example_prompts": [
         "Transform this image into a watercolor painting style"
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "qwen/image-edit": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2456,7 +2481,7 @@
       "category": "image",
       "slug": "market/qwen/image-edit",
       "display_name": "Qwen - image-edit",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Qwen - image-edit",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/qwen/image-edit",
       "tags": [
@@ -2470,7 +2495,8 @@
       ],
       "ui_example_prompts": [
         "Add colorful flowers in the foreground"
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "grok-imagine/text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2543,7 +2569,7 @@
       "category": "video",
       "slug": "market/grok-imagine/text-to-video",
       "display_name": "Grok Imagine - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Grok Imagine - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/grok-imagine/text-to-video",
       "tags": [
@@ -2558,7 +2584,8 @@
         "A couple of doors open to the right one by one randomly and stay open, to sho...",
         "A couple of doors open to the right one by one randomly and stay open, to sho...",
         "A couple of doors open to the right one by one randomly and stay open, to sho..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "grok-imagine/image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2639,7 +2666,7 @@
       "category": "image",
       "slug": "market/grok-imagine/image-to-video",
       "display_name": "Grok Imagine - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Grok Imagine - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/grok-imagine/image-to-video",
       "tags": [
@@ -2654,7 +2681,8 @@
         "POV hand comes into frame handing the girl a cup of take away coffee, the gir...",
         "POV hand comes into frame handing the girl a cup of take away coffee, the gir...",
         "POV hand comes into frame handing the girl a cup of take away coffee, the gir..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "kling-2.6/text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2728,7 +2756,7 @@
       "category": "video",
       "slug": "market/kling/text-to-video",
       "display_name": "Kling-2.6 - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Kling-2.6 - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/text-to-video",
       "old_registry_id": "kling/text-to-video",
@@ -2744,7 +2772,8 @@
         "Scene: A fashion live-streaming sales setting, with clothes hanging on racks ...",
         "Scene: A fashion live-streaming sales setting, with clothes hanging on racks ...",
         "Scene: A fashion live-streaming sales setting, with clothes hanging on racks ..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "kling-2.6/image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2826,7 +2855,7 @@
       "category": "image",
       "slug": "market/kling/image-to-video",
       "display_name": "Kling-2.6 - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Kling-2.6 - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/image-to-video",
       "old_registry_id": "kling/image-to-video",
@@ -2842,7 +2871,8 @@
         "In a bright rehearsal room, sunlight streams through the windows, and a stand...",
         "In a bright rehearsal room, sunlight streams through the windows, and a stand...",
         "In a bright rehearsal room, sunlight streams through the windows, and a stand..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "kling/ai-avatar-v1-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -2915,7 +2945,7 @@
       "category": "avatar",
       "slug": "market/kling/ai-avatar-v1-pro",
       "display_name": "Kling - AI Avatar V1 Pro",
-      "description": "English",
+      "description": "Создание аватаров и персонажей с помощью Kling - AI Avatar V1 Pro",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/ai-avatar-v1-pro",
       "tags": [
@@ -2929,7 +2959,8 @@
         "видео",
         "персонаж",
         "ролик"
-      ]
+      ],
+      "use_case": "Создание анимированных персонажей для видео, презентаций, маркетинга"
     },
     "kling/v1-avatar-standard": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3002,7 +3033,7 @@
       "category": "avatar",
       "slug": "market/kling/v1-avatar-standard",
       "display_name": "Kling - V1 Avatar Standard",
-      "description": "English",
+      "description": "Создание аватаров и персонажей с помощью Kling - V1 Avatar Standard",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v1-avatar-standard",
       "tags": [
@@ -3016,7 +3047,8 @@
         "видео",
         "персонаж",
         "ролик"
-      ]
+      ],
+      "use_case": "Создание анимированных персонажей для видео, презентаций, маркетинга"
     },
     "kling/v2-1-master-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3097,7 +3129,7 @@
       "category": "image",
       "slug": "market/kling/v2-1-master-image-to-video",
       "display_name": "Kling - V2.1 Master Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Kling - V2.1 Master Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v2-1-master-image-to-video",
       "tags": [
@@ -3112,7 +3144,8 @@
         "A team of paratroopers descends into enemy territory, as they pass through cl...",
         "A team of paratroopers descends into enemy territory, as they pass through cl...",
         "A team of paratroopers descends into enemy territory, as they pass through cl..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "kling/v2-1-master-text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3193,7 +3226,7 @@
       "category": "video",
       "slug": "market/kling/v2-1-master-text-to-video",
       "display_name": "Kling - V2.1 Master Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Kling - V2.1 Master Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v2-1-master-text-to-video",
       "tags": [
@@ -3208,7 +3241,8 @@
         "First-person view from a soldier jumping from a transport plane — the camera ...",
         "First-person view from a soldier jumping from a transport plane — the camera ...",
         "First-person view from a soldier jumping from a transport plane — the camera ..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "kling/v2-1-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3293,7 +3327,7 @@
       "category": "video",
       "slug": "market/kling/v2-1-pro",
       "display_name": "Kling - V2.1 Pro",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Kling - V2.1 Pro",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v2-1-pro",
       "tags": [
@@ -3308,7 +3342,8 @@
         "POV shot of a gravity surfer diving between ancient ruins suspended midair, g...",
         "POV shot of a gravity surfer diving between ancient ruins suspended midair, g...",
         "POV shot of a gravity surfer diving between ancient ruins suspended midair, g..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "kling/v2-1-standard": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3389,7 +3424,7 @@
       "category": "video",
       "slug": "market/kling/v2-1-standard",
       "display_name": "Kling - V2.1 Standard",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Kling - V2.1 Standard",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v2-1-standard",
       "tags": [
@@ -3404,7 +3439,8 @@
         "Begin with the uploaded image as the first frame. Gradually animate the scene...",
         "Begin with the uploaded image as the first frame. Gradually animate the scene...",
         "Begin with the uploaded image as the first frame. Gradually animate the scene..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "bytedance/v1-pro-fast-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3481,7 +3517,7 @@
       "category": "image",
       "slug": "market/bytedance/v1-pro-fast-image-to-video",
       "display_name": "Bytedance - V1 Pro Fast Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Bytedance - V1 Pro Fast Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/bytedance/v1-pro-fast-image-to-video",
       "tags": [
@@ -3496,7 +3532,8 @@
         "A cinematic close-up sequence of a single elegant ceramic coffee cup with sau...",
         "A cinematic close-up sequence of a single elegant ceramic coffee cup with sau...",
         "A cinematic close-up sequence of a single elegant ceramic coffee cup with sau..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "bytedance/v1-pro-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3585,7 +3622,7 @@
       "category": "image",
       "slug": "market/bytedance/v1-pro-image-to-video",
       "display_name": "Bytedance - V1 Pro Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Bytedance - V1 Pro Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/bytedance/v1-pro-image-to-video",
       "tags": [
@@ -3600,7 +3637,8 @@
         "A golden retriever dashing through shallow surf at the beach, back angle came...",
         "A golden retriever dashing through shallow surf at the beach, back angle came...",
         "A golden retriever dashing through shallow surf at the beach, back angle came..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "bytedance/v1-pro-text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3689,7 +3727,7 @@
       "category": "video",
       "slug": "market/bytedance/v1-pro-text-to-video",
       "display_name": "Bytedance - V1 Pro Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Bytedance - V1 Pro Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/bytedance/v1-pro-text-to-video",
       "tags": [
@@ -3704,7 +3742,8 @@
         "A boy with curly hair and a backpack rides a bike down a golden-lit rural roa...",
         "A boy with curly hair and a backpack rides a bike down a golden-lit rural roa...",
         "A boy with curly hair and a backpack rides a bike down a golden-lit rural roa..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "bytedance/v1-lite-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3797,7 +3836,7 @@
       "category": "image",
       "slug": "market/bytedance/v1-lite-image-to-video",
       "display_name": "Bytedance - V1 Lite Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Bytedance - V1 Lite Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/bytedance/v1-lite-image-to-video",
       "tags": [
@@ -3812,7 +3851,8 @@
         "Multiple shots. A traveler crosses an endless desert toward a glowing archway...",
         "Multiple shots. A traveler crosses an endless desert toward a glowing archway...",
         "Multiple shots. A traveler crosses an endless desert toward a glowing archway..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "bytedance/v1-lite-text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3897,7 +3937,7 @@
       "category": "video",
       "slug": "market/bytedance/v1-lite-text-to-video",
       "display_name": "Bytedance - V1 Lite Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Bytedance - V1 Lite Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/bytedance/v1-lite-text-to-video",
       "tags": [
@@ -3912,7 +3952,8 @@
         "Wide-angle shot: A serene sailing boat gently sways in the harbor at dawn, su...",
         "Wide-angle shot: A serene sailing boat gently sways in the harbor at dawn, su...",
         "Wide-angle shot: A serene sailing boat gently sways in the harbor at dawn, su..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "hailuo/2-3-image-to-video-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -3986,10 +4027,10 @@
       },
       "model_id": "hailuo/2-3-image-to-video-pro",
       "provider": "hailuo",
-      "category": "image",
+      "category": "video",
       "slug": "market/hailuo/2-3-image-to-video-pro",
-      "display_name": "Hailuo - Image to Video",
-      "description": "English",
+      "display_name": "Hailuo 2.3 Pro - Image to Video",
+      "description": "Создание и редактирование изображений с помощью Hailuo 2.3 Pro - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/hailuo/2-3-image-to-video-pro",
       "tags": [
@@ -4004,7 +4045,8 @@
         "A graceful geisha performs a traditional Japanese dance indoors. She wears a ...",
         "A graceful geisha performs a traditional Japanese dance indoors. She wears a ...",
         "A graceful geisha performs a traditional Japanese dance indoors. She wears a ..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "hailuo/2-3-image-to-video-standard": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4078,10 +4120,10 @@
       },
       "model_id": "hailuo/2-3-image-to-video-standard",
       "provider": "hailuo",
-      "category": "image",
+      "category": "video",
       "slug": "market/hailuo/2-3-image-to-video-standard",
-      "display_name": "Hailuo - Image to Video",
-      "description": "English",
+      "display_name": "Hailuo 2.3 Standard - Image to Video",
+      "description": "Создание и редактирование изображений с помощью Hailuo 2.3 Standard - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/hailuo/2-3-image-to-video-standard",
       "tags": [
@@ -4096,7 +4138,8 @@
         "Two armored medieval knights clash in an intense duel at sunset, cinematic li...",
         "Two armored medieval knights clash in an intense duel at sunset, cinematic li...",
         "Two armored medieval knights clash in an intense duel at sunset, cinematic li..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "hailuo/02-text-to-video-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4165,7 +4208,7 @@
       "category": "video",
       "slug": "market/hailuo/02-text-to-video-pro",
       "display_name": "Hailuo Pro - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Hailuo Pro - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/hailuo/02-text-to-video-pro",
       "tags": [
@@ -4180,7 +4223,8 @@
         "High top angle wide mid close-up tracking shot, flying very fast two meters h...",
         "High top angle wide mid close-up tracking shot, flying very fast two meters h...",
         "High top angle wide mid close-up tracking shot, flying very fast two meters h..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "hailuo/02-text-to-video-standard": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4253,7 +4297,7 @@
       "category": "video",
       "slug": "market/hailuo/02-text-to-video-standard",
       "display_name": "Hailuo Standard - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Hailuo Standard - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/hailuo/02-text-to-video-standard",
       "tags": [
@@ -4268,7 +4312,8 @@
         "A llama and a raccoon battle it out in an intense table tennis match, inside ...",
         "A llama and a raccoon battle it out in an intense table tennis match, inside ...",
         "A llama and a raccoon battle it out in an intense table tennis match, inside ..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "hailuo/02-image-to-video-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4342,10 +4387,10 @@
       },
       "model_id": "hailuo/02-image-to-video-pro",
       "provider": "hailuo",
-      "category": "image",
+      "category": "video",
       "slug": "market/hailuo/02-image-to-video-pro",
       "display_name": "Hailuo Pro - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Hailuo Pro - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/hailuo/02-image-to-video-pro",
       "tags": [
@@ -4360,7 +4405,8 @@
         "Cinematic wide shot: A colossal starship drifts silently above the rings of S...",
         "Cinematic wide shot: A colossal starship drifts silently above the rings of S...",
         "Cinematic wide shot: A colossal starship drifts silently above the rings of S..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "hailuo/02-image-to-video-standard": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4442,10 +4488,10 @@
       },
       "model_id": "hailuo/02-image-to-video-standard",
       "provider": "hailuo",
-      "category": "image",
+      "category": "video",
       "slug": "market/hailuo/02-image-to-video-standard",
       "display_name": "Hailuo Standard - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Hailuo Standard - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/hailuo/02-image-to-video-standard",
       "tags": [
@@ -4460,7 +4506,8 @@
         "Epic aerial shot: A lone samurai stands atop a jagged mountain peak as a stor...",
         "Epic aerial shot: A lone samurai stands atop a jagged mountain peak as a stor...",
         "Epic aerial shot: A lone samurai stands atop a jagged mountain peak as a stor..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "sora-2-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4561,7 +4608,7 @@
       "category": "image",
       "slug": "market/sora2/sora-2-image-to-video",
       "display_name": "Sora2 - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Sora2 - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-2-image-to-video",
       "old_registry_id": "sora2/sora-2-image-to-video",
@@ -4575,7 +4622,8 @@
         "A claymation conductor passionately leads a claymation orchestra, while the e...",
         "A claymation conductor passionately leads a claymation orchestra, while the e...",
         "A claymation conductor passionately leads a claymation orchestra, while the e..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "sora-2-text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4664,7 +4712,7 @@
       "category": "video",
       "slug": "market/sora2/sora-2-text-to-video",
       "display_name": "Sora2 - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Sora2 - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-2-text-to-video",
       "old_registry_id": "sora2/sora-2-text-to-video",
@@ -4678,7 +4726,8 @@
         "A professor stands at the front of a lively classroom, enthusiastically givin...",
         "A professor stands at the front of a lively classroom, enthusiastically givin...",
         "A professor stands at the front of a lively classroom, enthusiastically givin..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "sora-2-pro-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4775,7 +4824,7 @@
       "category": "image",
       "slug": "market/sora2/sora-2-pro-image-to-video",
       "display_name": "Sora2 - Pro Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Sora2 - Pro Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-2-pro-image-to-video",
       "old_registry_id": "sora2/sora-2-pro-image-to-video",
@@ -4784,7 +4833,8 @@
         "изображение",
         "картинка",
         "фото"
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "sora-2-pro-text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4877,7 +4927,7 @@
       "category": "video",
       "slug": "market/sora2/sora-2-pro-text-to-video",
       "display_name": "Sora2 - Pro Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Sora2 - Pro Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video",
       "old_registry_id": "sora2/sora-2-pro-text-to-video",
@@ -4891,7 +4941,8 @@
         "a happy dog running in the garden",
         "a happy dog running in the garden",
         "a happy dog running in the garden"
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "sora-watermark-remover": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -4953,11 +5004,18 @@
       "category": "enhance",
       "slug": "market/sora2/sora-watermark-remover",
       "display_name": "Sora2 - Watermark Remover",
-      "description": "English",
+      "description": "Улучшение качества контента с помощью Sora2 - Watermark Remover",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-watermark-remover",
       "old_registry_id": "sora2/sora-watermark-remover",
-      "tags": []
+      "tags": [
+        "watermark",
+        "removal",
+        "editing",
+        "очистка",
+        "водяной знак"
+      ],
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
     },
     "sora-2-pro-storyboard/index": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5039,13 +5097,14 @@
       "category": "other",
       "slug": "market/sora-2-pro-storyboard/index",
       "display_name": "sora-2-pro-storyboard",
-      "description": "English",
+      "description": "AI модель sora-2-pro-storyboard для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora-2-pro-storyboard/index",
       "tags": [
         "index",
         "sora-2-pro-storyboard"
-      ]
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "sora-2-characters": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5126,11 +5185,18 @@
       "category": "other",
       "slug": "market/sora2/sora-2-characters",
       "display_name": "Sora2 - Characters",
-      "description": "English",
+      "description": "AI модель Sora2 - Characters для генерации контента",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-2-characters",
       "old_registry_id": "sora2/sora-2-characters",
-      "tags": []
+      "tags": [
+        "avatar",
+        "character",
+        "generation",
+        "персонаж",
+        "аватар"
+      ],
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
     },
     "wan/2-6-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5215,7 +5281,7 @@
       "category": "image",
       "slug": "market/wan/2-6-image-to-video",
       "display_name": "Wan 2.6 - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Wan 2.6 - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-6-image-to-video",
       "tags": [
@@ -5230,7 +5296,8 @@
         "Anthopmopric fox singing a Christmas song at the rubbish dump in the rain.",
         "Anthopmopric fox singing a Christmas song at the rubbish dump in the rain.",
         "Anthopmopric fox singing a Christmas song at the rubbish dump in the rain."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "wan/2-6-text-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5303,7 +5370,7 @@
       "category": "video",
       "slug": "market/wan/2-6-text-to-video",
       "display_name": "Wan 2.6 - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Wan 2.6 - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-6-text-to-video",
       "tags": [
@@ -5318,7 +5385,8 @@
         "In a hyperrealistic ASMR video, a hand uses a knitted knife to slowly slice a...",
         "In a hyperrealistic ASMR video, a hand uses a knitted knife to slowly slice a...",
         "In a hyperrealistic ASMR video, a hand uses a knitted knife to slowly slice a..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "wan/2-6-video-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5403,7 +5471,7 @@
       "category": "video",
       "slug": "market/wan/2-6-video-to-video",
       "display_name": "Wan 2.6 - Video to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Wan 2.6 - Video to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-6-video-to-video",
       "tags": [
@@ -5418,7 +5486,8 @@
         "The video drinks milk tea while doing some improvised dance moves to the music.",
         "The video drinks milk tea while doing some improvised dance moves to the music.",
         "The video drinks milk tea while doing some improvised dance moves to the music."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "wan/2-2-a14b-image-to-video-turbo": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5507,7 +5576,7 @@
       "category": "image",
       "slug": "market/wan/2-2-a14b-image-to-video-turbo",
       "display_name": "Wan - Image to Video",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Wan - Image to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-2-a14b-image-to-video-turbo",
       "tags": [
@@ -5522,7 +5591,8 @@
         "Overcast lighting, medium lens, soft lighting, low contrast lighting, edge li...",
         "Overcast lighting, medium lens, soft lighting, low contrast lighting, edge li...",
         "Overcast lighting, medium lens, soft lighting, low contrast lighting, edge li..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "wan/2-2-a14b-text-to-video-turbo": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5607,7 +5677,7 @@
       "category": "video",
       "slug": "market/wan/2-2-a14b-text-to-video-turbo",
       "display_name": "Wan - Text to Video",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Wan - Text to Video",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-2-a14b-text-to-video-turbo",
       "tags": [
@@ -5622,7 +5692,8 @@
         "Drone shot, fast traversal, starting inside a cracked, frosty circular pipe. ...",
         "Drone shot, fast traversal, starting inside a cracked, frosty circular pipe. ...",
         "Drone shot, fast traversal, starting inside a cracked, frosty circular pipe. ..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "wan/2-2-animate-move": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5692,7 +5763,7 @@
       "category": "video",
       "slug": "market/wan/2-2-animate-move",
       "display_name": "Wan - Animate Move",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Wan - Animate Move",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-2-animate-move",
       "tags": [
@@ -5702,7 +5773,8 @@
         "wan",
         "видео",
         "ролик"
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "wan/2-2-animate-replace": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5772,7 +5844,7 @@
       "category": "video",
       "slug": "market/wan/2-2-animate-replace",
       "display_name": "Wan - Animate Replace",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Wan - Animate Replace",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-2-animate-replace",
       "tags": [
@@ -5782,7 +5854,8 @@
         "wan",
         "видео",
         "ролик"
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "wan/2-2-a14b-speech-to-video-turbo": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5887,7 +5960,7 @@
       "category": "video",
       "slug": "market/wan/2-2-a14b-speech-to-video-turbo",
       "display_name": "Wan - 2.2 A14B Speech to Video Turbo",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Wan - 2.2 A14B Speech to Video Turbo",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/wan/2-2-a14b-speech-to-video-turbo",
       "tags": [
@@ -5906,7 +5979,8 @@
         "The lady is talking",
         "The lady is talking",
         "The lady is talking"
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "topaz/video-upscale": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5972,7 +6046,7 @@
       "category": "enhance",
       "slug": "market/topaz/video-upscale",
       "display_name": "Topaz - Video Upscale",
-      "description": "English",
+      "description": "Улучшение качества контента с помощью Topaz - Video Upscale",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/topaz/video-upscale",
       "tags": [
@@ -5986,7 +6060,8 @@
         "видео",
         "качество",
         "ролик"
-      ]
+      ],
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
     },
     "infinitalk/from-audio": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6063,7 +6138,7 @@
       "category": "music",
       "slug": "market/infinitalk/from-audio",
       "display_name": "Infinitalk - From Audio",
-      "description": "English",
+      "description": "Генерация музыки и звуковых эффектов с помощью Infinitalk - From Audio",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/infinitalk/from-audio",
       "tags": [
@@ -6078,7 +6153,8 @@
         "A young woman with long dark hair talking on a podcast.",
         "A young woman with long dark hair talking on a podcast.",
         "A young woman with long dark hair talking on a podcast."
-      ]
+      ],
+      "use_case": "Уникальные треки для видео, подкастов, презентаций без авторских прав"
     },
     "elevenlabs/text-to-speech-turbo-2-5": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6177,7 +6253,7 @@
       "category": "audio",
       "slug": "market/elevenlabs/text-to-speech-turbo-2-5",
       "display_name": "elevenlabs/text-to-speech-turbo-2-5",
-      "description": "English",
+      "description": "Создание аудио контента с помощью elevenlabs/text-to-speech-turbo-2-5",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/elevenlabs/text-to-speech-turbo-2-5",
       "tags": [
@@ -6190,7 +6266,8 @@
         "звук",
         "озвучка",
         "речь"
-      ]
+      ],
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
     },
     "elevenlabs/speech-to-text": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6264,7 +6341,7 @@
       "category": "audio",
       "slug": "market/elevenlabs/speech-to-text",
       "display_name": "elevenlabs/speech-to-text",
-      "description": "English",
+      "description": "Создание аудио контента с помощью elevenlabs/speech-to-text",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/elevenlabs/speech-to-text",
       "tags": [
@@ -6277,7 +6354,8 @@
         "звук",
         "озвучка",
         "речь"
-      ]
+      ],
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
     },
     "elevenlabs/sound-effect-v2": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6354,7 +6432,7 @@
       "category": "audio",
       "slug": "market/elevenlabs/sound-effect-v2",
       "display_name": "elevenlabs/sound-effect-v2",
-      "description": "English",
+      "description": "Создание аудио контента с помощью elevenlabs/sound-effect-v2",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/elevenlabs/sound-effect-v2",
       "tags": [
@@ -6364,7 +6442,8 @@
         "аудио",
         "звук",
         "озвучка"
-      ]
+      ],
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
     },
     "elevenlabs/audio-isolation": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6426,7 +6505,7 @@
       "category": "music",
       "slug": "market/elevenlabs/audio-isolation",
       "display_name": "elevenlabs/audio-isolation",
-      "description": "English",
+      "description": "Генерация музыки и звуковых эффектов с помощью elevenlabs/audio-isolation",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/elevenlabs/audio-isolation",
       "tags": [
@@ -6436,7 +6515,8 @@
         "аудио",
         "звук",
         "озвучка"
-      ]
+      ],
+      "use_case": "Уникальные треки для видео, подкастов, презентаций без авторских прав"
     },
     "kling/v2-5-turbo-image-to-video-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6521,7 +6601,7 @@
       "category": "image",
       "slug": "market/kling/v2-5-turbo-image-to-video-pro",
       "display_name": "Kling - V2.5 Turbo Image to Video Pro",
-      "description": "English",
+      "description": "Создание и редактирование изображений с помощью Kling - V2.5 Turbo Image to Video Pro",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v2-5-turbo-image-to-video-pro",
       "tags": [
@@ -6536,7 +6616,8 @@
         "Astronaut instantly teleports through a glowing magical wooden door. Handheld...",
         "Astronaut instantly teleports through a glowing magical wooden door. Handheld...",
         "Astronaut instantly teleports through a glowing magical wooden door. Handheld..."
-      ]
+      ],
+      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
     },
     "kling/v2-5-turbo-text-to-video-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6617,7 +6698,7 @@
       "category": "video",
       "slug": "market/kling/v2-5-turbo-text-to-video-pro",
       "display_name": "Kling - V2.5 Turbo Text to Video Pro",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Kling - V2.5 Turbo Text to Video Pro",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/kling/v2-5-turbo-text-to-video-pro",
       "tags": [
@@ -6632,7 +6713,8 @@
         "Real-time playback. Wide shot of a ruined city: collapsed towers, fires blazi...",
         "Real-time playback. Wide shot of a ruined city: collapsed towers, fires blazi...",
         "Real-time playback. Wide shot of a ruined city: collapsed towers, fires blazi..."
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "veo3_fast": {
       "endpoint": "/api/v1/veo/generate",
@@ -6773,7 +6855,7 @@
       "category": "video",
       "slug": "veo3-api/generate-veo-3-video",
       "display_name": "Generate Veo 3.1 AI Video(Fast&Quality)",
-      "description": "English",
+      "description": "Генерация видео контента с помощью Generate Veo 3.1 AI Video(Fast&Quality)",
       "method": "POST",
       "source_url": "https://docs.kie.ai/veo3-api/generate-veo-3-video",
       "old_registry_id": "veo3/fast",
@@ -6782,7 +6864,8 @@
         "movie",
         "видео",
         "ролик"
-      ]
+      ],
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
     },
     "V4": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6940,7 +7023,7 @@
       "category": "audio",
       "slug": "suno-api/generate-music",
       "display_name": "Generate Music",
-      "description": "English",
+      "description": "Создание аудио контента с помощью Generate Music",
       "method": "POST",
       "source_url": "https://docs.kie.ai/suno-api/generate-music",
       "old_registry_id": "suno/v4",
@@ -6953,7 +7036,8 @@
         "звук",
         "музыка",
         "озвучка"
-      ]
+      ],
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
     }
   },
   "last_updated": "2025-12-25T04:10:00Z",

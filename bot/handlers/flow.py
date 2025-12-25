@@ -4,6 +4,7 @@ Primary UX flow: categories -> models -> inputs -> confirmation -> generation.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,6 +22,7 @@ from app.payments.integration import generate_with_payment
 from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
 from app.utils.validation import validate_url, validate_file_url, validate_text_input
 
+logger = logging.getLogger(__name__)
 router = Router(name="flow")
 
 
@@ -30,11 +32,14 @@ class FlowStates(StatesGroup):
 
 
 CATEGORY_LABELS = {
-    # Task-oriented categories (production v3.0)
-    "creative": "🎨 Креатив (картинки, дизайн)",
-    "music": "🎵 Музыка и аудио",
-    "voice": "🎙️ Голос и озвучка",
+    # Real categories from SOURCE_OF_TRUTH (v1.2.6)
+    "image": "🎨 Картинки и дизайн",
     "video": "🎬 Видео",
+    "audio": "🎵 Аудио",
+    "music": "🎵 Музыка",
+    "enhance": "✨ Улучшение качества",
+    "avatar": "🧑‍🎤 Аватары",
+    "other": "⭐ Другое",
     
     # Legacy format (backward compatibility)
     "text-to-image": "🎨 Создать картинку",
@@ -45,7 +50,6 @@ CATEGORY_LABELS = {
     "text-to-speech": "🎵 Озвучка текста",
     "speech-to-text": "📝 Распознать речь",
     "audio-generation": "🎵 Создать музыку",
-    "audio": "🎵 Аудио и музыка",
     "upscale": "✨ Улучшить качество",
     "ocr": "📝 Распознать текст",
     "lip-sync": "🎬 Lip Sync",
@@ -54,7 +58,10 @@ CATEGORY_LABELS = {
     "music-generation": "🎵 Создать музыку",
     "sound-effects": "🔊 Звуковые эффекты",
     "general": "⭐ Разное",
-    "other": "⭐ Другое",
+    
+    # Alternative names
+    "creative": "🎨 Креатив",
+    "voice": "🎙️ Голос и озвучка",
     "t2i": "🎨 Создать картинку",
     "i2i": "✏️ Редактировать изображение",
     "t2v": "🎬 Создать видео",
@@ -133,8 +140,12 @@ def _models_by_category() -> Dict[str, List[Dict[str, Any]]]:
     for model in models:
         category = model.get("category", "other") or "other"
         grouped.setdefault(category, []).append(model)
+    # Sort by price (cheapest first), then by name
     for model_list in grouped.values():
-        model_list.sort(key=lambda item: (item.get("name") or item.get("model_id") or "").lower())
+        model_list.sort(key=lambda item: (
+            item.get("pricing", {}).get("rub_per_gen", 999999),
+            (item.get("name") or item.get("model_id") or "").lower()
+        ))
     return grouped
 
 
@@ -174,11 +185,14 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     buttons = []
     
     # Priority mapping: category -> user-friendly label
+    # Based on real categories from SOURCE_OF_TRUTH
     priority_map = [
-        ('creative', '🎨 Креатив (картинки, дизайн)'),
-        ('music', '🎵 Музыка и аудио'),
-        ('voice', '🎙️ Голос и озвучка'),
+        ('image', '🎨 Картинки и дизайн'),
         ('video', '🎬 Видео'),
+        ('audio', '🎵 Аудио'),
+        ('enhance', '✨ Улучшение качества'),
+        ('avatar', '🧑‍🎤 Аватары'),
+        ('music', '🎵 Музыка'),
     ]
     
     # Add buttons for existing categories
@@ -190,6 +204,17 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     buttons.append([
         InlineKeyboardButton(text="⭐ Лучшие модели", callback_data="menu:best"),
         InlineKeyboardButton(text="🔍 Поиск модели", callback_data="menu:search"),
+    ])
+    
+    # NEW: Quick actions row - Instagram, TikTok, YouTube
+    buttons.append([
+        InlineKeyboardButton(text="⚡ Быстрые действия", callback_data="quick:menu"),
+    ])
+    
+    # NEW: Gallery row - Trending, Free
+    buttons.append([
+        InlineKeyboardButton(text="🔥 Trending", callback_data="gallery:trending"),
+        InlineKeyboardButton(text="🆓 Free", callback_data="gallery:free"),
     ])
     
     # Browse all categories (if needed)
@@ -248,7 +273,7 @@ def _main_menu_keyboard_OLD() -> InlineKeyboardMarkup:
 
 
 def _model_keyboard(models: List[Dict[str, Any]], back_cb: str, page: int = 0, per_page: int = 6) -> InlineKeyboardMarkup:
-    """Create paginated model keyboard."""
+    """Create paginated model keyboard with prices."""
     rows: List[List[InlineKeyboardButton]] = []
     
     # Calculate pagination
@@ -257,14 +282,29 @@ def _model_keyboard(models: List[Dict[str, Any]], back_cb: str, page: int = 0, p
     page_models = models[start:end]
     total_pages = (len(models) + per_page - 1) // per_page
     
-    # Model buttons
+    # Model buttons with PRICE indicators (MASTER PROMPT requirement)
     for model in page_models:
         model_id = model.get("model_id", "unknown")
-        title = model.get("name") or model_id
+        title = model.get("display_name") or model.get("name") or model_id
+        price_rub = model.get("pricing", {}).get("rub_per_gen", 0)
+        
+        # Price tag
+        if price_rub == 0:
+            price_tag = "🆓"
+        elif price_rub < 1.0:
+            price_tag = f"{price_rub:.2f}₽"
+        elif price_rub < 10.0:
+            price_tag = f"{price_rub:.1f}₽"
+        else:
+            price_tag = f"{price_rub:.0f}₽"
+        
         # Truncate long names
-        if len(title) > 40:
-            title = title[:37] + "..."
-        rows.append([InlineKeyboardButton(text=title, callback_data=f"model:{model_id}")])
+        max_name_len = 28
+        if len(title) > max_name_len:
+            title = title[:max_name_len-3] + "..."
+        
+        button_text = f"{title} • {price_tag}"
+        rows.append([InlineKeyboardButton(text=button_text, callback_data=f"model:{model_id}")])
     
     # Pagination buttons
     if total_pages > 1:
@@ -297,22 +337,23 @@ def _model_detail_text(model: Dict[str, Any]) -> str:
     # Description - human-friendly (v6.3.0 enrichment)
     description = model.get("description", "")
     if not description:
-        # Fallback description based on category
+        # Enhanced fallback descriptions based on category
         category = model.get("category", "")
-        if category == "text-to-image":
-            description = "Создаёт изображения по вашему описанию"
-        elif category == "text-to-video":
-            description = "Создаёт видео из текста"
-        elif category == "audio":
-            description = "Работа с аудио: озвучка, музыка, обработка"
-        elif category == "upscale":
-            description = "Улучшает качество изображений"
-        elif category == "image-to-image":
-            description = "Редактирует и улучшает изображения"
-        elif category == "image-to-video":
-            description = "Превращает картинку в видео"
-        else:
-            description = "Генерация и обработка контента"
+        fallback_descriptions = {
+            "text-to-image": "Создаёт изображения по вашему описанию",
+            "image": "Создаёт изображения по вашему описанию",
+            "text-to-video": "Создаёт видео из текста",
+            "video": "Создаёт и редактирует видео",
+            "audio": "Работа с аудио: озвучка, музыка, обработка",
+            "music": "Генерация музыки и звуковых эффектов",
+            "upscale": "Улучшает качество изображений",
+            "enhance": "Улучшает качество и редактирует медиа",
+            "image-to-image": "Редактирует и улучшает изображения",
+            "image-to-video": "Превращает картинку в видео",
+            "avatar": "Создание анимированных аватаров и персонажей",
+            "other": "AI генерация и обработка контента",
+        }
+        description = fallback_descriptions.get(category, "AI генерация контента")
     
     # Use-case from v6.3.0 enrichment
     use_case = model.get("use_case", "")
@@ -603,12 +644,32 @@ def _validate_field_value(value: Any, field_spec: Dict[str, Any], field_name: st
 
 @router.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext) -> None:
-    """Start command - NO welcome balance, only FREE tier."""
+    """Start command - personalized welcome with quick-start guide."""
     await state.clear()
-    # NO welcome credit - only FREE tier (5 cheapest models)
+    
+    # Get user info for personalization
+    first_name = message.from_user.first_name or "друг"
+    
+    # Count available models
+    models_list = _get_models_list()
+    total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
+    
+    # Welcome message with quick-start guide
     await message.answer(
-        "� <b>Что вы хотите создать сегодня?</b>\n"
-        "Я подберу лучшую нейросеть под вашу задачу",
+        f"👋 Привет, <b>{first_name}</b>!\n\n"
+        f"🤖 Я помогу создать контент с помощью <b>{total_models} AI моделей</b>\n\n"
+        f"<b>Что умею:</b>\n"
+        f"📸 Картинки и дизайн — <b>от 0₽ (есть бесплатные!)</b>\n"
+        f"🎬 Видео для TikTok/Reels — от 7.90₽\n"
+        f"✨ Улучшение качества — от 0.20₽\n"
+        f"🎵 Аудио и озвучка — от 0.08₽\n\n"
+        f"💡 <b>Как начать?</b>\n"
+        f"1️⃣ Выберите категорию или модель\n"
+        f"2️⃣ Введите параметры (текст, изображение...)\n"
+        f"3️⃣ Подтвердите и получите результат!\n\n"
+        f"🆓 <b>4 бесплатные модели</b> для старта\n"
+        f"💰 Старт с {WELCOME_BALANCE_RUB:.0f}₽ на балансе\n\n"
+        f"Выбирайте задачу 👇",
         reply_markup=_main_menu_keyboard(),
     )
 
@@ -617,8 +678,22 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
 async def main_menu_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.clear()
+    
+    # Get user info
+    first_name = callback.from_user.first_name or "друг"
+    
+    # Count models
+    models_list = _get_models_list()
+    total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
+    
     await callback.message.edit_text(
-        "📋 Главное меню\n\nВыберите действие:",
+        f"🎨 <b>Главное меню</b>\n\n"
+        f"✨ {total_models} AI моделей для ваших задач\n\n"
+        f"� <b>Категории:</b> Картинки, Видео, Аудио, Улучшение\n"
+        f"⭐ <b>Лучшие:</b> Топ моделей по цене/качеству\n"
+        f"🔍 <b>Поиск:</b> Найти нужную модель\n\n"
+        f"🆓 4 бесплатные модели • Старт с {WELCOME_BALANCE_RUB:.0f}₽\n\n"
+        f"Выберите действие 👇",
         reply_markup=_main_menu_keyboard(),
     )
 
@@ -717,50 +792,57 @@ async def best_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
     Show curated list of best models (MASTER PROMPT requirement).
     
     CRITERIA:
-    - Quality: Most popular/reliable models
-    - Use case coverage: Different types (image, video, music, voice)
-    - Price: Mix of FREE and premium
+    - TOP cheapest models first (best value)
+    - Quality: Most reliable models from registry
+    - Use case coverage: Different types (image, video, audio, enhance)
+    - Price: Mix of FREE and paid
     """
     await callback.answer()
     await state.clear()
     
-    # Get registry
-    from app.kie.registry import get_model_registry
-    registry = get_model_registry()
+    # Get all models sorted by price
+    models = _get_models_list()
+    valid_models = [m for m in models if _is_valid_model(m)]
     
-    # Curated best models (manually selected for quality + use case coverage)
-    best_model_ids = [
-        "z-image",           # FREE - best t2i quality/price ratio
-        "flux-pro",          # Premium - highest quality images
-        "kling-video",       # Best video quality
-        "minimax-video",     # Fast video generation
-        "suno-music",        # Best music generation
-        "elevenlabs-tts-turbo",  # Best voice quality
-        "upscale",           # Essential utility
-        "pixart-sigma",      # Good i2i
-    ]
+    # Sort by price (cheapest first)
+    valid_models.sort(key=lambda m: m.get("pricing", {}).get("rub_per_gen", 999999))
     
-    # Build keyboard
+    # Take top 15 best value models
+    best_models = valid_models[:15]
+    
+    # Build keyboard with price indicators
     buttons = []
-    for model_id in best_model_ids:
-        model = registry.get(model_id)
-        if not model:
-            continue
+    for model in best_models:
+        model_id = model.get("model_id", "")
+        name = model.get("display_name") or model.get("name") or model_id
+        price_rub = model.get("pricing", {}).get("rub_per_gen", 0)
+        category = model.get("category", "other")
         
-        name = model.get("name", model_id)
-        price = model.get("pricing", {}).get("rub_per_use", 0)
-        
-        # Add price tag
-        if price < 0.5:
+        # Add price + category tags
+        if price_rub == 0:
             price_tag = "🆓"
-        elif price < 10:
+        elif price_rub < 1.0:
             price_tag = "💚"
-        elif price < 50:
+        elif price_rub < 5.0:
             price_tag = "💛"
         else:
-            price_tag = "🔴"
+            price_tag = "💰"
         
-        button_text = f"{price_tag} {name}"
+        # Category emoji
+        cat_emoji = {
+            "image": "🎨",
+            "video": "🎬",
+            "audio": "🎵",
+            "music": "🎵",
+            "enhance": "✨",
+            "avatar": "🧑‍🎤",
+        }.get(category, "⭐")
+        
+        # Truncate long names
+        if len(name) > 30:
+            name = name[:27] + "..."
+        
+        button_text = f"{price_tag} {cat_emoji} {name}"
         buttons.append([InlineKeyboardButton(
             text=button_text,
             callback_data=f"model:{model_id}"
@@ -769,15 +851,14 @@ async def best_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
     buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
     
     await callback.message.edit_text(
-        "⭐ **Лучшие модели**\n\n"
-        "Проверенные модели с лучшим соотношением цена/качество:\n\n"
-        "🆓 - Бесплатно\n"
-        "💚 - Дёшево (<10₽)\n"
-        "💛 - Средняя цена (10-50₽)\n"
-        "🔴 - Премиум (50₽+)\n\n"
+        "⭐ <b>Лучшие модели</b>\n\n"
+        "Топ-15 моделей с лучшим соотношением цена/качество:\n\n"
+        "🆓 Бесплатно (0₽)\n"
+        "💚 Очень дёшево (<1₽)\n"
+        "💛 Дёшево (<5₽)\n"
+        "💰 Доступно (5₽+)\n\n"
         "Выберите модель:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        parse_mode="Markdown"
     )
 
 
@@ -1273,7 +1354,16 @@ async def category_cb(callback: CallbackQuery, state: FSMContext) -> None:
     models = grouped.get(category, [])
 
     if not models:
-        await callback.message.edit_text("⚠️ В этой категории пока нет моделей.", reply_markup=_category_keyboard())
+        category_label = _category_label(category)
+        await callback.message.edit_text(
+            f"⚠️ {category_label}\n\n"
+            f"В этой категории пока нет доступных моделей.\n"
+            f"Попробуйте другую категорию или вернитесь в меню.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")],
+                [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
+            ])
+        )
         return
 
     await state.update_data(category=category, category_models=models)
