@@ -238,38 +238,38 @@ async def main():
         free_manager = FreeModelManager(db_service)
         logger.info("FreeModelManager initialized")
         
-        # AUTO-SETUP: Configure 5 cheapest models as free tier (idempotent)
+        # AUTO-SETUP: Configure FREE models (0 RUB only) as free tier
         try:
             import json
-            registry_path = "models/kie_models_final_truth.json"
-            with open(registry_path, 'r', encoding='utf-8') as f:
+            from pathlib import Path
+            
+            sot_path = Path("models/KIE_SOURCE_OF_TRUTH.json")
+            with open(sot_path, 'r', encoding='utf-8') as f:
                 sot = json.load(f)
             
-            # Use pre-identified free_tier_models from registry v6.2
-            free_tier_ids = sot.get('free_tier_models', [])
+            # Get ONLY models with 0 RUB price (real FREE models)
+            models = sot.get('models', {})
+            free_tier_ids = [
+                model_id for model_id, model in models.items()
+                if model.get('enabled', True)
+                and model.get('pricing', {}).get('rub_per_gen') == 0
+            ]
             
             if free_tier_ids:
-                # Get full model data
-                models_map = {m['model_id']: m for m in sot.get('models', [])}
-                
                 for model_id in free_tier_ids:
-                    if model_id not in models_map:
-                        continue
-                    
                     is_free = await free_manager.is_model_free(model_id)
                     
                     if not is_free:
                         await free_manager.add_free_model(
                             model_id=model_id,
-                            daily_limit=10,  # v6.2: increased from 5
-                            hourly_limit=3   # v6.2: increased from 2
+                            daily_limit=10,
+                            hourly_limit=3
                         )
-                        price_rub = models_map[model_id].get('pricing', {}).get('rub_per_generation', 0)
-                        logger.info(f"✅ Auto-configured FREE: {model_id} ({price_rub:.2f}₽)")
+                        logger.info(f"✅ Auto-configured FREE: {model_id} (0 RUB)")
                 
                 logger.info(f"Free tier auto-setup: {len(free_tier_ids)} models")
             else:
-                logger.warning("No free_tier_models in registry v6.2")
+                logger.warning("No FREE (0 RUB) models found in SOURCE_OF_TRUTH")
         except Exception as e:
             logger.warning(f"Free tier auto-setup skipped: {e}")
         

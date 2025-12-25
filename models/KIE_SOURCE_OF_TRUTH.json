@@ -6956,5 +6956,14 @@
       ]
     }
   },
-  "last_updated": "2025-12-25T04:10:00Z"
+  "last_updated": "2025-12-25T04:10:00Z",
+  "metadata": {
+    "free_tier_models": [
+      "qwen/image-edit",
+      "qwen/image-to-image",
+      "qwen/text-to-image",
+      "z-image"
+    ],
+    "free_tier_count": 4
+  }
 }

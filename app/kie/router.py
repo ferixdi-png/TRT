@@ -9,16 +9,32 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Загрузка v4 source of truth
+# Загрузка source of truth
 def load_v4_source_of_truth() -> Dict[str, Any]:
-    """Load source of truth v4.0 with new API architecture."""
-    v4_path = Path(__file__).parent.parent.parent / "models" / "kie_source_of_truth_v4.json"
-    if not v4_path.exists():
-        logger.warning(f"V4 source of truth not found at {v4_path}, falling back to stub")
-        return {"version": "4.0.0", "models": [], "categories": {}}
+    """
+    Load source of truth with new API architecture.
     
-    with open(v4_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    Tries in order:
+    1. models/kie_source_of_truth_v4.json (old name)
+    2. models/KIE_SOURCE_OF_TRUTH.json (new canonical name)
+    3. Fallback to stub
+    """
+    # Try old v4 path first (for backwards compatibility)
+    v4_path_old = Path(__file__).parent.parent.parent / "models" / "kie_source_of_truth_v4.json"
+    if v4_path_old.exists():
+        with open(v4_path_old, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    # Try new canonical path
+    sot_path = Path(__file__).parent.parent.parent / "models" / "KIE_SOURCE_OF_TRUTH.json"
+    if sot_path.exists():
+        logger.info(f"✅ Using SOURCE_OF_TRUTH (v4 router): {sot_path}")
+        with open(sot_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    # Fallback to stub
+    logger.warning("No source of truth found, using empty stub")
+    return {"version": "stub", "models": {}, "categories": {}}
 
 
 def get_api_category_for_model(model_id: str, source_v4: Optional[Dict] = None) -> Optional[str]:
@@ -35,12 +51,21 @@ def get_api_category_for_model(model_id: str, source_v4: Optional[Dict] = None) 
     if source_v4 is None:
         source_v4 = load_v4_source_of_truth()
     
-    models = source_v4.get('models', [])
-    for model in models:
-        if model.get('model_id') == model_id:
-            return model.get('api_category')
+    # Handle both dict and list structures
+    models = source_v4.get('models', {})
     
-    logger.warning(f"Model {model_id} not found in v4 source of truth")
+    # If models is dict (new format), iterate over values
+    if isinstance(models, dict):
+        for model_id_key, model in models.items():
+            if model.get('model_id') == model_id:
+                return model.get('category')  # Use 'category' field from new SOT
+    # If models is list (old v4 format), iterate directly
+    elif isinstance(models, list):
+        for model in models:
+            if model.get('model_id') == model_id:
+                return model.get('api_category')
+    
+    logger.warning(f"Model {model_id} not found in source of truth")
     return None
 
 
@@ -66,17 +91,24 @@ def build_category_payload(
     if source_v4 is None:
         source_v4 = load_v4_source_of_truth()
     
-    # Find model schema
+    # Handle both dict and list structures
+    models = source_v4.get('models', {})
+    
     model_schema = None
-    for model in source_v4.get('models', []):
-        if model.get('model_id') == model_id:
-            model_schema = model
-            break
+    # If models is dict (new format)
+    if isinstance(models, dict):
+        model_schema = models.get(model_id)
+    # If models is list (old v4 format)
+    elif isinstance(models, list):
+        for model in models:
+            if model.get('model_id') == model_id:
+                model_schema = model
+                break
     
     if not model_schema:
-        raise ValueError(f"Model {model_id} not found in source of truth v4")
+        raise ValueError(f"Model {model_id} not found in source of truth")
     
-    category = model_schema.get('api_category')
+    category = model_schema.get('category') or model_schema.get('api_category')
     input_schema = model_schema.get('input_schema', {})
     properties = input_schema.get('properties', {})
     required_fields = input_schema.get('required', [])
@@ -114,16 +146,28 @@ def get_api_endpoint_for_model(model_id: str, source_v4: Optional[Dict] = None) 
         source_v4: Optional pre-loaded v4 source of truth
     
     Returns:
-        Full endpoint path (e.g. '/veo3/text_to_video', '/suno/generate')
+        Full endpoint path (e.g. '/api/v1/jobs/createTask')
     """
     if source_v4 is None:
         source_v4 = load_v4_source_of_truth()
     
-    for model in source_v4.get('models', []):
-        if model.get('model_id') == model_id:
-            return model.get('api_endpoint', '')
+    # Handle both dict and list structures
+    models = source_v4.get('models', {})
     
-    raise ValueError(f"Model {model_id} not found in source of truth v4")
+    # If models is dict (new format)
+    if isinstance(models, dict):
+        model = models.get(model_id)
+        if model:
+            return model.get('endpoint', '/api/v1/jobs/createTask')
+    # If models is list (old v4 format)
+    elif isinstance(models, list):
+        for model in models:
+            if model.get('model_id') == model_id:
+                return model.get('api_endpoint', '/api/v1/jobs/createTask')
+    
+    # Fallback to default endpoint
+    logger.warning(f"Model {model_id} not found, using default endpoint")
+    return '/api/v1/jobs/createTask'
 
 
 def get_base_url_for_category(category: str, source_v4: Optional[Dict] = None) -> str:
