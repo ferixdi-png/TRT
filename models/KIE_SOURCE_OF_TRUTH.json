@@ -1,6 +1,6 @@
 {
-  "version": "1.2.9-DESCRIPTIONS",
-  "updated_at": "2025-12-25 09:00:00",
+  "version": "1.2.10-FINAL",
+  "updated_at": "2025-12-25 09:15:00",
   "models": {
     "bytedance/seedream": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -363,7 +363,7 @@
       "category": "image",
       "slug": "market/z-image/z-image",
       "display_name": "z-image",
-      "description": "Бесплатная модель для создания изображений. Отлично для тестов и простых задач без затрат",
+      "description": "Бесплатная AI-модель, генерирующая фотореалистичные изображения. Экспериментируйте и тестируйте идеи без затрат",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/z-image/z-image",
       "old_registry_id": "z-image/z-image",
@@ -646,7 +646,7 @@
       "category": "image",
       "slug": "market/google/imagen4",
       "display_name": "Google - imagen4",
-      "description": "Универсальная модель Google Imagen 4 для создания изображений по описанию. Баланс скорости и качества",
+      "description": "Google Imagen 4 - универсальная модель среднего класса. Оптимальный баланс скорости, качества и цены для повседневных задач",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/google/imagen4",
       "tags": [
@@ -1950,7 +1950,7 @@
       "category": "other",
       "slug": "market/ideogram/character-edit",
       "display_name": "Ideogram - character-edit",
-      "description": "AI модель Ideogram - character-edit для генерации контента",
+      "description": "Редактирование персонажей с помощью маски и референсов от Ideogram. Замените лицо, позу или стиль героя на изображении",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/ideogram/character-edit",
       "tags": [
@@ -2082,12 +2082,15 @@
       "category": "other",
       "slug": "market/ideogram/character-remix",
       "display_name": "Ideogram - character-remix",
-      "description": "AI модель Ideogram - character-remix для генерации контента",
+      "description": "Ремикс персонажей с сохранением идентичности от Ideogram. Меняйте фон, стиль или ситуацию - герой остаётся узнаваемым",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/ideogram/character-remix",
       "tags": [
         "character remix",
-        "ideogram"
+        "ideogram",
+        "персонаж",
+        "ремикс",
+        "стиль"
       ],
       "ui_example_prompts": [
         "A fisheye lens selfie photograph taken at night on an urban street. The image...",
@@ -2200,7 +2203,10 @@
       "source_url": "https://docs.kie.ai/market/ideogram/character",
       "tags": [
         "character",
-        "ideogram"
+        "ideogram",
+        "персонаж",
+        "аватар",
+        "герой"
       ],
       "ui_example_prompts": [
         "Place the woman from the uploaded portrait, wearing a casual white blouse, in...",
@@ -5148,7 +5154,7 @@
       "category": "other",
       "slug": "market/sora-2-pro-storyboard/index",
       "display_name": "sora-2-pro-storyboard",
-      "description": "AI модель sora-2-pro-storyboard для генерации контента",
+      "description": "Sora 2 Pro Storyboard - генерация профессиональной раскадровки для видео. Превращает сценарий в визуальный план с кадрами",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora-2-pro-storyboard/index",
       "tags": [
@@ -5244,7 +5250,7 @@
       "category": "other",
       "slug": "market/sora2/sora-2-characters",
       "display_name": "Sora2 - Characters",
-      "description": "AI модель Sora2 - Characters для генерации контента",
+      "description": "Sora 2 Characters - создание анимированных персонажей по описанию. Дружелюбные мультяшные герои с выразительной мимикой",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/sora2/sora-2-characters",
       "old_registry_id": "sora2/sora-2-characters",
@@ -5255,7 +5261,12 @@
         "персонаж",
         "аватар"
       ],
-      "use_case": "Универсальная AI модель для различных задач создания и обработки контента"
+      "use_case": "Универсальная AI модель для различных задач создания и обработки контента",
+      "ui_example_prompts": [
+        "Дружелюбный мультяшный персонаж с выразительными глазами",
+        "Милый герой с плавными движениями и эмоциями",
+        "Анимированный персонаж для детского контента"
+      ]
     },
     "wan/2-6-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5833,7 +5844,12 @@
         "видео",
         "ролик"
       ],
-      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента",
+      "ui_example_prompts": [
+        "Движение камеры вправо, медленное панорамирование",
+        "Zoom in на объект, плавное приближение",
+        "Orbit вокруг предмета, круговое движение"
+      ]
     },
     "wan/2-2-animate-replace": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -5914,7 +5930,12 @@
         "видео",
         "ролик"
       ],
-      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента",
+      "ui_example_prompts": [
+        "Замените зимний фон на летний пейзаж",
+        "Поменяйте дневной свет на ночное освещение",
+        "Трансформируйте улицу в футуристический город"
+      ]
     },
     "wan/2-2-a14b-speech-to-video-turbo": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6120,7 +6141,12 @@
         "качество",
         "ролик"
       ],
-      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования"
+      "use_case": "Улучшение качества для печати, больших экранов, профессионального использования",
+      "ui_example_prompts": [
+        "Улучшить качество старого семейного видео",
+        "Апскейл 480p видео до 4K разрешения",
+        "Увеличить резкость размытой записи"
+      ]
     },
     "infinitalk/from-audio": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6326,7 +6352,12 @@
         "озвучка",
         "речь"
       ],
-      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством",
+      "ui_example_prompts": [
+        "Озвучить новостную статью профессиональным голосом",
+        "Создать аудиокнигу из текстового романа",
+        "Голосовое сопровождение для презентации"
+      ]
     },
     "elevenlabs/speech-to-text": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6414,7 +6445,12 @@
         "озвучка",
         "речь"
       ],
-      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством",
+      "ui_example_prompts": [
+        "Расшифровать интервью в текст",
+        "Транскрибировать лекцию для конспекта",
+        "Перевести голосовое сообщение в письмо"
+      ]
     },
     "elevenlabs/sound-effect-v2": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6502,7 +6538,12 @@
         "звук",
         "озвучка"
       ],
-      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством",
+      "ui_example_prompts": [
+        "Звук закрывающейся металлической двери",
+        "Шаги по мокрому асфальту ночью",
+        "Шум дождя с громом вдалеке"
+      ]
     },
     "elevenlabs/audio-isolation": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6575,7 +6616,12 @@
         "звук",
         "озвучка"
       ],
-      "use_case": "Уникальные треки для видео, подкастов, презентаций без авторских прав"
+      "use_case": "Уникальные треки для видео, подкастов, презентаций без авторских прав",
+      "ui_example_prompts": [
+        "Удалить фоновый шум из записи подкаста",
+        "Извлечь чистый голос из концертной записи",
+        "Убрать музыку, оставить только речь"
+      ]
     },
     "kling/v2-5-turbo-image-to-video-pro": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -6924,7 +6970,12 @@
         "видео",
         "ролик"
       ],
-      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента"
+      "use_case": "Создание видео для Reels, Shorts, TikTok, рекламных роликов, презентаций, образовательного контента",
+      "ui_example_prompts": [
+        "Быстрая генерация короткого видео для соцсетей",
+        "Динамичная анимация логотипа компании",
+        "Видео-превью для поста в Instagram"
+      ]
     },
     "V4": {
       "endpoint": "/api/v1/jobs/createTask",
@@ -7096,7 +7147,12 @@
         "музыка",
         "озвучка"
       ],
-      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством"
+      "use_case": "Озвучка видео, создание подкастов, аудиокниг, голосовых сообщений с профессиональным качеством",
+      "ui_example_prompts": [
+        "Фотореалистичное видео природы в 4K качестве",
+        "Cinematic видео с драматичным освещением",
+        "Профессиональная видеореклама продукта"
+      ]
     }
   },
   "last_updated": "2025-12-25T04:10:00Z",
