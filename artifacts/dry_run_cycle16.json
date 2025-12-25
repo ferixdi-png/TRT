@@ -1,0 +1,17 @@
+{
+  "total": 72,
+  "success": 70,
+  "failed": 2,
+  "success_rate": 97.22222222222221,
+  "credits_spent": 0,
+  "failed_models": [
+    [
+      "veo3_fast",
+      "Model veo3_fast requires field 'imageUrls' (type: list), but it is missing from "
+    ],
+    [
+      "V4",
+      "Model V4 requires field 'customMode' (type: bool), but it is missing from user i"
+    ]
+  ]
+}
