@@ -1,9 +1,9 @@
 {
-  "version": "1.2.5-OPTIONAL-FIELDS",
+  "version": "1.2.6-ENDPOINT-FIX",
   "updated_at": "2025-12-25 02:50:00",
   "models": {
     "bytedance/seedream": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -96,7 +96,7 @@
       ]
     },
     "bytedance/seedream-v4-text-to-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -189,7 +189,7 @@
       ]
     },
     "bytedance/seedream-v4-edit": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -294,7 +294,7 @@
       ]
     },
     "z-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -378,7 +378,7 @@
       ]
     },
     "google/imagen4-fast": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -470,7 +470,7 @@
       ]
     },
     "google/imagen4-ultra": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -562,7 +562,7 @@
       ]
     },
     "google/imagen4": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -658,7 +658,7 @@
       ]
     },
     "google/nano-banana-edit": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -754,7 +754,7 @@
       ]
     },
     "google/nano-banana": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -838,7 +838,7 @@
       ]
     },
     "nano-banana-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -934,7 +934,7 @@
       ]
     },
     "flux-2/pro-image-to-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1039,7 +1039,7 @@
       ]
     },
     "flux-2/pro-text-to-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1128,7 +1128,7 @@
       ]
     },
     "flux-2/flex-image-to-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1233,7 +1233,7 @@
       ]
     },
     "flux-2/flex-text-to-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1322,7 +1322,7 @@
       ]
     },
     "grok-imagine/text-to-image": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1406,7 +1406,7 @@
       ]
     },
     "grok-imagine/upscale": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1482,7 +1482,7 @@
       ]
     },
     "topaz/image-upscale": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1562,7 +1562,7 @@
       ]
     },
     "recraft/remove-background": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1630,7 +1630,7 @@
       ]
     },
     "recraft/crisp-upscale": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1706,7 +1706,7 @@
       ]
     },
     "ideogram/v3-reframe": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1794,7 +1794,7 @@
       ]
     },
     "ideogram/character-edit": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -1906,7 +1906,7 @@
       ]
     },
     "ideogram/character-remix": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -2034,7 +2034,7 @@
       ]
     },
     "ideogram/character": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -2473,7 +2473,7 @@
       ]
     },
     "grok-imagine/text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -2561,7 +2561,7 @@
       ]
     },
     "grok-imagine/image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -2845,7 +2845,7 @@
       ]
     },
     "kling/ai-avatar-v1-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -2932,7 +2932,7 @@
       ]
     },
     "kling/v1-avatar-standard": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3019,7 +3019,7 @@
       ]
     },
     "kling/v2-1-master-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3115,7 +3115,7 @@
       ]
     },
     "kling/v2-1-master-text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3211,7 +3211,7 @@
       ]
     },
     "kling/v2-1-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3311,7 +3311,7 @@
       ]
     },
     "kling/v2-1-standard": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3407,7 +3407,7 @@
       ]
     },
     "bytedance/v1-pro-fast-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3499,7 +3499,7 @@
       ]
     },
     "bytedance/v1-pro-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3603,7 +3603,7 @@
       ]
     },
     "bytedance/v1-pro-text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3707,7 +3707,7 @@
       ]
     },
     "bytedance/v1-lite-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3815,7 +3815,7 @@
       ]
     },
     "bytedance/v1-lite-text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -3915,7 +3915,7 @@
       ]
     },
     "hailuo/2-3-image-to-video-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4007,7 +4007,7 @@
       ]
     },
     "hailuo/2-3-image-to-video-standard": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4099,7 +4099,7 @@
       ]
     },
     "hailuo/02-text-to-video-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4183,7 +4183,7 @@
       ]
     },
     "hailuo/02-text-to-video-standard": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4271,7 +4271,7 @@
       ]
     },
     "hailuo/02-image-to-video-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4363,7 +4363,7 @@
       ]
     },
     "hailuo/02-image-to-video-standard": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4463,7 +4463,7 @@
       ]
     },
     "sora-2-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4578,7 +4578,7 @@
       ]
     },
     "sora-2-text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4681,7 +4681,7 @@
       ]
     },
     "sora-2-pro-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4787,7 +4787,7 @@
       ]
     },
     "sora-2-pro-text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4894,7 +4894,7 @@
       ]
     },
     "sora-watermark-remover": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -4960,7 +4960,7 @@
       "tags": []
     },
     "sora-2-pro-storyboard/index": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5048,7 +5048,7 @@
       ]
     },
     "sora-2-characters": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5133,7 +5133,7 @@
       "tags": []
     },
     "wan/2-6-image-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5233,7 +5233,7 @@
       ]
     },
     "wan/2-6-text-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5321,7 +5321,7 @@
       ]
     },
     "wan/2-6-video-to-video": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5421,7 +5421,7 @@
       ]
     },
     "wan/2-2-a14b-image-to-video-turbo": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5525,7 +5525,7 @@
       ]
     },
     "wan/2-2-a14b-text-to-video-turbo": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5625,7 +5625,7 @@
       ]
     },
     "wan/2-2-animate-move": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5705,7 +5705,7 @@
       ]
     },
     "wan/2-2-animate-replace": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5785,7 +5785,7 @@
       ]
     },
     "wan/2-2-a14b-speech-to-video-turbo": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5909,7 +5909,7 @@
       ]
     },
     "topaz/video-upscale": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -5989,7 +5989,7 @@
       ]
     },
     "infinitalk/from-audio": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6081,7 +6081,7 @@
       ]
     },
     "elevenlabs/text-to-speech-turbo-2-5": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6193,7 +6193,7 @@
       ]
     },
     "elevenlabs/speech-to-text": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6280,7 +6280,7 @@
       ]
     },
     "elevenlabs/sound-effect-v2": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6367,7 +6367,7 @@
       ]
     },
     "elevenlabs/audio-isolation": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6439,7 +6439,7 @@
       ]
     },
     "kling/v2-5-turbo-image-to-video-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6539,7 +6539,7 @@
       ]
     },
     "kling/v2-5-turbo-text-to-video-pro": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "model": {
           "type": "str",
@@ -6785,7 +6785,7 @@
       ]
     },
     "V4": {
-      "endpoint": "/api/v1/jobs/createTask\\",
+      "endpoint": "/api/v1/jobs/createTask",
       "input_schema": {
         "prompt": {
           "type": "str",
@@ -6956,5 +6956,5 @@
       ]
     }
   },
-  "last_updated": "2025-12-25T03:18:00Z"
+  "last_updated": "2025-12-25T04:10:00Z"
 }
