@@ -20,6 +20,12 @@ TEST_MODE = os.getenv('TEST_MODE', 'false').lower() == 'true'
 KIE_STUB = os.getenv('KIE_STUB', 'false').lower() == 'true'
 USE_V4_API = os.getenv('KIE_USE_V4', 'true').lower() == 'true'  # Default to V4
 
+# Import at module level to avoid circular imports and for isinstance check
+try:
+    from app.kie.client_v4 import KieApiClientV4
+except ImportError:
+    KieApiClientV4 = None
+
 
 class KieGenerator:
     """Universal generator for Kie.ai models."""
@@ -163,8 +169,9 @@ class KieGenerator:
             # Create task
             api_client = self._get_api_client()
             
-            # For V4, pass model_id to help router
-            if is_v4:
+            # V4 API requires model_id as first argument
+            # V3 API (old KieApiClient) only takes payload
+            if isinstance(api_client, KieApiClientV4):
                 create_response = await api_client.create_task(model_id, payload)
             else:
                 create_response = await api_client.create_task(payload)
