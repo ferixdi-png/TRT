@@ -93,7 +93,32 @@ class E2EAPITest:
             logger.info(f"🚀 Making API call...")
             response = await self.client.create_task(model_id, payload)
             
-            logger.info(f"✅ API call successful!")
+            # Check API response success
+            response_code = response.get('code', 0)
+            if response_code != 200:
+                error_msg = response.get('msg', 'Unknown error')
+                logger.error(f"❌ API returned error: {error_msg} (code={response_code})")
+                return {
+                    "model_id": model_id,
+                    "status": "FAIL",
+                    "reason": f"API error: {error_msg}",
+                    "cost_rub": 0,
+                    "response": response
+                }
+            
+            # Check taskId present
+            task_id = response.get('data', {}).get('taskId')
+            if not task_id:
+                logger.error(f"❌ No taskId in response")
+                return {
+                    "model_id": model_id,
+                    "status": "FAIL",
+                    "reason": "No taskId in response",
+                    "cost_rub": 0,
+                    "response": response
+                }
+            
+            logger.info(f"✅ Task created! taskId: {task_id}")
             logger.info(f"📊 Response: {json.dumps(response, indent=2)}")
             
             return {
@@ -167,7 +192,32 @@ class E2EAPITest:
             logger.info(f"🚀 Making API call...")
             response = await self.client.create_task(model_id, payload)
             
-            logger.info(f"✅ API call successful!")
+            # Check API response success
+            response_code = response.get('code', 0)
+            if response_code != 200:
+                error_msg = response.get('msg', 'Unknown error')
+                logger.error(f"❌ API returned error: {error_msg} (code={response_code})")
+                return {
+                    "model_id": model_id,
+                    "status": "FAIL",
+                    "reason": f"API error: {error_msg}",
+                    "cost_rub": cost_rub,
+                    "response": response
+                }
+            
+            # Check taskId present
+            task_id = response.get('data', {}).get('taskId')
+            if not task_id:
+                logger.error(f"❌ No taskId in response")
+                return {
+                    "model_id": model_id,
+                    "status": "FAIL",
+                    "reason": "No taskId in response",
+                    "cost_rub": cost_rub,
+                    "response": response
+                }
+            
+            logger.info(f"✅ Task created! taskId: {task_id}")
             logger.info(f"💸 Spent: {cost_rub} RUB")
             logger.info(f"📊 Response: {json.dumps(response, indent=2)}")
             

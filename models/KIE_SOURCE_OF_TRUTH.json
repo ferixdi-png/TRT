@@ -2173,7 +2173,7 @@
           "required": true,
           "examples": [
             {
-              "prompt": "",
+              "prompt": "A beautiful landscape with mountains and sunset",
               "image_size": "square_hd",
               "num_inference_steps": 30,
               "guidance_scale": 2.5,
@@ -2183,7 +2183,7 @@
               "acceleration": "none"
             },
             {
-              "prompt": "",
+              "prompt": "A beautiful landscape with mountains and sunset",
               "image_size": "square_hd",
               "num_inference_steps": 30,
               "guidance_scale": 2.5,
@@ -2193,7 +2193,7 @@
               "acceleration": "none"
             },
             {
-              "prompt": "",
+              "prompt": "A beautiful landscape with mountains and sunset",
               "image_size": "square_hd",
               "num_inference_steps": 30,
               "guidance_scale": 2.5,
@@ -2203,7 +2203,7 @@
               "acceleration": "none"
             },
             {
-              "prompt": "",
+              "prompt": "A beautiful landscape with mountains and sunset",
               "image_size": "square_hd",
               "num_inference_steps": 30,
               "guidance_scale": 2.5,
@@ -2278,7 +2278,7 @@
           "required": true,
           "examples": [
             {
-              "prompt": "",
+              "prompt": "Transform this image into a watercolor painting",
               "image_url": "",
               "strength": 0.8,
               "output_format": "png",
@@ -2289,7 +2289,7 @@
               "enable_safety_checker": true
             },
             {
-              "prompt": "",
+              "prompt": "Transform this image into a watercolor painting",
               "image_url": "",
               "strength": 0.8,
               "output_format": "png",
@@ -2300,7 +2300,7 @@
               "enable_safety_checker": true
             },
             {
-              "prompt": "",
+              "prompt": "Transform this image into a watercolor painting",
               "image_url": "",
               "strength": 0.8,
               "output_format": "png",
@@ -2311,7 +2311,7 @@
               "enable_safety_checker": true
             },
             {
-              "prompt": "",
+              "prompt": "Transform this image into a watercolor painting",
               "image_url": "",
               "strength": 0.8,
               "output_format": "png",
@@ -2387,7 +2387,7 @@
           "required": true,
           "examples": [
             {
-              "prompt": "",
+              "prompt": "Remove the background and make it white",
               "image_url": "https://file.aiquickdraw.com/custom-page/akr/section-images/1755603225969i6j87xnw.jpg",
               "acceleration": "none",
               "image_size": "landscape_4_3",
@@ -2399,7 +2399,7 @@
               "negative_prompt": "blurry, ugly"
             },
             {
-              "prompt": "",
+              "prompt": "Remove the background and make it white",
               "image_url": "https://file.aiquickdraw.com/custom-page/akr/section-images/1755603225969i6j87xnw.jpg",
               "acceleration": "none",
               "image_size": "landscape_4_3",
@@ -2411,7 +2411,7 @@
               "negative_prompt": "blurry, ugly"
             },
             {
-              "prompt": "",
+              "prompt": "Remove the background and make it white",
               "image_url": "https://file.aiquickdraw.com/custom-page/akr/section-images/1755603225969i6j87xnw.jpg",
               "acceleration": "none",
               "image_size": "landscape_4_3",
@@ -2423,7 +2423,7 @@
               "negative_prompt": "blurry, ugly"
             },
             {
-              "prompt": "",
+              "prompt": "Remove the background and make it white",
               "image_url": "https://file.aiquickdraw.com/custom-page/akr/section-images/1755603225969i6j87xnw.jpg",
               "acceleration": "none",
               "image_size": "landscape_4_3",
