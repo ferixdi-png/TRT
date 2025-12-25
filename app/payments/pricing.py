@@ -155,7 +155,7 @@ def calculate_kie_cost(
     
     Priority:
     1. kie_response['cost'] or ['price'] if available (assumed in RUB)
-    2. model['pricing']['rub_per_generation'] from registry v6.2 (direct RUB)
+    2. model['pricing']['rub_per_gen'] from SOURCE_OF_TRUTH (direct RUB)
     3. model['price'] from old registry (in USD) → convert to RUB
     4. FALLBACK_PRICES_USD (in USD) → convert to RUB
     5. Default 10.0 USD → convert to RUB
@@ -178,18 +178,18 @@ def calculate_kie_cost(
                 logger.info(f"Using Kie.ai response cost for {model_id}: {cost_rub} RUB")
                 return cost_rub
     
-    # Priority 2: New registry v6.2 format (direct RUB price)
+    # Priority 2: SOURCE_OF_TRUTH format (direct RUB price)
     pricing = model.get("pricing", {})
     if isinstance(pricing, dict):
-        rub_price = pricing.get("rub_per_generation")
+        rub_price = pricing.get("rub_per_gen")
         if rub_price is not None:
             try:
                 cost_rub = float(rub_price)
                 if cost_rub > 0:
-                    logger.info(f"Using registry v6.2 price for {model_id}: {cost_rub} RUB")
+                    logger.info(f"Using SOURCE_OF_TRUTH price for {model_id}: {cost_rub} RUB")
                     return cost_rub
             except (TypeError, ValueError):
-                logger.warning(f"Invalid v6.2 price for {model_id}: {rub_price}")
+                logger.warning(f"Invalid SOURCE_OF_TRUTH price for {model_id}: {rub_price}")
     
     # Priority 3: Old registry format (in USD → convert to RUB)
     registry_price_usd = model.get("price")

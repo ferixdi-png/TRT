@@ -75,9 +75,9 @@ def get_model_price(model_id: str) -> Dict[str, float]:
     
     Returns:
         {
-            "usd_per_use": float,
-            "credits_per_use": float,
-            "rub_per_use": float,
+            "usd_per_gen": float,
+            "credits_per_gen": float,
+            "rub_per_gen": float,
             "is_free": bool
         }
     """
@@ -85,17 +85,17 @@ def get_model_price(model_id: str) -> Dict[str, float]:
         with open(SOURCE_OF_TRUTH, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        models = data.get("models", [])
+        models_dict = data.get("models", {})
         
         # Find model
-        model = next((m for m in models if m["model_id"] == model_id), None)
+        model = models_dict.get(model_id)
         
         if not model:
             logger.warning(f"Model not found: {model_id}")
             return {
-                "usd_per_use": 0.0,
-                "credits_per_use": 0.0,
-                "rub_per_use": 0.0,
+                "usd_per_gen": 0.0,
+                "credits_per_gen": 0.0,
+                "rub_per_gen": 0.0,
                 "is_free": False
             }
         
@@ -103,18 +103,18 @@ def get_model_price(model_id: str) -> Dict[str, float]:
         is_free = is_free_model(model_id)
         
         return {
-            "usd_per_use": pricing.get("usd_per_use", 0.0),
-            "credits_per_use": pricing.get("credits_per_use", 0.0),
-            "rub_per_use": pricing.get("rub_per_use", 0.0),
+            "usd_per_gen": pricing.get("usd_per_gen", 0.0),
+            "credits_per_gen": pricing.get("credits_per_gen", 0.0),
+            "rub_per_gen": pricing.get("rub_per_gen", 0.0),
             "is_free": is_free
         }
     
     except Exception as e:
         logger.error(f"Failed to get price for {model_id}: {e}")
         return {
-            "usd_per_use": 0.0,
-            "credits_per_use": 0.0,
-            "rub_per_use": 0.0,
+            "usd_per_gen": 0.0,
+            "credits_per_gen": 0.0,
+            "rub_per_gen": 0.0,
             "is_free": False
         }
 
@@ -141,12 +141,12 @@ def get_all_models_by_category() -> Dict[str, List[Dict[str, Any]]]:
         with open(SOURCE_OF_TRUTH, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        models = data.get("models", [])
+        models_dict = data.get("models", {})
         free_ids = get_free_models()
         
         by_category: Dict[str, List[Dict[str, Any]]] = {}
         
-        for model in models:
+        for model_id, model in models_dict.items():
             if not model.get("enabled", True):
                 continue
             
@@ -158,7 +158,7 @@ def get_all_models_by_category() -> Dict[str, List[Dict[str, Any]]]:
             by_category[category].append({
                 "model_id": model["model_id"],
                 "display_name": model.get("display_name", model["model_id"]),
-                "price_rub": model.get("pricing", {}).get("rub_per_use", 0.0),
+                "price_rub": model.get("pricing", {}).get("rub_per_gen", 0.0),
                 "is_free": model["model_id"] in free_ids,
                 "description": model.get("description", "")
             })
@@ -193,7 +193,7 @@ def calculate_cost(model_id: str, quantity: int = 1) -> Dict[str, Any]:
     """
     pricing = get_model_price(model_id)
     
-    price_per_use = pricing["rub_per_use"]
+    price_per_use = pricing["rub_per_gen"]
     is_free = pricing["is_free"]
     
     # Free models cost nothing

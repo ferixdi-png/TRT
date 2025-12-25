@@ -56,11 +56,11 @@ def get_safe_test_models() -> List[str]:
         safe_models = [
             m for m in models
             if m.get("enabled", True)
-            and m.get("pricing", {}).get("rub_per_use", float('inf')) <= MAX_TEST_COST_PER_RUN
+            and m.get("pricing", {}).get("rub_per_gen", float('inf')) <= MAX_TEST_COST_PER_RUN
         ]
         
         # Sort by price (cheapest first)
-        safe_models.sort(key=lambda m: m.get("pricing", {}).get("rub_per_use", 0))
+        safe_models.sort(key=lambda m: m.get("pricing", {}).get("rub_per_gen", 0))
         
         # Take TOP-N
         safe_models = safe_models[:SAFE_MODE_MAX_MODELS]
@@ -69,7 +69,7 @@ def get_safe_test_models() -> List[str]:
         
         logger.info(f"SAFE_TEST_MODE enabled: {len(safe_model_ids)} models allowed")
         for m in safe_models:
-            price = m.get("pricing", {}).get("rub_per_use", 0)
+            price = m.get("pricing", {}).get("rub_per_gen", 0)
             logger.info(f"  ✓ {m['model_id']}: {price} RUB")
         
         return safe_model_ids

@@ -62,11 +62,11 @@ def validate_models(data: Dict[str, Any]) -> None:
     if not models:
         raise StartupValidationError("Нет моделей в source of truth")
     
-    # Count enabled models (pricing.rub_per_use + enabled flag)
+    # Count enabled models (pricing.rub_per_gen + enabled flag)
     enabled_models = [
         m for m in models
         if m.get("enabled", True) 
-        and m.get("pricing", {}).get("rub_per_use") is not None
+        and m.get("pricing", {}).get("rub_per_gen") is not None
     ]
     
     if len(enabled_models) < MIN_ENABLED_MODELS:
@@ -81,13 +81,13 @@ def validate_free_tier(data: Dict[str, Any]) -> None:
     """Validate FREE tier configuration."""
     models = data.get("models", [])
     
-    # Get enabled models sorted by price (rub_per_use)
+    # Get enabled models sorted by price (rub_per_gen)
     enabled_models = [
         m for m in models
         if m.get("enabled", True)
-        and m.get("pricing", {}).get("rub_per_use") is not None
+        and m.get("pricing", {}).get("rub_per_gen") is not None
     ]
-    enabled_models.sort(key=lambda m: m.get("pricing", {}).get("rub_per_use", 999999))
+    enabled_models.sort(key=lambda m: m.get("pricing", {}).get("rub_per_gen", 999999))
     
     if len(enabled_models) < FREE_TIER_COUNT:
         raise StartupValidationError(
@@ -97,7 +97,7 @@ def validate_free_tier(data: Dict[str, Any]) -> None:
     # Check that cheapest 5 have reasonable prices
     cheapest_5 = enabled_models[:FREE_TIER_COUNT]
     for model in cheapest_5:
-        price_rub = model.get("pricing", {}).get("rub_per_use", 0)
+        price_rub = model.get("pricing", {}).get("rub_per_gen", 0)
         if price_rub < 0:
             raise StartupValidationError(
                 f"FREE tier модель {model.get('model_id')} имеет невалидную цену: {price_rub} RUB"
