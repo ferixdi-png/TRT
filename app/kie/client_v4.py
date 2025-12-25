@@ -8,6 +8,13 @@ import os
 from typing import Dict, Any, Optional
 
 import requests
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
 
 from app.kie.router import (
     get_api_category_for_model,
@@ -38,6 +45,31 @@ class KieApiClientV4:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout)),
+        before_sleep=before_sleep_log(logger, logging.WARNING)
+    )
+    def _make_request(self, url: str, payload: Dict[str, Any]) -> requests.Response:
+        """
+        Make HTTP request with automatic retry.
+        
+        Retries on:
+        - ConnectionError (network issues)
+        - Timeout (slow response)
+        
+        Does NOT retry on:
+        - 4xx errors (client errors - bad request)
+        - 5xx errors (server errors - will be handled by caller)
+        """
+        return requests.post(
+            url,
+            headers=self._headers(),
+            json=payload,
+            timeout=self.timeout
+        )
     
     async def create_task(
         self, 
@@ -70,29 +102,22 @@ class KieApiClientV4:
         logger.info(f"Creating task for {model_id} ({category}): POST {url}")
         logger.debug(f"Payload: {payload}")
         
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                response = await asyncio.to_thread(
-                    requests.post,
-                    url,
-                    headers=self._headers(),
-                    json=payload,
-                    timeout=self.timeout
-                )
-                
-                logger.info(f"Response status: {response.status_code}")
-                logger.debug(f"Response body: {response.text[:500]}")
-                
-                response.raise_for_status()
-                return response.json()
-                
-            except requests.RequestException as exc:
-                logger.warning(f"Attempt {attempt+1}/{max_retries} failed: {exc}")
-                if attempt == max_retries - 1:
-                    logger.error(f"Create task failed after retries: {exc}", exc_info=True)
-                    return {"error": str(exc), "state": "fail"}
-                await asyncio.sleep(1 * (attempt + 1))
+        try:
+            response = await asyncio.to_thread(
+                self._make_request,
+                url,
+                payload
+            )
+            
+            logger.info(f"Response status: {response.status_code}")
+            logger.debug(f"Response body: {response.text[:500]}")
+            
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.RequestException as exc:
+            logger.error(f"Create task failed: {exc}", exc_info=True)
+            return {"error": str(exc), "state": "fail"}
     
     async def get_record_info(self, task_id: str) -> Dict[str, Any]:
         """

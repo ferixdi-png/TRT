@@ -62,8 +62,12 @@ def calculate_kie_cost(
         if rub_price is not None:
             try:
                 cost_rub = float(rub_price)
-                if cost_rub > 0:
-                    logger.info(f"Using SOURCE_OF_TRUTH price for {model_id}: {cost_rub} RUB")
+                # Allow 0 for FREE models
+                if cost_rub >= 0:
+                    if cost_rub == 0:
+                        logger.info(f"Using SOURCE_OF_TRUTH price for {model_id}: FREE (0 RUB)")
+                    else:
+                        logger.info(f"Using SOURCE_OF_TRUTH price for {model_id}: {cost_rub} RUB")
                     return cost_rub
             except (TypeError, ValueError):
                 logger.warning(f"Invalid SOURCE_OF_TRUTH price for {model_id}: {rub_price}")
