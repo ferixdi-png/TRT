@@ -16,8 +16,7 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-SOURCE_OF_TRUTH_PATH = Path("models/kie_models_final_truth.json")
-SOURCE_OF_TRUTH_FALLBACK = Path("models/kie_source_of_truth.json")
+SOURCE_OF_TRUTH_PATH = Path("models/KIE_SOURCE_OF_TRUTH.json")
 USD_TO_RUB = 78.0
 MARKUP = 2.0
 MIN_ENABLED_MODELS = 20
@@ -31,16 +30,14 @@ class StartupValidationError(Exception):
 
 def load_source_of_truth() -> Dict[str, Any]:
     """Load and parse source of truth JSON."""
-    # Try new path first, fallback to old
-    path = SOURCE_OF_TRUTH_PATH if SOURCE_OF_TRUTH_PATH.exists() else SOURCE_OF_TRUTH_FALLBACK
     
-    if not path.exists():
+    if not SOURCE_OF_TRUTH_PATH.exists():
         raise StartupValidationError(
             f"Source of truth не найден: {SOURCE_OF_TRUTH_PATH}"
         )
     
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(SOURCE_OF_TRUTH_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise StartupValidationError(
@@ -57,16 +54,16 @@ def load_source_of_truth() -> Dict[str, Any]:
 
 def validate_models(data: Dict[str, Any]) -> None:
     """Validate models count and structure."""
-    models = data.get("models", [])
+    models_dict = data.get("models", {})
     
-    if not models:
+    if not models_dict:
         raise StartupValidationError("Нет моделей в source of truth")
     
     # Count enabled models (pricing.rub_per_gen + enabled flag)
     enabled_models = [
-        m for m in models
-        if m.get("enabled", True) 
-        and m.get("pricing", {}).get("rub_per_gen") is not None
+        model for model_id, model in models_dict.items()
+        if model.get("enabled", True) 
+        and model.get("pricing", {}).get("rub_per_gen") is not None
     ]
     
     if len(enabled_models) < MIN_ENABLED_MODELS:
@@ -74,18 +71,18 @@ def validate_models(data: Dict[str, Any]) -> None:
             f"Недостаточно enabled моделей: {len(enabled_models)} < {MIN_ENABLED_MODELS}"
         )
     
-    logger.info(f"✅ Models: {len(models)} total, {len(enabled_models)} enabled")
+    logger.info(f"✅ Models: {len(models_dict)} total, {len(enabled_models)} enabled")
 
 
 def validate_free_tier(data: Dict[str, Any]) -> None:
     """Validate FREE tier configuration."""
-    models = data.get("models", [])
+    models_dict = data.get("models", {})
     
     # Get enabled models sorted by price (rub_per_gen)
     enabled_models = [
-        m for m in models
-        if m.get("enabled", True)
-        and m.get("pricing", {}).get("rub_per_gen") is not None
+        model for model_id, model in models_dict.items()
+        if model.get("enabled", True)
+        and model.get("pricing", {}).get("rub_per_gen") is not None
     ]
     enabled_models.sort(key=lambda m: m.get("pricing", {}).get("rub_per_gen", 999999))
     
