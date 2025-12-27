@@ -213,7 +213,8 @@ async def start_marketing(message: Message, state: FSMContext) -> None:
     
     # Check if admin
     from app.admin.permissions import is_admin
-    is_admin_user = is_admin(user_id)
+    # is_admin is async; without await aiogram will emit RuntimeWarning and logic will break
+    is_admin_user = await is_admin(user_id)
     
     # Onboarding for newcomers: clear 3-step process
     text = (
@@ -244,7 +245,7 @@ async def version_command(message: Message) -> None:
     """Show build version (admin only)."""
     from app.admin.permissions import is_admin
     
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         await message.answer("⛔ Команда доступна только администраторам")
         return
     
