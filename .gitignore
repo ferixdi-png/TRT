@@ -66,5 +66,12 @@ __pycache__/
 archive/
 artifacts/
 data/
-pricing_source_truth.txt
+# NOTE: pricing_source_truth.txt is REQUIRED at runtime (Render) to compute pricing + FREE tier.
+# It must be committed inside /models. Do NOT ignore it.
+
+# If some old local copies exist at repo root, keep them ignored:
+/pricing_source_truth.txt
+
+# But always allow the source-of-truth used by the app:
+!models/pricing_source_truth.txt
 *.backup

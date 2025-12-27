@@ -86,8 +86,13 @@ class PricingContract:
             Dict[model_id, (usd, rub)]
         """
         if not self.truth_file.exists():
-            logger.error(f"Pricing truth file not found: {self.truth_file}")
-            return {}
+            # IMPORTANT: This file must be committed in GitHub deployments.
+            raise FileNotFoundError(
+                f"Pricing SOURCE_OF_TRUTH file not found: {self.truth_file}. "
+                "This file is required to compute prices and FREE tier. "
+                "If you deployed from GitHub, make sure 'models/pricing_source_truth.txt' is committed "
+                "(watch out for .gitignore)."
+            )
         
         self._pricing_map = {}
         
@@ -115,6 +120,12 @@ class PricingContract:
                     logger.warning(f"Failed to parse pricing line '{line}': {e}")
                     continue
         
+        if not self._pricing_map:
+            raise ValueError(
+                f"Pricing SOURCE_OF_TRUTH parsed 0 models from: {self.truth_file}. "
+                "Check file content format: 'model_id: 0.0200 USD' (one per line)."
+            )
+
         logger.info(f"Loaded pricing for {len(self._pricing_map)} models from truth file")
         return self._pricing_map
     
