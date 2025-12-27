@@ -20,14 +20,26 @@ TG_CALLBACK_LIMIT = 64
 
 # In-memory registry: short_key -> original_id
 _registry: Dict[str, str] = {}
-_reverse: Dict[str, str] = {}  # original_id -> short_key
+_reverse: Dict[str, str] = {}  # cache_key (prefix:raw_id) -> short_key
 
 
-def _hash_id(raw_id: str) -> str:
-    """Generate short hash from ID (10 chars base64url)."""
-    digest = hashlib.sha1(raw_id.encode('utf-8')).digest()
-    b64 = base64.urlsafe_b64encode(digest[:8]).decode('ascii').rstrip('=')
-    return b64[:10]  # 10 chars max
+def _hash_id_v2(raw_id: str) -> str:
+    """Current short hash (10 chars, base64url-ish).
+
+    We intentionally keep this compact and URL-safe.
+    """
+    digest = hashlib.sha1(raw_id.encode("utf-8")).digest()
+    b64 = base64.urlsafe_b64encode(digest[:8]).decode("ascii").rstrip("=")
+    return b64[:10]
+
+
+def _hash_id_v1(raw_id: str) -> str:
+    """Legacy short hash (6 chars lowercase hex).
+
+    Older builds used 6-char lowercase-ish hashes. Supporting it keeps
+    old messages' buttons working after deploys.
+    """
+    return hashlib.md5(raw_id.encode("utf-8")).hexdigest()[:6]
 
 
 def make_key(prefix: str, raw_id: str) -> str:
@@ -57,16 +69,38 @@ def make_key(prefix: str, raw_id: str) -> str:
         return _reverse[cache_key]
     
     # Generate new short key
-    short_hash = _hash_id(raw_id)
-    short_key = f"{prefix}:{short_hash}"
+    # Generate short key(s)
+    short_hash_v2 = _hash_id_v2(raw_id)
+    short_key_v2 = f"{prefix}:{short_hash_v2}"
+
+    # Register both directions (v2)
+    _registry[short_key_v2] = raw_id
+    _reverse[cache_key] = short_key_v2
+
+    # Also register legacy key (v1) so old callbacks still resolve.
+    short_hash_v1 = _hash_id_v1(raw_id)
+    short_key_v1 = f"{prefix}:{short_hash_v1}"
+    _registry.setdefault(short_key_v1, raw_id)
     
-    # Register both directions
-    _registry[short_key] = raw_id
-    _reverse[cache_key] = short_key
-    
-    logger.debug(f"Registered callback: {short_key} -> {raw_id}")
-    
-    return short_key
+    logger.debug(
+        f"Registered callback: {short_key_v2} (v2) / {short_key_v1} (v1) -> {raw_id}"
+    )
+
+    return short_key_v2
+
+
+def _register_hashes(prefix: str, raw_id: str) -> None:
+    """Register both legacy (v1) and current (v2) hash keys.
+
+    Why this exists: after deploy/restart, users can still press old buttons
+    from previous messages. Those buttons might contain hashed callback_data
+    even if the current build now uses direct IDs. Pre-registering hashes for
+    *all* models makes those old callbacks resolve cleanly.
+    """
+    short_key_v2 = f"{prefix}:{_hash_id_v2(raw_id)}"
+    short_key_v1 = f"{prefix}:{_hash_id_v1(raw_id)}"
+    _registry.setdefault(short_key_v2, raw_id)
+    _registry.setdefault(short_key_v1, raw_id)
 
 
 def resolve_key(key: str) -> Optional[str]:
@@ -86,13 +120,13 @@ def resolve_key(key: str) -> Optional[str]:
     # treat it as the real ID.
     prefix, rest = key.split(':', 1)
 
-    # If this looks like a short hash key (base36, 6 chars) but registry doesn't know it,
-    # it's most likely a stale button from a previous deploy.
-    looks_like_hash = len(rest) == 6 and rest.isalnum() and rest == rest.lower()
+    # Direct form (prefix:payload). If it's not a known short key, treat it as payload.
+    # If payload looks like a legacy hash (6 hex), we only accept it if we have it in registry;
+    # otherwise it's a stale button from another deploy.
+    looks_like_v1_hash = len(rest) == 6 and all(c in "0123456789abcdef" for c in rest)
 
-    # Direct form (prefix:payload). Return payload unless it looks like an unresolved hash.
     if len(key.encode("utf-8")) <= TG_CALLBACK_LIMIT and key not in _registry:
-        return None if looks_like_hash else rest
+        return None if looks_like_v1_hash else rest
 
     # Short key form (prefix:HASH) stored in memory
     original = _registry.get(key)
@@ -113,11 +147,26 @@ def init_registry_from_models(models_dict: Dict[str, dict]) -> None:
     logger.info(f"Initializing callback registry with {len(models_dict)} models")
     
     for model_id in models_dict.keys():
+        # Always register both hashed variants, even if current menus will
+        # use the direct form (prefix:...); this prevents "stale button" for
+        # users clicking old messages after restart/deploy.
+        _register_hashes("m", model_id)
+        _register_hashes("gen", model_id)
+        _register_hashes("card", model_id)
+
+        # Warm the cache for current direct-vs-hash decision.
         make_key("m", model_id)  # m: = model
         make_key("gen", model_id)  # gen: = generation
         make_key("card", model_id)  # card: = model card
     
-    logger.info(f"Callback registry initialized: {len(_registry)} keys")
+    # Useful in logs: most model IDs fit directly, so _registry can be small.
+    direct_count = 0
+    for model_id in models_dict.keys():
+        if len(f"m:{model_id}".encode("utf-8")) <= TG_CALLBACK_LIMIT:
+            direct_count += 1
+    logger.info(
+        f"Callback registry initialized: {len(_registry)} hashed keys, {direct_count} direct keys"
+    )
 
 
 def validate_callback_length(callback_data: str) -> bool:

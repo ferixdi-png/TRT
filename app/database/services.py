@@ -58,6 +58,17 @@ class DatabaseService:
     def __init__(self, dsn: str):
         self.dsn = dsn
         self._pool: Optional[asyncpg.Pool] = None
+
+    @property
+    def pool(self) -> Any:
+        """Backward-compat alias for the underlying asyncpg pool.
+
+        Some modules still reference `db.pool`. We keep `_pool` as the
+        canonical attribute to avoid accidental reassignment.
+        """
+        if self._pool is None:
+            raise RuntimeError("Database pool not initialized")
+        return self._pool
     
     async def initialize(self):
         """Initialize connection pool and apply schema."""
