@@ -1,0 +1,1945 @@
+{
+  "version": "locked-from-file-v19",
+  "updated_at": "2025-12-26T03:18:48Z",
+  "metadata": {
+    "source": "minimal_locked",
+    "note": "Locked to модели.txt list; bot shows ONLY these models (no extras). Free tier limited to 5 cheapest.",
+    "minimal_locked": true,
+    "allowed_models_from": "models/ALLOWED_MODEL_IDS.txt"
+  },
+  "models": {
+    "sora-2-text-to-video": {
+      "model_id": "sora-2-text-to-video",
+      "display_name": "Sora 2 Text To Video",
+      "category": "text-to-video",
+      "pricing": {
+        "usd_per_use": 3.15,
+        "credits_per_use": 315.0,
+        "rub_per_use": 598.0,
+        "usd_per_gen": 3.15,
+        "rub_per_gen": 598.0,
+        "credits_per_gen": 315.0,
+        "is_free": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "default": "landscape"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация видео из текста с помощью Sora 2 Text To Video",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "sora-2-text-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "sora-2-image-to-video": {
+      "model_id": "sora-2-image-to-video",
+      "display_name": "Sora 2 Image To Video",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 1.65,
+        "credits_per_use": 165.0,
+        "rub_per_use": 314.0,
+        "usd_per_gen": 1.65,
+        "rub_per_gen": 314.0,
+        "credits_per_gen": 165.0,
+        "is_free": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "sora-2-image-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "sora-watermark-remover": {
+      "model_id": "sora-watermark-remover",
+      "display_name": "Sora Watermark Remover",
+      "category": "image-to-image",
+      "pricing": {
+        "rub_per_use": 9.5,
+        "usd_per_use": 0.05,
+        "credits_per_use": 5.0,
+        "usd_per_gen": 0.05,
+        "rub_per_gen": 9.5,
+        "credits_per_gen": 5.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Редактирование и улучшение изображений",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "sora-watermark-remover",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": true
+    },
+    "grok-imagine/image-to-video": {
+      "model_id": "grok-imagine/image-to-video",
+      "display_name": "Grok Imagine Image To Video",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 0.1,
+        "credits_per_use": 10.0,
+        "rub_per_use": 19.0,
+        "usd_per_gen": 0.1,
+        "rub_per_gen": 19.0,
+        "credits_per_gen": 10.0,
+        "is_free": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "grok-imagine/image-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "grok-imagine/text-to-video": {
+      "model_id": "grok-imagine/text-to-video",
+      "display_name": "Grok Imagine Text To Video",
+      "category": "text-to-video",
+      "pricing": {
+        "usd_per_use": 0.1,
+        "credits_per_use": 10.0,
+        "rub_per_use": 19.0,
+        "usd_per_gen": 0.1,
+        "rub_per_gen": 19.0,
+        "credits_per_gen": 10.0,
+        "is_free": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "default": "landscape"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация видео из текста с помощью Grok Imagine Text To Video",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "grok-imagine/text-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "grok-imagine/text-to-image": {
+      "model_id": "grok-imagine/text-to-image",
+      "display_name": "Grok Imagine Text To Image",
+      "category": "text-to-image",
+      "pricing": {
+        "usd_per_use": 0.02,
+        "credits_per_use": 2.0,
+        "rub_per_use": 3.8,
+        "usd_per_gen": 0.02,
+        "rub_per_gen": 3.8,
+        "credits_per_gen": 2.0,
+        "is_free": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "9:16",
+              "16:9"
+            ],
+            "default": "1:1"
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Создание изображений из текстового описания",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "grok-imagine/text-to-image",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": true
+    },
+    "grok-imagine/upscale": {
+      "model_id": "grok-imagine/upscale",
+      "display_name": "Grok Imagine Upscale",
+      "category": "image-to-image",
+      "pricing": {
+        "usd_per_use": 0.05,
+        "credits_per_use": 5.0,
+        "rub_per_use": 9.5,
+        "usd_per_gen": 0.05,
+        "rub_per_gen": 9.5,
+        "credits_per_gen": 5.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Редактирование и улучшение изображений",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "grok-imagine/upscale",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": true
+    },
+    "wan/2-6-text-to-video": {
+      "model_id": "wan/2-6-text-to-video",
+      "display_name": "Wan 2 6 Text To Video",
+      "category": "text-to-video",
+      "pricing": {
+        "usd_per_use": 0.6,
+        "credits_per_use": 60.0,
+        "rub_per_use": 114.0,
+        "usd_per_gen": 0.6,
+        "rub_per_gen": 114.0,
+        "credits_per_gen": 60.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "default": "landscape"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация видео из текста с помощью Wan 2 6 Text To Video",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "wan/2-6-text-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "wan/2-6-image-to-video": {
+      "model_id": "wan/2-6-image-to-video",
+      "display_name": "Wan 2 6 Image To Video",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 1.0475,
+        "credits_per_use": 104.75000000000001,
+        "rub_per_use": 199.0,
+        "usd_per_gen": 1.0475,
+        "rub_per_gen": 199.0,
+        "credits_per_gen": 104.75000000000001
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "wan/2-6-image-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "wan/2-6-video-to-video": {
+      "model_id": "wan/2-6-video-to-video",
+      "display_name": "Wan 2 6 Video To Video",
+      "category": "video-to-video",
+      "pricing": {
+        "usd_per_use": 1.575,
+        "credits_per_use": 157.5,
+        "rub_per_use": 299.0,
+        "usd_per_gen": 1.575,
+        "rub_per_gen": 299.0,
+        "credits_per_gen": 157.5
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "video_url"
+        ],
+        "properties": {
+          "video_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "wan/2-6-video-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "kling-2.6/image-to-video": {
+      "model_id": "kling-2.6/image-to-video",
+      "display_name": "Kling 2.6 Image To Video",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 0.55,
+        "credits_per_use": 55.00000000000001,
+        "rub_per_use": 104.0,
+        "usd_per_gen": 0.55,
+        "rub_per_gen": 104.0,
+        "credits_per_gen": 55.00000000000001
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "kling-2.6/image-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "kling-2.6/text-to-video": {
+      "model_id": "kling-2.6/text-to-video",
+      "display_name": "Kling 2.6 Text To Video",
+      "category": "text-to-video",
+      "pricing": {
+        "usd_per_use": 0.55,
+        "credits_per_use": 55.00000000000001,
+        "rub_per_use": 104.0,
+        "usd_per_gen": 0.55,
+        "rub_per_gen": 104.0,
+        "credits_per_gen": 55.00000000000001
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "default": "landscape"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация видео из текста с помощью Kling 2.6 Text To Video",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "kling-2.6/text-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "bytedance/seedance-1.5-pro": {
+      "model_id": "bytedance/seedance-1.5-pro",
+      "display_name": "Bytedance Seedance 1.5 Pro",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.42,
+        "credits_per_use": 42.0,
+        "rub_per_use": 80.0,
+        "usd_per_gen": 0.42,
+        "rub_per_gen": 80.0,
+        "credits_per_gen": 42.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "bytedance/seedance-1.5-pro",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "hailuo/2-3-image-to-video-pro": {
+      "model_id": "hailuo/2-3-image-to-video-pro",
+      "display_name": "Hailuo 2 3 Image To Video Pro",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 0.45,
+        "credits_per_use": 45.0,
+        "rub_per_use": 86.0,
+        "usd_per_gen": 0.45,
+        "rub_per_gen": 86.0,
+        "credits_per_gen": 45.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "hailuo/2-3-image-to-video-pro",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "hailuo/2-3-image-to-video-standard": {
+      "model_id": "hailuo/2-3-image-to-video-standard",
+      "display_name": "Hailuo 2 3 Image To Video Standard",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 0.15,
+        "credits_per_use": 15.0,
+        "rub_per_use": 28.0,
+        "usd_per_gen": 0.15,
+        "rub_per_gen": 28.0,
+        "credits_per_gen": 15.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "hailuo/2-3-image-to-video-standard",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "kling/v2-5-turbo-text-to-video-pro": {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "display_name": "Kling V2 5 Turbo Text To Video Pro",
+      "category": "text-to-video",
+      "pricing": {
+        "usd_per_use": 0.42,
+        "credits_per_use": 42.0,
+        "rub_per_use": 80.0,
+        "usd_per_gen": 0.42,
+        "rub_per_gen": 80.0,
+        "credits_per_gen": 42.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "default": "landscape"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация видео из текста с помощью Kling V2 5 Turbo Text To Video Pro",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "kling/v2-5-turbo-text-to-video-pro",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "kling/v2-5-turbo-image-to-video-pro": {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "display_name": "Kling V2 5 Turbo Image To Video Pro",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 0.21,
+        "credits_per_use": 21.0,
+        "rub_per_use": 40.0,
+        "usd_per_gen": 0.21,
+        "rub_per_gen": 40.0,
+        "credits_per_gen": 21.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "kling/v2-5-turbo-image-to-video-pro",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "wan/2-5-image-to-video": {
+      "model_id": "wan/2-5-image-to-video",
+      "display_name": "Wan 2 5 Image To Video",
+      "category": "image-to-video",
+      "pricing": {
+        "usd_per_use": 1.0,
+        "credits_per_use": 100.0,
+        "rub_per_use": 190.0,
+        "usd_per_gen": 1.0,
+        "rub_per_gen": 190.0,
+        "credits_per_gen": 100.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация и обработка видео",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "wan/2-5-image-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "wan/2-5-text-to-video": {
+      "model_id": "wan/2-5-text-to-video",
+      "display_name": "Wan 2 5 Text To Video",
+      "category": "text-to-video",
+      "pricing": {
+        "usd_per_use": 0.6,
+        "credits_per_use": 60.0,
+        "rub_per_use": 114.0,
+        "usd_per_gen": 0.6,
+        "rub_per_gen": 114.0,
+        "credits_per_gen": 60.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
+            "default": "landscape"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 10
+          }
+        }
+      },
+      "output_type": "video",
+      "description": "Генерация видео из текста с помощью Wan 2 5 Text To Video",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "wan/2-5-text-to-video",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "infinitalk/from-audio": {
+      "model_id": "infinitalk/from-audio",
+      "display_name": "Infinitalk From Audio",
+      "category": "audio",
+      "pricing": {
+        "usd_per_use": 0.015,
+        "credits_per_use": 1.5,
+        "rub_per_use": 2.85,
+        "usd_per_gen": 0.015,
+        "rub_per_gen": 2.85,
+        "credits_per_gen": 1.5,
+        "is_free": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "audio_url"
+        ],
+        "properties": {
+          "audio_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "audio",
+      "description": "Работа с аудио и звуком",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "infinitalk/from-audio",
+      "tags": [
+        "free"
+      ],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "wan/2-2-a14b-speech-to-video-turbo": {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "display_name": "Wan 2 2 A14B Speech To Video Turbo",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.12,
+        "credits_per_use": 12.0,
+        "rub_per_use": 23.0,
+        "usd_per_gen": 0.12,
+        "rub_per_gen": 23.0,
+        "credits_per_gen": 12.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "wan/2-2-a14b-speech-to-video-turbo",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "kling/v1-avatar-standard": {
+      "model_id": "kling/v1-avatar-standard",
+      "display_name": "Kling V1 Avatar Standard",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.04,
+        "credits_per_use": 4.0,
+        "rub_per_use": 7.6,
+        "usd_per_gen": 0.04,
+        "rub_per_gen": 7.6,
+        "credits_per_gen": 4.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "kling/v1-avatar-standard",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "kling/ai-avatar-v1-pro": {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "display_name": "Kling Ai Avatar V1 Pro",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.08,
+        "credits_per_use": 8.0,
+        "rub_per_use": 15.0,
+        "usd_per_gen": 0.08,
+        "rub_per_gen": 15.0,
+        "credits_per_gen": 8.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "kling/ai-avatar-v1-pro",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "z-image": {
+      "model_id": "z-image",
+      "display_name": "Z Image",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.004,
+        "credits_per_use": 0.4,
+        "rub_per_use": 0.76,
+        "usd_per_gen": 0.004,
+        "rub_per_gen": 0.76,
+        "credits_per_gen": 0.4,
+        "is_free": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "z-image",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "flux-2/pro-image-to-image": {
+      "model_id": "flux-2/pro-image-to-image",
+      "display_name": "Flux 2 Pro Image To Image",
+      "category": "image-to-image",
+      "pricing": {
+        "usd_per_use": 0.035,
+        "credits_per_use": 3.5000000000000004,
+        "rub_per_use": 6.65,
+        "usd_per_gen": 0.035,
+        "rub_per_gen": 6.65,
+        "credits_per_gen": 3.5000000000000004
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Редактирование и улучшение изображений",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "flux-2/pro-image-to-image",
+      "tags": [
+        "free"
+      ],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "flux-2/flex-image-to-image": {
+      "model_id": "flux-2/flex-image-to-image",
+      "display_name": "Flux 2 Flex Image To Image",
+      "category": "image-to-image",
+      "pricing": {
+        "usd_per_use": 0.035,
+        "credits_per_use": 3.5000000000000004,
+        "rub_per_use": 6.65,
+        "usd_per_gen": 0.035,
+        "rub_per_gen": 6.65,
+        "credits_per_gen": 3.5000000000000004
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Редактирование и улучшение изображений",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "flux-2/flex-image-to-image",
+      "tags": [
+        "free"
+      ],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "flux-2/flex-text-to-image": {
+      "model_id": "flux-2/flex-text-to-image",
+      "display_name": "Flux 2 Flex Text To Image",
+      "category": "text-to-image",
+      "pricing": {
+        "usd_per_use": 0.12,
+        "credits_per_use": 12.0,
+        "rub_per_use": 23.0,
+        "usd_per_gen": 0.12,
+        "rub_per_gen": 23.0,
+        "credits_per_gen": 12.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "9:16",
+              "16:9"
+            ],
+            "default": "1:1"
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Создание изображений из текстового описания",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "flux-2/flex-text-to-image",
+      "tags": [
+        "free"
+      ],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "flux-2/pro-text-to-image": {
+      "model_id": "flux-2/pro-text-to-image",
+      "display_name": "Flux 2 Pro Text To Image",
+      "category": "text-to-image",
+      "pricing": {
+        "usd_per_use": 0.035,
+        "credits_per_use": 3.5000000000000004,
+        "rub_per_use": 6.65,
+        "usd_per_gen": 0.035,
+        "rub_per_gen": 6.65,
+        "credits_per_gen": 3.5000000000000004
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "9:16",
+              "16:9"
+            ],
+            "default": "1:1"
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Создание изображений из текстового описания",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "flux-2/pro-text-to-image",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": true
+    },
+    "seedream/4.5-text-to-image": {
+      "model_id": "seedream/4.5-text-to-image",
+      "display_name": "Seedream 4.5 Text To Image",
+      "category": "text-to-image",
+      "pricing": {
+        "usd_per_use": 0.0325,
+        "credits_per_use": 3.25,
+        "rub_per_use": 6.18,
+        "usd_per_gen": 0.0325,
+        "rub_per_gen": 6.18,
+        "credits_per_gen": 3.25
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "9:16",
+              "16:9"
+            ],
+            "default": "1:1"
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Создание изображений из текстового описания",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "seedream/4.5-text-to-image",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": true
+    },
+    "seedream/4.5-edit": {
+      "model_id": "seedream/4.5-edit",
+      "display_name": "Seedream 4.5 Edit",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.0325,
+        "credits_per_use": 3.25,
+        "rub_per_use": 6.18,
+        "usd_per_gen": 0.0325,
+        "rub_per_gen": 6.18,
+        "credits_per_gen": 3.25
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "seedream/4.5-edit",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "nano-banana-pro": {
+      "model_id": "nano-banana-pro",
+      "display_name": "Nano Banana Pro",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.09,
+        "credits_per_use": 9.0,
+        "rub_per_use": 17.0,
+        "usd_per_gen": 0.09,
+        "rub_per_gen": 17.0,
+        "credits_per_gen": 9.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "nano-banana-pro",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "google/nano-banana": {
+      "model_id": "google/nano-banana",
+      "display_name": "Google Nano Banana",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.02,
+        "credits_per_use": 2.0,
+        "rub_per_use": 3.8,
+        "usd_per_gen": 0.02,
+        "rub_per_gen": 3.8,
+        "credits_per_gen": 2.0,
+        "is_free": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "google/nano-banana",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "google/nano-banana-edit": {
+      "model_id": "google/nano-banana-edit",
+      "display_name": "Google Nano Banana Edit",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.02,
+        "credits_per_use": 2.0,
+        "rub_per_use": 3.8,
+        "usd_per_gen": 0.02,
+        "rub_per_gen": 3.8,
+        "credits_per_gen": 2.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "google/nano-banana-edit",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "google/imagen4-fast": {
+      "model_id": "google/imagen4-fast",
+      "display_name": "Google Imagen4 Fast",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.02,
+        "credits_per_use": 2.0,
+        "rub_per_use": 3.8,
+        "usd_per_gen": 0.02,
+        "rub_per_gen": 3.8,
+        "credits_per_gen": 2.0,
+        "is_free": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "google/imagen4-fast",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "google/imagen4-ultra": {
+      "model_id": "google/imagen4-ultra",
+      "display_name": "Google Imagen4 Ultra",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.09,
+        "credits_per_use": 9.0,
+        "rub_per_use": 17.0,
+        "usd_per_gen": 0.09,
+        "rub_per_gen": 17.0,
+        "credits_per_gen": 9.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "google/imagen4-ultra",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "google/imagen4": {
+      "model_id": "google/imagen4",
+      "display_name": "Google Imagen4",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.02,
+        "credits_per_use": 2.0,
+        "rub_per_use": 3.8,
+        "usd_per_gen": 0.02,
+        "rub_per_gen": 3.8,
+        "credits_per_gen": 2.0,
+        "is_free": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "google/imagen4",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "recraft/remove-background": {
+      "model_id": "recraft/remove-background",
+      "display_name": "Recraft Remove Background",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.005,
+        "credits_per_use": 0.5,
+        "rub_per_use": 0.95,
+        "usd_per_gen": 0.005,
+        "rub_per_gen": 0.95,
+        "credits_per_gen": 0.5,
+        "is_free": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "recraft/remove-background",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "topaz/image-upscale": {
+      "model_id": "topaz/image-upscale",
+      "display_name": "Topaz Image Upscale",
+      "category": "image-to-image",
+      "pricing": {
+        "usd_per_use": 0.05,
+        "credits_per_use": 5.0,
+        "rub_per_use": 9.5,
+        "usd_per_gen": 0.05,
+        "rub_per_gen": 9.5,
+        "credits_per_gen": 5.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "image",
+      "description": "Редактирование и улучшение изображений",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "topaz/image-upscale",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "elevenlabs/sound-effect-v2": {
+      "model_id": "elevenlabs/sound-effect-v2",
+      "display_name": "Elevenlabs Sound Effect V2",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.03,
+        "credits_per_use": 3.0,
+        "rub_per_use": 5.7,
+        "usd_per_gen": 0.03,
+        "rub_per_gen": 5.7,
+        "credits_per_gen": 3.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "elevenlabs/sound-effect-v2",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "elevenlabs/text-to-speech-multilingual-v2": {
+      "model_id": "elevenlabs/text-to-speech-multilingual-v2",
+      "display_name": "Elevenlabs Text To Speech Multilingual V2",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.03,
+        "credits_per_use": 3.0,
+        "rub_per_use": 5.7,
+        "usd_per_gen": 0.03,
+        "rub_per_gen": 5.7,
+        "credits_per_gen": 3.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "elevenlabs/text-to-speech-multilingual-v2",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "elevenlabs/text-to-speech-turbo-2-5": {
+      "model_id": "elevenlabs/text-to-speech-turbo-2-5",
+      "display_name": "Elevenlabs Text To Speech Turbo 2 5",
+      "category": "other",
+      "pricing": {
+        "usd_per_use": 0.03,
+        "credits_per_use": 3.0,
+        "rub_per_use": 5.7,
+        "usd_per_gen": 0.03,
+        "rub_per_gen": 5.7,
+        "credits_per_gen": 3.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "text",
+      "description": "AI модель для работы с text",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "elevenlabs/text-to-speech-turbo-2-5",
+      "tags": [],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    },
+    "elevenlabs/audio-isolation": {
+      "model_id": "elevenlabs/audio-isolation",
+      "display_name": "Elevenlabs Audio Isolation",
+      "category": "audio",
+      "pricing": {
+        "usd_per_use": 0.03,
+        "credits_per_use": 3.0,
+        "rub_per_use": 5.7,
+        "usd_per_gen": 0.03,
+        "rub_per_gen": 5.7,
+        "credits_per_gen": 3.0
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "audio_url"
+        ],
+        "properties": {
+          "audio_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "output_type": "audio",
+      "description": "Работа с аудио и звуком",
+      "enabled": true,
+      "last_updated": "2025-12-26T00:00:00Z",
+      "endpoint": "elevenlabs/audio-isolation",
+      "tags": [
+        "free"
+      ],
+      "ui_example_prompts": [
+        "Тест: короткий запрос для проверки пайплайна."
+      ],
+      "examples": [],
+      "_metadata": {
+        "source": "locked_from_file",
+        "locked": true
+      },
+      "is_free": false
+    }
+  }
+}
