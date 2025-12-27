@@ -138,9 +138,10 @@ async def start_wizard(
         wizard_current_field_index=0,
     )
     
-    # Show overview screen FIRST (what inputs are needed)
-    await show_wizard_overview(callback.message, state, spec, model_config)
-    await state.set_state(WizardState.collecting_input)
+    # UX: сразу запускаем сбор полей, чтобы пользователю не приходилось искать,
+    # где вводить инпуты (он просто отвечает сообщениями/прикрепляет файлы).
+    # При этом обзор остаётся доступен отдельной кнопкой "Подробнее" в карточке модели.
+    await start_collecting_inputs(callback, state)
 
 
 async def show_wizard_overview(message: Message, state: FSMContext, spec, model_config: Dict) -> None:
@@ -154,11 +155,12 @@ async def show_wizard_overview(message: Message, state: FSMContext, spec, model_
         model_config: Model configuration
     """
     from app.ui import tone_ru
-    from app.ui.profile import build_profile
+    # Import from canonical module (deploys sometimes lacked the thin wrapper).
+    from app.ui.model_profile import build_model_profile
     
     model_id = model_config.get("model_id", "unknown")
     display_name = model_config.get("display_name", model_id)
-    profile = build_profile(model_config)
+    profile = build_model_profile(model_config)
     
     # Build checklist of required inputs
     input_emojis = {
