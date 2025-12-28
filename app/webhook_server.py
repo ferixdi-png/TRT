@@ -334,7 +334,7 @@ async def start_webhook_server(
             log.error(f"Failed to get metrics: {e}", exc_info=True)
             return web.json_response({"error": str(e)}, status=500)
 
-    # GET-only: aiohttp auto-registers HEAD for GET (avoid manual HEAD to prevent duplicates)
+    # GET-only: aiohttp auto-registers HEAD for GET; do not register HEAD explicitly to avoid duplicates
     app.router.add_get("/", health)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/readyz", readyz)
@@ -350,7 +350,7 @@ async def start_webhook_server(
             "note": "Telegram sends POST requests to this path"
         })
     
-    # Only GET (aiohttp registers HEAD automatically; avoid duplicate HEAD registrations)
+    # Only GET (aiohttp auto-adds HEAD; do not register HEAD explicitly)
     app.router.add_get(path, webhook_probe)
 
     # Telegram webhook endpoint (aiogram handler with detailed logging)
