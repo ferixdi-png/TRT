@@ -324,7 +324,6 @@ async def main():
     database_url = os.getenv("DATABASE_URL")
     logger.info("✅ Multi-instance mode enabled - idempotency handled via processed_updates table")
 
-
     # Step 3.5: Initialize DB/services (ACTIVE only)
     if database_url and not dry_run:
         # Initialize PostgreSQL storage (compat layer) and DB services
