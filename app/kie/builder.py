@@ -249,21 +249,27 @@ def build_payload(
 
         is_direct_format = (not has_input_wrapper) and looks_flat_fields and not looks_nested
 
+
+        forced_format = (model_schema or {}).get('payload_format') or (model_schema or {}).get('payloadFormat')
+        if forced_format:
+            forced = str(forced_format).strip().lower()
+            if forced in ('direct', 'flat', 'root'):
+                is_direct_format = True
+            elif forced in ('wrapped', 'input', 'nested'):
+                is_direct_format = False
         # CRITICAL: Use api_endpoint for Kie.ai API (not model_id)
         api_endpoint = model_schema.get('api_endpoint', model_id)
         
-        # Build payload based on schema format
+                # Build payload based on schema format
+        payload = {'model': api_endpoint}
         if is_direct_format:
-            # ПРЯМОЙ формат: параметры на верхнем уровне
-            payload = {}
-            logger.info(f"Using DIRECT format for {model_id} (no input wrapper)")
+            logger.info(f"Using DIRECT format for {model_id} (root fields)")
+            payload_input = payload
         else:
-            # ОБЫЧНЫЙ формат: параметры в input wrapper
-            payload = {
-                'model': api_endpoint,  # Use api_endpoint, not model_id
-                'input': {}  # All fields go into 'input' object
-            }
+            payload['input'] = {}
             logger.info(f"Using WRAPPED format for {model_id} (input wrapper)")
+            payload_input = payload['input']
+
     
     # Parse input_schema: support BOTH flat and nested formats
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
@@ -316,7 +322,7 @@ def build_payload(
         # Text-to-X models: need prompt
         if category in ['t2i', 't2v', 'tts', 'music', 'sfx', 'text-to-image', 'text-to-video'] or 'text' in model_id.lower():
             if prompt_value:
-                payload['input']['prompt'] = prompt_value
+                payload_input['prompt'] = prompt_value
             else:
                 raise ValueError(f"Model {model_id} requires 'prompt' or 'text' field")
         
@@ -325,26 +331,26 @@ def build_payload(
             if url_value:
                 # Determine correct field name based on category
                 if 'image' in category or category in ['i2v', 'i2i', 'upscale', 'bg_remove']:
-                    payload['input']['image_url'] = url_value
+                    payload_input['image_url'] = url_value
                 elif 'video' in category or category == 'v2v':
-                    payload['input']['video_url'] = url_value
+                    payload_input['video_url'] = url_value
                 else:
-                    payload['input']['source_url'] = url_value
+                    payload_input['source_url'] = url_value
             elif file_value:
-                payload['input']['file_id'] = file_value
+                payload_input['file_id'] = file_value
             else:
                 raise ValueError(f"Model {model_id} (category: {category}) requires 'url' or 'file' field")
             
             # Optional prompt for guided processing
             if prompt_value:
-                payload['input']['prompt'] = prompt_value
+                payload_input['prompt'] = prompt_value
         
         # Audio models
         elif category in ['stt', 'audio_isolation']:
             if url_value:
-                payload['input']['audio_url'] = url_value
+                payload_input['audio_url'] = url_value
             elif file_value:
-                payload['input']['file_id'] = file_value
+                payload_input['file_id'] = file_value
             else:
                 raise ValueError(f"Model {model_id} (category: {category}) requires audio file or URL")
         
@@ -353,7 +359,7 @@ def build_payload(
             logger.warning(f"Unknown category '{category}' for {model_id}, accepting all user inputs")
             for key, value in user_inputs.items():
                 if value is not None:
-                    payload['input'][key] = value
+                    payload_input[key] = value
         
         return payload
     
@@ -457,7 +463,7 @@ def build_payload(
             if is_direct_format:
                 payload[field_name] = value
             else:
-                payload['input'][field_name] = value
+                payload_input[field_name] = value
     
     # Process optional fields
     for field_name in optional_fields:
@@ -491,7 +497,7 @@ def build_payload(
             if is_direct_format:
                 payload[field_name] = value
             else:
-                payload['input'][field_name] = value
+                payload_input[field_name] = value
     
     # КРИТИЧНО: Для ПРЯМОГО формата добавляем model field
     if is_direct_format:

@@ -1128,7 +1128,7 @@
     "z-image": {
       "model_id": "z-image",
       "display_name": "Z Image",
-      "category": "other",
+      "category": "image",
       "pricing": {
         "usd_per_use": 0.004,
         "credits_per_use": 0.4,
@@ -1150,7 +1150,7 @@
           }
         }
       },
-      "output_type": "text",
+      "output_type": "image",
       "description": "AI модель для работы с text",
       "enabled": true,
       "last_updated": "2025-12-26T00:00:00Z",
@@ -1164,7 +1164,8 @@
         "source": "locked_from_file",
         "locked": true
       },
-      "is_free": false
+      "is_free": false,
+      "payload_format": "direct"
     },
     "flux-2/pro-image-to-image": {
       "model_id": "flux-2/pro-image-to-image",
@@ -1593,7 +1594,7 @@
           }
         }
       },
-      "output_type": "text",
+      "output_type": "image",
       "description": "AI модель для работы с text",
       "enabled": true,
       "last_updated": "2025-12-26T00:00:00Z",
@@ -1674,7 +1675,7 @@
           }
         }
       },
-      "output_type": "text",
+      "output_type": "image",
       "description": "AI модель для работы с text",
       "enabled": true,
       "last_updated": "2025-12-26T00:00:00Z",
@@ -1715,7 +1716,7 @@
           }
         }
       },
-      "output_type": "text",
+      "output_type": "image",
       "description": "AI модель для работы с text",
       "enabled": true,
       "last_updated": "2025-12-26T00:00:00Z",
