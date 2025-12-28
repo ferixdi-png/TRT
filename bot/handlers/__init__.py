@@ -12,6 +12,7 @@ from .quick_actions import router as quick_actions_router
 from .callback_fallback import router as callback_fallback_router
 from .navigation import router as navigation_router
 from .gen_handler import router as gen_handler_router
+from .favorites import router as favorites_router
 
 __all__ = [
     "flow_router",
@@ -27,4 +28,5 @@ __all__ = [
     "callback_fallback_router",
     "navigation_router",
     "gen_handler_router",
+    "favorites_router",
 ]

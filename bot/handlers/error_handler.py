@@ -25,7 +25,9 @@ async def global_error_handler(event: ErrorEvent):
     update = event.update
     
     # Log error for debugging (with full stacktrace)
-    logger.error(f"Error in update {update.update_id}: {exception}", exc_info=exception)
+    # В Render логи часто единственный способ быстро понять, что сломалось.
+    # exc_info=True гарантирует полную трассировку, а не просто строку исключения.
+    logger.error(f"Error in update {update.update_id}: {exception}", exc_info=True)
     
     # User-friendly error message (no stacktrace)
     # Определяем тип ошибки для более понятного сообщения

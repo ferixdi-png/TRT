@@ -236,6 +236,7 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     )
     from bot.handlers.callback_fallback import router as callback_fallback_router
     from bot.handlers.formats import router as formats_router
+    from bot.handlers.favorites import router as favorites_router
     from bot.flows.wizard import router as wizard_router
 
     # Register routers in order (admin first, then formats/wizard for new UX, then legacy)
@@ -251,6 +252,7 @@ def create_bot_application() -> Tuple[Dispatcher, Bot]:
     dp.include_router(balance_router)
     dp.include_router(history_router)
     # dp.include_router(flow_router)  # DISABLED: conflicts with marketing (gen:/model:/launch:)
+    dp.include_router(favorites_router)  # FAVORITES: menu:favorites + fav:add/remove
     dp.include_router(callback_fallback_router)  # LAST: catches unknown callbacks
     dp.include_router(zero_silence_router)
     dp.include_router(error_handler_router)

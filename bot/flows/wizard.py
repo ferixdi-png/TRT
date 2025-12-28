@@ -144,6 +144,40 @@ async def start_wizard(
     await start_collecting_inputs(callback, state)
 
 
+async def start_collecting_inputs(callback: CallbackQuery, state: FSMContext) -> None:
+    """Переводит FSM в режим пошагового сбора параметров и показывает 1-е поле."""
+    data = await state.get_data()
+    spec = data.get("wizard_spec")
+
+    # На всякий: если по какой-то причине спека нет — пробуем достроить по model_config.
+    if spec is None:
+        model_config = data.get("model_config")
+        if model_config:
+            try:
+                spec = get_input_spec(model_config)
+                await state.update_data(wizard_spec=spec)
+            except Exception:
+                spec = None
+
+    # Если вообще нет полей — сразу в генерацию.
+    if not spec or not getattr(spec, "fields", None):
+        from bot.handlers.flow import trigger_generation
+        await state.set_state(WizardState.ready_to_generate)
+        await trigger_generation(callback.message, state)
+        return
+
+    # Инициализируем прогресс визарда.
+    await state.set_state(WizardState.collecting_input)
+    await state.update_data(wizard_current_field_index=0)
+
+    # Если в state не было контейнера для значений — создаём.
+    if not data.get("wizard_inputs"):
+        await state.update_data(wizard_inputs={})
+
+    # Показываем первое поле.
+    await show_field_input(callback.message, state)
+
+
 async def show_wizard_overview(message: Message, state: FSMContext, spec, model_config: Dict) -> None:
     """
     Show wizard overview - what inputs will be collected.
@@ -234,16 +268,7 @@ async def show_wizard_overview(message: Message, state: FSMContext, spec, model_
 async def wizard_start_collecting_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Start collecting inputs after overview."""
     await callback.answer()
-    
-    data = await state.get_data()
-    spec = data.get("wizard_spec")
-    
-    if not spec or not spec.fields:
-        await callback.message.edit_text("❌ Ошибка: спецификация не найдена", parse_mode="HTML")
-        return
-    
-    # Show first field
-    await show_field_input(callback.message, state, spec.fields[0])
+    await start_collecting_inputs(callback, state)
 
 
 @router.callback_query(F.data.startswith("wizard:presets:"))

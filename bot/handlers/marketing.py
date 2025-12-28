@@ -135,6 +135,7 @@ def _build_main_menu_keyboard() -> InlineKeyboardMarkup:
         # Быстрый доступ
         [
             InlineKeyboardButton(text=tone_ru.MENU_HISTORY, callback_data="menu:history"),
+            InlineKeyboardButton(text="⭐ Избранное", callback_data="menu:favorites"),
             InlineKeyboardButton(text=tone_ru.MENU_BALANCE, callback_data="menu:balance"),
         ],
         [
