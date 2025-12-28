@@ -81,6 +81,11 @@ class Config:
     
     # OPTIONAL - Bot mode
     bot_mode: str = field(default="polling")
+
+    # OPTIONAL - UX switches
+    # If enabled, the bot will start asking for model inputs immediately after
+    # a user selects a model (no extra "✅ Сгенерировать" tap).
+    auto_start_on_model_select: bool = field(default=True)
     
     # OPTIONAL - Storage
     storage_mode: str = field(default="auto")
@@ -139,10 +144,15 @@ class Config:
         self.bot_mode = os.getenv("BOT_MODE", "polling").lower()
         if self.bot_mode not in ["polling", "webhook"]:
             raise ValueError(f"BOT_MODE must be 'polling' or 'webhook', got: {self.bot_mode}")
-        
+
         # OPTIONAL - Storage
         self.storage_mode = os.getenv("STORAGE_MODE", "auto").lower()
         self.database_url = os.getenv("DATABASE_URL")
+
+        # OPTIONAL - UX switches
+        self.auto_start_on_model_select = os.getenv("AUTO_START_ON_MODEL_SELECT", "1") not in (
+            "0", "false", "False", "no", "NO"
+        )
         
         # OPTIONAL - Kie.ai
         self.kie_base_url = os.getenv("KIE_BASE_URL", "https://api.kie.ai").rstrip("/")

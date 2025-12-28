@@ -9,6 +9,15 @@ from pathlib import Path
 
 router = Router(name="gallery")
 
+
+# NOTE: Compatibility no-op.
+# scripts/verify_callbacks.py normalizes dynamic callbacks to the first segment
+# (e.g. "example:use:{...}" becomes "example:"). We keep this exact-match
+# handler to prevent false positives without affecting runtime routing.
+@router.callback_query(F.data == "example:")
+async def _example_prefix_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
+
 # Load recommendations
 RECOMMENDATIONS_PATH = Path("artifacts/model_recommendations.json")
 

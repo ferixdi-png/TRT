@@ -1,8 +1,9 @@
 """Format-based navigation handlers."""
 import logging
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 
 from app.ui.formats import FORMATS, get_model_format, group_models_by_format, get_popular_models, get_recommended_models
 from app.ui.render import render_format_page, render_model_card
@@ -11,6 +12,10 @@ from app.payments.pricing import calculate_user_price, format_price_rub
 
 logger = logging.getLogger(__name__)
 router = Router(name="formats")
+
+
+class TemplateFlow(StatesGroup):
+    answering = State()
 
 
 @router.callback_query(F.data == "menu:formats")
@@ -375,6 +380,186 @@ async def show_templates(callback: CallbackQuery, state: FSMContext) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("use_template:"))
+async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
+    """Start template question flow and then launch wizard with a built prompt."""
+    await callback.answer()
+
+    # use_template:<model_id>:<template_id>
+    parts = callback.data.split(":")
+    if len(parts) < 3:
+        await callback.answer("❌ Некорректный шаблон", show_alert=True)
+        return
+    model_id, template_id = parts[1], parts[2]
+
+    sot_data = load_source_of_truth()
+    models = sot_data.get("models", {})
+    model_config = models.get(model_id)
+    if not model_config:
+        await callback.answer("❌ Модель не найдена", show_alert=True)
+        return
+
+    model_format = get_model_format(model_config)
+    if not model_format:
+        await callback.answer("❌ Формат не найден", show_alert=True)
+        return
+
+    from app.ui.templates import get_template
+    template = get_template(template_id, model_format.key)
+    if not template:
+        await callback.answer("❌ Шаблон не найден", show_alert=True)
+        return
+
+    # Store flow context
+    await state.set_state(TemplateFlow.answering)
+    await state.update_data(
+        tpl={
+            "model_id": model_id,
+            "format_key": model_format.key,
+            "template_id": template_id,
+            "q_index": 0,
+            "answers": {},
+        }
+    )
+
+    q = template.questions[0] if template.questions else None
+    if not q:
+        # No questions: immediately launch wizard with the built prompt
+        prompt = template.build_prompt({})
+        bot_msg = await callback.message.edit_text(
+            "🚀 Запускаю шаблон…", parse_mode="HTML"
+        )
+        from bot.flows.wizard import start_wizard
+
+        class _Dummy:
+            def __init__(self, msg: Message):
+                self.message = msg
+            async def answer(self, *args, **kwargs):
+                return None
+
+        await state.clear()
+        await start_wizard(_Dummy(bot_msg), state, model_config, prefill_prompt=prompt)
+        return
+
+    example = q.get("example")
+    example_line = f"\n\n<i>Пример: {example}</i>" if example else ""
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="tpl:cancel")],
+            [InlineKeyboardButton(text="◀️ К списку шаблонов", callback_data=f"templates:{model_id}")],
+        ]
+    )
+    await callback.message.edit_text(
+        f"🧪 <b>{template.name}</b>\n\n{q.get('text', 'Введите значение:')}{example_line}",
+        reply_markup=kb,
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "tpl:cancel")
+async def cancel_template_flow(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    data = await state.get_data()
+    tpl = (data.get("tpl") or {})
+    model_id = tpl.get("model_id")
+    await state.clear()
+    if model_id:
+        await callback.message.edit_text(
+            "Ок, шаблон отменён.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К модели", callback_data=f"model:{model_id}")],
+                    [InlineKeyboardButton(text="🏠 Меню", callback_data="menu:main")],
+                ]
+            ),
+            parse_mode="HTML",
+        )
+    else:
+        await callback.message.edit_text(
+            "Ок, шаблон отменён.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="🏠 Меню", callback_data="menu:main")]]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.message(TemplateFlow.answering)
+async def template_answer_msg(message: Message, state: FSMContext) -> None:
+    """Collect template answers sequentially."""
+    data = await state.get_data()
+    tpl_state = (data.get("tpl") or {})
+    model_id = tpl_state.get("model_id")
+    format_key = tpl_state.get("format_key")
+    template_id = tpl_state.get("template_id")
+    q_index = int(tpl_state.get("q_index", 0) or 0)
+    answers = dict(tpl_state.get("answers") or {})
+
+    # Load model/template
+    sot_data = load_source_of_truth()
+    models = sot_data.get("models", {})
+    model_config = models.get(model_id)
+    if not model_config:
+        await state.clear()
+        await message.answer("⚠️ Модель не найдена. Нажмите /start")
+        return
+
+    from app.ui.templates import get_template
+    template = get_template(template_id, format_key)
+    if not template:
+        await state.clear()
+        await message.answer("⚠️ Шаблон не найден. Нажмите /start")
+        return
+
+    # Save answer
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("Напишите ответ текстом 🙂")
+        return
+
+    # Current question key
+    if template.questions and q_index < len(template.questions):
+        key = template.questions[q_index].get("key") or f"q{q_index}"
+        answers[key] = text
+    q_index += 1
+
+    # Next question
+    if template.questions and q_index < len(template.questions):
+        await state.update_data(tpl={**tpl_state, "q_index": q_index, "answers": answers})
+        q = template.questions[q_index]
+        example = q.get("example")
+        example_line = f"\n\n<i>Пример: {example}</i>" if example else ""
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="tpl:cancel")],
+                [InlineKeyboardButton(text="◀️ К списку шаблонов", callback_data=f"templates:{model_id}")],
+            ]
+        )
+        await message.answer(
+            f"🧪 <b>{template.name}</b>\n\n{q.get('text', 'Введите значение:')}{example_line}",
+            reply_markup=kb,
+            parse_mode="HTML",
+        )
+        return
+
+    # Done: build prompt and launch wizard
+    prompt = template.build_prompt(answers)
+
+    # Create a bot message that wizard can safely edit
+    bot_msg = await message.answer("🚀 Запускаю генерацию по шаблону…", parse_mode="HTML")
+
+    from bot.flows.wizard import start_wizard
+
+    class _Dummy:
+        def __init__(self, msg: Message):
+            self.message = msg
+        async def answer(self, *args, **kwargs):
+            return None
+
+    await state.clear()
+    await start_wizard(_Dummy(bot_msg), state, model_config, prefill_prompt=prompt)
 
 
 @router.callback_query(F.data == "noop")

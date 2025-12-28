@@ -16,6 +16,21 @@ import os
 import sys
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# Import/Path guard
+# ---------------------------------------------------------------------------
+# When running this script via `python scripts/verify_project.py`, Python sets
+# sys.path[0] to the scripts/ folder, so `import app.*` fails.
+# We hard-pin the project root to make verification reproducible from anywhere.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+try:
+    os.chdir(PROJECT_ROOT)
+except Exception:
+    # If chdir fails for any reason, continue with the current working dir.
+    pass
+
 def load_allowed_model_ids() -> list[str]:
     p = Path("models/ALLOWED_MODEL_IDS.txt")
     if not p.exists():

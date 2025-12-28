@@ -530,22 +530,12 @@ def _model_detail_text_OLD(model: Dict[str, Any]) -> str:
         else:
             best_for = "Обработка и генерация контента"
     
-    # Price formatting - CORRECT FORMULA: price_usd × 78 (USD→RUB) × 2 (markup)
-    price_raw = model.get("price")
-    if price_raw:
-        try:
-            price_usd = float(price_raw)
-            if price_usd == 0:
-                price_str = "Бесплатно"
-            else:
-                # Step 1: Convert USD to RUB (using calculate_kie_cost)
-                kie_cost_rub = calculate_kie_cost(model, {}, None)
-                # Step 2: Apply 2x markup for user price
-                user_price_rub = calculate_user_price(kie_cost_rub)
-                price_str = format_price_rub(user_price_rub)
-        except (TypeError, ValueError):
-            price_str = str(price_raw)
-    else:
+    # Price formatting (SOURCE_OF_TRUTH is authoritative): base_rub * markup
+    try:
+        base_cost_rub = float(calculate_kie_cost(model, {}, None))
+        user_price_rub = float(calculate_user_price(base_cost_rub))
+        price_str = "Бесплатно" if user_price_rub <= 0 else format_price_rub(user_price_rub)
+    except Exception:
         price_str = "Уточняется"
     
     # ETA
@@ -1521,10 +1511,11 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.edit_text("⚠️ Модель не найдена.")
         return
     
-    price_raw = model.get("price") or 0
+    # Amount is always in RUB for ChargeManager.
     try:
-        amount = float(price_raw)
-    except (TypeError, ValueError):
+        base_cost_rub = float(calculate_kie_cost(model, inputs, None))
+        amount = float(calculate_user_price(base_cost_rub))
+    except Exception:
         amount = 0.0
     
     charge_manager = get_charge_manager()
@@ -1676,10 +1667,29 @@ async def model_cb(callback: CallbackQuery, state: FSMContext) -> None:
         back_cb = f"cat:{category}"
 
     await state.update_data(model_id=model_id)
+
+    # SYNTX-grade UX: by default we don't force an extra "✅ Сгенерировать" tap.
+    # Immediately proceed to input collection after model selection.
+    auto_start = True
+    try:
+        from app.utils.config import get_config
+        auto_start = bool(getattr(get_config(), "auto_start_on_model_select", True))
+    except Exception:
+        auto_start = True
+
     await callback.message.edit_text(
-        _model_detail_text(model),
+        _model_detail_text(model) + ("\n\n<b>Ок, выбрано.</b> Сейчас спрошу параметры 👇" if auto_start else ""),
         reply_markup=_model_detail_keyboard(model_id, back_cb),
     )
+
+    if auto_start:
+        await _start_generation_flow(
+            message=callback.message,
+            state=state,
+            model=model,
+            model_id=model_id,
+            user_id=callback.from_user.id,
+        )
 
 
 @router.callback_query(F.data.startswith("gen:"))
@@ -1704,8 +1714,25 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.edit_text("⚠️ Модель не найдена.", reply_markup=_category_keyboard())
         return
 
+    await _start_generation_flow(
+        message=callback.message,
+        state=state,
+        model=model,
+        model_id=model_id,
+        user_id=user_id,
+    )
+
+
+async def _start_generation_flow(*, message: Message, state: FSMContext, model: Dict[str, Any], model_id: str, user_id: int) -> None:
+    """Start the input-collection flow for a selected model (shared by model_cb and gen:)."""
+    # Log model selection for generation
+    logger.info(
+        f"Generation flow init: model_id={model_id}",
+        extra={'user_id': user_id, 'model_id': model_id}
+    )
+
     input_schema = model.get("input_schema", {})
-    
+
     # Support BOTH flat and nested formats (like builder.py)
     if 'properties' in input_schema:
         # Nested format
@@ -1715,27 +1742,27 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
     else:
         # Flat format (source_of_truth.json) - convert
         properties = input_schema
-        required_fields = [k for k, v in properties.items() if v.get('required', False)]
-        optional_fields = [k for k in properties.keys() if k not in required_fields]
-    
+        required_fields = [k for k, v in (properties or {}).items() if isinstance(v, dict) and v.get('required', False)]
+        optional_fields = [k for k in (properties or {}).keys() if k not in required_fields]
+
     ctx = InputContext(
         model_id=model_id,
         required_fields=required_fields,
         optional_fields=optional_fields,
-        properties=properties,
+        properties=properties or {},
         collected={},
-        collecting_optional=False
+        collecting_optional=False,
     )
-    await state.update_data(flow_ctx=ctx.__dict__)
+    await state.update_data(flow_ctx=ctx.__dict__, model_id=model_id)
 
     if not required_fields:
-        await _show_confirmation(callback.message, state, model)
+        await _show_confirmation(message, state, model)
         return
 
     field_name = required_fields[0]
-    field_spec = properties.get(field_name, {})
+    field_spec = (properties or {}).get(field_name, {})
     await state.set_state(InputFlow.waiting_input)
-    await callback.message.answer(
+    await message.answer(
         _field_prompt(field_name, field_spec),
         reply_markup=_enum_keyboard(field_spec),
     )
@@ -2023,18 +2050,12 @@ async def _show_confirmation(message: Message, state: FSMContext, model: Optiona
     
     model_name = model.get("name") or model.get("model_id")
     
-    # Price formatting - CORRECT FORMULA: price_usd × 78 (USD→RUB) × 2 (markup)
-    price_usd = model.get("price") or 0
+    # Price formatting (SOURCE_OF_TRUTH is authoritative): base_rub * markup
     try:
-        if price_usd == 0:
-            price_str = "Бесплатно"
-        else:
-            # Step 1: Convert USD to RUB (using calculate_kie_cost)
-            kie_cost_rub = calculate_kie_cost(model, {}, None)
-            # Step 2: Apply 2x markup for user price
-            user_price_rub = calculate_user_price(kie_cost_rub)
-            price_str = format_price_rub(user_price_rub)
-    except (TypeError, ValueError):
+        base_cost_rub = float(calculate_kie_cost(model, flow_ctx.collected, None))
+        user_price_rub = float(calculate_user_price(base_cost_rub))
+        price_str = "Бесплатно" if user_price_rub <= 0 else format_price_rub(user_price_rub)
+    except Exception:
         price_str = "Цена не определена"
     
     # ETA
@@ -2117,6 +2138,55 @@ async def cancel_cb(callback: CallbackQuery, state: FSMContext) -> None:
     )
 
 
+@router.callback_query(F.data == "back_to_inputs")
+async def back_to_inputs_cb(callback: CallbackQuery, state: FSMContext) -> None:
+    """Return user to inputs collection after a validation error.
+
+    This button appears when strict validation detects missing/invalid required
+    inputs. We reset the flow to the first required field and continue.
+    """
+    await callback.answer()
+
+    data = await state.get_data()
+    flow_ctx_raw = data.get("flow_ctx")
+    if not flow_ctx_raw:
+        await state.clear()
+        try:
+            await callback.message.answer(
+                "Ок, начнём заново 👇",
+                reply_markup=_main_menu_keyboard(),
+            )
+        except Exception:
+            pass
+        return
+
+    flow_ctx = InputContext(**flow_ctx_raw)
+    # Restart required fields collection
+    flow_ctx.index = 0
+    flow_ctx.collecting_optional = False
+    await state.update_data(flow_ctx=flow_ctx.__dict__)
+
+    model = next((m for m in _get_models_list() if m.get("model_id") == flow_ctx.model_id), None)
+    if not model:
+        await state.clear()
+        await callback.message.answer("⚠️ Модель не найдена.")
+        return
+
+    # If no required fields, go to confirmation directly
+    if not flow_ctx.required_fields:
+        await state.set_state(InputFlow.confirm)
+        await _show_confirmation(callback.message, state, model)
+        return
+
+    await state.set_state(InputFlow.waiting_input)
+    first_field = flow_ctx.required_fields[0]
+    spec = flow_ctx.properties.get(first_field, {})
+    await callback.message.answer(
+        "Давай поправим ввод 👇\n\n" + _field_prompt(first_field, spec),
+        reply_markup=_enum_keyboard(spec),
+    )
+
+
 @router.callback_query(F.data == "confirm", InputFlow.confirm)
 async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
@@ -2134,7 +2204,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     
     # VALIDATE INPUTS FIRST (before lock, before payment)
     try:
-        validate_inputs(model, flow_ctx.inputs)
+        validate_inputs(model, flow_ctx.collected)
     except UserFacingValidationError as e:
         await callback.message.answer(
             str(e),
@@ -2145,7 +2215,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         return
     
     # Build stable idempotency key from inputs
-    idem_key = build_generation_key(uid, flow_ctx.model_id, flow_ctx.inputs)
+    idem_key = build_generation_key(uid, flow_ctx.model_id, flow_ctx.collected)
     
     # Check idempotency BEFORE lock
     idem_started, idem_existing = idem_try_start(idem_key, ttl_s=600.0)
@@ -2179,10 +2249,12 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
             pass
         return
 
-    price_raw = model.get("price") or 0
+    # Amount is always in RUB for ChargeManager.
+    # Use SOURCE_OF_TRUTH base cost * markup (calculate_* already handles FX/credits).
     try:
-        amount = float(price_raw)
-    except (TypeError, ValueError):
+        base_cost_rub = float(calculate_kie_cost(model, flow_ctx.collected, None))
+        amount = float(calculate_user_price(base_cost_rub))
+    except Exception:
         amount = 0.0
 
     charge_manager = get_charge_manager()
@@ -2216,11 +2288,11 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     from app.utils.html import escape_html
     
     # Initial progress message with model and inputs info
-    model_name = _get_models_list()
-    model_display = "Unknown"
-    for m in model_name:
+    models_list = _get_models_list()
+    model_display = flow_ctx.model_id
+    for m in models_list:
         if m.get("model_id") == flow_ctx.model_id:
-            model_display = m.get("name") or flow_ctx.model_id
+            model_display = m.get("display_name") or m.get("name") or flow_ctx.model_id
             break
 
     # Format inputs for display - ESCAPE USER INPUT

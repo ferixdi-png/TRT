@@ -30,8 +30,14 @@ def get_git_tracked_files() -> List[str]:
         )
         return result.stdout.strip().split('\n')
     except subprocess.CalledProcessError:
-        print("❌ Error: Not a git repository or git not available")
-        sys.exit(1)
+        # In CI / real repo this should be a hard error.
+        # But when someone unzips a release archive (no .git), we prefer a soft skip.
+        strict = os.getenv("STRICT_GIT", "0").lower() in {"1", "true", "yes"}
+        if strict:
+            print("❌ Error: Not a git repository or git not available")
+            sys.exit(1)
+        print("⚠️  Not a git repository detected (skipping git-tracked health checks)")
+        return []
 
 
 def check_file_size(file_path: str) -> Tuple[bool, float]:
