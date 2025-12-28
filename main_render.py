@@ -334,13 +334,16 @@ async def main():
         logging.getLogger(__name__).info("PostgreSQL storage initialized")
 
         from app.database.services import DatabaseService, set_default_db_service
-        from app.database.service import configure_db_service
         db_service = DatabaseService(database_url)
         await db_service.initialize()
         logging.getLogger(__name__).info("✅ Database initialized with schema")
         # Sync both modern helper and legacy singleton for webhook/metrics modules
         set_default_db_service(db_service)
-        configure_db_service(db_service)
+        try:
+            from app.database.services import configure_db_service
+            configure_db_service(db_service)
+        except ImportError:
+            pass
         
         # Check DB schema and configure feature flags
         try:
