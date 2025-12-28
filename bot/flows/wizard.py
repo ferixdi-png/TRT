@@ -20,6 +20,26 @@ logger = logging.getLogger(__name__)
 router = Router(name="wizard")
 
 
+async def _wizard_fail_and_return_to_menu(message: Message, state: FSMContext, reason: str) -> None:
+    """Log wizard failure and safely return user to the main menu."""
+    logger.error("Wizard fallback to menu: %s", reason)
+    await state.clear()
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text="🏠 В меню", callback_data="menu:main"
+    )]])
+
+    try:
+        await message.answer(
+            "❌ Произошла ошибка в мастере. Возвращаю в меню.",
+            reply_markup=kb,
+            parse_mode="HTML",
+        )
+    except Exception:
+        # If editing fails (deleted message), ignore.
+        logger.exception("Failed to send wizard fallback message")
+
+
 class WizardState(StatesGroup):
     """Wizard FSM states."""
     collecting_input = State()
@@ -99,9 +119,10 @@ async def start_wizard(
     
     # Get input spec
     spec = get_input_spec(model_config)
-    
+
     if not spec.fields:
         # No inputs needed, go straight to generation
+        logger.info("Wizard checklist: no fields for model %s, auto-starting generation", model_id)
         await callback.message.edit_text(
             f"🚀 <b>{display_name}</b>\n\n"
             "Запускаю генерацию...",
@@ -119,6 +140,12 @@ async def start_wizard(
         from bot.handlers.flow import trigger_generation
         await trigger_generation(callback.message, state)
         return
+
+    logger.info(
+        "Wizard checklist: start for model %s with %d fields",
+        model_id,
+        len(spec.fields),
+    )
     
     # Prefill if provided
     initial_inputs = {}
@@ -159,10 +186,13 @@ async def start_collecting_inputs(callback: CallbackQuery, state: FSMContext) ->
             except Exception:
                 spec = None
 
+    if spec is None:
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec missing in state")
+        return
+
     # Если вообще нет полей — сразу в генерацию.
     if not spec or not getattr(spec, "fields", None):
         from bot.handlers.flow import trigger_generation
-        await state.set_state(WizardState.ready_to_generate)
         await trigger_generation(callback.message, state)
         return
 
@@ -175,7 +205,11 @@ async def start_collecting_inputs(callback: CallbackQuery, state: FSMContext) ->
         await state.update_data(wizard_inputs={})
 
     # Показываем первое поле.
-    await show_field_input(callback.message, state)
+    if not spec.fields:
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec has no fields after validation")
+        return
+
+    await show_field_input(callback.message, state, spec.fields[0])
 
 
 async def show_wizard_overview(message: Message, state: FSMContext, spec, model_config: Dict) -> None:
@@ -395,6 +429,10 @@ async def show_field_input(message: Message, state: FSMContext, field) -> None:
     step_num = current_idx + 1
     
     # Build field description
+    if field is None:
+        await _wizard_fail_and_return_to_menu(message, state, "field missing in show_field_input")
+        return
+
     field_emoji = {
         InputType.TEXT: "✍️",
         InputType.IMAGE_URL: "🖼",
@@ -475,9 +513,13 @@ async def wizard_skip_field(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     spec = data.get("wizard_spec")
     current_index = data.get("wizard_current_field_index", 0)
-    
+
+    if not spec or not getattr(spec, "fields", None):
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec missing during skip")
+        return
+
     if current_index >= len(spec.fields):
-        await wizard_show_confirmation(callback, state)
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_current_field_index out of range on skip")
         return
     
     current_field = spec.fields[current_index]
@@ -505,8 +547,13 @@ async def wizard_use_default(callback: CallbackQuery, state: FSMContext) -> None
     spec = data.get("wizard_spec")
     current_index = data.get("wizard_current_field_index", 0)
     inputs = data.get("wizard_inputs", {})
-    
+
+    if not spec or not getattr(spec, "fields", None):
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec missing during use_default")
+        return
+
     if current_index >= len(spec.fields):
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_current_field_index out of range on use_default")
         return
     
     current_field = spec.fields[current_index]
@@ -548,10 +595,17 @@ async def wizard_go_back(callback: CallbackQuery, state: FSMContext) -> None:
         from bot.handlers.formats import show_model_card
         await show_model_card(callback, model_id)
         return
-    
+
     # Go to previous field
     spec = data.get("wizard_spec")
+    if not spec or not getattr(spec, "fields", None):
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec missing during back navigation")
+        return
+
     prev_index = current_index - 1
+    if prev_index >= len(spec.fields):
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_current_field_index out of range on back")
+        return
     await state.update_data(wizard_current_field_index=prev_index)
     await show_field_input(callback.message, state, spec.fields[prev_index])
 
@@ -563,8 +617,13 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
     spec = data.get("wizard_spec")
     current_index = data.get("wizard_current_field_index", 0)
     inputs = data.get("wizard_inputs", {})
-    
+
+    if not spec or not getattr(spec, "fields", None):
+        await _wizard_fail_and_return_to_menu(message, state, "wizard_spec missing during input")
+        return
+
     if current_index >= len(spec.fields):
+        await _wizard_fail_and_return_to_menu(message, state, "wizard_current_field_index out of range on input")
         return
     
     current_field = spec.fields[current_index]
@@ -638,16 +697,16 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
             )
             return
     else:
-        # Text input
+        # Text/boolean/number input
         user_input = message.text
-        
+
         if not user_input:
             await message.answer("❌ Пустой ввод. Попробуйте снова.", parse_mode="HTML")
             return
-        
+
         # Validate input
         is_valid, error = current_field.validate(user_input)
-        
+
         if not is_valid:
             await message.answer(
                 f"❌ <b>Ошибка валидации:</b>\n{error}\n\n"
@@ -655,9 +714,9 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
                 parse_mode="HTML"
             )
             return
-        
-        # Save input
-        inputs[current_field.name] = user_input
+
+        # Save normalized input for downstream payload
+        inputs[current_field.name] = current_field.coerce(user_input)
     
     # Move to next field
     next_index = current_index + 1

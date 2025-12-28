@@ -6,12 +6,14 @@ import hmac
 import logging
 import os
 import time
-from typing import Optional, Tuple, Dict, Any
+import uuid
+from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime, timedelta
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiogram.types import Update
+from aiogram.webhook.aiohttp_server import setup_application
 
 from app.utils.healthcheck import get_health_state
 
@@ -47,6 +49,115 @@ def _detect_base_url() -> Optional[str]:
         if v:
             return v.rstrip("/")
     return None
+
+
+class DispatcherWebhookHandler:
+    """Webhook handler that logs requests and updates before feeding aiogram."""
+
+    def __init__(self, dp: Dispatcher, bot: Bot):
+        self.dp = dp
+        self.bot = bot
+
+    def _build_request_id(self, request: web.Request) -> str:
+        return request.headers.get("X-Request-ID") or uuid.uuid4().hex
+
+    @staticmethod
+    def _extract_update_meta(update: Update) -> Tuple[str, Optional[int], str]:
+        if update.message:
+            user_id = update.message.from_user.id if update.message.from_user else None
+            payload = update.message.text or update.message.caption or "<no-text>"
+            return "message", user_id, payload
+
+        if update.callback_query:
+            user_id = update.callback_query.from_user.id if update.callback_query.from_user else None
+            payload = update.callback_query.data or "<no-data>"
+            return "callback", user_id, payload
+
+        return "other", None, "<unknown-payload>"
+
+    async def handle_webhook(self, request: web.Request) -> web.Response:
+        request_id = self._build_request_id(request)
+        has_secret_header = bool(request.headers.get("X-Telegram-Bot-Api-Secret-Token"))
+        masked_path = mask_path(request.path)
+        status_code = 200
+
+        try:
+            raw_body = await request.json()
+        except Exception as e:
+            log.error(
+                "❌ Webhook JSON parse failed | request_id=%s path=%s has_secret_header=%s error=%s",
+                request_id,
+                masked_path,
+                has_secret_header,
+                e,
+                exc_info=True,
+            )
+            log.info(
+                "📨 Webhook POST | request_id=%s path=%s has_secret_header=%s status=%s",
+                request_id,
+                masked_path,
+                has_secret_header,
+                status_code,
+            )
+            return web.Response(status=status_code)
+
+        updates_data: List[Dict[str, Any]] = raw_body if isinstance(raw_body, list) else [raw_body]
+
+        log.info(
+            "📨 Webhook POST | request_id=%s path=%s has_secret_header=%s updates=%s",
+            request_id,
+            masked_path,
+            has_secret_header,
+            len(updates_data),
+        )
+
+        for raw_update in updates_data:
+            try:
+                update = Update(**raw_update)
+            except Exception as e:
+                log.error(
+                    "❌ Invalid update payload | request_id=%s path=%s error=%s payload=%s",
+                    request_id,
+                    masked_path,
+                    e,
+                    str(raw_update)[:500],
+                    exc_info=True,
+                )
+                continue
+
+            update_type, user_id, payload = self._extract_update_meta(update)
+
+            log.info(
+                "🔔 Update received | request_id=%s update_id=%s user_id=%s type=%s payload=%s",
+                request_id,
+                update.update_id,
+                user_id,
+                update_type,
+                payload,
+            )
+
+            try:
+                await self.dp.feed_webhook_update(bot=self.bot, update=update)
+            except Exception as e:
+                log.error(
+                    "❌ Error processing update | request_id=%s update_id=%s user_id=%s type=%s error=%s",
+                    request_id,
+                    update.update_id,
+                    user_id,
+                    update_type,
+                    e,
+                    exc_info=True,
+                )
+
+        log.info(
+            "✅ Webhook response | request_id=%s path=%s has_secret_header=%s status=%s",
+            request_id,
+            masked_path,
+            has_secret_header,
+            status_code,
+        )
+
+        return web.Response(status=status_code)
 
 
 async def start_webhook_server(
@@ -148,6 +259,8 @@ async def start_webhook_server(
         client_max_size=max_size
     )
 
+    webhook_handler = DispatcherWebhookHandler(dp=dp, bot=bot)
+
     # Health endpoints
     async def healthz(request: web.Request) -> web.Response:
         """Liveness probe - always returns 200 OK quickly (no DB/external deps)."""
@@ -236,11 +349,12 @@ async def start_webhook_server(
             "note": "Telegram sends POST requests to this path"
         })
     
-    # Only GET - HEAD is handled by aiogram's SimpleRequestHandler
+    # Only GET - HEAD is handled explicitly
     app.router.add_get(path, webhook_probe)
+    app.router.add_route("HEAD", path, webhook_probe)
 
-    # Telegram webhook endpoint (aiogram handler)
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=path)
+    # Telegram webhook endpoint (aiogram handler with detailed logging)
+    app.router.add_post(path, webhook_handler.handle_webhook)
     setup_application(app, dp, bot=bot)
     
     # ==== MEDIA PROXY ROUTE ====
