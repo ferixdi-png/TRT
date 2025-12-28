@@ -331,7 +331,6 @@ async def main():
         storage = PGStorage(database_url)
         await storage.initialize()
         logging.getLogger(__name__).info("PostgreSQL storage initialized")
-
         from app.database.services import DatabaseService, set_default_db_service
         db_service = DatabaseService(database_url)
         await db_service.initialize()
