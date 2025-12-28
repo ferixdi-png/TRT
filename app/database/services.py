@@ -27,12 +27,23 @@ from app.database.schema import apply_schema, verify_schema
 logger = logging.getLogger(__name__)
 
 
+# Default database service for handlers that cannot receive DI explicitly (e.g. callback handlers)
+_default_db_service: "DatabaseService | None" = None
+
+
+def set_default_db_service(db_service: "DatabaseService | None") -> None:
+    """Configure global fallback DatabaseService for convenience helpers."""
+
+    global _default_db_service
+    _default_db_service = db_service
+
+
 async def ensure_user_exists(
     db_service,
     user_id: int,
     username: Optional[str] = None,
     first_name: Optional[str] = None,
-) -> None:
+):
     """
     Idempotent user upsert (avoids FK violations in generation_events).
     
@@ -42,11 +53,12 @@ async def ensure_user_exists(
         username: Optional username
         first_name: Optional first name
     """
-    if not db_service:
+    db = db_service or _default_db_service
+    if not db:
         return
     
     try:
-        user_service = UserService(db_service)
+        user_service = UserService(db)
         await user_service.get_or_create(user_id, username, first_name)
     except Exception as e:
         logger.warning(f"Failed to ensure user {user_id} exists (non-critical): {e}")
@@ -224,6 +236,40 @@ class UserService:
                 user_id,
             )
             return dict(meta or {})
+
+
+# Convenience helpers for handlers -----------------------------------------
+
+
+async def get_user_by_id(user_id: int, db_service: "DatabaseService | None" = None) -> Dict[str, Any] | None:
+    """Fetch a user row by Telegram user_id.
+
+    Falls back to globally injected DatabaseService when explicit instance is
+    not provided (used by lightweight callback handlers).
+    """
+
+    db = db_service or _default_db_service
+    if not db:
+        logger.warning("get_user_by_id: no db_service configured; returning None")
+        return None
+
+    async with db.get_connection() as conn:
+        row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+        return dict(row) if row else None
+
+
+async def merge_user_metadata(
+    user_id: int, patch: Dict[str, Any], db_service: "DatabaseService | None" = None
+) -> Dict[str, Any]:
+    """Shallow-merge metadata for a user (idempotent helper for callbacks)."""
+
+    db = db_service or _default_db_service
+    if not db:
+        logger.warning("merge_user_metadata: no db_service configured; skipping")
+        return {}
+
+    user_service = UserService(db)
+    return await user_service.merge_metadata(user_id, patch)
 
 
 class WalletService:

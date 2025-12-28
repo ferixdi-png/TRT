@@ -324,7 +324,6 @@ async def main():
     database_url = os.getenv("DATABASE_URL")
     logger.info("✅ Multi-instance mode enabled - idempotency handled via processed_updates table")
 
-
     # Step 3.5: Initialize DB/services (ACTIVE only)
     if database_url and not dry_run:
         # Initialize PostgreSQL storage (compat layer) and DB services
@@ -333,10 +332,17 @@ async def main():
         await storage.initialize()
         logging.getLogger(__name__).info("PostgreSQL storage initialized")
 
-        from app.database.services import DatabaseService
+        from app.database.services import DatabaseService, set_default_db_service
         db_service = DatabaseService(database_url)
         await db_service.initialize()
         logging.getLogger(__name__).info("✅ Database initialized with schema")
+        # Sync both modern helper and legacy singleton for webhook/metrics modules
+        set_default_db_service(db_service)
+        try:
+            from app.database.services import configure_db_service
+            configure_db_service(db_service)
+        except ImportError:
+            pass
         
         # Check DB schema and configure feature flags
         try:

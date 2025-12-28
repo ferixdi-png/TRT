@@ -33,11 +33,11 @@ class InputField:
     min_value: Optional[float] = None
     max_value: Optional[float] = None
     default: Optional[Any] = None
-    
+
     def validate(self, value: Any) -> tuple[bool, Optional[str]]:
         """
         Validate input value.
-        
+
         Returns:
             (is_valid, error_message)
         """
@@ -45,12 +45,12 @@ class InputField:
             if self.required:
                 return False, f"{self.name} обязателен"
             return True, None
-        
+
         if self.type == InputType.TEXT:
             if not isinstance(value, str):
                 return False, f"{self.name} должен быть текстом"
             return True, None
-        
+
         if self.type == InputType.NUMBER:
             try:
                 num = float(value)
@@ -61,18 +61,50 @@ class InputField:
                 return True, None
             except (ValueError, TypeError):
                 return False, f"{self.name} должен быть числом"
-        
+
+        if self.type == InputType.BOOLEAN:
+            if isinstance(value, bool):
+                return True, None
+            if isinstance(value, str) and value.lower() in {"true", "false", "1", "0", "да", "нет", "yes", "no"}:
+                return True, None
+            return False, f"{self.name} должен быть логическим значением (да/нет)"
+
         if self.type == InputType.ENUM:
             if self.enum_values and value not in self.enum_values:
                 return False, f"{self.name} должен быть одним из: {', '.join(self.enum_values)}"
             return True, None
-        
+
         if self.type in (InputType.IMAGE_URL, InputType.VIDEO_URL, InputType.AUDIO_URL):
             if not isinstance(value, str) or not (value.startswith('http://') or value.startswith('https://')):
                 return False, f"{self.name} должен быть URL"
             return True, None
-        
+
         return True, None
+
+    def coerce(self, value: Any) -> Any:
+        """Return value converted to the expected python type for downstream payloads."""
+        if value is None or value == "":
+            return None
+
+        if self.type == InputType.NUMBER:
+            try:
+                num = float(value)
+                return int(num) if num.is_integer() else num
+            except Exception:
+                return value
+
+        if self.type == InputType.BOOLEAN:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                lowered = value.lower()
+                if lowered in {"true", "1", "yes", "да"}:
+                    return True
+                if lowered in {"false", "0", "no", "нет"}:
+                    return False
+            return value
+
+        return value
 
 
 @dataclass
