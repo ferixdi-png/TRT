@@ -349,9 +349,8 @@ async def start_webhook_server(
             "note": "Telegram sends POST requests to this path"
         })
     
-    # Only GET - HEAD is handled explicitly
+    # Only GET (aiohttp auto-adds HEAD for GET routes)
     app.router.add_get(path, webhook_probe)
-    app.router.add_route("HEAD", path, webhook_probe)
 
     # Telegram webhook endpoint (aiogram handler with detailed logging)
     app.router.add_post(path, webhook_handler.handle_webhook)
