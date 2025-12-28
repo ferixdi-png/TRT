@@ -1694,7 +1694,7 @@
     "recraft/remove-background": {
       "model_id": "recraft/remove-background",
       "display_name": "Recraft Remove Background",
-      "category": "other",
+      "category": "image",
       "pricing": {
         "usd_per_use": 0.005,
         "credits_per_use": 0.5,
@@ -1707,17 +1707,19 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "prompt"
+          "image_url"
         ],
         "properties": {
-          "prompt": {
+          "image_url": {
             "type": "string",
-            "maxLength": 10000
+            "format": "uri",
+            "title": "Изображение",
+            "description": "Отправь фото/картинку (или ссылку) — я удалю фон."
           }
         }
       },
       "output_type": "image",
-      "description": "AI модель для работы с text",
+      "description": "Remove background from an image (send a photo or image URL)",
       "enabled": true,
       "last_updated": "2025-12-26T00:00:00Z",
       "endpoint": "recraft/remove-background",
@@ -1730,7 +1732,8 @@
         "source": "locked_from_file",
         "locked": true
       },
-      "is_free": false
+      "is_free": false,
+      "payload_format": "wrapped"
     },
     "topaz/image-upscale": {
       "model_id": "topaz/image-upscale",

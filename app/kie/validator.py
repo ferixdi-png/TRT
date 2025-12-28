@@ -398,144 +398,104 @@ def validate_model_inputs(
                 )
 
 
-def validate_payload_before_create_task(
-    model_id: str,
-    payload: Dict[str, Any],
-    model_schema: Dict[str, Any]
-) -> None:
-    """
-    Final validation before createTask API call.
-    
-    Contract:
-    - Payload MUST contain 'model' field
-    - WRAPPED format: Payload MUST contain 'input' object
-    - DIRECT format (veo3_fast, V4): Parameters on top level
-    - All required fields MUST be present
-    - No invalid field types
-    
-    Raises:
-        ModelContractError: If payload is invalid
-    """
-    if 'model' not in payload:
-        raise ModelContractError("Payload must contain 'model' field")
-    
-    # Check model: must match either model_id OR api_endpoint
-    api_endpoint = model_schema.get('api_endpoint', model_id)
-    if payload['model'] != model_id and payload['model'] != api_endpoint:
-        raise ModelContractError(
-            f"Payload model '{payload['model']}' does not match requested model '{model_id}' or api_endpoint '{api_endpoint}'"
-        )
-    
-    # КРИТИЧНО: Определяем формат payload
-    # DIRECT format: veo3_fast, V4 (параметры на верхнем уровне)
-    # WRAPPED format: остальные (параметры в input wrapper)
-    is_direct_format = model_id in ['veo3_fast', 'V4']
-    
-    if is_direct_format:
-        # DIRECT format: параметры на верхнем уровне, 'input' НЕ требуется
-        logger.info(f"Validating DIRECT format for {model_id}")
-        input_data = payload  # Сам payload и есть "input"
-    else:
-        # WRAPPED format: требуем 'input' object
-        if 'input' not in payload:
-            raise ModelContractError("Payload must contain 'input' object")
-        
-        input_data = payload['input']
-        if not isinstance(input_data, dict):
-            raise ModelContractError("Payload 'input' must be a dictionary")
-    
-    # СИСТЕМНЫЕ ПОЛЯ - добавляются автоматически, НЕ должны быть в input
-    SYSTEM_FIELDS = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
-    
-    input_schema = model_schema.get('input_schema', {})
-    
-    # ВАЖНО: Если schema имеет структуру {model: {...}, callBackUrl: {...}, input: {type: dict, examples: [...]}}
-    # то реальные user fields находятся в examples первого примера для 'input' поля
-    if 'input' in input_schema and isinstance(input_schema['input'], dict):
-        input_field_spec = input_schema['input']
-        
-        # ВАРИАНТ 1: input имеет properties (вложенная schema)
-        if 'properties' in input_field_spec:
-            input_schema = input_field_spec['properties']
-        
-        # ВАРИАНТ 2: input имеет examples (описание поля)
-        elif 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
-            # Это описание поля - examples показывают структуру user inputs
-            examples = input_field_spec['examples']
-            if examples and isinstance(examples[0], dict):
-                # Первый example показывает какие поля должны быть
-                example_structure = examples[0]
-                
-                # Создаем schema из примера
-                input_schema = {}
-                for field_name, field_value in example_structure.items():
-                    # Определяем тип по значению
-                    if isinstance(field_value, str):
-                        field_type = 'string'
-                    elif isinstance(field_value, (int, float)):
-                        field_type = 'number'
-                    elif isinstance(field_value, bool):
-                        field_type = 'boolean'
-                    elif isinstance(field_value, dict):
-                        field_type = 'object'
-                    elif isinstance(field_value, list):
-                        field_type = 'array'
-                    else:
-                        field_type = 'string'
-                    
-                    input_schema[field_name] = {
-                        'type': field_type,
-                        'required': False  # Консервативно
-                    }
-                
-                # ВАЖНО: Для prompt делаем required ТОЛЬКО если он НЕ пустой в примере
-                if 'prompt' in input_schema:
-                    prompt_value = example_structure.get('prompt', '')
-                    if isinstance(prompt_value, str) and prompt_value.strip():
-                        # Только НЕ пустые промпты делаем required
-                        input_schema['prompt']['required'] = True
-    
-    # Support BOTH flat and nested formats
-    if 'properties' in input_schema:
-        # Nested format
-        required_fields = input_schema.get('required', [])
-        properties = input_schema.get('properties', {})
-    else:
-        # Flat format - convert
-        properties = input_schema
-        required_fields = [k for k, v in properties.items() if v.get('required', False)]
-    
-    # ФИЛЬТРУЕМ системные поля
-    # Для DIRECT format: НЕ фильтруем (поля на верхнем уровне)
-    # Для WRAPPED format: фильтруем (они НЕ в input)
-    if not is_direct_format:
-        required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
-        properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
-    
-    # КРИТИЧНО: Для DIRECT моделей только 'prompt' is required
-    if is_direct_format and model_id in ['veo3_fast', 'V4']:
-        required_fields = ['prompt']  # Остальные поля builder заполнил defaults
-        logger.debug(f"Direct model {model_id}: only 'prompt' required in validation")
-    
-    # Check all required fields are present
-    for field_name in required_fields:
-        if field_name not in input_data:
-            location = "payload" if is_direct_format else "payload['input']"
-            raise ModelContractError(
-                f"Required field '{field_name}' is missing from {location}"
-            )
-        
-        # Validate type
-        field_spec = properties.get(field_name, {})
-        field_type = field_spec.get('type', 'string')
-        value = input_data[field_name]
-        
-        try:
-            # Required fields already checked above
-            is_required = field_name in required_fields
-            validate_input_type(value, field_type, field_name, is_required=is_required)
-        except ModelContractError as e:
-            raise ModelContractError(
-                f"Payload validation failed for field '{field_name}': {str(e)}"
-            )
+def validate_payload_before_create_task(model_id: str, payload: Dict[str, Any], model_schema: Dict[str, Any]) -> None:
+    """Validate payload shape and required inputs BEFORE calling Kie createTask.
 
+    Why this exists:
+    - Kie returns generic "This field is required" errors.
+    - We want deterministic, user-friendly errors + detailed logs.
+    """
+
+    SYSTEM_FIELDS: Set[str] = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
+
+    if not isinstance(payload, dict):
+        raise ModelContractError(f"Payload must be a dict, got {type(payload).__name__}")
+
+    # Determine payload format (wrapped vs direct)
+    forced_format = (model_schema or {}).get('payload_format') or (model_schema or {}).get('payloadFormat')
+    forced_format = str(forced_format).strip().lower() if forced_format is not None else ''
+
+    is_direct_model = forced_format in {'direct', 'flat'} or model_id in {'veo3_fast', 'V4'}
+
+    if 'model' not in payload:
+        raise ModelContractError("Payload is missing required root field 'model'")
+
+    if is_direct_model:
+        input_data = payload
+    else:
+        if 'input' not in payload or not isinstance(payload.get('input'), dict):
+            raise ModelContractError("Payload is missing required field 'input' (wrapped payload expected)")
+        input_data = payload['input']
+
+    # Normalize schema into properties + required list
+    input_schema = (model_schema or {}).get('input_schema') or {}
+
+    properties: Dict[str, Any] = {}
+    required_fields: List[str] = []
+
+    if isinstance(input_schema, dict) and input_schema.get('type') == 'object' and isinstance(input_schema.get('properties'), dict):
+        properties = input_schema.get('properties', {})
+        required_fields = list(input_schema.get('required', []) or [])
+    elif isinstance(input_schema, dict) and input_schema and all(isinstance(v, dict) for v in input_schema.values()):
+        # Flat schema (field specs directly)
+        properties = input_schema
+        required_fields = [k for k, v in properties.items() if v.get('required') is True]
+    else:
+        # No schema - nothing strict to validate
+        properties = {}
+        required_fields = []
+
+    required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
+
+    missing: List[str] = []
+    for f in required_fields:
+        if f not in input_data:
+            missing.append(f)
+            continue
+        v = input_data.get(f)
+        if v is None:
+            missing.append(f)
+            continue
+        if isinstance(v, str) and not v.strip():
+            missing.append(f)
+            continue
+        if isinstance(v, (list, dict)) and len(v) == 0:
+            missing.append(f)
+            continue
+
+    if missing:
+        raise ModelContractError(
+            f"Missing required field(s): {', '.join(missing)} (model={model_id}, format={'direct' if is_direct_model else 'wrapped'})"
+        )
+
+    # Type validation for provided fields (best-effort)
+    for field_name, value in list(input_data.items()):
+        if field_name in SYSTEM_FIELDS:
+            continue
+        spec = properties.get(field_name)
+        if not isinstance(spec, dict):
+            continue
+
+        expected_type = spec.get('type')
+        fmt = spec.get('format')
+
+        # Heuristics: *_url or format=uri -> url
+        if fmt == 'uri' or field_name.endswith('_url'):
+            validate_input_type(value, 'url', field_name, is_required=(field_name in required_fields))
+            continue
+
+        if expected_type in {'string'}:
+            validate_input_type(value, 'text', field_name, is_required=(field_name in required_fields))
+        elif expected_type in {'integer'}:
+            validate_input_type(value, 'integer', field_name, is_required=(field_name in required_fields))
+        elif expected_type in {'number'}:
+            validate_input_type(value, 'number', field_name, is_required=(field_name in required_fields))
+        elif expected_type in {'boolean'}:
+            validate_input_type(value, 'boolean', field_name, is_required=(field_name in required_fields))
+
+    logger.info(
+        "Payload contract ok | model=%s format=%s keys=%s",
+        model_id,
+        'direct' if is_direct_model else 'wrapped',
+        sorted(list(payload.keys())),
+    )
