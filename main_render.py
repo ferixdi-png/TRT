@@ -333,10 +333,11 @@ async def main():
         await storage.initialize()
         logging.getLogger(__name__).info("PostgreSQL storage initialized")
 
-        from app.database.services import DatabaseService
+        from app.database.services import DatabaseService, set_default_db_service
         db_service = DatabaseService(database_url)
         await db_service.initialize()
         logging.getLogger(__name__).info("✅ Database initialized with schema")
+        set_default_db_service(db_service)
         
         # Check DB schema and configure feature flags
         try:
