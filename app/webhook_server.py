@@ -261,7 +261,7 @@ async def start_webhook_server(
 
     webhook_handler = DispatcherWebhookHandler(dp=dp, bot=bot)
 
-    # Health endpoints
+    # Health endpoints (GET only; aiohttp auto-adds HEAD)
     async def healthz(request: web.Request) -> web.Response:
         """Liveness probe - always returns 200 OK quickly (no DB/external deps)."""
         import subprocess
