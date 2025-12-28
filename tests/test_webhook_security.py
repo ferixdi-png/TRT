@@ -82,7 +82,6 @@ async def test_webhook_path_contains_secret_when_not_explicit():
         # Mock web components to avoid actual server start
         with patch("app.webhook_server.web.AppRunner") as mock_runner, \
              patch("app.webhook_server.web.TCPSite") as mock_site, \
-             patch("app.webhook_server.SimpleRequestHandler"), \
              patch("app.webhook_server.setup_application"), \
              patch("app.webhook_server._detect_base_url", return_value="https://test.com"):
             
@@ -120,7 +119,6 @@ async def test_configure_webhook_uses_secret_path():
         
         with patch("app.webhook_server.web.AppRunner") as mock_runner, \
              patch("app.webhook_server.web.TCPSite") as mock_site, \
-             patch("app.webhook_server.SimpleRequestHandler"), \
              patch("app.webhook_server.setup_application"), \
              patch("app.webhook_server._detect_base_url", return_value="https://test.com"):
             

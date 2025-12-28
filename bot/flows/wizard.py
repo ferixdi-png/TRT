@@ -162,7 +162,6 @@ async def start_collecting_inputs(callback: CallbackQuery, state: FSMContext) ->
     # Если вообще нет полей — сразу в генерацию.
     if not spec or not getattr(spec, "fields", None):
         from bot.handlers.flow import trigger_generation
-        await state.set_state(WizardState.ready_to_generate)
         await trigger_generation(callback.message, state)
         return
 
@@ -175,7 +174,7 @@ async def start_collecting_inputs(callback: CallbackQuery, state: FSMContext) ->
         await state.update_data(wizard_inputs={})
 
     # Показываем первое поле.
-    await show_field_input(callback.message, state)
+    await show_field_input(callback.message, state, spec.fields[0])
 
 
 async def show_wizard_overview(message: Message, state: FSMContext, spec, model_config: Dict) -> None:
