@@ -345,8 +345,6 @@ async def main():
         except ImportError:
             pass
 
-        set_default_db_service(db_service)
-
         
         # Check DB schema and configure feature flags
         try:

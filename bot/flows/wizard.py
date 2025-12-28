@@ -697,16 +697,16 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
             )
             return
     else:
-        # Text input
+        # Text/boolean/number input
         user_input = message.text
-        
+
         if not user_input:
             await message.answer("❌ Пустой ввод. Попробуйте снова.", parse_mode="HTML")
             return
-        
+
         # Validate input
         is_valid, error = current_field.validate(user_input)
-        
+
         if not is_valid:
             await message.answer(
                 f"❌ <b>Ошибка валидации:</b>\n{error}\n\n"
@@ -714,9 +714,9 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
                 parse_mode="HTML"
             )
             return
-        
-        # Save input
-        inputs[current_field.name] = user_input
+
+        # Save normalized input for downstream payload
+        inputs[current_field.name] = current_field.coerce(user_input)
     
     # Move to next field
     next_index = current_index + 1
