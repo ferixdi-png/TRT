@@ -336,7 +336,7 @@ async def main():
         db_service = DatabaseService(database_url)
         await db_service.initialize()
         logging.getLogger(__name__).info("✅ Database initialized with schema")
-        # Sync both modern helper and legacy singleton for webhook/metrics modules
+        # Sync both modern helper and legacy singleton for webhook/metrics modules (single default setter)
         set_default_db_service(db_service)
         try:
             from app.database.services import configure_db_service

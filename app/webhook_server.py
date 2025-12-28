@@ -334,6 +334,7 @@ async def start_webhook_server(
             log.error(f"Failed to get metrics: {e}", exc_info=True)
             return web.json_response({"error": str(e)}, status=500)
 
+    # GET-only: aiohttp auto-registers HEAD for GET (avoid manual HEAD to prevent duplicates)
     app.router.add_get("/", health)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/readyz", readyz)
