@@ -91,25 +91,18 @@ def _load_source_of_truth() -> Dict:
 
 
 @lru_cache(maxsize=1)
-def _load_overlay() -> Dict:
-    """Load UI overlay (schema fixes + metadata)."""
-    overlay_path = os.path.join(
-        os.path.dirname(__file__),
-        "../../models/KIE_OVERLAY.json"
-    )
-    
-    if not os.path.exists(overlay_path):
-        logger.debug("No KIE_OVERLAY.json found (optional)")
-        return {"overrides": {}}
+def _load_overlay_overrides() -> Dict[str, Dict]:
+    """Load UI overlay overrides.
 
+    Single implementation shared with payload builder (supports multiple formats).
+    """
     try:
-        with open(overlay_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        logger.info(f"✅ Loaded overlay with {len(data.get('overrides', {}))} overrides")
-        return data
+        from app.kie.overlay_loader import load_kie_overlay
+        overlay_path = os.path.join(os.path.dirname(__file__), "../../models/KIE_OVERLAY.json")
+        return load_kie_overlay(overlay_path)
     except Exception as e:
         logger.warning(f"⚠️ Failed to load overlay: {e}")
-        return {"overrides": {}}
+        return {}
 
 
 @lru_cache(maxsize=1)
@@ -171,9 +164,8 @@ def merge_overlay(model: Dict, model_id: str) -> Dict:
     Returns:
         Merged model dict (deep copy)
     """
-    overlay_data = _load_overlay()
-    overrides = overlay_data.get("overrides", {})
-    
+    overrides = _load_overlay_overrides()
+
     if model_id not in overrides:
         return model  # No overlay - return as is
     
