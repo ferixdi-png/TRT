@@ -346,6 +346,8 @@ async def start_webhook_server(
             payload = await request.json()
         except Exception:
             payload = None
+        # NOTE: callbacks are optional (main flow uses polling) but callBackUrl must exist.
+        # Use module-level logger `log` (defined at top) to avoid NameError.
         log.info(
             "📩 Kie callback received | ip=%s size=%sb json=%s",
             request.remote,
