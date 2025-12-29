@@ -369,9 +369,24 @@ async def start_webhook_server(
             "note": "Telegram sends POST requests to this path"
         })
     
-    # Only GET - HEAD is handled explicitly
-    app.router.add_get(path, webhook_probe)
-    app.router.add_route("HEAD", path, webhook_probe)
+    # Only GET here; prevent aiohttp from auto-registering HEAD for GET.
+    # We add HEAD explicitly below to avoid route-duplication errors on startup.
+    get_has_auto_head_disabled = False
+    try:
+        app.router.add_get(path, webhook_probe, allow_head=False)
+        get_has_auto_head_disabled = True
+    except TypeError:
+        # Very old aiohttp versions may not support allow_head.
+        # In that case GET will implicitly register HEAD, so we must not add HEAD again.
+        app.router.add_get(path, webhook_probe)
+
+    if get_has_auto_head_disabled:
+        try:
+            app.router.add_route("HEAD", path, webhook_probe)
+        except RuntimeError as e:
+            # Another route could have already registered HEAD for the same path.
+            if "method HEAD is already registered" not in str(e):
+                raise
 
     # Telegram webhook endpoint (aiogram handler with detailed logging)
     app.router.add_post(path, webhook_handler.handle_webhook)
