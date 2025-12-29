@@ -11,6 +11,8 @@ from typing import Dict, Any
 
 import requests
 
+from app.utils.public_url import get_public_base_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,10 +51,40 @@ class KieApiClient:
             return self.base_url
         return f"{self.base_url}/api/v1"
 
-    async def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Create Kie.ai task with retry logic."""
+    async def create_task(self, payload: Dict[str, Any], callback_url: str | None = None) -> Dict[str, Any]:
+        """Create Kie.ai task with retry logic.
+
+        Note: a number of Kie.ai models/endpoints require `callBackUrl` to be present
+        even if the client also uses polling. When provided, we inject it at the root
+        of the payload.
+        """
         url = f"{self._api_base()}/jobs/createTask"
         max_retries = 3
+
+        # Kie нередко требует callBackUrl даже если документация
+        # помечает его как optional. Поэтому если не передали —
+        # попробуем собрать его из публичного base URL.
+        if not callback_url and "callBackUrl" not in payload:
+            base = get_public_base_url()
+            if base:
+                callback_url = base.rstrip("/") + "/kie/callback"
+                logger.info(f"Kie callBackUrl auto-set: {callback_url}")
+            else:
+                logger.warning(
+                    "Kie callBackUrl missing and public base URL not resolved. "
+                    "Set PUBLIC_BASE_URL or WEBHOOK_BASE_URL."
+                )
+        if callback_url:
+            # Kie expects this key in camelCase.
+            payload = dict(payload)
+            payload.setdefault("callBackUrl", callback_url)
+        logger.info(
+            "Kie createTask POST %s model=%s has_callBackUrl=%s input_keys=%s",
+            url,
+            payload.get("model"),
+            bool(payload.get("callBackUrl")),
+            list((payload.get("input") or {}).keys()),
+        )
         for attempt in range(max_retries):
             try:
                 return await asyncio.to_thread(self._post, url, payload)
