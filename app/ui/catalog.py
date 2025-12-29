@@ -101,7 +101,7 @@ def _load_overlay() -> Dict:
     if not os.path.exists(overlay_path):
         logger.debug("No KIE_OVERLAY.json found (optional)")
         return {"overrides": {}}
-    
+
     try:
         with open(overlay_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -110,6 +110,52 @@ def _load_overlay() -> Dict:
     except Exception as e:
         logger.warning(f"⚠️ Failed to load overlay: {e}")
         return {"overrides": {}}
+
+
+@lru_cache(maxsize=1)
+def _load_final_truth() -> Dict[str, Dict]:
+    """Load enriched metadata (category/output_type/name) parsed from Kie docs."""
+    truth_path = os.path.join(
+        os.path.dirname(__file__),
+        "../../models/kie_models_final_truth.json",
+    )
+
+    if not os.path.exists(truth_path):
+        logger.debug("No kie_models_final_truth.json found (optional)")
+        return {}
+
+    try:
+        with open(truth_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        models = data.get("models")
+        if not isinstance(models, list):
+            return {}
+        index = {m.get("model_id"): m for m in models if isinstance(m, dict) and m.get("model_id")}
+        logger.info(f"✅ Loaded FINAL_TRUTH metadata for {len(index)} models")
+        return index
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to load FINAL_TRUTH: {e}")
+        return {}
+
+
+def _apply_final_truth(model: Dict, model_id: str) -> Dict:
+    """Merge FINAL_TRUTH fields into base model (low priority)."""
+    truth = _load_final_truth().get(model_id)
+    if not truth:
+        return model
+
+    merged = deepcopy(model)
+
+    # Only override when base is missing/weak, overlay can still override later.
+    for key in ("category", "output_type", "display_name", "description"):
+        if key in truth and (not merged.get(key) or str(merged.get(key)).lower() == "other"):
+            merged[key] = truth[key]
+
+    # Preserve existing spec, but if base spec is empty and truth has it – copy.
+    if (not merged.get("spec") or merged.get("spec") == {}) and truth.get("spec"):
+        merged["spec"] = truth["spec"]
+
+    return merged
 
 
 def merge_overlay(model: Dict, model_id: str) -> Dict:
@@ -162,10 +208,11 @@ def load_models_sot() -> Dict[str, Dict]:
     data = _load_source_of_truth()
     base_models = data.get("models", {})
     
-    # Apply overlay to each model
+    # Apply FINAL_TRUTH enrichment + overlay to each model
     merged_models = {}
     for model_id, model in base_models.items():
-        merged_models[model_id] = merge_overlay(model, model_id)
+        enriched = _apply_final_truth(model, model_id)
+        merged_models[model_id] = merge_overlay(enriched, model_id)
     
     return merged_models
 
