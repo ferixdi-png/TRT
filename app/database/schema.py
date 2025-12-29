@@ -232,6 +232,57 @@ async def apply_schema(connection):
         END $$;
     """)
     
+
+    # Third: migrate legacy TEXT JSON columns to JSONB (best-effort, safe)
+    # Older DBs had jobs.input_json / jobs.result_json / ui_state.data as TEXT.
+    # We attempt to convert them to JSONB; if conversion fails, we keep TEXT and
+    # application code will fallback to JSON-string serialization.
+    await connection.execute("""
+        DO $$
+        BEGIN
+            -- jobs.input_json -> JSONB
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='jobs' AND column_name='input_json' AND udt_name='text'
+            ) THEN
+                BEGIN
+                    ALTER TABLE jobs
+                        ALTER COLUMN input_json TYPE JSONB
+                        USING NULLIF(input_json, '')::jsonb;
+                EXCEPTION WHEN others THEN
+                    RAISE NOTICE 'jobs.input_json: failed to convert TEXT -> JSONB (keeping TEXT)';
+                END;
+            END IF;
+
+            -- jobs.result_json -> JSONB
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='jobs' AND column_name='result_json' AND udt_name='text'
+            ) THEN
+                BEGIN
+                    ALTER TABLE jobs
+                        ALTER COLUMN result_json TYPE JSONB
+                        USING NULLIF(result_json, '')::jsonb;
+                EXCEPTION WHEN others THEN
+                    RAISE NOTICE 'jobs.result_json: failed to convert TEXT -> JSONB (keeping TEXT)';
+                END;
+            END IF;
+
+            -- ui_state.data -> JSONB
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='ui_state' AND column_name='data' AND udt_name='text'
+            ) THEN
+                BEGIN
+                    ALTER TABLE ui_state
+                        ALTER COLUMN data TYPE JSONB
+                        USING COALESCE(NULLIF(data, ''), '{}')::jsonb;
+                EXCEPTION WHEN others THEN
+                    RAISE NOTICE 'ui_state.data: failed to convert TEXT -> JSONB (keeping TEXT)';
+                END;
+            END IF;
+        END $$;
+    """)
     logger.info("✅ Schema applied successfully (idempotent + migration-safe)")
 
 
