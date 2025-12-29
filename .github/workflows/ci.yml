@@ -1,4 +1,4 @@
-﻿name: ci
+name: ci
 
 on:
   push:
@@ -17,18 +17,25 @@ jobs:
       KIE_API_KEY: "test-key"
       KIE_BASE_URL: "http://localhost"
       DATABASE_URL: "postgresql://localhost/test"
+      ADMIN_ID: "1"
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
+
       - name: Compile
         run: python -m compileall .
+
       - name: Pytest
         run: pytest -q
-      - name: Verify project
+
+      - name: Verify project invariants
+        run: python scripts/verify_project.py
+
       - name: Dry run startup
-        run: DRY_RUN=1 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN python main_render.py
-        run: python scripts/verify_project.py`n      - name: Dry run startup`n        run: DRY_RUN=1 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN python main_render.py
+        run: python main_render.py
