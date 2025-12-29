@@ -13,6 +13,81 @@ logger = logging.getLogger(__name__)
 OVERLAY_PATH = Path("models") / "KIE_OVERLAY.json"
 
 
+# --- Auto-defaults for text-to-image models ---
+# Many Kie text2image endpoints require technical fields (aspect_ratio, num_images, seed)
+# even when the UI should only ask for a prompt.
+# We auto-inject safe defaults and allow user overrides from the wizard.
+_T2I_DEFAULTS: Dict[str, Any] = {
+    "aspect_ratio": "1:1",
+    "num_images": 1,
+}
+
+
+def _is_text2image_model(model_cfg: Dict[str, Any]) -> bool:
+    """Best-effort detection of the text-to-image family.
+
+    We purposely avoid maintaining a hardcoded allowlist of model IDs.
+    """
+    if not isinstance(model_cfg, dict):
+        return False
+
+    ui = model_cfg.get("ui") if isinstance(model_cfg.get("ui"), dict) else {}
+    fmt = (ui.get("format_group") or "").lower()
+    if fmt in {"text2image", "text-to-image", "t2i"}:
+        return True
+
+    category = (model_cfg.get("category") or "").lower()
+    if category in {"text-to-image", "t2i"}:
+        return True
+
+    # Heuristic fallback: output is image and schema requires a prompt
+    out = (model_cfg.get("output_type") or "").lower()
+    if out == "image":
+        sch = model_cfg.get("input_schema") if isinstance(model_cfg.get("input_schema"), dict) else {}
+        req = sch.get("required") if isinstance(sch.get("required"), list) else []
+        props = sch.get("properties") if isinstance(sch.get("properties"), dict) else {}
+        if "prompt" in req or "prompt" in props:
+            return True
+
+    return False
+
+
+def _inject_text2image_defaults(model_cfg: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Inject safe defaults for text2image models.
+
+    We add both snake_case and camelCase aliases when we cannot infer the provider's
+    exact expected key (Kie endpoints vary). Extra keys are typically ignored.
+    """
+    if not _is_text2image_model(model_cfg):
+        return inputs
+    if not isinstance(inputs, dict):
+        return inputs
+
+    # Respect explicit user overrides if present.
+    ar = inputs.get("aspect_ratio") or inputs.get("aspectRatio")
+    ni = inputs.get("num_images") or inputs.get("numImages")
+
+    if not ar:
+        ar = _T2I_DEFAULTS["aspect_ratio"]
+        inputs.setdefault("aspect_ratio", ar)
+        inputs.setdefault("aspectRatio", ar)
+
+    if ni is None:
+        ni = _T2I_DEFAULTS["num_images"]
+        inputs.setdefault("num_images", ni)
+        inputs.setdefault("numImages", ni)
+
+    # Seed is optional for many models, but we support it as a user override.
+    if "seed" in inputs and "seeds" not in inputs:
+        try:
+            # Some endpoints expect a list of seeds.
+            inputs.setdefault("seeds", [int(inputs["seed"])])
+        except Exception:
+            pass
+
+    return inputs
+
+
 def _deep_merge_model_cfg(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
     """Merge per-model overlay with base config.
 
@@ -90,11 +165,27 @@ def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[
 
     # Apply per-model overlay (schema/category/output fixes).
     # This is critical for correct UX (e.g. remove-background must request an image, not a prompt).
+    # Overlay file may be either:
+    #   {"overrides": {"model_id": {...}}}
+    # or legacy:
+    #   {"models": {"model_id": {...}}}
+    # or a plain dict keyed by model_id.
     try:
         if OVERLAY_PATH.exists():
             with open(OVERLAY_PATH, "r", encoding="utf-8") as f:
                 overlay = json.load(f) or {}
-            models_overlay = overlay.get("models", overlay)
+
+            models_overlay = None
+            if isinstance(overlay, dict):
+                if isinstance(overlay.get("overrides"), dict):
+                    models_overlay = overlay.get("overrides")
+                elif isinstance(overlay.get("models"), dict):
+                    models_overlay = overlay.get("models")
+                else:
+                    # Heuristic: if keys look like model_ids (vendor/name), treat as overrides.
+                    if any(isinstance(k, str) and "/" in k for k in overlay.keys()):
+                        models_overlay = overlay
+
             models = data.get("models", {})
             if isinstance(models, dict) and isinstance(models_overlay, dict):
                 for mid, ov in models_overlay.items():
@@ -193,7 +284,16 @@ def build_payload(
 
     from app.kie.validator import validate_model_inputs, validate_payload_before_create_task
 
-    validate_model_inputs(model_id, model_schema, user_inputs)
+    # Normalize + inject automatic defaults (text-to-image family).
+    # This prevents the common Kie error: {"code":500,"msg":"This field is required"}
+    # when the backend expects aspect_ratio/num_images but the UX only asked for a prompt.
+    inputs: Dict[str, Any] = dict(user_inputs or {})
+    _inject_text2image_defaults(model_schema, inputs)
+
+    validate_model_inputs(model_id, model_schema, inputs)
+
+    # From here on, use normalized inputs everywhere.
+    user_inputs = inputs
 
     # V7 format detection: has 'parameters' instead of 'input_schema'
     is_v7 = 'parameters' in model_schema and 'endpoint' in model_schema
