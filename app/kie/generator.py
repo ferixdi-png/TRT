@@ -13,6 +13,7 @@ from app.kie.validator import ModelContractError
 from app.kie.parser import parse_record_info, get_human_readable_error
 from app.utils.errors import classify_api_failure, classify_exception
 from app.kie.router import is_v4_model, build_category_payload
+from app.utils.public_url import get_public_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -181,13 +182,24 @@ class KieGenerator:
             
             # Create task
             api_client = self._get_api_client()
+
+            # Some Kie.ai endpoints require callBackUrl even if we also poll for the result.
+            base_url = get_public_base_url()
+            callback_url = f"{base_url}/kie/callback" if base_url else None
+            if not callback_url:
+                logger.warning(
+                    "Kie callBackUrl is not set: public base URL is missing (set WEBHOOK_BASE_URL or RENDER_EXTERNAL_URL)"
+                )
             
             # V4 API requires model_id as first argument
             # V3 API (old KieApiClient) only takes payload
             if isinstance(api_client, KieApiClientV4):
+                if callback_url and isinstance(payload, dict):
+                    payload = dict(payload)
+                    payload.setdefault("callBackUrl", callback_url)
                 create_response = await api_client.create_task(model_id, payload)
             else:
-                create_response = await api_client.create_task(payload)
+                create_response = await api_client.create_task(payload, callback_url=callback_url)
             
             # Debug: log response
             logger.info(f"Create task response: {create_response}")
