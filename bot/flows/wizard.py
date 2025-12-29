@@ -3,7 +3,6 @@ import logging
 import hmac
 import hashlib
 import os
-import time
 from typing import Dict, List, Optional, Any
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -44,88 +43,19 @@ async def _wizard_fail_and_return_to_menu(message: Message, state: FSMContext, r
 class WizardState(StatesGroup):
     """Wizard FSM states."""
     collecting_input = State()
-    settings_input = State()
     confirming = State()
 
 
-def _is_text2image_model_cfg(model_cfg: dict) -> bool:
-    """Best-effort check for text-to-image family (wizard-side)."""
-    try:
-        ui = model_cfg.get("ui") if isinstance(model_cfg.get("ui"), dict) else {}
-        fmt = (ui.get("format_group") or "").lower()
-        if fmt in {"text2image", "text-to-image", "t2i"}:
-            return True
-        cat = (model_cfg.get("category") or "").lower()
-        return cat in {"text-to-image", "t2i"}
-    except Exception:
-        return False
-
-
-def _parse_t2i_settings(text: str) -> dict:
-    """Parse lines like `aspect_ratio=16:9` into a dict.
-
-    Allowed keys: aspect_ratio, num_images, seed
-    """
-    out = {}
-    if not text:
-        return out
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        k = k.strip()
-        v = v.strip()
-        if k not in {"aspect_ratio", "num_images", "seed"}:
-            continue
-        if k == "aspect_ratio":
-            # basic validation: 1:1, 16:9, 9:16, etc.
-            if ":" not in v:
-                continue
-            a, b = v.split(":", 1)
-            if not (a.isdigit() and b.isdigit()):
-                continue
-            out[k] = f"{int(a)}:{int(b)}"
-        elif k == "num_images":
-            if not v.isdigit():
-                continue
-            n = int(v)
-            if not (1 <= n <= 4):
-                continue
-            out[k] = n
-        elif k == "seed":
-            try:
-                out[k] = int(v)
-            except Exception:
-                continue
-    return out
-
-
-def _sign_file_id(file_id: str, exp: int) -> str:
-    """Sign (file_id, exp) for secure media proxy.
-
-    IMPORTANT: Must match app.webhook_server.media_proxy signature logic.
-    """
+def _sign_file_id(file_id: str) -> str:
+    """Sign file ID for secure media proxy."""
     secret = os.getenv("MEDIA_PROXY_SECRET", "default_proxy_secret_change_me")
-    payload = f"{file_id}:{exp}"
-    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    signature = hmac.new(secret.encode(), file_id.encode(), hashlib.sha256).hexdigest()[:16]
     return signature
 
 
 def _get_public_base_url() -> str:
     """Get PUBLIC_BASE_URL for media proxy."""
     return os.getenv("PUBLIC_BASE_URL", os.getenv("WEBHOOK_BASE_URL", "https://unknown.render.com")).rstrip("/")
-
-
-def _build_signed_media_url(file_id: str) -> str:
-    """Create a signed media proxy URL with expiration."""
-    base_url = _get_public_base_url()
-    # Default TTL: 30 minutes (enough for Kie to fetch once, short enough for safety)
-    exp = int(time.time()) + int(os.getenv("MEDIA_PROXY_TTL_SEC", "1800"))
-    sig = _sign_file_id(file_id, exp)
-    return f"{base_url}/media/telegram/{file_id}?sig={sig}&exp={exp}"
 
 
 # Wizard start handler (callback: wizard:start:<model_id>)
@@ -218,13 +148,36 @@ async def start_wizard(
     )
     
     # Prefill if provided
-    initial_inputs = {}
+    initial_inputs: Dict[str, Any] = {}
+
+    # 1) prefill_prompt (examples / quick-actions)
     if prefill_prompt and spec.fields:
-        # Try to fill first text field with example
         for field in spec.fields:
             if field.type == InputType.TEXT and field.name in ["prompt", "text", "description"]:
                 initial_inputs[field.name] = prefill_prompt
                 break
+
+    # 2) state-based prefill (rerun, quick-actions)
+    data = await state.get_data()
+    wizard_prefill = data.get("wizard_prefill") or {}
+    force_prompt_edit = bool(data.get("wizard_prefill_force_prompt_edit", False))
+
+    if isinstance(wizard_prefill, dict) and wizard_prefill:
+        allowed_names = {f.name for f in spec.fields}
+        for k, v in wizard_prefill.items():
+            if k in allowed_names and v is not None:
+                initial_inputs[k] = v
+
+    # Validate prefill values against the same rules as normal wizard input.
+    if initial_inputs:
+        validated: Dict[str, Any] = {}
+        for field in spec.fields:
+            if field.name not in initial_inputs:
+                continue
+            ok, val, _ = validate_input_value(field, initial_inputs[field.name])
+            if ok:
+                validated[field.name] = val
+        initial_inputs = validated
     
     # Save wizard state
     await state.update_data(
@@ -233,6 +186,10 @@ async def start_wizard(
         wizard_spec=spec,
         wizard_inputs=initial_inputs,
         wizard_current_field_index=0,
+        wizard_force_prompt_edit=force_prompt_edit,
+        # one-shot flags
+        wizard_prefill=None,
+        wizard_prefill_force_prompt_edit=None,
     )
     
     # UX: сразу запускаем сбор полей, чтобы пользователю не приходилось искать,
@@ -521,21 +478,6 @@ async def show_field_input(message: Message, state: FSMContext, field) -> None:
         f"🧠 <b>{display_name}</b>  •  Шаг {step_num}/{total_fields}\n\n"
         f"{field_emoji} <b>{field.description or field.name}</b>\n\n"
     )
-
-    # Show current text2image settings (if any)
-    try:
-        if _is_text2image_model_cfg(model_config):
-            overrides = data.get("wizard_overrides", {}) or {}
-            if overrides:
-                # Keep it minimal
-                parts = []
-                for k in ("aspect_ratio", "num_images", "seed"):
-                    if k in overrides:
-                        parts.append(f"{k}={overrides[k]}")
-                if parts:
-                    text += f"⚙️ <b>Настройки:</b> <code>{' '.join(parts)}</code>\n\n"
-    except Exception:
-        pass
     
     if field.example:
         text += f"💡 <b>Пример:</b> <i>{field.example}</i>\n\n"
@@ -564,10 +506,6 @@ async def show_field_input(message: Message, state: FSMContext, field) -> None:
     
     # Build keyboard
     buttons = []
-
-    # Settings for text2image (no extra steps; just optional overrides)
-    if _is_text2image_model_cfg(model_config) and field and getattr(field, "name", "") in {"prompt", "text"}:
-        buttons.append([InlineKeyboardButton(text="⚙️ Настройки", callback_data="wizard:settings")])
     
     # Skip button for optional fields
     if not field.required:
@@ -625,91 +563,6 @@ async def wizard_skip_field(callback: CallbackQuery, state: FSMContext) -> None:
         await wizard_show_confirmation(callback, state)
     else:
         await show_field_input(callback.message, state, spec.fields[next_index])
-
-
-@router.callback_query(F.data == "wizard:settings", WizardState.collecting_input)
-async def wizard_open_settings(callback: CallbackQuery, state: FSMContext) -> None:
-    """Open quick settings for text2image defaults."""
-    await callback.answer()
-    data = await state.get_data()
-    model_config = data.get("model_config", {}) or {}
-    if not _is_text2image_model_cfg(model_config):
-        await callback.answer("⚙️ Настройки доступны только для text-to-image", show_alert=True)
-        return
-
-    overrides = data.get("wizard_overrides", {}) or {}
-    current = "\n".join([f"{k}={overrides[k]}" for k in ("aspect_ratio", "num_images", "seed") if k in overrides])
-    if not current:
-        current = "(пока пусто)"
-
-    text = (
-        "⚙️ <b>Настройки генерации</b>\n\n"
-        "Отправь одним сообщением строки формата <code>ключ=значение</code>:\n"
-        "<code>aspect_ratio=16:9</code>\n"
-        "<code>num_images=2</code>\n"
-        "<code>seed=123</code>\n\n"
-        f"Текущие: \n<code>{current}</code>\n\n"
-        "Я применю их к текущей генерации (можно менять каждый раз)."
-    )
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="wizard:settings_back")],
-        [InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main")],
-    ])
-
-    await state.set_state(WizardState.settings_input)
-    try:
-        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    except Exception:
-        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
-
-
-@router.callback_query(F.data == "wizard:settings_back", WizardState.settings_input)
-async def wizard_settings_back(callback: CallbackQuery, state: FSMContext) -> None:
-    """Return from settings to the current field prompt."""
-    await callback.answer()
-    data = await state.get_data()
-    spec = data.get("wizard_spec")
-    idx = data.get("wizard_current_field_index", 0)
-    await state.set_state(WizardState.collecting_input)
-    if not spec or not getattr(spec, "fields", None) or idx >= len(spec.fields):
-        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec missing on settings_back")
-        return
-    await show_field_input(callback.message, state, spec.fields[idx])
-
-
-@router.message(WizardState.settings_input)
-async def wizard_settings_save(message: Message, state: FSMContext) -> None:
-    """Parse and store text2image settings, then return to the current field."""
-    data = await state.get_data()
-    model_config = data.get("model_config", {}) or {}
-    if not _is_text2image_model_cfg(model_config):
-        await state.set_state(WizardState.collecting_input)
-        await message.answer("⚠️ Настройки недоступны для этой модели")
-        return
-
-    parsed = _parse_t2i_settings(message.text or "")
-    if not parsed:
-        await message.answer(
-            "❌ Не понял настройки. Пример:\n<code>aspect_ratio=16:9\nnum_images=2\nseed=123</code>",
-            parse_mode="HTML",
-        )
-        return
-
-    overrides = data.get("wizard_overrides", {}) or {}
-    overrides.update(parsed)
-    await state.update_data(wizard_overrides=overrides)
-
-    # Return to current field
-    spec = data.get("wizard_spec")
-    idx = data.get("wizard_current_field_index", 0)
-    await state.set_state(WizardState.collecting_input)
-    if not spec or not getattr(spec, "fields", None) or idx >= len(spec.fields):
-        await message.answer("✅ Настройки сохранены")
-        return
-
-    await message.answer("✅ Настройки применены")
-    await show_field_input(message, state, spec.fields[idx])
 
 
 @router.callback_query(F.data == "wizard:use_default", WizardState.collecting_input)
@@ -834,7 +687,8 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
             # Generate signed URL for media proxy
             base_url = _get_public_base_url()
             if base_url and base_url != "https://unknown.render.com":
-                media_url = _build_signed_media_url(file_id)
+                sig = _sign_file_id(file_id)
+                media_url = f"{base_url}/media/telegram/{file_id}?sig={sig}"
                 
                 # Save URL (will be passed to KIE API)
                 inputs[current_field.name] = media_url
@@ -927,16 +781,6 @@ async def wizard_show_confirmation(message_or_callback, state: FSMContext) -> No
     
     for field_name, value in inputs.items():
         text += f"• {field_name}: {value}\n"
-
-    overrides = data.get("wizard_overrides", {}) or {}
-    if overrides:
-        # Keep only known keys for clarity
-        parts = []
-        for k in ("aspect_ratio", "num_images", "seed"):
-            if k in overrides:
-                parts.append(f"{k}={overrides[k]}")
-        if parts:
-            text += f"\n⚙️ Настройки: <code>{' '.join(parts)}</code>\n"
     
     text += "\n"
     
@@ -950,6 +794,7 @@ async def wizard_show_confirmation(message_or_callback, state: FSMContext) -> No
     buttons = [
         [InlineKeyboardButton(text="✅ Подтвердить", callback_data="wizard:confirm")],
         [InlineKeyboardButton(text="✏️ Изменить", callback_data="wizard:edit")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="wizard:cancel")],
         [InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main")],
     ]
     
@@ -974,51 +819,45 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
     
     model_id = model_config.get("model_id", "unknown")
     display_name = model_config.get("display_name", model_id)
-    
+
     # Show "starting..." message
     await callback.message.edit_text(
         f"🚀 <b>{display_name}</b>\n\n"
         "Запускаю генерацию...",
         parse_mode="HTML"
     )
-    
+
     # Build payload from inputs
     payload = dict(inputs)  # Copy wizard inputs
 
-    # Apply quick settings overrides (text-to-image defaults)
-    overrides = data.get("wizard_overrides", {}) or {}
-    if overrides:
-        payload.update(overrides)
-    
     # Add defaults from schema if missing
     schema = model_config.get("input_schema", {})
     properties = schema.get("properties", {})
-    
+
     for field_name, field_spec in properties.items():
         if field_name not in payload and "default" in field_spec:
             payload[field_name] = field_spec["default"]
-    
+
     # Save generation context
     await state.update_data(
         model_id=model_id,
         payload=payload,
         is_free_selected=False,  # Will be determined by pricing
     )
-    
+
     # Clear wizard state
     await state.clear()
-    
+
     # Trigger generation via payment integration
     # Note: payload arg kept for backward compat in integration.py
     from app.payments.integration import generate_with_payment
     from app.payments.charges import get_charge_manager
-    
+
     user_id = callback.from_user.id
-    chat_id = callback.message.chat.id
-    
+
     try:
         cm = get_charge_manager()
-        
+
         result = await generate_with_payment(
             user_id=user_id,
             model_id=model_id,
@@ -1026,16 +865,16 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
             amount=0.0,  # Will be calculated inside
             charge_manager=cm,
         )
-        
+
         # Send result
         if result.get("success"):
             output_url = result.get("output_url")
-            
+
             success_text = (
                 f"✅ <b>Готово!</b>\n\n"
                 f"🎨 Модель: {display_name}\n\n"
             )
-            
+
             # Build result keyboard
             buttons = [
                 [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"launch:{model_id}")],
@@ -1045,14 +884,14 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
                 ],
             ]
             kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-            
+
             # Send text message
             await callback.message.answer(success_text, reply_markup=kb, parse_mode="HTML")
-            
+
             # Send media result
             if output_url:
                 output_type = model_config.get("output_type", "").lower()
-                
+
                 try:
                     if "video" in output_type:
                         await callback.message.answer_video(output_url)
@@ -1069,17 +908,17 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
             # Error
             error_msg = result.get("error", "Неизвестная ошибка")
             error_code = result.get("error_code", "unknown")
-            
+
             # Sanitize error message for user
             user_error = _sanitize_error_for_user(error_msg, error_code)
-            
+
             error_text = (
                 f"❌ <b>Ошибка генерации</b>\n\n"
                 f"🎨 Модель: {display_name}\n\n"
                 f"<b>Что произошло:</b>\n{user_error}\n\n"
                 f"💡 Попробуйте изменить параметры и запустить снова"
             )
-            
+
             buttons = [
                 [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"launch:{model_id}")],
                 [
@@ -1088,19 +927,19 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
                 ],
             ]
             kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-            
+
             await callback.message.answer(error_text, reply_markup=kb, parse_mode="HTML")
-            
+
     except Exception as e:
         logger.error(f"Generation failed: {e}", exc_info=True)
-        
+
         error_text = (
             f"❌ <b>Ошибка генерации</b>\n\n"
             f"🎨 Модель: {display_name}\n\n"
             f"Произошла непредвиденная ошибка. Попробуйте ещё раз.\n\n"
             f"Если проблема повторяется, свяжитесь с поддержкой."
         )
-        
+
         buttons = [
             [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"launch:{model_id}")],
             [
@@ -1109,8 +948,35 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
             ],
         ]
         kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
+
         await callback.message.answer(error_text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "wizard:cancel", WizardState.confirming)
+async def wizard_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    """Cancel wizard without losing the main menu."""
+    await callback.answer("Отменено")
+    await state.clear()
+
+    # Reuse centralized menu rendering (no dead-ends)
+    try:
+        from bot.handlers.navigation import _build_main_menu_keyboard
+        from app.ui.catalog import get_counts
+        from app.pricing.free_models import get_free_models
+
+        counts = get_counts()
+        total = sum(counts.values())
+        free_count = len(get_free_models())
+
+        text = (
+            f"🏠 <b>Главное меню</b>\n\n"
+            f"🚀 {total} нейросетей • 🎁 {free_count} бесплатно"
+        )
+        await callback.message.edit_text(text, reply_markup=_build_main_menu_keyboard(), parse_mode="HTML")
+    except Exception:
+        # Fallback: just ask user to press /start
+        await callback.message.answer("🏠 /start — вернуться в меню")
+    return
 
 
 def _sanitize_error_for_user(error_msg: str, error_code: str) -> str:
