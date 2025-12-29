@@ -38,22 +38,6 @@ async def show_formats_menu(callback: CallbackQuery, state: FSMContext) -> None:
     
     buttons = []
 
-    def _ui_price_suffix(pricing: dict) -> str:
-        """Return formatted price suffix for UI (end-user price with markup)."""
-        if not pricing:
-            return ""
-        if pricing.get("is_free"):
-            return " 🆓"
-        base = pricing.get("rub_per_use")
-        if base is None:
-            return ""
-        try:
-            user_price = calculate_user_price(float(base))
-            return f" • {format_price_rub(user_price)}"
-        except Exception:
-            # Never break UI due to pricing format issues
-            return ""
-
     def _ui_price_suffix(model_cfg: dict) -> str:
         """Menu price must reflect what user pays (MARKUP applied)."""
         base = (model_cfg or {}).get("pricing", {}).get("rub_per_use")
@@ -65,6 +49,12 @@ async def show_formats_menu(callback: CallbackQuery, state: FSMContext) -> None:
         except Exception:
             return ""
     
+    def _fmt_label(fmt) -> str:
+        parts = [p.strip() for p in (fmt.name or "").split("→")]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            return f"{fmt.emoji} {parts[0]} → {parts[1]}"
+        return f"{fmt.emoji} {fmt.name}"
+
     # Add format buttons (2 per row)
     row = []
     for format_key, format_obj in FORMATS.items():
@@ -73,7 +63,7 @@ async def show_formats_menu(callback: CallbackQuery, state: FSMContext) -> None:
         
         count = len(grouped[format_key])
         button = InlineKeyboardButton(
-            text=f"{format_obj.emoji} {format_obj.name.split('→')[0].strip()} → {format_obj.name.split('→')[1].strip()} ({count})",
+            text=f"{_fmt_label(format_obj)} ({count})",
             callback_data=f"format:{format_key}"
         )
         row.append(button)
@@ -193,7 +183,6 @@ async def show_format_page(callback: CallbackQuery, state: FSMContext) -> None:
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         )
         await callback.answer()
-        return
         return
 
     # Recommended section
