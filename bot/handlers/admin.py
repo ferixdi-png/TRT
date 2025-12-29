@@ -558,31 +558,6 @@ async def cb_admin_models_broken(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data == "admin:main")
-async def cb_admin_main(callback: CallbackQuery, state: FSMContext):
-    """Return to admin main menu."""
-    await state.clear()
-    
-    if not await is_admin(callback.from_user.id, _db_service):
-        await callback.answer("⛔️ Доступ запрещён", show_alert=True)
-        return
-    
-    text = (
-        f"🛠 <b>Админ-панель</b>\n\n"
-        f"Главное меню"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 Управление моделями", callback_data="admin:models")],
-        [InlineKeyboardButton(text="👥 Управление пользователями", callback_data="admin:users")],
-        [InlineKeyboardButton(text="📊 Аналитика", callback_data="admin:analytics")],
-        [InlineKeyboardButton(text="📜 Лог действий", callback_data="admin:log")],
-        [InlineKeyboardButton(text="◀️ Закрыть", callback_data="admin:close")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
-
 
 @router.callback_query(F.data == "admin:models:resync")
 async def cb_admin_models_resync(callback: CallbackQuery):

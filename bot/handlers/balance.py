@@ -37,6 +37,12 @@ class TopupStates(StatesGroup):
     confirm_payment = State()
 
 
+@router.callback_query(F.data == "menu:balance")
+async def cb_menu_balance(callback: CallbackQuery, state: FSMContext):
+    """Alias: menu:balance -> balance:main (no dead buttons)."""
+    return await cb_balance_main(callback, state)
+
+
 @router.callback_query(F.data == "balance:main")
 async def cb_balance_main(callback: CallbackQuery, state: FSMContext):
     """Show balance and history."""
@@ -101,7 +107,7 @@ async def cb_balance_main(callback: CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Пополнить", callback_data="balance:topup")],
         [InlineKeyboardButton(text="📜 Вся история", callback_data="history:main")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="marketing:main")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")]
     ])
     
     await callback.message.edit_text(text, reply_markup=keyboard)
@@ -293,7 +299,7 @@ async def process_receipt(message: Message, state: FSMContext):
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Мой баланс", callback_data="balance:main")],
-        [InlineKeyboardButton(text="◀️ В меню", callback_data="marketing:main")]
+        [InlineKeyboardButton(text="◀️ В меню", callback_data="menu:main")]
     ])
     
     await message.answer(text, reply_markup=keyboard)

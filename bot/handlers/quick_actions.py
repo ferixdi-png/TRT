@@ -93,7 +93,7 @@ async def show_quick_actions(callback: CallbackQuery, state: FSMContext):
             )
         ])
     
-    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="menu:main")])
     
     await callback.message.edit_text(
         "⚡ <b>Быстрые действия</b>\n\n"
@@ -216,12 +216,10 @@ async def use_quick_example(callback: CallbackQuery, state: FSMContext):
     prompt = action['prompt_examples'][example_idx]
     recommended_model = action['recommended_models'][0]['id']  # Use best model
     
-    # Save to FSM state
+    # We keep only lightweight prefill data in state.
     await state.update_data(
-        model_id=recommended_model,
-        prompt=prompt,
-        from_quick_action=True,
-        action_name=action['name']
+        wizard_prefill={"prompt": prompt},
+        wizard_prefill_force_prompt_edit=False,
     )
     
     # Show confirmation
@@ -237,8 +235,126 @@ async def use_quick_example(callback: CallbackQuery, state: FSMContext):
         f"<b>Промпт:</b>\n{prompt}\n\n"
         f"Начинаем?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Да, создать!", callback_data=f"gen:{recommended_model}")],
-            [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data=f"model:{recommended_model}")],
+            [InlineKeyboardButton(text="✅ Да, создать!", callback_data=f"quick:run:{action_id}:{example_idx}")],
+            [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data=f"quick:edit:{action_id}:{example_idx}")],
             [InlineKeyboardButton(text="◀️ Назад", callback_data=f"quick:examples:{action_id}")]
         ])
     )
+
+
+@router.callback_query(F.data.startswith("quick:run:"))
+async def quick_run(callback: CallbackQuery, state: FSMContext):
+    """Start wizard immediately with prefilled prompt."""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    action_id = parts[2]
+    example_idx = int(parts[3])
+
+    action = QUICK_ACTIONS.get(action_id)
+    if not action or example_idx >= len(action['prompt_examples']):
+        await callback.message.answer("⚠️ Пример не найден")
+        return
+
+    prompt = action['prompt_examples'][example_idx]
+    model_id = action['recommended_models'][0]['id']
+
+    from app.ui.catalog import get_model
+    from bot.flows.wizard import start_wizard
+
+    model_config = get_model(model_id)
+    if not model_config:
+        await callback.message.answer("❌ Модель не найдена")
+        return
+
+    await state.update_data(
+        wizard_prefill={"prompt": prompt},
+        wizard_prefill_force_prompt_edit=False,
+    )
+    await start_wizard(callback.message, state, model_id, model_config)
+
+
+@router.callback_query(F.data.startswith("quick:edit:"))
+async def quick_edit(callback: CallbackQuery, state: FSMContext):
+    """Start wizard with prompt prefilled but force prompt step for editing."""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    action_id = parts[2]
+    example_idx = int(parts[3])
+
+    action = QUICK_ACTIONS.get(action_id)
+    if not action or example_idx >= len(action['prompt_examples']):
+        await callback.message.answer("⚠️ Пример не найден")
+        return
+
+    prompt = action['prompt_examples'][example_idx]
+    model_id = action['recommended_models'][0]['id']
+
+    from app.ui.catalog import get_model
+    from bot.flows.wizard import start_wizard
+
+    model_config = get_model(model_id)
+    if not model_config:
+        await callback.message.answer("❌ Модель не найдена")
+        return
+
+    await state.update_data(
+        wizard_prefill={"prompt": prompt},
+        wizard_prefill_force_prompt_edit=True,
+    )
+    await start_wizard(callback.message, state, model_id, model_config)
+
+
+@router.callback_query(F.data == "quick:repeat_last")
+async def cb_quick_repeat_last(callback: CallbackQuery, state: FSMContext):
+    """Repeat last successful generation (Syntx UX)."""
+    await callback.answer()
+    try:
+        from app.payments.charges import get_charge_manager
+        from app.database.services import JobService
+        cm = get_charge_manager()
+        db = getattr(cm, "db_service", None) if cm else None
+        if not db:
+            await callback.answer("⚠️ База недоступна", show_alert=True)
+            return
+
+        jobs = await JobService(db).list_user_jobs(callback.from_user.id, limit=5)
+        if not jobs:
+            await callback.answer("История пока пустая 🙂", show_alert=True)
+            return
+
+        # Prefer last succeeded job
+        job_id = None
+        for j in jobs:
+            if (j.get("status") or "").lower() == "succeeded":
+                job_id = j.get("id")
+                break
+        if job_id is None:
+            job_id = jobs[0].get("id")
+
+        full = await JobService(db).get(int(job_id)) if job_id else None
+        if not full:
+            await callback.answer("Не нашёл последнюю задачу", show_alert=True)
+            return
+
+        model_id = str(full.get("model_id") or "")
+        input_json = full.get("input_json") or {}
+        if not model_id:
+            await callback.answer("В истории нет модели", show_alert=True)
+            return
+
+        from app.ui.catalog import get_model
+        from bot.flows.wizard import start_wizard
+
+        model = get_model(model_id)
+        if not model:
+            await callback.answer("Модель больше недоступна", show_alert=True)
+            return
+
+        await state.update_data(wizard_prefill=input_json)
+        await start_wizard(callback, state, model_config=model)
+
+    except Exception as e:
+        logger.error(f"repeat_last failed: {e}", exc_info=True)
+        await callback.answer("Не получилось повторить. Попробуйте через историю.", show_alert=True)

@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 router = Router(name="history")
 
+
+@router.callback_query(F.data == "menu:history")
+async def cb_menu_history(callback: CallbackQuery, state: FSMContext):
+    """Alias: menu:history -> history:main (no dead buttons)."""
+    return await cb_history_main(callback, state)
+
 # Global database service
 _db_service = None
 

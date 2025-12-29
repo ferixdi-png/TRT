@@ -139,6 +139,10 @@ def _build_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=tone_ru.MENU_BALANCE, callback_data="menu:balance"),
         ],
         [
+            InlineKeyboardButton(text="🔁 Повторить последнюю", callback_data="quick:repeat_last"),
+            InlineKeyboardButton(text="⚡ Быстрые действия", callback_data="quick:menu"),
+        ],
+        [
             InlineKeyboardButton(text="💎 Тарифы", callback_data="menu:pricing"),
             InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu:help"),
         ],
@@ -280,21 +284,7 @@ async def version_command(message: Message) -> None:
     await message.answer(text, parse_mode="HTML")
 
 
-@router.callback_query(F.data == "main_menu")
-async def main_menu_cb(callback: CallbackQuery) -> None:
-    """Main menu callback."""
-    await callback.answer()
-    
-    counts = get_counts()
-    total = sum(counts.values())
-    free_count = len(_get_free_models())
-    
-    text = (
-        f"🏠 <b>Главное меню</b>\n\n"
-        f"🚀 {total} нейросетей • 🎁 {free_count} бесплатно"
-    )
-    
-    await callback.message.edit_text(text, reply_markup=_build_main_menu_keyboard(), parse_mode="HTML")
+ 
 
 
 # ============================================================================
@@ -389,188 +379,6 @@ async def category_screen(callback: CallbackQuery) -> None:
     
     buttons = [[build_model_button(m)] for m in models[:15]]
     buttons = add_navigation(buttons, "main_menu")
-    
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
-
-
-# ============================================================================
-# MODEL CARD
-# ============================================================================
-
-@router.callback_query(F.data.startswith("model:"))
-async def model_card(callback: CallbackQuery) -> None:
-    """Model card (marketing)."""
-    await callback.answer()
-    
-    model_id = callback.data.split(":")[1]
-    model = get_model(model_id)
-    
-    if not model:
-        await callback.answer("❌ Модель не найдена", show_alert=True)
-        return
-    
-    profile = build_profile(model)
-    
-    text = f"<b>{profile['display_name']}</b>\n\n{profile['short_pitch']}\n\n"
-    text += "<b>📌 Подходит для:</b>\n" + "\n".join(profile['best_for']) + "\n\n"
-    text += f"<b>📦 Результат:</b> {profile['output_format']}\n"
-    text += f"<b>💰 Цена:</b> {profile['price']['label']}\n"
-    
-    if profile['upsell_line']:
-        text += f"\n{profile['upsell_line']}\n"
-    
-    if profile['examples']:
-        text += "\n<b>💡 Примеры:</b>\n"
-        for i, ex in enumerate(profile['examples'][:2], 1):
-            text += f"{i}. {ex}\n"
-    
-    buttons = [
-        [InlineKeyboardButton(text="🚀 Запустить", callback_data=make_key("gen", model_id))],
-    ]
-    
-    if not profile['price']['is_free']:
-        buttons.append([InlineKeyboardButton(text="💳 Пополнить", callback_data="menu:balance")])
-    
-    buttons.append(build_back_row(f"cat:{profile['category']}", "main_menu"))
-    
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
-
-
-# ============================================================================
-# FORMATS CATALOG (новый UX)
-# ============================================================================
-
-@router.callback_query(F.data == "menu:formats")
-async def formats_menu(callback: CallbackQuery) -> None:
-    """Formats catalog menu (syntx-level UX)."""
-    await callback.answer()
-    
-    from app.ui.format_groups import FORMAT_GROUPS
-    
-    text = (
-        f"🧩 <b>Форматы</b>\n\n"
-        f"Выберите тип задачи:"
-    )
-    
-    buttons = []
-    for group_key, group_info in FORMAT_GROUPS.items():
-        buttons.append([InlineKeyboardButton(
-            text=f"{group_info['emoji']} {group_info['title']}",
-            callback_data=f"format_group:{group_key}"
-        )])
-    
-    buttons.append(build_back_row("main_menu"))
-    
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
-
-
-@router.callback_query(F.data.startswith("format_group:"))
-async def format_group_screen(callback: CallbackQuery) -> None:
-    """Show models in format group."""
-    await callback.answer()
-    
-    group_key = callback.data.split(":", 1)[1]
-    
-    from app.ui.format_groups import FORMAT_GROUPS, group_by_format
-    from app.ui.catalog import load_models_sot
-    
-    if group_key not in FORMAT_GROUPS:
-        await callback.message.edit_text("❌ Формат не найден", parse_mode="HTML")
-        return
-    
-    group_info = FORMAT_GROUPS[group_key]
-    models = load_models_sot()
-    grouped = group_by_format(models)
-    models_in_group = grouped.get(group_key, [])
-    
-    if not models_in_group:
-        text = f"{group_info['emoji']} <b>{group_info['title']}</b>\n\n❌ Модели пока не добавлены"
-        buttons = [build_back_row("menu:formats")]
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
-        return
-    
-    text = (
-        f"{group_info['emoji']} <b>{group_info['title']}</b>\n"
-        f"{group_info['desc']}\n\n"
-        f"📦 Доступно моделей: {len(models_in_group)}"
-    )
-    
-    buttons = []
-    for model in models_in_group[:15]:  # Top 15
-        short_title = model.get("ui", {}).get("short_title", model.get("display_name", "")[:25])
-        buttons.append([InlineKeyboardButton(
-            text=short_title,
-            callback_data=make_key("card", model["model_id"])
-        )])
-    
-    buttons.append(build_back_row("menu:formats"))
-    
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
-
-
-@router.callback_query(F.data.startswith("format_catalog:"))
-async def format_catalog_screen(callback: CallbackQuery) -> None:
-    """Show models by format."""
-    await callback.answer()
-    
-    format_key = callback.data.split(":", 1)[1]
-    
-    # Load format map
-    import json
-    from pathlib import Path
-    
-    # Use relative path from repo root
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    map_file = repo_root / "app/ui/content/model_format_map.json"
-    
-    if not map_file.exists():
-        await callback.message.edit_text("❌ Каталог форматов недоступен", parse_mode="HTML")
-        return
-    
-    with open(map_file, "r", encoding="utf-8") as f:
-        format_map = json.load(f)
-    
-    # Find models matching format
-    matching_models = []
-    for model_id, formats in format_map.get("model_to_formats", {}).items():
-        if format_key in formats or (format_key == "video" and any(f in formats for f in ["text-to-video", "image-to-video", "video-editing"])) \
-           or (format_key == "image" and any(f in formats for f in ["text-to-image", "image-to-image", "image-upscale", "background-remove"])) \
-           or (format_key == "audio" and any(f in formats for f in ["text-to-audio", "audio-editing", "audio-to-video"])):
-            
-            try:
-                model = get_model(model_id)
-                if model and model.get("enabled", True):
-                    matching_models.append(model)
-            except Exception:
-                continue
-    
-    if not matching_models:
-        await callback.message.edit_text(f"❌ Модели для формата <b>{format_key}</b> не найдены", parse_mode="HTML")
-        return
-    
-    # Format name mapping
-    format_names = {
-        "text-to-image": "Текст → Изображение",
-        "image-to-image": "Изображение → Изображение",
-        "text-to-video": "Текст → Видео",
-        "image-to-video": "Изображение → Видео",
-        "text-to-audio": "Текст → Аудио (TTS/SFX)",
-        "audio-editing": "Обработка аудио",
-        "audio-to-video": "Аудио → Видео",
-        "video-editing": "Обработка видео",
-        "image-upscale": "Увеличение изображений",
-        "background-remove": "Удаление фона",
-        "video": "🎬 Видео (все)",
-        "image": "🖼 Изображения (все)",
-        "audio": "🎙 Аудио (все)",
-    }
-    
-    format_display = format_names.get(format_key, format_key)
-    
-    text = f"🧩 <b>{format_display}</b>\n\n🎨 Найдено моделей: {len(matching_models)}"
-    
-    buttons = [[build_model_button(m)] for m in matching_models[:15]]
-    buttons.append(build_back_row("menu:formats", "main_menu"))
     
     await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
@@ -715,14 +523,6 @@ async def model_card_handler(callback: CallbackQuery) -> None:
 # ============================================================================
 # FALLBACKS
 # ============================================================================
-
-@router.callback_query(F.data == "menu:history")
-async def history_screen(callback: CallbackQuery) -> None:
-    """History fallback."""
-    await callback.answer()
-    text = "📜 <b>История</b>\n\nФункция в разработке."
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[build_back_row("main_menu")]), parse_mode="HTML")
-
 
 @router.callback_query(F.data == "menu:help")
 async def help_screen(callback: CallbackQuery) -> None:
