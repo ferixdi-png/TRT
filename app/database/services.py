@@ -12,7 +12,7 @@ import logging
 import json
 from contextlib import asynccontextmanager
 from decimal import Decimal
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timedelta
 
 
@@ -27,32 +27,23 @@ from app.database.schema import apply_schema, verify_schema
 
 logger = logging.getLogger(__name__)
 
-def _json_dumps_safe(value: Any) -> str:
-    """Best-effort JSON serialization (for legacy TEXT columns)."""
-    try:
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    except Exception:
-        try:
-            return json.dumps(str(value), ensure_ascii=False, separators=(",", ":"))
-        except Exception:
-            return "{}"
 
+def _to_json_str(value: Any) -> Optional[str]:
+    """Serialize dict/list payloads for asyncpg query parameters.
 
-async def _column_udt_name(conn: asyncpg.Connection, table: str, column: str) -> Optional[str]:
-    """Return information_schema.udt_name for a column, or None if missing."""
-    try:
-        return await conn.fetchval(
-            """SELECT udt_name
-               FROM information_schema.columns
-              WHERE table_schema='public'
-                AND table_name=$1
-                AND column_name=$2""",
-            table,
-            column,
-        )
-    except Exception:
+    In some deployments the DB column type (or asyncpg codecs) for JSON/JSONB fields may
+    still be treated as TEXT by the driver, which makes passing Python dicts fail with
+    `expected str, got dict`. Storing as JSON text is safe and keeps the payload usable.
+    """
+    if value is None:
         return None
-
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except Exception:
+        # Last resort: never crash a generation because of logging payload serialization.
+        return str(value)
 
 
 # Default database service for handlers that cannot receive DI explicitly (e.g. callback handlers)
@@ -550,18 +541,12 @@ class JobService:
     
     def __init__(self, db: DatabaseService):
         self.db = db
-        self._input_json_is_text: Optional[bool] = None
-        self._result_json_is_text: Optional[bool] = None
     
     async def create(self, user_id: int, model_id: str, category: str,
-                    input_json: Dict, price_rub: Decimal, 
+                    input_json: Any, price_rub: Decimal, 
                     idempotency_key: str) -> Optional[int]:
         """Create new job (idempotent)."""
         async with self.db.transaction() as conn:
-            if self._input_json_is_text is None:
-                udt = await _column_udt_name(conn, "jobs", "input_json")
-                self._input_json_is_text = (udt == "text")
-
             # Check idempotency
             existing = await conn.fetchval(
                 "SELECT id FROM jobs WHERE idempotency_key = $1",
@@ -572,12 +557,25 @@ class JobService:
                 return existing
             
             # Insert job
-            job_id = await conn.fetchval("""
-                INSERT INTO jobs (user_id, model_id, category, input_json, price_rub, 
-                                 status, idempotency_key)
-                VALUES ($1, $2, $3, $4, $5, 'draft', $6)
-                RETURNING id
-            """, user_id, model_id, category, (_json_dumps_safe(input_json) if self._input_json_is_text else input_json), price_rub, idempotency_key)
+            # Some installations may have legacy DB schemas / codecs where JSON payload columns
+            # are effectively treated as TEXT by the driver. In that case passing a Python dict
+            # raises: "expected str, got dict". We try native first (keeps JSONB semantics),
+            # and fallback to serialized JSON text if needed.
+            try:
+                job_id = await conn.fetchval("""
+                    INSERT INTO jobs (user_id, model_id, category, input_json, price_rub, 
+                                     status, idempotency_key)
+                    VALUES ($1, $2, $3, $4, $5, 'draft', $6)
+                    RETURNING id
+                """, user_id, model_id, category, input_json, price_rub, idempotency_key)
+            except asyncpg.exceptions.DataError:
+                input_payload = _to_json_str(input_json) or "{}"
+                job_id = await conn.fetchval("""
+                    INSERT INTO jobs (user_id, model_id, category, input_json, price_rub, 
+                                     status, idempotency_key)
+                    VALUES ($1, $2, $3, $4, $5, 'draft', $6)
+                    RETURNING id
+                """, user_id, model_id, category, input_payload, price_rub, idempotency_key)
             
             logger.info(f"Created job {job_id} for user {user_id}")
             return job_id
@@ -593,14 +591,11 @@ class JobService:
     
     async def update_status(self, job_id: int, status: str, 
                            kie_task_id: str = None, kie_status: str = None,
-                           result_json: Dict = None, error_text: str = None):
+                           result_json: Any = None, error_text: str = None):
         """Update job status."""
         async with self.db.transaction() as conn:
-            if result_json is not None and self._result_json_is_text is None:
-                udt = await _column_udt_name(conn, "jobs", "result_json")
-                self._result_json_is_text = (udt == "text")
-
-            await conn.execute("""
+            try:
+                await conn.execute("""
                 UPDATE jobs
                 SET status = $2,
                     kie_task_id = COALESCE($3, kie_task_id),
@@ -611,7 +606,21 @@ class JobService:
                     finished_at = CASE WHEN $2 IN ('succeeded', 'failed', 'refunded', 'cancelled') 
                                       THEN NOW() ELSE finished_at END
                 WHERE id = $1
-            """, job_id, status, kie_task_id, kie_status, (_json_dumps_safe(result_json) if (result_json is not None and self._result_json_is_text) else result_json), error_text)
+                """, job_id, status, kie_task_id, kie_status, result_json, error_text)
+            except (asyncpg.exceptions.DataError, TypeError):
+                safe_result = _to_json_str(result_json) if result_json is not None else None
+                await conn.execute("""
+                UPDATE jobs
+                SET status = $2,
+                    kie_task_id = COALESCE($3, kie_task_id),
+                    kie_status = COALESCE($4, kie_status),
+                    result_json = COALESCE($5, result_json),
+                    error_text = COALESCE($6, error_text),
+                    updated_at = NOW(),
+                    finished_at = CASE WHEN $2 IN ('succeeded', 'failed', 'refunded', 'cancelled') 
+                                      THEN NOW() ELSE finished_at END
+                WHERE id = $1
+                """, job_id, status, kie_task_id, kie_status, safe_result, error_text)
     
     async def list_user_jobs(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """Get user's jobs."""
@@ -631,7 +640,6 @@ class UIStateService:
     
     def __init__(self, db: DatabaseService):
         self.db = db
-        self._data_is_text: Optional[bool] = None
     
     async def get(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get UI state."""
@@ -640,24 +648,12 @@ class UIStateService:
                 "SELECT state, data FROM ui_state WHERE user_id = $1",
                 user_id
             )
-            if not state:
-                return None
-            data = dict(state)
-            if isinstance(data.get('data'), str):
-                try:
-                    data['data'] = json.loads(data['data']) if data['data'] else {}
-                except Exception:
-                    data['data'] = {}
-            return data
+            return dict(state) if state else None
     
     async def set(self, user_id: int, state: str, data: Dict = None, 
                  ttl_minutes: int = 60):
         """Set UI state with TTL."""
         async with self.db.transaction() as conn:
-            if self._data_is_text is None:
-                udt = await _column_udt_name(conn, "ui_state", "data")
-                self._data_is_text = (udt == "text")
-
             expires_at = datetime.now() + timedelta(minutes=ttl_minutes)
             await conn.execute("""
                 INSERT INTO ui_state (user_id, state, data, expires_at)
@@ -667,7 +663,7 @@ class UIStateService:
                     data = EXCLUDED.data,
                     updated_at = NOW(),
                     expires_at = EXCLUDED.expires_at
-            """, user_id, state, (_json_dumps_safe(data or {}) if self._data_is_text else (data or {})), expires_at)
+            """, user_id, state, data or {}, expires_at)
     
     async def clear(self, user_id: int):
         """Clear UI state."""
