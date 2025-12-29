@@ -121,24 +121,13 @@ async def start_wizard(
     spec = get_input_spec(model_config)
 
     if not spec.fields:
-        # No inputs needed, go straight to generation
-        logger.info("Wizard checklist: no fields for model %s, auto-starting generation", model_id)
-        await callback.message.edit_text(
-            f"🚀 <b>{display_name}</b>\n\n"
-            "Запускаю генерацию...",
-            parse_mode="HTML"
-        )
-        
-        # Save state and trigger generation
+        # No inputs needed — but still keep Syntx parity: show confirmation
         await state.update_data(
-            model_id=model_id,
             model_config=model_config,
-            wizard_inputs={}
+            wizard_inputs={},
+            wizard_current_field_index=0,
         )
-        
-        # Import and call generator
-        from bot.handlers.flow import trigger_generation
-        await trigger_generation(callback.message, state)
+        await wizard_show_confirmation(callback, state)
         return
 
     logger.info(
@@ -766,11 +755,14 @@ async def wizard_show_confirmation(message_or_callback, state: FSMContext) -> No
     
     model_id = model_config.get("model_id", "unknown")
     display_name = model_config.get("display_name", model_id)
-    
-    # Get price
-    pricing = model_config.get("pricing", {})
-    price_rub = pricing.get("rub_per_use", 0)
-    is_free = pricing.get("is_free", False)
+    # Get price (single source of truth: pricing module applies markup)
+    from app.payments.pricing import get_price_breakdown, format_price_rub
+    from app.pricing.free_models import is_free_model
+
+    breakdown = get_price_breakdown(model_config, inputs)
+    is_free = is_free_model(model_id) or float(breakdown.user_price_rub) <= 0
+    price_rub = 0.0 if is_free else float(breakdown.user_price_rub)
+    price_text = "Бесплатно" if is_free else format_price_rub(price_rub)
     
     # Build summary
     text = (
@@ -810,146 +802,49 @@ async def wizard_show_confirmation(message_or_callback, state: FSMContext) -> No
 
 @router.callback_query(F.data == "wizard:confirm", WizardState.confirming)
 async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext) -> None:
-    """Confirm and start generation."""
+    """Confirm and start generation (queued/running/ready with cancel)."""
     await callback.answer()
-    
+
     data = await state.get_data()
     model_config = data.get("model_config", {})
     inputs = data.get("wizard_inputs", {})
-    
+
     model_id = model_config.get("model_id", "unknown")
     display_name = model_config.get("display_name", model_id)
 
-    # Show "starting..." message
-    await callback.message.edit_text(
-        f"🚀 <b>{display_name}</b>\n\n"
-        "Запускаю генерацию...",
-        parse_mode="HTML"
-    )
-
-    # Build payload from inputs
-    payload = dict(inputs)  # Copy wizard inputs
-
-    # Add defaults from schema if missing
-    schema = model_config.get("input_schema", {})
-    properties = schema.get("properties", {})
-
+    # Final inputs = wizard_inputs + schema defaults (single source of truth: input_schema)
+    payload = dict(inputs)
+    schema = model_config.get("input_schema", {}) or {}
+    properties = schema.get("properties", {}) or {}
     for field_name, field_spec in properties.items():
-        if field_name not in payload and "default" in field_spec:
+        if field_name not in payload and isinstance(field_spec, dict) and "default" in field_spec:
             payload[field_name] = field_spec["default"]
 
-    # Save generation context
-    await state.update_data(
-        model_id=model_id,
-        payload=payload,
-        is_free_selected=False,  # Will be determined by pricing
-    )
+    # Price (with markup)
+    from decimal import Decimal
+    from app.payments.pricing import get_price_breakdown
+    from app.pricing.free_models import is_free_model
 
-    # Clear wizard state
+    breakdown = get_price_breakdown(model_config, payload)
+    is_free = is_free_model(model_id) or float(breakdown.user_price_rub) <= 0
+    price_rub = Decimal("0") if is_free else Decimal(str(breakdown.user_price_rub))
+
+    # Kick off async generation runner (background task)
+    from bot.services.generation_runner import start_generation
+
     await state.clear()
-
-    # Trigger generation via payment integration
-    # Note: payload arg kept for backward compat in integration.py
-    from app.payments.integration import generate_with_payment
-    from app.payments.charges import get_charge_manager
-
-    user_id = callback.from_user.id
-
-    try:
-        cm = get_charge_manager()
-
-        result = await generate_with_payment(
-            user_id=user_id,
-            model_id=model_id,
-            user_inputs=payload,
-            amount=0.0,  # Will be calculated inside
-            charge_manager=cm,
-        )
-
-        # Send result
-        if result.get("success"):
-            output_url = result.get("output_url")
-
-            success_text = (
-                f"✅ <b>Готово!</b>\n\n"
-                f"🎨 Модель: {display_name}\n\n"
-            )
-
-            # Build result keyboard
-            buttons = [
-                [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"launch:{model_id}")],
-                [
-                    InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main"),
-                    InlineKeyboardButton(text="💳 Баланс", callback_data="menu:balance"),
-                ],
-            ]
-            kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-            # Send text message
-            await callback.message.answer(success_text, reply_markup=kb, parse_mode="HTML")
-
-            # Send media result
-            if output_url:
-                output_type = model_config.get("output_type", "").lower()
-
-                try:
-                    if "video" in output_type:
-                        await callback.message.answer_video(output_url)
-                    elif "image" in output_type:
-                        await callback.message.answer_photo(output_url)
-                    elif "audio" in output_type:
-                        await callback.message.answer_audio(output_url)
-                    else:
-                        await callback.message.answer(f"📎 Результат: {output_url}")
-                except Exception as e:
-                    logger.error(f"Failed to send media result: {e}")
-                    await callback.message.answer(f"📎 Результат: {output_url}")
-        else:
-            # Error
-            error_msg = result.get("error", "Неизвестная ошибка")
-            error_code = result.get("error_code", "unknown")
-
-            # Sanitize error message for user
-            user_error = _sanitize_error_for_user(error_msg, error_code)
-
-            error_text = (
-                f"❌ <b>Ошибка генерации</b>\n\n"
-                f"🎨 Модель: {display_name}\n\n"
-                f"<b>Что произошло:</b>\n{user_error}\n\n"
-                f"💡 Попробуйте изменить параметры и запустить снова"
-            )
-
-            buttons = [
-                [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"launch:{model_id}")],
-                [
-                    InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main"),
-                    InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu:help"),
-                ],
-            ]
-            kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-            await callback.message.answer(error_text, reply_markup=kb, parse_mode="HTML")
-
-    except Exception as e:
-        logger.error(f"Generation failed: {e}", exc_info=True)
-
-        error_text = (
-            f"❌ <b>Ошибка генерации</b>\n\n"
-            f"🎨 Модель: {display_name}\n\n"
-            f"Произошла непредвиденная ошибка. Попробуйте ещё раз.\n\n"
-            f"Если проблема повторяется, свяжитесь с поддержкой."
-        )
-
-        buttons = [
-            [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"launch:{model_id}")],
-            [
-                InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main"),
-                InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu:help"),
-            ],
-        ]
-        kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-        await callback.message.answer(error_text, reply_markup=kb, parse_mode="HTML")
+    await start_generation(
+        bot=callback.bot,
+        message=callback.message,
+        user_id=callback.from_user.id,
+        model_id=model_id,
+        display_name=display_name,
+        category=(model_config.get("category") or model_config.get("output_type") or "unknown"),
+        user_inputs=payload,
+        price_rub=price_rub,
+        output_type=(model_config.get("output_type") or ""),
+        timeout=int(model_config.get("timeout", 300) or 300),
+    )
 
 
 @router.callback_query(F.data == "wizard:cancel", WizardState.confirming)
@@ -1023,3 +918,37 @@ async def wizard_edit_inputs(callback: CallbackQuery, state: FSMContext) -> None
     await state.update_data(wizard_current_field_index=0)
     await state.set_state(WizardState.collecting_input)
     await show_field_input(callback.message, state, spec.fields[0])
+
+
+@router.callback_query(F.data.startswith("job:cancel:"))
+async def cb_job_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    """Cancel currently running generation for the user (if any)."""
+    await callback.answer("Отменяю…")
+    try:
+        job_id_str = str(callback.data).split(":", 2)[2]
+        job_id = int(job_id_str)
+    except Exception:
+        job_id = None
+
+    try:
+        from bot.services.generation_runner import cancel_user_generation
+
+        ok = await cancel_user_generation(callback.from_user.id, job_id)
+        if not ok:
+            await callback.answer("Нечего отменять", show_alert=False)
+            return
+
+        # Give instant UX feedback; the runner will also update when cancelled.
+        try:
+            await callback.message.edit_text(
+                "⛔ <b>Отменяю генерацию…</b>",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main")]]
+                ),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+    except Exception:
+        # Never crash callbacks
+        return
