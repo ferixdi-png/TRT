@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, Optional, Callable
 from datetime import datetime, timedelta
 import os
+from contextlib import nullcontext
 
 from app.kie.builder import build_payload, load_source_of_truth
 from app.kie.validator import ModelContractError
@@ -16,6 +17,8 @@ from app.kie.parser import parse_record_info, get_human_readable_error
 from app.utils.errors import classify_api_failure, classify_exception
 from app.kie.router import is_v4_model, build_category_payload
 from app.utils.public_url import get_public_base_url
+from app.utils.payload_hash import payload_hash
+from app.utils.trace import TraceContext, get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -198,265 +201,373 @@ class KieGenerator:
             - error_code: Optional[str]
             - error_message: Optional[str]
         """
-        logger.info(f"▶️ generation start timeout={timeout}s inputs={list(user_inputs.keys())}")
+        ctx = TraceContext(model_id=model_id) if get_request_id() == "-" else nullcontext()
+        with ctx:
+            ph = payload_hash({"model": model_id, "inputs": user_inputs})
+            logger.info(
+                "▶️ generation start timeout=%ss inputs=%s",
+                timeout,
+                list(user_inputs.keys()),
+                extra={"stage": "start", "payload_hash": ph, "model_id": model_id},
+            )
 
-        try:
-            # Load source of truth if needed
-            if not self.source_of_truth:
-                self.source_of_truth = load_source_of_truth()
-            
-            # Check if this is a V4 model (new architecture)
-            is_v4 = USE_V4_API and is_v4_model(model_id)
-            
-            # Build payload using appropriate builder
-            if is_v4:
-                logger.info(f"Using V4 API for model {model_id}")
-                payload = build_category_payload(model_id, user_inputs)
-            else:
-                logger.info(f"Using V3 API for model {model_id}")
-                payload = build_payload(model_id, user_inputs, self.source_of_truth)
-            
-            # Log payload summary (once)
             try:
-                _p = dict(payload) if isinstance(payload, dict) else {}
-                _model = _p.get('model') or _p.get('model_id') or model_id
-                _prompt = (_p.get('prompt') or _p.get('input', {}).get('prompt') or '')
-                _prompt_len = len(_prompt) if isinstance(_prompt, str) else 0
-                logger.info(f"🧩 payload built model={_model} keys={list(_p.keys())} prompt_len={_prompt_len}")
-            except Exception:
-                logger.debug("payload built (failed to summarize)")
+                # Load source of truth if needed
+                if not self.source_of_truth:
+                    self.source_of_truth = load_source_of_truth()
 
-            # Log full payload (masked) for debugging contract issues
-            try:
-                masked = _mask_for_logs(payload)
-                s = json.dumps(masked, ensure_ascii=False)
-                if len(s) > 2500:
-                    s = s[:2000] + "..." + s[-300:]
-                logger.info("📤 Kie payload (masked): %s", s)
-            except Exception:
-                logger.debug("Failed to log full payload")
-            
-            # Create task
-            api_client = self._get_api_client()
+                # Check if this is a V4 model (new architecture)
+                is_v4 = USE_V4_API and is_v4_model(model_id)
 
-            # Some Kie.ai endpoints require callBackUrl even if we also poll for the result.
-            base_url = get_public_base_url()
-            callback_url = f"{base_url}/kie/callback" if base_url else None
-            if not callback_url:
-                logger.warning(
-                    "Kie callBackUrl is not set: public base URL is missing (set WEBHOOK_BASE_URL or RENDER_EXTERNAL_URL)"
-                )
-            
-            # V4 API requires model_id as first argument
-            # V3 API (old KieApiClient) only takes payload
-            if isinstance(api_client, KieApiClientV4):
-                if callback_url and isinstance(payload, dict):
-                    payload = dict(payload)
-                    payload.setdefault("callBackUrl", callback_url)
-                create_response = await api_client.create_task(model_id, payload)
-            else:
-                create_response = await api_client.create_task(payload, callback_url=callback_url)
-            
-            # Debug: log response
-            logger.info(f"Create task response: {create_response}")
-            
-            # Check if response is None or has error
-            if create_response is None:
-                err = classify_api_failure('UPSTREAM_NONE', 'create_task returned None')
-                logger.error(f"{err.code} create_task returned None | {err.debug_reason}")
-                return {
-                    'success': False,
-                    'message': '❌ Ошибка API: не получен ответ от сервера',
-                    'result_urls': [],
-                    'result_object': None,
-                    'error_code': 'NO_RESPONSE',
-                    'error_message': 'API client returned None',
-                    'task_id': None
-                }
-            
-            # Check for error in response (from exception handling)
-            if 'error' in create_response:
-                error_msg = create_response.get('error', 'Unknown error')
-                logger.error(f"API error in create_task: {error_msg}")
-                return {
-                    'success': False,
-                    'message': f'❌ Ошибка API: {error_msg}',
-                    'result_urls': [],
-                    'result_object': None,
-                    'error_code': 'API_CONNECTION_ERROR',
-                    'error_message': error_msg,
-                    'task_id': None
-                }
-            
-            # Extract taskId from response (can be at top level or in data object)
-            task_id = create_response.get('taskId')
-            if not task_id and create_response.get('data'):
-                # data can be dict with taskId
-                data = create_response.get('data')
-                if isinstance(data, dict):
-                    task_id = data.get('taskId')
-            
-            if not task_id:
-                # Check if response has error
-                error_code = create_response.get('code')
-                error_msg = create_response.get('msg', 'Unknown error')
-                
-                logger.error(f"No taskId in response. Full response: {create_response}")
-                return {
-                    'success': False,
-                    'message': f'❌ Ошибка API: {error_msg}',
-                    'result_urls': [],
-                    'result_object': None,
-                    'error_code': f'API_ERROR_{error_code}' if error_code else 'NO_TASK_ID',
-                    'error_message': f'{error_msg}. Response: {create_response}',
-                    'task_id': None
-                }
-            
-            # Wait for completion with heartbeat
-            start_time = datetime.now()
-            start_ts = time.monotonic()
-            last_heartbeat = datetime.now()
-            
-            while True:
-                # Check timeout
-                elapsed = (datetime.now() - start_time).total_seconds()
-                if elapsed > timeout:
-                    return {
-                        'success': False,
-                        'message': f'⏱️ Превышено время ожидания ({timeout} сек)',
-                        'result_urls': [],
-                        'result_object': None,
-                        'error_code': 'TIMEOUT',
-                        'error_message': f'Task timeout after {timeout} seconds',
-                        'task_id': task_id
-                    }
-                
-                # Get record info
-                record_info = await api_client.get_record_info(task_id)
-                
-                # Normalize data-wrapper format: {"code":200,"data":{"state":...}}
-                if isinstance(record_info, dict) and isinstance(record_info.get("data"), dict) and "state" not in record_info:
-                    logger.debug("Normalizing recordInfo from data-wrapper format")
-                    record_info = record_info["data"]
-                
+                # Build payload using appropriate builder
+                if is_v4:
+                    logger.info(
+                        "Using V4 API for model %s",
+                        model_id,
+                        extra={"stage": "payload_build", "payload_hash": ph, "model_id": model_id},
+                    )
+                    payload = build_category_payload(model_id, user_inputs)
+                else:
+                    logger.info(
+                        "Using V3 API for model %s",
+                        model_id,
+                        extra={"stage": "payload_build", "payload_hash": ph, "model_id": model_id},
+                    )
+                    payload = build_payload(model_id, user_inputs, self.source_of_truth)
+
+                # Hash the final payload (stronger correlation than user_inputs)
+                ph = payload_hash(payload)
+
+                # Log payload summary (once)
                 try:
-                    st = (record_info or {}).get('state') or (record_info or {}).get('status')
-                    fc = (record_info or {}).get('failCode')
-                    logger.info(f"poll state={st} failCode={fc}")
+                    _p = dict(payload) if isinstance(payload, dict) else {}
+                    _model = _p.get("model") or _p.get("model_id") or model_id
+                    _prompt = (_p.get("prompt") or _p.get("input", {}).get("prompt") or "")
+                    _prompt_len = len(_prompt) if isinstance(_prompt, str) else 0
+                    logger.info(
+                        "🧩 payload built model=%s keys=%s prompt_len=%s",
+                        _model,
+                        list(_p.keys()),
+                        _prompt_len,
+                        extra={"stage": "payload_built", "payload_hash": ph, "model_id": model_id},
+                    )
                 except Exception:
-                    pass
-                
-                parsed = parse_record_info(record_info)
-                
-                state = parsed['state']
-                
-                if state == 'success':
-                    return {
-                        'success': True,
-                        'message': parsed['message'],
-                        'result_urls': parsed['result_urls'],
-                        'result_object': parsed['result_object'],
-                        'error_code': None,
-                        'error_message': None,
-                        'task_id': task_id
-                    }
-                
-                elif state == 'fail':
-                    error_msg = get_human_readable_error(
-                        parsed['error_code'],
-                        parsed['error_message']
+                    logger.debug(
+                        "payload built (failed to summarize)",
+                        exc_info=True,
+                        extra={"stage": "payload_built", "payload_hash": ph, "model_id": model_id},
+                    )
+
+                # Log full payload (masked) for debugging contract issues
+                try:
+                    masked = _mask_for_logs(payload)
+                    s = json.dumps(masked, ensure_ascii=False)
+                    if len(s) > 2500:
+                        s = s[:2000] + "..." + s[-300:]
+                    logger.info(
+                        "📤 Kie payload (masked): %s",
+                        s,
+                        extra={"stage": "payload_log", "payload_hash": ph, "model_id": model_id},
+                    )
+                except Exception:
+                    logger.debug(
+                        "Failed to log full payload",
+                        exc_info=True,
+                        extra={"stage": "payload_log", "payload_hash": ph, "model_id": model_id},
+                    )
+
+                # Create task
+                api_client = self._get_api_client()
+
+                # Some Kie.ai endpoints require callBackUrl even if we also poll for the result.
+                base_url = get_public_base_url()
+                callback_url = f"{base_url}/kie/callback" if base_url else None
+                if not callback_url:
+                    logger.warning(
+                        "Kie callBackUrl is not set: public base URL is missing (set WEBHOOK_BASE_URL or RENDER_EXTERNAL_URL)",
+                        extra={"stage": "callback_url", "payload_hash": ph, "model_id": model_id},
+                    )
+
+                # V4 API requires model_id as first argument
+                # V3 API (old KieApiClient) only takes payload
+                try:
+                    if KieApiClientV4 is not None and isinstance(api_client, KieApiClientV4):
+                        if callback_url and isinstance(payload, dict):
+                            payload = dict(payload)
+                            payload.setdefault("callBackUrl", callback_url)
+                        create_response = await api_client.create_task(model_id, payload)
+                    else:
+                        create_response = await api_client.create_task(payload, callback_url=callback_url)
+                except Exception as e:
+                    cls = classify_exception(e)
+                    logger.error(
+                        "create_task exception code=%s error=%s",
+                        getattr(cls, "code", "EXC"),
+                        str(e),
+                        exc_info=True,
+                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
                     )
                     return {
-                        'success': False,
-                        'message': f"❌ {error_msg}\n\nНажмите /start для возврата в меню.",
-                        'result_urls': [],
-                        'result_object': None,
-                        'error_code': parsed['error_code'],
-                        'error_message': parsed['error_message'],
-                        'task_id': task_id
+                        "success": False,
+                        "message": "❌ Ошибка API при старте генерации. Попробуйте ещё раз позже.",
+                        "result_urls": [],
+                        "result_object": None,
+                        "error_code": getattr(cls, "code", "API_ERROR"),
+                        "error_message": str(e),
+                        "task_id": None,
                     }
-                
-                elif state == 'waiting':
-                    # Send heartbeat if needed
-                    time_since_heartbeat = (datetime.now() - last_heartbeat).total_seconds()
-                    if time_since_heartbeat >= self._heartbeat_interval:
-                        if progress_callback:
-                            # Use real progress from Kie.ai if available
-                            # MASTER PROMPT: "7. Прогресс / ETA" - enhanced formatting
-                            progress_percent = parsed.get('progress', 0)
-                            eta_seconds = parsed.get('eta')
-                            
-                            if progress_percent and progress_percent > 0:
-                                # Show progress bar
-                                bar_length = 10
-                                filled = int(progress_percent / 10)
-                                bar = '█' * filled + '░' * (bar_length - filled)
-                                
-                                if eta_seconds:
-                                    progress_callback(
-                                        f"⏳ <b>Генерация</b>\n\n"
-                                        f"{bar} {progress_percent}%\n"
-                                        f"Осталось: ~{eta_seconds} сек"
-                                    )
+
+                logger.info(
+                    "Create task response: %s",
+                    create_response,
+                    extra={"stage": "create_task_response", "payload_hash": ph, "model_id": model_id},
+                )
+
+                # Check if response is None or has error
+                if create_response is None:
+                    err = classify_api_failure("UPSTREAM_NONE", "create_task returned None")
+                    logger.error(
+                        "%s create_task returned None | %s",
+                        err.code,
+                        err.debug_reason,
+                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                    )
+                    return {
+                        "success": False,
+                        "message": "❌ Ошибка API: не получен ответ от сервера",
+                        "result_urls": [],
+                        "result_object": None,
+                        "error_code": "NO_RESPONSE",
+                        "error_message": "API client returned None",
+                        "task_id": None,
+                    }
+
+                # Check for error in response (from exception handling)
+                if isinstance(create_response, dict) and "error" in create_response:
+                    error_msg = create_response.get("error", "Unknown error")
+                    logger.error(
+                        "API error in create_task: %s",
+                        error_msg,
+                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                    )
+                    return {
+                        "success": False,
+                        "message": f"❌ Ошибка API: {error_msg}",
+                        "result_urls": [],
+                        "result_object": None,
+                        "error_code": "API_CONNECTION_ERROR",
+                        "error_message": error_msg,
+                        "task_id": None,
+                    }
+
+                # Extract taskId from response (can be at top level or in data object)
+                task_id = create_response.get("taskId") if isinstance(create_response, dict) else None
+                if not task_id and isinstance(create_response, dict) and create_response.get("data"):
+                    data = create_response.get("data")
+                    if isinstance(data, dict):
+                        task_id = data.get("taskId")
+
+                if not task_id:
+                    error_code = create_response.get("code") if isinstance(create_response, dict) else None
+                    error_msg = (create_response.get("msg", "Unknown error") if isinstance(create_response, dict) else "Unknown error")
+
+                    logger.error(
+                        "No taskId in response. Full response: %s",
+                        create_response,
+                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                    )
+                    return {
+                        "success": False,
+                        "message": f"❌ Ошибка API: {error_msg}",
+                        "result_urls": [],
+                        "result_object": None,
+                        "error_code": f"API_ERROR_{error_code}" if error_code else "NO_TASK_ID",
+                        "error_message": f"{error_msg}. Response: {create_response}",
+                        "task_id": None,
+                    }
+
+                # Wait for completion with heartbeat
+                start_time = datetime.now()
+                start_ts = time.monotonic()
+                last_heartbeat = datetime.now()
+
+                while True:
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    if elapsed > timeout:
+                        logger.error(
+                            "Timeout waiting for task: %ss",
+                            timeout,
+                            extra={
+                                "stage": "timeout",
+                                "payload_hash": ph,
+                                "model_id": model_id,
+                                "task_id": task_id,
+                            },
+                        )
+                        return {
+                            "success": False,
+                            "message": f"⏱️ Превышено время ожидания ({timeout} сек)",
+                            "result_urls": [],
+                            "result_object": None,
+                            "error_code": "TIMEOUT",
+                            "error_message": f"Task timeout after {timeout} seconds",
+                            "task_id": task_id,
+                        }
+
+                    # Get record info
+                    try:
+                        record_info = await api_client.get_record_info(task_id)
+                    except Exception as e:
+                        cls = classify_exception(e)
+                        logger.error(
+                            "get_record_info exception code=%s error=%s",
+                            getattr(cls, "code", "EXC"),
+                            str(e),
+                            exc_info=True,
+                            extra={
+                                "stage": "poll",
+                                "payload_hash": ph,
+                                "model_id": model_id,
+                                "task_id": task_id,
+                            },
+                        )
+                        return {
+                            "success": False,
+                            "message": "❌ Ошибка API при получении результата. Попробуйте ещё раз позже.",
+                            "result_urls": [],
+                            "result_object": None,
+                            "error_code": getattr(cls, "code", "POLL_ERROR"),
+                            "error_message": str(e),
+                            "task_id": task_id,
+                        }
+
+                    # Normalize data-wrapper format: {"code":200,"data":{"state":...}}
+                    if (
+                        isinstance(record_info, dict)
+                        and isinstance(record_info.get("data"), dict)
+                        and "state" not in record_info
+                    ):
+                        logger.debug(
+                            "Normalizing recordInfo from data-wrapper format",
+                            extra={"stage": "poll", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                        )
+                        record_info = record_info["data"]
+
+                    parsed = parse_record_info(record_info)
+                    state = parsed.get("state")
+                    fail_code = parsed.get("error_code")
+
+                    logger.info(
+                        "poll state=%s failCode=%s",
+                        state,
+                        fail_code,
+                        extra={"stage": "poll", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                    )
+
+                    if state == "success":
+                        logger.info(
+                            "✅ generation success urls=%s",
+                            len(parsed.get("result_urls") or []),
+                            extra={"stage": "success", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                        )
+                        return {
+                            "success": True,
+                            "message": parsed["message"],
+                            "result_urls": parsed["result_urls"],
+                            "result_object": parsed["result_object"],
+                            "error_code": None,
+                            "error_message": None,
+                            "task_id": task_id,
+                        }
+
+                    if state == "fail":
+                        human = get_human_readable_error(parsed.get("error_code"), parsed.get("error_message"))
+                        logger.warning(
+                            "generation failed code=%s msg=%s",
+                            parsed.get("error_code"),
+                            parsed.get("error_message"),
+                            extra={"stage": "fail", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                        )
+                        return {
+                            "success": False,
+                            "message": f"❌ {human}\n\nНажмите /start для возврата в меню.",
+                            "result_urls": [],
+                            "result_object": None,
+                            "error_code": parsed.get("error_code"),
+                            "error_message": parsed.get("error_message"),
+                            "task_id": task_id,
+                        }
+
+                    if state == "waiting":
+                        time_since_heartbeat = (datetime.now() - last_heartbeat).total_seconds()
+                        if time_since_heartbeat >= self._heartbeat_interval:
+                            if progress_callback:
+                                progress_percent = parsed.get("progress", 0)
+                                eta_seconds = parsed.get("eta")
+
+                                if progress_percent and progress_percent > 0:
+                                    bar_length = 10
+                                    filled = int(progress_percent / 10)
+                                    bar = "█" * filled + "░" * (bar_length - filled)
+
+                                    if eta_seconds:
+                                        progress_callback(
+                                            f"⏳ <b>Генерация</b>\n\n{bar} {progress_percent}%\nОсталось: ~{eta_seconds} сек"
+                                        )
+                                    else:
+                                        progress_callback(f"⏳ <b>Генерация</b>\n\n{bar} {progress_percent}%")
+                                elif eta_seconds:
+                                    progress_callback(f"⏳ <b>Генерация...</b>\n\nОсталось: ~{eta_seconds} сек")
                                 else:
-                                    progress_callback(
-                                        f"⏳ <b>Генерация</b>\n\n"
-                                        f"{bar} {progress_percent}%"
-                                    )
-                            elif eta_seconds:
-                                progress_callback(
-                                    f"⏳ <b>Генерация...</b>\n\n"
-                                    f"Осталось: ~{eta_seconds} сек"
-                                )
-                            else:
-                                # Fallback: show elapsed time with animation
-                                dots = '.' * (int(elapsed) % 4)
-                                progress_callback(
-                                    f"⏳ <b>Генерация{dots}</b>\n\n"
-                                    f"Прошло: {int(elapsed)} сек"
-                                )
-                        last_heartbeat = datetime.now()
-                    
-                    # Wait before next check
+                                    dots = "." * (int(elapsed) % 4)
+                                    progress_callback(f"⏳ <b>Генерация{dots}</b>\n\nПрошло: {int(elapsed)} сек")
+
+                            last_heartbeat = datetime.now()
+
+                        delay = _compute_poll_delay(time.monotonic() - start_ts)
+                        await asyncio.sleep(delay)
+                        continue
+
+                    # Unknown/empty state: keep polling
                     delay = _compute_poll_delay(time.monotonic() - start_ts)
                     await asyncio.sleep(delay)
                     continue
-                
-                else:
-                    # Unknown state
-                    delay = _compute_poll_delay(time.monotonic() - start_ts)
-                    await asyncio.sleep(delay)
-                    continue
-        
-        except (ValueError, ModelContractError) as e:
-            # Payload building error
-            if isinstance(e, ModelContractError):
-                logger.error("Model contract error: model=%s missing=%s", model_id, getattr(e, "missing", None))
-            else:
-                logger.error("Payload build error: model=%s error=%s", model_id, str(e))
-            return {
-                'success': False,
-                'message': f"❌ Ошибка в параметрах: {str(e)}\n\nНажмите /start для возврата в меню.",
-                'result_urls': [],
-                'result_object': None,
-                'error_code': 'INVALID_INPUT',
-                'error_message': str(e),
-                'task_id': None
-            }
-        
-        except Exception as e:
-            logger.error(f"Error in generate: {e}", exc_info=True)
-            # MASTER PROMPT: Logging - critical event (generation failed)
-            logger.error(f"Generation failed: model={model_id}, error={str(e)}")
-            return {
-                'success': False,
-                'message': f"❌ Произошла ошибка: {str(e)}\n\nНажмите /start для возврата в меню.",
-                'result_urls': [],
-                'result_object': None,
-                'error_code': 'UNKNOWN_ERROR',
-                'error_message': str(e),
-                'task_id': None
-            }
+
+            except (ValueError, ModelContractError) as e:
+                logger.error(
+                    "Payload/contract validation error: model=%s error=%s",
+                    model_id,
+                    str(e),
+                    extra={"stage": "payload_validation", "payload_hash": ph, "model_id": model_id},
+                )
+                return {
+                    "success": False,
+                    "message": f"❌ Ошибка в параметрах: {str(e)}\n\nНажмите /start для возврата в меню.",
+                    "result_urls": [],
+                    "result_object": None,
+                    "error_code": "INVALID_INPUT",
+                    "error_message": str(e),
+                    "task_id": None,
+                }
+
+            except Exception as e:
+                cls = classify_exception(e)
+                logger.error(
+                    "Error in generate code=%s error=%s",
+                    getattr(cls, "code", "EXC"),
+                    str(e),
+                    exc_info=True,
+                    extra={"stage": "exception", "payload_hash": ph, "model_id": model_id},
+                )
+                return {
+                    "success": False,
+                    "message": f"❌ Произошла ошибка: {str(e)}\n\nНажмите /start для возврата в меню.",
+                    "result_urls": [],
+                    "result_object": None,
+                    "error_code": getattr(cls, "code", "UNKNOWN_ERROR"),
+                    "error_message": str(e),
+                    "task_id": None,
+                }
 
 
 # Convenience functions
