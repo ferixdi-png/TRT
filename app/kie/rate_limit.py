@@ -1,66 +1,64 @@
+from __future__ import annotations
+
 import asyncio
-import random
+import hashlib
 import time
 from collections import deque
-from dataclasses import dataclass
-from typing import Deque, Optional, Dict, Any
-
-
-@dataclass(frozen=True)
-class RateLimitConfig:
-    """Configuration for a sliding-window rate limit."""
-
-    max_requests: int
-    per_seconds: float
-    safety_margin: float = 0.05  # small buffer to avoid edge bursts
 
 
 class SlidingWindowRateLimiter:
-    """Async sliding-window rate limiter (in-process).
+    """Simple async sliding-window limiter.
 
-    This queues callers (awaits) instead of failing fast, which is exactly
-    what we need for Kie: excess *new generation* requests are not queued
-    server-side and will return 429.
-
-    Note: This is process-local (Render typically runs 1 instance). If you
-    scale to multiple instances, you'd want a shared limiter (Redis).
+    Enforces up to `limit` acquisitions per `window_seconds`.
+    Designed for account-wide API limits (per API key).
     """
 
-    def __init__(self, cfg: RateLimitConfig, name: Optional[str] = None):
-        self.cfg = cfg
-        self.name = name or "rate_limiter"
+    def __init__(self, limit: int, window_seconds: float) -> None:
+        self.limit = max(1, int(limit))
+        self.window_seconds = float(window_seconds)
         self._lock = asyncio.Lock()
-        self._events: Deque[float] = deque()
-
-    def _prune(self, now: float) -> None:
-        cutoff = now - self.cfg.per_seconds
-        while self._events and self._events[0] <= cutoff:
-            self._events.popleft()
+        self._timestamps: deque[float] = deque()
 
     async def acquire(self) -> None:
         while True:
             async with self._lock:
                 now = time.monotonic()
-                self._prune(now)
+                cutoff = now - self.window_seconds
+                while self._timestamps and self._timestamps[0] <= cutoff:
+                    self._timestamps.popleft()
 
-                if len(self._events) < self.cfg.max_requests:
-                    self._events.append(now)
+                if len(self._timestamps) < self.limit:
+                    self._timestamps.append(now)
                     return
 
-                oldest = self._events[0]
-                wait_s = (oldest + self.cfg.per_seconds - now) + self.cfg.safety_margin
+                # Need to wait until the oldest timestamp exits the window.
+                wait_for = (self._timestamps[0] + self.window_seconds) - now
 
-            wait_s = max(0.01, wait_s)
-            # tiny jitter prevents stampedes when many coroutines wake together
-            jitter = random.uniform(0, min(0.25, wait_s * 0.1))
-            await asyncio.sleep(wait_s + jitter)
+            if wait_for > 0:
+                await asyncio.sleep(wait_for)
 
-    def snapshot(self) -> Dict[str, Any]:
-        now = time.monotonic()
-        self._prune(now)
-        return {
-            "name": self.name,
-            "in_window": len(self._events),
-            "max": self.cfg.max_requests,
-            "window_s": self.cfg.per_seconds,
-        }
+
+class KieAccountLimiter:
+    """Global (process-wide) limiter keyed by API key."""
+
+    _limiters: dict[str, SlidingWindowRateLimiter] = {}
+    _global_lock = asyncio.Lock()
+
+    @staticmethod
+    def _key(api_key: str) -> str:
+        # Avoid keeping raw keys in memory dict keys/logs.
+        return hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+
+    @classmethod
+    def for_key(cls, api_key: str, limit: int, window_seconds: float) -> SlidingWindowRateLimiter:
+        k = cls._key(api_key)
+        # Fast path
+        limiter = cls._limiters.get(k)
+        if limiter is not None:
+            return limiter
+
+        # Rare slow path (first time per key)
+        # We can't `await` here, so create optimistically; duplicates are fine and will be GC'd.
+        limiter = SlidingWindowRateLimiter(limit=limit, window_seconds=window_seconds)
+        cls._limiters[k] = limiter
+        return limiter

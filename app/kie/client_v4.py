@@ -3,7 +3,6 @@ Kie.ai API Client V4 - поддержка новой category-specific архи�
 Работает параллельно со старым client для совместимости.
 """
 import asyncio
-import random
 import logging
 import os
 from typing import Dict, Any, Optional
@@ -23,19 +22,10 @@ from app.kie.router import (
     get_base_url_for_category,
     load_v4_source_of_truth
 )
-from .rate_limit import SlidingWindowRateLimiter, RateLimitConfig
+
+from app.kie.rate_limit import KieAccountLimiter
 
 logger = logging.getLogger(__name__)
-
-_CREATE_RL = SlidingWindowRateLimiter(
-    RateLimitConfig(
-        max_requests=int(os.getenv("KIE_CREATE_RL_MAX", "18")),
-        per_seconds=float(os.getenv("KIE_CREATE_RL_WINDOW_S", "10")),
-        safety_margin=float(os.getenv("KIE_CREATE_RL_MARGIN_S", "0.05")),
-    ),
-)
-_CREATE_SEM = asyncio.Semaphore(int(os.getenv("KIE_CREATE_CONCURRENCY", "8")))
-
 
 
 class KieApiClientV4:
@@ -83,78 +73,110 @@ class KieApiClientV4:
             timeout=self.timeout
         )
     
-    async def create_task(self, model_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new generation task.
-
-        Kie enforces a hard per-account limit (documented as 20 new generation requests per 10 seconds).
-        Excess returns HTTP 429 and is NOT queued on their side. So we queue locally using:
-          - in-process sliding-window rate limiter
-          - concurrency semaphore
+    async def create_task(
+        self, 
+        model_id: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        endpoint = resolve_v4_endpoint(model_id, KIE_V4_ENDPOINTS)
-        if not endpoint:
-            return {"state": "fail", "error": f"Unknown model_id: {model_id}"}
+        Create task using category-specific endpoint.
+        
+        Args:
+            model_id: Model identifier (used to route to correct API)
+            payload: Request payload (already formatted for specific category)
+        
+        Returns:
+            Task creation response with taskId
+        """
+        category = get_api_category_for_model(model_id, self.source_v4)
+        if not category:
+            return {
+                "error": f"Unknown model category for {model_id}",
+                "state": "fail"
+            }
+        
+        base_url = get_base_url_for_category(category, self.source_v4)
+        endpoint = get_api_endpoint_for_model(model_id, self.source_v4)
+        
+        # Полный URL для category-specific API
+        url = f"{base_url}{endpoint}"
+        
+        logger.info(f"Creating task for {model_id} ({category}): POST {url}")
+        logger.debug(f"Payload: {payload}")
+        
+        # Account-wide limiter: Kie enforces 20 new generation requests / 10 seconds per account.
+        # Excess requests return 429 and are not queued.
+        limiter = KieAccountLimiter.for_key(
+            self.api_key,
+            limit=int(os.getenv("KIE_CREATE_RATE_LIMIT", "20")),
+            window_seconds=float(os.getenv("KIE_CREATE_RATE_WINDOW_SECONDS", "10")),
+        )
+        await limiter.acquire()
 
-        api_category = get_api_category_for_model(model_id)
-        adapter = get_v4_payload_adapter(model_id, api_category, endpoint)
-        adapted_payload = adapter(payload)
+        max_attempts = int(os.getenv("KIE_CREATE_MAX_RETRIES", "4"))
+        for attempt in range(max_attempts):
+            try:
+                response = await asyncio.to_thread(self._make_request, url, payload)
 
-        url = f"{endpoint}/v1/videos/task" if api_category == "video" else f"{endpoint}/api/v1/create"
+                logger.info(f"Response status: {response.status_code}")
+                logger.debug(f"Response body: {response.text[:500]}")
 
-        max_attempts = int(os.getenv("KIE_CREATE_MAX_ATTEMPTS", "6"))
-        base_sleep = float(os.getenv("KIE_CREATE_BASE_SLEEP_S", "1.0"))
-
-        await _CREATE_SEM.acquire()
-        try:
-            for attempt in range(1, max_attempts + 1):
-                await _CREATE_RL.acquire()
-
-                try:
-                    response = await asyncio.to_thread(
-                        requests.post,
-                        url,
-                        json=adapted_payload,
-                        headers=self._headers(),
-                        timeout=self.timeout,
-                    )
-                except requests.RequestException as e:
-                    # network/transient
-                    sleep_s = min(20.0, base_sleep * (2 ** (attempt - 1))) * (1.0 + random.random() * 0.25)
-                    logger.warning("Kie create_task request exception (attempt %s/%s): %s; sleeping %.2fs", attempt, max_attempts, e, sleep_s)
-                    await asyncio.sleep(sleep_s)
-                    continue
-
-                # Rate limit: respect Retry-After when possible
+                # Handle account rate-limit explicitly
                 if response.status_code == 429:
-                    retry_after = float(response.headers.get("Retry-After") or 10)
-                    sleep_s = max(retry_after, 1.0) * (1.0 + random.random() * 0.15)
-                    logger.warning("Kie create_task hit 429 (attempt %s/%s). retry_after=%.2fs", attempt, max_attempts, retry_after)
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        sleep_s = float(retry_after) if retry_after else 0.0
+                    except ValueError:
+                        sleep_s = 0.0
+                    # Fallback to a conservative backoff if header is absent.
+                    if sleep_s <= 0:
+                        sleep_s = min(10.0, 1.2 * (attempt + 1))
+                    logger.warning(
+                        "Kie rate limit (429) on create_task | model=%s attempt=%s/%s sleep=%.1fs",
+                        model_id,
+                        attempt + 1,
+                        max_attempts,
+                        sleep_s,
+                    )
                     await asyncio.sleep(sleep_s)
                     continue
 
-                # Transient upstream failures
-                if response.status_code in {500, 502, 503, 504}:
-                    sleep_s = min(20.0, base_sleep * (2 ** (attempt - 1))) * (1.0 + random.random() * 0.25)
-                    logger.warning("Kie create_task %s (attempt %s/%s). sleeping %.2fs", response.status_code, attempt, max_attempts, sleep_s)
+                # Retry a few times on transient server errors
+                if 500 <= response.status_code < 600 and attempt < max_attempts - 1:
+                    sleep_s = min(6.0, 0.8 * (attempt + 1))
+                    logger.warning(
+                        "Kie server error on create_task | status=%s model=%s attempt=%s/%s sleep=%.1fs",
+                        response.status_code,
+                        model_id,
+                        attempt + 1,
+                        max_attempts,
+                        sleep_s,
+                    )
                     await asyncio.sleep(sleep_s)
                     continue
 
-                if response.status_code != 200:
-                    return {
-                        "state": "fail",
-                        "error": f"HTTP {response.status_code}: {response.text[:500]}",
-                    }
+                response.raise_for_status()
+                return response.json()
 
-                try:
-                    return response.json()
-                except ValueError:
-                    return {"state": "fail", "error": "Invalid JSON response from Kie"}
+            except requests.RequestException as exc:
+                # Network/timeout issues: retry a bit, then fail.
+                if attempt < max_attempts - 1:
+                    sleep_s = min(6.0, 0.8 * (attempt + 1))
+                    logger.warning(
+                        "Create task attempt failed | model=%s attempt=%s/%s sleep=%.1fs err=%s",
+                        model_id,
+                        attempt + 1,
+                        max_attempts,
+                        sleep_s,
+                        str(exc),
+                    )
+                    await asyncio.sleep(sleep_s)
+                    continue
 
-            return {"state": "fail", "error": "Rate-limited / transient errors: exhausted retries"}
-        finally:
-            _CREATE_SEM.release()
-
-    async def get_record_info(self, task_id: str, model_id: Optional[str] = None) -> Dict[str, Any]:
+                logger.error(f"Create task failed: {exc}", exc_info=True)
+                return {"error": str(exc), "state": "fail"}
+    
+    async def get_record_info(self, task_id: str) -> Dict[str, Any]:
         """
         Get task record info (status checking).
         Этот endpoint все еще универсальный.
