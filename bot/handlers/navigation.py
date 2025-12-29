@@ -8,6 +8,7 @@ import logging
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.context import FSMContext
 
 from app.ui.catalog import get_counts
 from app.pricing.free_models import get_free_models
@@ -46,16 +47,19 @@ def _build_main_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 @router.callback_query(F.data == "main_menu")
-async def cb_main_menu(callback: CallbackQuery):
-    """Legacy alias: main_menu -> menu:main."""
-    callback.data = "menu:main"
-    return await cb_menu_main(callback)
+async def cb_main_menu(callback: CallbackQuery, state: FSMContext):
+    """Legacy alias: main_menu -> menu:main.
+
+    NOTE: aiogram v3 CallbackQuery is a frozen pydantic model; never mutate callback.data.
+    """
+    return await cb_menu_main(callback, state)
 
 
 @router.callback_query(F.data == "menu:main")
-async def cb_menu_main(callback: CallbackQuery):
-    """Show main menu."""
+async def cb_menu_main(callback: CallbackQuery, state: FSMContext):
+    """Show main menu and clear any ongoing FSM state."""
     await callback.answer()
+    await state.clear()
 
     try:
         counts = get_counts()
