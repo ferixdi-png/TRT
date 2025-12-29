@@ -10,6 +10,7 @@ import uuid
 from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime, timedelta
 
+import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
@@ -337,6 +338,25 @@ async def start_webhook_server(
     app.router.add_get("/", health)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/readyz", readyz)
+    # Optional callback endpoint for Kie.ai. Some endpoints require callBackUrl
+    # even if we also poll for results. Keeping it separate from the Telegram webhook
+    # path avoids exposing the bot webhook secret.
+    async def kie_callback(request: web.Request) -> web.Response:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+        logger.info(
+            "📩 Kie callback received | ip=%s size=%sb json=%s",
+            request.remote,
+            request.content_length or 0,
+            isinstance(payload, dict),
+        )
+        # We don't rely on callbacks for the main flow (we poll), but we keep the endpoint
+        # to satisfy providers that require it.
+        return web.json_response({"ok": True})
+
+    app.router.add_post("/kie/callback", kie_callback)
     app.router.add_get("/metrics", metrics_endpoint)
     
     # Webhook path probe (for manual testing - Telegram uses POST)
@@ -349,8 +369,9 @@ async def start_webhook_server(
             "note": "Telegram sends POST requests to this path"
         })
     
-    # Only GET (aiohttp auto-adds HEAD for GET routes)
+    # Only GET - HEAD is handled explicitly
     app.router.add_get(path, webhook_probe)
+    app.router.add_route("HEAD", path, webhook_probe)
 
     # Telegram webhook endpoint (aiogram handler with detailed logging)
     app.router.add_post(path, webhook_handler.handle_webhook)
@@ -384,6 +405,30 @@ async def start_webhook_server(
             log.warning(f"Media proxy: Invalid expiration format")
             return web.Response(status=401, text="Invalid signature")
         
+        async def _stream_telegram_file(file_url: str) -> web.StreamResponse | web.Response:
+            # Keep the bot token server-side (do not 302 redirect with token in URL)
+            req_headers = {}
+            if request.headers.get("Range"):
+                req_headers["Range"] = request.headers["Range"]
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(file_url, headers=req_headers) as resp:
+                    if resp.status not in (200, 206):
+                        log.warning(f"Media proxy: Telegram fetch failed | status={resp.status}")
+                        return web.Response(status=404, text="File not found")
+
+                    headers: Dict[str, str] = {}
+                    for h in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
+                        if h in resp.headers:
+                            headers[h] = resp.headers[h]
+
+                    stream = web.StreamResponse(status=resp.status, headers=headers)
+                    await stream.prepare(request)
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        await stream.write(chunk)
+                    await stream.write_eof()
+                    return stream
+
         # Check cache
         global _media_proxy_cache
         now = datetime.now()
@@ -391,15 +436,8 @@ async def start_webhook_server(
         if file_id in _media_proxy_cache:
             file_path, cached_at = _media_proxy_cache[file_id]
             if now - cached_at < _CACHE_TTL:
-                # Cache hit - redirect to Telegram CDN
                 file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_path}"
-                
-                # Support range requests for video/audio
-                headers = {"Location": file_url}
-                if request.headers.get("Range"):
-                    headers["Accept-Ranges"] = "bytes"
-                
-                return web.Response(status=302, headers=headers)
+                return await _stream_telegram_file(file_url)
             else:
                 # Cache expired
                 del _media_proxy_cache[file_id]
@@ -414,15 +452,10 @@ async def start_webhook_server(
             
             # Redirect to Telegram CDN
             file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_path}"
-            
-            # Support range requests
-            headers = {"Location": file_url}
-            if request.headers.get("Range"):
-                headers["Accept-Ranges"] = "bytes"
-            
+
             # Log without exposing tokens
             log.info(f"Media proxy: Resolved file_id (len={len(file_id)}) -> path")
-            return web.Response(status=302, headers=headers)
+            return await _stream_telegram_file(file_url)
         
         except Exception as e:
             log.warning(f"Media proxy: Failed to resolve file | error={type(e).__name__}")
