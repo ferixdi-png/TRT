@@ -5,6 +5,7 @@ Handles FREE tier models (no charge).
 """
 import logging
 from app.utils.trace import TraceContext, get_request_id
+import asyncio
 import time
 from typing import Dict, Any, Optional
 from uuid import uuid4
@@ -105,6 +106,16 @@ async def generate_with_payment(
         if charge_manager is None:
             charge_manager = get_charge_manager()
         db_service = getattr(charge_manager, 'db_service', None)
+
+        # AMOUNT_SAFEGUARD: if caller passed 0/None for paid models, compute price from source-of-truth
+        if (amount is None or float(amount) <= 0.0) and not is_free_model(model_id):
+            try:
+                from app.payments.pricing import get_price_breakdown
+                breakdown = get_price_breakdown(get_model_config(model_id), user_inputs)
+                amount = float(breakdown.user_price_rub)
+                logger.info(f"💰 Amount auto-computed: {amount:.2f} RUB")
+            except Exception as e:
+                logger.warning(f"Failed to auto-compute amount: {e}")
         
         # Check if model is FREE (TOP-5 cheapest)
         if is_free_model(model_id):
@@ -205,7 +216,17 @@ async def generate_with_payment(
                 logger.info("db_service not available - skipping generation event log (referral start)")
             
             start_time = time.time()
-            gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+            try:
+                gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+            except asyncio.CancelledError:
+                # user cancelled — restore referral free use
+                try:
+                    db = getattr(charge_manager, "db_service", None)
+                    if db is not None:
+                        await UserService(db).increment_metadata_counter(user_id, "referral_free_uses", +1)
+                except Exception as e:
+                    logger.warning(f"Failed to restore referral-free use after cancel: {e}")
+                raise
             duration_ms = int((time.time() - start_time) * 1000)
         
             success = gen_result.get('success', False)
@@ -277,7 +298,11 @@ async def generate_with_payment(
         
         if charge_result['status'] == 'already_committed':
             # Already paid, just generate
-            gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+            try:
+                gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+            except asyncio.CancelledError:
+                # Charge already committed; treat cancel as stopping the wait only
+                raise
             gen_result = _normalize_gen_result(gen_result)
             return {
                 **gen_result,
@@ -320,7 +345,15 @@ async def generate_with_payment(
             logger.info("db_service not available - skipping generation event log (paid start)")
         
         start_time = time.time()
-        gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        try:
+            gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        except asyncio.CancelledError:
+            # user cancelled — release reserved/pending charge
+            try:
+                await charge_manager.release_charge(charge_task_id, reason="cancelled")
+            except Exception as e:
+                logger.warning(f"Failed to release charge after cancel: {e}")
+            raise
         gen_result = _normalize_gen_result(gen_result)
         duration_ms = int((time.time() - start_time) * 1000)
         
