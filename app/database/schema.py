@@ -232,57 +232,53 @@ async def apply_schema(connection):
         END $$;
     """)
     
-
-    # Third: migrate legacy TEXT JSON columns to JSONB (best-effort, safe)
-    # Older DBs had jobs.input_json / jobs.result_json / ui_state.data as TEXT.
-    # We attempt to convert them to JSONB; if conversion fails, we keep TEXT and
-    # application code will fallback to JSON-string serialization.
+    # Backward-compat: some older DBs were created with jobs.input_json/result_json as TEXT.
+    # That breaks asyncpg JSON codec (dict -> expected str). Normalize to JSONB.
     await connection.execute("""
         DO $$
+        DECLARE
+            t_input  text;
+            t_result text;
         BEGIN
-            -- jobs.input_json -> JSONB
-            IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                 WHERE table_schema='public' AND table_name='jobs' AND column_name='input_json' AND udt_name='text'
-            ) THEN
+            SELECT data_type INTO t_input
+              FROM information_schema.columns
+             WHERE table_name = 'jobs' AND column_name = 'input_json'
+             LIMIT 1;
+
+            IF t_input IS NOT NULL AND t_input <> 'jsonb' THEN
                 BEGIN
                     ALTER TABLE jobs
-                        ALTER COLUMN input_json TYPE JSONB
-                        USING NULLIF(input_json, '')::jsonb;
+                        ALTER COLUMN input_json TYPE jsonb
+                        USING COALESCE(NULLIF(input_json::text, ''), '{}')::jsonb;
                 EXCEPTION WHEN others THEN
-                    RAISE NOTICE 'jobs.input_json: failed to convert TEXT -> JSONB (keeping TEXT)';
+                    -- Best effort salvage: if there are invalid JSON strings, fall back to empty objects.
+                    UPDATE jobs SET input_json = '{}' WHERE input_json IS NOT NULL;
+                    ALTER TABLE jobs
+                        ALTER COLUMN input_json TYPE jsonb
+                        USING '{}'::jsonb;
                 END;
             END IF;
 
-            -- jobs.result_json -> JSONB
-            IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                 WHERE table_schema='public' AND table_name='jobs' AND column_name='result_json' AND udt_name='text'
-            ) THEN
+            SELECT data_type INTO t_result
+              FROM information_schema.columns
+             WHERE table_name = 'jobs' AND column_name = 'result_json'
+             LIMIT 1;
+
+            IF t_result IS NOT NULL AND t_result <> 'jsonb' THEN
                 BEGIN
                     ALTER TABLE jobs
-                        ALTER COLUMN result_json TYPE JSONB
-                        USING NULLIF(result_json, '')::jsonb;
+                        ALTER COLUMN result_json TYPE jsonb
+                        USING COALESCE(NULLIF(result_json::text, ''), '{}')::jsonb;
                 EXCEPTION WHEN others THEN
-                    RAISE NOTICE 'jobs.result_json: failed to convert TEXT -> JSONB (keeping TEXT)';
-                END;
-            END IF;
-
-            -- ui_state.data -> JSONB
-            IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                 WHERE table_schema='public' AND table_name='ui_state' AND column_name='data' AND udt_name='text'
-            ) THEN
-                BEGIN
-                    ALTER TABLE ui_state
-                        ALTER COLUMN data TYPE JSONB
-                        USING COALESCE(NULLIF(data, ''), '{}')::jsonb;
-                EXCEPTION WHEN others THEN
-                    RAISE NOTICE 'ui_state.data: failed to convert TEXT -> JSONB (keeping TEXT)';
+                    UPDATE jobs SET result_json = '{}' WHERE result_json IS NOT NULL;
+                    ALTER TABLE jobs
+                        ALTER COLUMN result_json TYPE jsonb
+                        USING '{}'::jsonb;
                 END;
             END IF;
         END $$;
     """)
+
     logger.info("✅ Schema applied successfully (idempotent + migration-safe)")
 
 
