@@ -3,6 +3,7 @@ import logging
 import hmac
 import hashlib
 import os
+import time
 from typing import Dict, List, Optional, Any
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -102,16 +103,29 @@ def _parse_t2i_settings(text: str) -> dict:
     return out
 
 
-def _sign_file_id(file_id: str) -> str:
-    """Sign file ID for secure media proxy."""
+def _sign_file_id(file_id: str, exp: int) -> str:
+    """Sign (file_id, exp) for secure media proxy.
+
+    IMPORTANT: Must match app.webhook_server.media_proxy signature logic.
+    """
     secret = os.getenv("MEDIA_PROXY_SECRET", "default_proxy_secret_change_me")
-    signature = hmac.new(secret.encode(), file_id.encode(), hashlib.sha256).hexdigest()[:16]
+    payload = f"{file_id}:{exp}"
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
     return signature
 
 
 def _get_public_base_url() -> str:
     """Get PUBLIC_BASE_URL for media proxy."""
     return os.getenv("PUBLIC_BASE_URL", os.getenv("WEBHOOK_BASE_URL", "https://unknown.render.com")).rstrip("/")
+
+
+def _build_signed_media_url(file_id: str) -> str:
+    """Create a signed media proxy URL with expiration."""
+    base_url = _get_public_base_url()
+    # Default TTL: 30 minutes (enough for Kie to fetch once, short enough for safety)
+    exp = int(time.time()) + int(os.getenv("MEDIA_PROXY_TTL_SEC", "1800"))
+    sig = _sign_file_id(file_id, exp)
+    return f"{base_url}/media/telegram/{file_id}?sig={sig}&exp={exp}"
 
 
 # Wizard start handler (callback: wizard:start:<model_id>)
@@ -820,8 +834,7 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
             # Generate signed URL for media proxy
             base_url = _get_public_base_url()
             if base_url and base_url != "https://unknown.render.com":
-                sig = _sign_file_id(file_id)
-                media_url = f"{base_url}/media/telegram/{file_id}?sig={sig}"
+                media_url = _build_signed_media_url(file_id)
                 
                 # Save URL (will be passed to KIE API)
                 inputs[current_field.name] = media_url
