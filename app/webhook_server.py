@@ -369,24 +369,27 @@ async def start_webhook_server(
             "note": "Telegram sends POST requests to this path"
         })
     
-    # Only GET here; prevent aiohttp from auto-registering HEAD for GET.
-    # We add HEAD explicitly below to avoid route-duplication errors on startup.
-    get_has_auto_head_disabled = False
+    # Webhook path probe (GET).
+    # IMPORTANT:
+    # - Some aiohttp versions auto-register HEAD for GET.
+    # - On Render, it is easy to accidentally set TELEGRAM_WEBHOOK_PATH="/" which already has GET/HEAD.
+    # - Adding an explicit HEAD route can therefore crash the app on startup.
+    #
+    # We register only GET and NEVER register HEAD explicitly.
+    # If aiohttp adds HEAD automatically -> great.
+    # If not -> fine, we don't need a separate HEAD handler.
     try:
+        # Prefer disabling implicit HEAD for GET when supported.
+        # Even if HEAD exists elsewhere, we never add it explicitly here.
         app.router.add_get(path, webhook_probe, allow_head=False)
-        get_has_auto_head_disabled = True
     except TypeError:
-        # Very old aiohttp versions may not support allow_head.
-        # In that case GET will implicitly register HEAD, so we must not add HEAD again.
+        # Old aiohttp: allow_head is not supported.
+        # GET may auto-register HEAD; do not add HEAD separately.
         app.router.add_get(path, webhook_probe)
-
-    if get_has_auto_head_disabled:
-        try:
-            app.router.add_route("HEAD", path, webhook_probe)
-        except RuntimeError as e:
-            # Another route could have already registered HEAD for the same path.
-            if "method HEAD is already registered" not in str(e):
-                raise
+    except RuntimeError:
+        # Path might already be occupied (misconfigured TELEGRAM_WEBHOOK_PATH like "/").
+        # Probe endpoint is optional; never crash the app on startup.
+        logger.warning("Webhook probe GET route already exists for path=%s (skipping)", mask_path(path))
 
     # Telegram webhook endpoint (aiogram handler with detailed logging)
     app.router.add_post(path, webhook_handler.handle_webhook)
