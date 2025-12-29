@@ -25,6 +25,8 @@ from app.database.services import JobService
 from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
 
+from app.kie.normalize import detect_output_type
+
 logger = logging.getLogger(__name__)
 
 
@@ -214,6 +216,11 @@ async def start_generation(
                 if output_url:
                     try:
                         ot = (output_type or "").lower()
+                        # Some models in source_of_truth have wrong output_type (e.g. audio models marked as text).
+                        # Fallback to URL-based detection so UX stays correct.
+                        if not ("video" in ot or "image" in ot or "audio" in ot):
+                            ot = detect_output_type(output_url)
+
                         if "video" in ot:
                             await bot.send_video(message.chat.id, output_url)
                         elif "image" in ot:
