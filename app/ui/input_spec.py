@@ -282,9 +282,32 @@ def get_input_spec(model_config: Dict[str, Any]) -> InputSpec:
     """
     model_id = model_config.get("model_id", "unknown")
     
+    def _is_text2image(cfg: Dict[str, Any]) -> bool:
+        ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
+        fmt = (ui.get("format_group") or "").lower()
+        if fmt in {"text2image", "text-to-image", "t2i"}:
+            return True
+        cat = (cfg.get("category") or "").lower()
+        return cat in {"text-to-image", "t2i"}
+
+    def _suppress_t2i_defaults(spec: InputSpec, cfg: Dict[str, Any]) -> InputSpec:
+        """Hide technical defaults for text2image models.
+
+        These fields are auto-injected in app.kie.builder, and user can override them via wizard settings.
+        """
+        if not spec or not getattr(spec, "fields", None):
+            return spec
+        if not _is_text2image(cfg):
+            return spec
+
+        auto_fields = {"aspect_ratio", "aspectRatio", "num_images", "numImages", "seed", "seeds"}
+        spec.fields = [f for f in spec.fields if f.name not in auto_fields]
+        return spec
+
     # Try schema-based first
     if "input_schema" in model_config:
         spec = build_input_spec_from_schema(model_id, model_config["input_schema"])
+        spec = _suppress_t2i_defaults(spec, model_config)
         if spec.fields:
             return spec
     
@@ -292,4 +315,6 @@ def get_input_spec(model_config: Dict[str, Any]) -> InputSpec:
     category = model_config.get("category", "")
     output_type = model_config.get("output_type", "")
     
-    return build_input_spec_heuristic(model_id, category, output_type)
+    spec = build_input_spec_heuristic(model_id, category, output_type)
+    spec = _suppress_t2i_defaults(spec, model_config)
+    return spec
