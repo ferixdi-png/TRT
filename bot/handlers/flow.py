@@ -200,71 +200,36 @@ def _category_keyboard() -> InlineKeyboardMarkup:
 
 
 def _main_menu_keyboard() -> InlineKeyboardMarkup:
+    """Main menu.
+
+    IMPORTANT: everything must be reachable in 1–2 taps.
+    The previous version tried to render synthetic categories (video/image/text/audio)
+    but the registry actually contains Kie categories (text-to-video, image-to-image, ...),
+    which made most sections disappear and users couldn't find models.
     """
-    Main menu keyboard - Elite marketing UX for creators.
-    
-    ARCHITECTURE:
-    - Premium categories: Video, Images, Texts/Ads, Audio
-    - Quick access: FREE tier, Popular, My Projects
-    - Bottom: Balance, Support
-    - All 42 models accessible through categories/search
-    """
-    # Get actual categories from registry
-    grouped = _models_by_category()
-    
-    # Build elite menu
-    buttons = []
-    
-    # TOP ROW: Main creative categories
-    row1 = []
-    if 'video' in grouped and len(grouped['video']) > 0:
-        row1.append(InlineKeyboardButton(text="🎬 Видео", callback_data="cat:video"))
-    if 'image' in grouped and len(grouped['image']) > 0:
-        row1.append(InlineKeyboardButton(text="🖼 Изображения", callback_data="cat:image"))
-    if row1:
-        buttons.append(row1)
-    
-    # ROW 2: Content & Audio
-    row2 = []
-    if 'text' in grouped and len(grouped['text']) > 0:
-        row2.append(InlineKeyboardButton(text="✍️ Тексты", callback_data="cat:text"))
-    if 'audio' in grouped and len(grouped['audio']) > 0:
-        row2.append(InlineKeyboardButton(text="🎧 Аудио", callback_data="cat:audio"))
-    if row2:
-        buttons.append(row2)
-    
-    # ROW 3: Music & Tools
-    row3 = []
-    if 'music' in grouped and len(grouped['music']) > 0:
-        row3.append(InlineKeyboardButton(text="🎼 Музыка", callback_data="cat:music"))
-    if 'enhance' in grouped and len(grouped['enhance']) > 0:
-        row3.append(InlineKeyboardButton(text="🧰 Инструменты", callback_data="cat:enhance"))
-    if row3:
-        buttons.append(row3)
-    
-    # ROW 4: Quick access - FREE + Popular
-    buttons.append([
-        InlineKeyboardButton(text="🔥 Бесплатные", callback_data="menu:free"),
-        InlineKeyboardButton(text="⭐ Популярные", callback_data="menu:popular"),
-    ])
-    
-    # ROW 5: My Projects
-    buttons.append([
-        InlineKeyboardButton(text="💼 Мои проекты", callback_data="menu:history"),
-    ])
-    
-    # ROW 6: Balance & Pricing
-    buttons.append([
-        InlineKeyboardButton(text="💳 Баланс", callback_data="menu:balance"),
-        InlineKeyboardButton(text="💎 Тарифы", callback_data="menu:pricing"),
-    ])
-    
-    # ROW 7: Search & Support
-    buttons.append([
-        InlineKeyboardButton(text="🔍 Поиск", callback_data="menu:search"),
-        InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu:help"),
-    ])
-    
+
+    buttons = [
+        [
+            InlineKeyboardButton(text="📚 Все модели", callback_data="menu:all"),
+            InlineKeyboardButton(text="🗂 Категории", callback_data="menu:categories"),
+        ],
+        [
+            InlineKeyboardButton(text="🎁 Бесплатные", callback_data="menu:free"),
+            InlineKeyboardButton(text="🔥 Популярные", callback_data="menu:popular"),
+        ],
+        [
+            InlineKeyboardButton(text="💼 Мои проекты", callback_data="menu:history"),
+        ],
+        [
+            InlineKeyboardButton(text="💳 Баланс", callback_data="menu:balance"),
+            InlineKeyboardButton(text="💎 Тарифы", callback_data="menu:pricing"),
+        ],
+        [
+            InlineKeyboardButton(text="🔍 Поиск", callback_data="menu:search"),
+            InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu:help"),
+        ],
+    ]
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -1130,6 +1095,12 @@ async def categories_cb(callback: CallbackQuery, state: FSMContext) -> None:
         "📂 Все модели по категориям\n\nВыберите категорию:",
         reply_markup=_category_keyboard(),
     )
+
+
+@router.callback_query(F.data == "menu:all")
+async def all_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
+    """Alias for 'all models' entrypoint used in some keyboards."""
+    await categories_cb(callback, state)
 
 
 @router.callback_query(F.data == "menu:free")
