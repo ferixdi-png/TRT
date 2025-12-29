@@ -346,7 +346,7 @@ async def start_webhook_server(
             payload = await request.json()
         except Exception:
             payload = None
-        logger.info(
+        log.info(
             "📩 Kie callback received | ip=%s size=%sb json=%s",
             request.remote,
             request.content_length or 0,
@@ -389,7 +389,7 @@ async def start_webhook_server(
     except RuntimeError:
         # Path might already be occupied (misconfigured TELEGRAM_WEBHOOK_PATH like "/").
         # Probe endpoint is optional; never crash the app on startup.
-        logger.warning("Webhook probe GET route already exists for path=%s (skipping)", mask_path(path))
+        log.warning("Webhook probe GET route already exists for path=%s (skipping)", mask_path(path))
 
     # Telegram webhook endpoint (aiogram handler with detailed logging)
     app.router.add_post(path, webhook_handler.handle_webhook)
