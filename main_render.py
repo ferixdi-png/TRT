@@ -31,40 +31,63 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 
 class ProductionFormatter(logging.Formatter):
-    """Production-grade log formatter with request_id/task_id correlation."""
-    
+    """Production log formatter with correlation fields.
+
+    Required by Definition of Done:
+      errors must contain request_id + model + stage + payload_hash.
+    """
+
     def format(self, record):
-        # Add request_id if available (from trace context)
-        request_id = getattr(record, 'request_id', None)
-        if request_id:
-            record.msg = f"[req:{request_id[:8]}] {record.msg}"
-        
-        # Add task_id if available
-        task_id = getattr(record, 'task_id', None)
-        if task_id:
-            record.msg = f"[task:{task_id[:8]}] {record.msg}"
-        
-        # Mask user_id if present (GDPR compliance)
-        user_id = getattr(record, 'user_id', None)
-        if user_id:
+        # NOTE: We prefix record.msg for compatibility with existing log lines.
+        # Avoid injecting placeholder values ("-").
+
+        stage = getattr(record, "stage", None)
+        if stage and str(stage) != "-":
+            record.msg = f"[stage:{stage}] {record.msg}"
+
+        ph = getattr(record, "payload_hash", None)
+        if ph and str(ph) != "-":
+            record.msg = f"[ph:{str(ph)[:8]}] {record.msg}"
+
+        model_id = getattr(record, "model_id", None)
+        if model_id and str(model_id) != "-":
+            record.msg = f"[model:{model_id}] {record.msg}"
+
+        request_id = getattr(record, "request_id", None)
+        if request_id and str(request_id) != "-":
+            record.msg = f"[req:{str(request_id)[:8]}] {record.msg}"
+
+        task_id = getattr(record, "task_id", None)
+        if task_id and str(task_id) != "-":
+            record.msg = f"[task:{str(task_id)[:8]}] {record.msg}"
+
+        user_id = getattr(record, "user_id", None)
+        if user_id and str(user_id) != "-":
             masked_user = f"***{str(user_id)[-4:]}"
             record.msg = f"[user:{masked_user}] {record.msg}"
-        
+
         return super().format(record)
 
 
-# Configure logging with production formatter
+# Configure logging with production formatter (+ trace injection)
 handler = logging.StreamHandler()
-handler.setFormatter(ProductionFormatter(
-    fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-))
-
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    handlers=[handler],
-    force=True  # Override any existing config
+handler.setFormatter(
+    ProductionFormatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 )
+
+# Inject request_id/user_id/model_id from contextvars (no-op if not set)
+try:
+    from app.utils.trace import TraceLogFilter
+
+    # INSTANCE_ID is defined below; filter instance_id is optional.
+    handler.addFilter(TraceLogFilter())
+except Exception:
+    pass
+
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO), handlers=[handler], force=True)
 logger = logging.getLogger('main_render')
 
 INSTANCE_ID = os.environ.get('INSTANCE_ID') or str(uuid.uuid4())[:8]
@@ -99,10 +122,15 @@ def run_startup_selfcheck() -> None:
       - allowed model list exists and contains EXACTLY 42 unique model ids
       - source-of-truth registry contains ONLY these 42 ids (1:1)
     """
-    required = ["TELEGRAM_BOT_TOKEN", "KIE_API_KEY", "ADMIN_ID"]
-    missing = [k for k in required if not os.environ.get(k)]
-    if missing:
-        raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+    dry_run = os.getenv("DRY_RUN", "0").lower() in {"1", "true", "yes"}
+    test_mode = os.getenv("TEST_MODE", "0").lower() in {"1", "true", "yes"}
+
+    # In CI / dry runs we validate repo invariants without requiring secrets.
+    if not (dry_run or test_mode):
+        required = ["TELEGRAM_BOT_TOKEN", "KIE_API_KEY", "ADMIN_ID"]
+        missing = [k for k in required if not os.environ.get(k)]
+        if missing:
+            raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
 
     # Load allowlist from repo file (canonical)
     allow_path = os.path.join(os.path.dirname(__file__), "models", "ALLOWED_MODEL_IDS.txt")
