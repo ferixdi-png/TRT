@@ -43,7 +43,63 @@ async def _wizard_fail_and_return_to_menu(message: Message, state: FSMContext, r
 class WizardState(StatesGroup):
     """Wizard FSM states."""
     collecting_input = State()
+    settings_input = State()
     confirming = State()
+
+
+def _is_text2image_model_cfg(model_cfg: dict) -> bool:
+    """Best-effort check for text-to-image family (wizard-side)."""
+    try:
+        ui = model_cfg.get("ui") if isinstance(model_cfg.get("ui"), dict) else {}
+        fmt = (ui.get("format_group") or "").lower()
+        if fmt in {"text2image", "text-to-image", "t2i"}:
+            return True
+        cat = (model_cfg.get("category") or "").lower()
+        return cat in {"text-to-image", "t2i"}
+    except Exception:
+        return False
+
+
+def _parse_t2i_settings(text: str) -> dict:
+    """Parse lines like `aspect_ratio=16:9` into a dict.
+
+    Allowed keys: aspect_ratio, num_images, seed
+    """
+    out = {}
+    if not text:
+        return out
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        if k not in {"aspect_ratio", "num_images", "seed"}:
+            continue
+        if k == "aspect_ratio":
+            # basic validation: 1:1, 16:9, 9:16, etc.
+            if ":" not in v:
+                continue
+            a, b = v.split(":", 1)
+            if not (a.isdigit() and b.isdigit()):
+                continue
+            out[k] = f"{int(a)}:{int(b)}"
+        elif k == "num_images":
+            if not v.isdigit():
+                continue
+            n = int(v)
+            if not (1 <= n <= 4):
+                continue
+            out[k] = n
+        elif k == "seed":
+            try:
+                out[k] = int(v)
+            except Exception:
+                continue
+    return out
 
 
 def _sign_file_id(file_id: str) -> str:
@@ -451,6 +507,21 @@ async def show_field_input(message: Message, state: FSMContext, field) -> None:
         f"🧠 <b>{display_name}</b>  •  Шаг {step_num}/{total_fields}\n\n"
         f"{field_emoji} <b>{field.description or field.name}</b>\n\n"
     )
+
+    # Show current text2image settings (if any)
+    try:
+        if _is_text2image_model_cfg(model_config):
+            overrides = data.get("wizard_overrides", {}) or {}
+            if overrides:
+                # Keep it minimal
+                parts = []
+                for k in ("aspect_ratio", "num_images", "seed"):
+                    if k in overrides:
+                        parts.append(f"{k}={overrides[k]}")
+                if parts:
+                    text += f"⚙️ <b>Настройки:</b> <code>{' '.join(parts)}</code>\n\n"
+    except Exception:
+        pass
     
     if field.example:
         text += f"💡 <b>Пример:</b> <i>{field.example}</i>\n\n"
@@ -479,6 +550,10 @@ async def show_field_input(message: Message, state: FSMContext, field) -> None:
     
     # Build keyboard
     buttons = []
+
+    # Settings for text2image (no extra steps; just optional overrides)
+    if _is_text2image_model_cfg(model_config) and field and getattr(field, "name", "") in {"prompt", "text"}:
+        buttons.append([InlineKeyboardButton(text="⚙️ Настройки", callback_data="wizard:settings")])
     
     # Skip button for optional fields
     if not field.required:
@@ -536,6 +611,91 @@ async def wizard_skip_field(callback: CallbackQuery, state: FSMContext) -> None:
         await wizard_show_confirmation(callback, state)
     else:
         await show_field_input(callback.message, state, spec.fields[next_index])
+
+
+@router.callback_query(F.data == "wizard:settings", WizardState.collecting_input)
+async def wizard_open_settings(callback: CallbackQuery, state: FSMContext) -> None:
+    """Open quick settings for text2image defaults."""
+    await callback.answer()
+    data = await state.get_data()
+    model_config = data.get("model_config", {}) or {}
+    if not _is_text2image_model_cfg(model_config):
+        await callback.answer("⚙️ Настройки доступны только для text-to-image", show_alert=True)
+        return
+
+    overrides = data.get("wizard_overrides", {}) or {}
+    current = "\n".join([f"{k}={overrides[k]}" for k in ("aspect_ratio", "num_images", "seed") if k in overrides])
+    if not current:
+        current = "(пока пусто)"
+
+    text = (
+        "⚙️ <b>Настройки генерации</b>\n\n"
+        "Отправь одним сообщением строки формата <code>ключ=значение</code>:\n"
+        "<code>aspect_ratio=16:9</code>\n"
+        "<code>num_images=2</code>\n"
+        "<code>seed=123</code>\n\n"
+        f"Текущие: \n<code>{current}</code>\n\n"
+        "Я применю их к текущей генерации (можно менять каждый раз)."
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="wizard:settings_back")],
+        [InlineKeyboardButton(text="🏠 В меню", callback_data="menu:main")],
+    ])
+
+    await state.set_state(WizardState.settings_input)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "wizard:settings_back", WizardState.settings_input)
+async def wizard_settings_back(callback: CallbackQuery, state: FSMContext) -> None:
+    """Return from settings to the current field prompt."""
+    await callback.answer()
+    data = await state.get_data()
+    spec = data.get("wizard_spec")
+    idx = data.get("wizard_current_field_index", 0)
+    await state.set_state(WizardState.collecting_input)
+    if not spec or not getattr(spec, "fields", None) or idx >= len(spec.fields):
+        await _wizard_fail_and_return_to_menu(callback.message, state, "wizard_spec missing on settings_back")
+        return
+    await show_field_input(callback.message, state, spec.fields[idx])
+
+
+@router.message(WizardState.settings_input)
+async def wizard_settings_save(message: Message, state: FSMContext) -> None:
+    """Parse and store text2image settings, then return to the current field."""
+    data = await state.get_data()
+    model_config = data.get("model_config", {}) or {}
+    if not _is_text2image_model_cfg(model_config):
+        await state.set_state(WizardState.collecting_input)
+        await message.answer("⚠️ Настройки недоступны для этой модели")
+        return
+
+    parsed = _parse_t2i_settings(message.text or "")
+    if not parsed:
+        await message.answer(
+            "❌ Не понял настройки. Пример:\n<code>aspect_ratio=16:9\nnum_images=2\nseed=123</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    overrides = data.get("wizard_overrides", {}) or {}
+    overrides.update(parsed)
+    await state.update_data(wizard_overrides=overrides)
+
+    # Return to current field
+    spec = data.get("wizard_spec")
+    idx = data.get("wizard_current_field_index", 0)
+    await state.set_state(WizardState.collecting_input)
+    if not spec or not getattr(spec, "fields", None) or idx >= len(spec.fields):
+        await message.answer("✅ Настройки сохранены")
+        return
+
+    await message.answer("✅ Настройки применены")
+    await show_field_input(message, state, spec.fields[idx])
 
 
 @router.callback_query(F.data == "wizard:use_default", WizardState.collecting_input)
@@ -754,6 +914,16 @@ async def wizard_show_confirmation(message_or_callback, state: FSMContext) -> No
     
     for field_name, value in inputs.items():
         text += f"• {field_name}: {value}\n"
+
+    overrides = data.get("wizard_overrides", {}) or {}
+    if overrides:
+        # Keep only known keys for clarity
+        parts = []
+        for k in ("aspect_ratio", "num_images", "seed"):
+            if k in overrides:
+                parts.append(f"{k}={overrides[k]}")
+        if parts:
+            text += f"\n⚙️ Настройки: <code>{' '.join(parts)}</code>\n"
     
     text += "\n"
     
@@ -801,6 +971,11 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
     
     # Build payload from inputs
     payload = dict(inputs)  # Copy wizard inputs
+
+    # Apply quick settings overrides (text-to-image defaults)
+    overrides = data.get("wizard_overrides", {}) or {}
+    if overrides:
+        payload.update(overrides)
     
     # Add defaults from schema if missing
     schema = model_config.get("input_schema", {})
