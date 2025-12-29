@@ -411,21 +411,17 @@ def validate_payload_before_create_task(model_id: str, payload: Dict[str, Any], 
     if not isinstance(payload, dict):
         raise ModelContractError(f"Payload must be a dict, got {type(payload).__name__}")
 
-    # Determine payload format (wrapped vs direct)
-    forced_format = (model_schema or {}).get('payload_format') or (model_schema or {}).get('payloadFormat')
-    forced_format = str(forced_format).strip().lower() if forced_format is not None else ''
-
-    is_direct_model = forced_format in {'direct', 'flat'} or model_id in {'veo3_fast', 'V4'}
-
+    # Kie Market unified createTask expects the wrapped payload:
+    #   {"model": "<model>", "input": {...}, "callBackUrl": "..."}
+    # Models may be marked as payload_format=direct in the source-of-truth, but that only
+    # means the *fields inside input* are flat. We still require "input" at the root.
     if 'model' not in payload:
         raise ModelContractError("Payload is missing required root field 'model'")
 
-    if is_direct_model:
-        input_data = payload
-    else:
-        if 'input' not in payload or not isinstance(payload.get('input'), dict):
-            raise ModelContractError("Payload is missing required field 'input' (wrapped payload expected)")
-        input_data = payload['input']
+    if 'input' not in payload or not isinstance(payload.get('input'), dict):
+        raise ModelContractError("Payload is missing required field 'input' (Kie createTask requires wrapped payload)")
+
+    input_data = payload['input']
 
     # Normalize schema into properties + required list
     input_schema = (model_schema or {}).get('input_schema') or {}
@@ -465,7 +461,7 @@ def validate_payload_before_create_task(model_id: str, payload: Dict[str, Any], 
 
     if missing:
         raise ModelContractError(
-            f"Missing required field(s): {', '.join(missing)} (model={model_id}, format={'direct' if is_direct_model else 'wrapped'})"
+            f"Missing required field(s): {', '.join(missing)} (model={model_id}, format=wrapped)"
         )
 
     # Type validation for provided fields (best-effort)
@@ -496,6 +492,6 @@ def validate_payload_before_create_task(model_id: str, payload: Dict[str, Any], 
     logger.info(
         "Payload contract ok | model=%s format=%s keys=%s",
         model_id,
-        'direct' if is_direct_model else 'wrapped',
+        'direct' if False else 'wrapped',
         sorted(list(payload.keys())),
     )

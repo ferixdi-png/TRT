@@ -340,21 +340,29 @@ def build_payload(
 
         is_direct_format = force_direct or ((not has_input_wrapper) and looks_flat_fields and not looks_nested)
 
+        # Kie createTask requires input wrapper for V3. Treat 'direct' as flat input fields, not root-level payload.
+        is_direct_format = False
+
         # CRITICAL: Use api_endpoint for Kie.ai API (not model_id)
         api_endpoint = model_schema.get('api_endpoint', model_id)
         
-        # Build payload based on schema format
-        if is_direct_format:
-            # ПРЯМОЙ формат: параметры на верхнем уровне
-            payload = {}
-            logger.info(f"Using DIRECT format for {model_id} (no input wrapper)")
+        # Build payload for Kie createTask.
+        #
+        # IMPORTANT: Kie Market unified createTask expects an 'input' object for V3 models:
+        #   {"model": "<model>", "input": {...}, "callBackUrl": "..."}
+        # Even if the source-of-truth marks payload_format=direct, that refers to how the
+        # model's user fields are represented (flat properties), not that they belong at
+        # the payload root. Root-level user fields cause Kie to return 422 (input cannot be null).
+        payload = {
+            'model': api_endpoint,  # Use endpoint/model name for Kie
+            'input': {}             # All user fields go under 'input'
+        }
+        if payload_format_hint in {"direct", "flat"}:
+            logger.info(f"Using WRAPPED format for {model_id} (payload_format={payload_format_hint} -> input wrapper required)")
         else:
-            # ОБЫЧНЫЙ формат: параметры в input wrapper
-            payload = {
-                'model': api_endpoint,  # Use api_endpoint, not model_id
-                'input': {}  # All fields go into 'input' object
-            }
             logger.info(f"Using WRAPPED format for {model_id} (input wrapper)")
+
+        # From this point on, we always populate payload['input'] (never root fields) for V3.
     
     # Parse input_schema: support BOTH flat and nested formats
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
@@ -487,7 +495,7 @@ def build_payload(
             
             # КРИТИЧНО: Smart defaults для veo3_fast и V4
             # Эти модели имеют много required полей, но большинство имеют разумные defaults
-            elif is_direct_format and model_id == 'veo3_fast':
+            elif model_id == 'veo3_fast':
                 # veo3_fast defaults
                 defaults = {
                     'imageUrls': [],
@@ -504,7 +512,7 @@ def build_payload(
                 elif field_name in required_fields:
                     raise ValueError(f"Required field '{field_name}' is missing")
             
-            elif is_direct_format and model_id == 'V4':
+            elif model_id == 'V4':
                 # V4 defaults
                 defaults = {
                     'instrumental': False,
@@ -557,11 +565,7 @@ def build_payload(
                     except (ValueError, TypeError):
                         raise ValueError(f"Field '{field_name}' must be a number")
             
-            # КРИТИЧНО: Для ПРЯМОГО формата поля на верхнем уровне
-            if is_direct_format:
-                payload[field_name] = value
-            else:
-                payload['input'][field_name] = value
+            payload['input'][field_name] = value
     
     # Process optional fields
     for field_name in optional_fields:
@@ -591,26 +595,14 @@ def build_payload(
                 except (ValueError, TypeError):
                     continue
             
-            # КРИТИЧНО: Для ПРЯМОГО формата поля на верхнем уровне
-            if is_direct_format:
-                payload[field_name] = value
-            else:
-                payload['input'][field_name] = value
+            payload['input'][field_name] = value
     
-    # КРИТИЧНО: Для ПРЯМОГО формата добавляем model field
-    if is_direct_format:
-        if 'model' not in payload:
-            payload['model'] = api_endpoint
-            logger.debug(f"Added model field for direct format: {api_endpoint}")
 
     # Fill schema defaults (aspect_ratio, duration, etc.) when present.
     # This keeps wizard lean but matches real Kie contract.
     try:
         schema_for_defaults = {'properties': properties} if isinstance(properties, dict) else {}
-        if is_direct_format:
-            payload = _apply_schema_defaults(payload, schema_for_defaults)
-        else:
-            payload['input'] = _apply_schema_defaults(payload.get('input') or {}, schema_for_defaults)
+        payload['input'] = _apply_schema_defaults(payload.get('input') or {}, schema_for_defaults)
     except Exception:
         logger.debug("Failed to apply schema defaults", exc_info=True)
     
