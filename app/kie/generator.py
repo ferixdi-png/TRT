@@ -2,6 +2,8 @@
 End-to-end generator for Kie.ai models with heartbeat and error handling.
 """
 import asyncio
+import time
+import random
 import json
 import logging
 from typing import Dict, Any, Optional, Callable
@@ -16,6 +18,23 @@ from app.kie.router import is_v4_model, build_category_payload
 from app.utils.public_url import get_public_base_url
 
 logger = logging.getLogger(__name__)
+
+
+# Adaptive polling: reduces API spam during long generations (helps avoid secondary throttling).
+def _compute_poll_delay(elapsed_s: float) -> float:
+    if elapsed_s < 10:
+        base = 2.0
+    elif elapsed_s < 30:
+        base = 3.0
+    elif elapsed_s < 90:
+        base = 5.0
+    elif elapsed_s < 180:
+        base = 7.0
+    else:
+        base = 9.0
+
+    jitter = random.uniform(-0.25, 0.25)
+    return max(1.5, base + jitter)
 
 
 def _mask_for_logs(value, *, _depth: int = 0):
@@ -295,6 +314,7 @@ class KieGenerator:
             
             # Wait for completion with heartbeat
             start_time = datetime.now()
+            start_ts = time.monotonic()
             last_heartbeat = datetime.now()
             
             while True:
@@ -398,12 +418,14 @@ class KieGenerator:
                         last_heartbeat = datetime.now()
                     
                     # Wait before next check
-                    await asyncio.sleep(2)  # Check every 2 seconds
+                    delay = _compute_poll_delay(time.monotonic() - start_ts)
+                    await asyncio.sleep(delay)
                     continue
                 
                 else:
                     # Unknown state
-                    await asyncio.sleep(2)
+                    delay = _compute_poll_delay(time.monotonic() - start_ts)
+                    await asyncio.sleep(delay)
                     continue
         
         except (ValueError, ModelContractError) as e:
