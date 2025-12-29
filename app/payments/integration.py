@@ -10,6 +10,8 @@ import time
 from typing import Dict, Any, Optional
 from uuid import uuid4
 
+from app.utils.payload_hash import payload_hash
+
 from app.payments.charges import ChargeManager, get_charge_manager
 from app.kie.generator import KieGenerator
 from app.utils.metrics import track_generation
@@ -87,6 +89,8 @@ async def generate_with_payment(
         user_inputs = payload
     elif user_inputs is None:
         user_inputs = {}
+
+    ph = payload_hash({"model": model_id, "inputs": user_inputs})
     
     # Handle legacy user_id from kwargs
     if user_id is None and "user_id" in kwargs:
@@ -111,7 +115,16 @@ async def generate_with_payment(
         if (amount is None or float(amount) <= 0.0) and not is_free_model(model_id):
             try:
                 from app.payments.pricing import get_price_breakdown
-                breakdown = get_price_breakdown(get_model_config(model_id), user_inputs)
+                from app.kie.builder import get_model_config
+
+                model_cfg = get_model_config(model_id)
+                if not isinstance(model_cfg, dict):
+                    raise ValueError("model config not found")
+                # Ensure model_id exists for pricing module
+                model_cfg = dict(model_cfg)
+                model_cfg.setdefault("model_id", model_id)
+
+                breakdown = get_price_breakdown(model_cfg, user_inputs)
                 amount = float(breakdown.user_price_rub)
                 logger.info(f"💰 Amount auto-computed: {amount:.2f} RUB")
             except Exception as e:
