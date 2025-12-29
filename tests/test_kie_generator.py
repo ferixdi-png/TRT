@@ -95,7 +95,7 @@ async def test_fail_state(generator):
     """Test fail state handling."""
     # Mock client to return fail state
     class FailClient:
-        async def create_task(self, payload):
+        async def create_task(self, payload, callback_url=None, **kwargs):
             return {'taskId': 'fail_task'}
         
         async def get_record_info(self, task_id):
@@ -127,7 +127,7 @@ async def test_fail_state(generator):
 async def test_timeout(generator):
     """Test timeout handling."""
     class TimeoutClient:
-        async def create_task(self, payload):
+        async def create_task(self, payload, callback_url=None, **kwargs):
             return {'taskId': 'timeout_task'}
         
         async def get_record_info(self, task_id):
