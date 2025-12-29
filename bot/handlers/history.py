@@ -80,8 +80,30 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
             
             text += f"\n{idx}. {status_emoji} {model_name} ({format_price_rub(price)}) - {date_str}"
     
-    # Build keyboard with gallery option
+    # Build keyboard with quick job access
     keyboard_rows = []
+
+    # Add buttons for the most recent jobs (fast rerun path)
+    if jobs:
+        for idx, job in enumerate(jobs[:5], 1):
+            job_id = job.get("id")
+            model_id = job.get("model_id", "unknown")
+            status = job.get("status", "unknown")
+
+            status_emoji = {
+                "succeeded": "✅",
+                "failed": "❌",
+                "running": "🔄",
+                "queued": "⏱️",
+            }.get(status, "•")
+
+            model_name = model_id.split('/')[-1] if '/' in model_id else model_id
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text=f"{status_emoji} {idx}. {model_name}",
+                    callback_data=f"history:job:{job_id}",
+                )
+            ])
     
     if jobs and any(j.get("status") == "succeeded" for j in jobs):
         keyboard_rows.append([
@@ -99,6 +121,135 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("history:job:"))
+async def cb_history_job_details(callback: CallbackQuery, state: FSMContext):
+    """Show details for a specific job with rerun action."""
+    await callback.answer()
+
+    db_service = _get_db_service()
+    if not db_service:
+        await callback.answer("⚠️ База данных недоступна", show_alert=True)
+        return
+
+    from app.database.services import JobService
+
+    try:
+        job_id = int(callback.data.split(":", 2)[2])
+    except Exception:
+        await callback.answer("⚠️ Неверный идентификатор", show_alert=True)
+        return
+
+    job_service = JobService(db_service)
+    job = await job_service.get(job_id)
+    if not job or job.get("user_id") != callback.from_user.id:
+        await callback.answer("⚠️ Генерация не найдена", show_alert=True)
+        return
+
+    model_id = job.get("model_id", "unknown")
+    status = job.get("status", "unknown")
+    price = job.get("price_rub", 0)
+    created = job.get("created_at")
+
+    status_emoji = {
+        "succeeded": "✅",
+        "failed": "❌",
+        "running": "🔄",
+        "queued": "⏱️",
+        "draft": "📝",
+    }.get(status, "•")
+
+    date_str = created.strftime("%d.%m.%Y %H:%M") if created else "—"
+    model_name = model_id.split('/')[-1] if '/' in model_id else model_id
+
+    text = (
+        f"🧾 <b>Детали генерации</b>\n\n"
+        f"{status_emoji} <b>{model_name}</b>\n"
+        f"💰 {format_price_rub(price)}\n"
+        f"📅 {date_str}\n\n"
+    )
+
+    # Show result urls if any
+    result_json = job.get("result_json") or {}
+    urls = []
+    if isinstance(result_json, dict):
+        urls = result_json.get("result_urls") or result_json.get("resultUrls") or []
+    if urls:
+        text += "<b>Результаты:</b>\n"
+        for u in urls[:5]:
+            text += f"• {u}\n"
+        if len(urls) > 5:
+            text += f"… и ещё {len(urls) - 5}\n"
+        text += "\n"
+
+    # Error if failed
+    if status == "failed":
+        err = job.get("error_text")
+        if err:
+            text += f"<b>Ошибка:</b>\n<i>{err}</i>\n\n"
+
+    # Persist last job id in state for rerun
+    await state.update_data(history_last_job_id=job_id)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔁 Повторить с теми же параметрами", callback_data="history:rerun")],
+        [InlineKeyboardButton(text="⭐ В избранные модели", callback_data=f"fav:add:{model_id}")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="history:main")],
+    ])
+
+    await callback.message.edit_text(text, reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "history:rerun")
+async def cb_history_rerun(callback: CallbackQuery, state: FSMContext):
+    """Start wizard for the last opened job, prefilled, then show confirmation."""
+    await callback.answer()
+
+    db_service = _get_db_service()
+    if not db_service:
+        await callback.answer("⚠️ База данных недоступна", show_alert=True)
+        return
+
+    data = await state.get_data()
+    job_id = data.get("history_last_job_id")
+    if not job_id:
+        await callback.answer("⚠️ Сначала откройте генерацию из истории", show_alert=True)
+        return
+
+    from app.database.services import JobService
+    from app.ui.catalog import get_model
+    from app.ui.input_spec import get_input_spec
+    from bot.flows.wizard import WizardState, wizard_show_confirmation
+
+    job_service = JobService(db_service)
+    job = await job_service.get(int(job_id))
+    if not job or job.get("user_id") != callback.from_user.id:
+        await callback.answer("⚠️ Генерация не найдена", show_alert=True)
+        return
+
+    model_id = job.get("model_id", "unknown")
+    model_cfg = get_model(model_id)
+    if not model_cfg:
+        await callback.answer("⚠️ Модель недоступна", show_alert=True)
+        return
+
+    spec = get_input_spec(model_cfg)
+    inputs = job.get("input_json") or {}
+    if not isinstance(inputs, dict):
+        inputs = {}
+
+    # Prepare wizard state (no dead-end: user can confirm or edit)
+    await state.clear()
+    await state.set_state(WizardState.confirming)
+    await state.update_data(
+        model_config=model_cfg,
+        wizard_spec=spec,
+        wizard_inputs=inputs,
+        wizard_current_field_index=0,
+    )
+
+    await wizard_show_confirmation(callback, state)
 
 
 @router.callback_query(F.data == "history:gallery")
