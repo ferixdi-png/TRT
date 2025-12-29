@@ -10,82 +10,45 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _apply_schema_defaults(input_obj: Dict[str, Any], input_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill missing fields in input_obj using JSONSchema defaults.
+
+    Это ключевой фикс для Syntx-parity: часть моделей Kie.ai на практике требует
+    параметры (aspect_ratio, duration, etc.) даже если UI их не спрашивает,
+    но они присутствуют в schema с default. Мы добавляем такие defaults
+    централизованно, чтобы:
+      - wizard не разрастался вопросами
+      - dry-run валидация совпадала с реальным контрактом
+    """
+    if not isinstance(input_schema, dict):
+        return input_obj
+
+    props = input_schema.get("properties") or {}
+    if not isinstance(props, dict):
+        return input_obj
+
+    out = dict(input_obj or {})
+    for k, spec in props.items():
+        if k in out:
+            continue
+        if not isinstance(spec, dict):
+            continue
+        if "default" not in spec:
+            continue
+        # Respect explicit nulls in schema, but don't inject None by default.
+        dv = spec.get("default")
+        if dv is None:
+            continue
+        # Copy complex defaults to avoid shared state.
+        if isinstance(dv, (dict, list)):
+            out[k] = json.loads(json.dumps(dv))
+        else:
+            out[k] = dv
+
+    return out
+
+
 OVERLAY_PATH = Path("models") / "KIE_OVERLAY.json"
-
-
-# --- Auto-defaults for text-to-image models ---
-# Many Kie text2image endpoints require technical fields (aspect_ratio, num_images, seed)
-# even when the UI should only ask for a prompt.
-# We auto-inject safe defaults and allow user overrides from the wizard.
-_T2I_DEFAULTS: Dict[str, Any] = {
-    "aspect_ratio": "1:1",
-    "num_images": 1,
-}
-
-
-def _is_text2image_model(model_cfg: Dict[str, Any]) -> bool:
-    """Best-effort detection of the text-to-image family.
-
-    We purposely avoid maintaining a hardcoded allowlist of model IDs.
-    """
-    if not isinstance(model_cfg, dict):
-        return False
-
-    ui = model_cfg.get("ui") if isinstance(model_cfg.get("ui"), dict) else {}
-    fmt = (ui.get("format_group") or "").lower()
-    if fmt in {"text2image", "text-to-image", "t2i"}:
-        return True
-
-    category = (model_cfg.get("category") or "").lower()
-    if category in {"text-to-image", "t2i"}:
-        return True
-
-    # Heuristic fallback: output is image and schema requires a prompt
-    out = (model_cfg.get("output_type") or "").lower()
-    if out == "image":
-        sch = model_cfg.get("input_schema") if isinstance(model_cfg.get("input_schema"), dict) else {}
-        req = sch.get("required") if isinstance(sch.get("required"), list) else []
-        props = sch.get("properties") if isinstance(sch.get("properties"), dict) else {}
-        if "prompt" in req or "prompt" in props:
-            return True
-
-    return False
-
-
-def _inject_text2image_defaults(model_cfg: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """Inject safe defaults for text2image models.
-
-    We add both snake_case and camelCase aliases when we cannot infer the provider's
-    exact expected key (Kie endpoints vary). Extra keys are typically ignored.
-    """
-    if not _is_text2image_model(model_cfg):
-        return inputs
-    if not isinstance(inputs, dict):
-        return inputs
-
-    # Respect explicit user overrides if present.
-    ar = inputs.get("aspect_ratio") or inputs.get("aspectRatio")
-    ni = inputs.get("num_images") or inputs.get("numImages")
-
-    if not ar:
-        ar = _T2I_DEFAULTS["aspect_ratio"]
-        inputs.setdefault("aspect_ratio", ar)
-        inputs.setdefault("aspectRatio", ar)
-
-    if ni is None:
-        ni = _T2I_DEFAULTS["num_images"]
-        inputs.setdefault("num_images", ni)
-        inputs.setdefault("numImages", ni)
-
-    # Seed is optional for many models, but we support it as a user override.
-    if "seed" in inputs and "seeds" not in inputs:
-        try:
-            # Some endpoints expect a list of seeds.
-            inputs.setdefault("seeds", [int(inputs["seed"])])
-        except Exception:
-            pass
-
-    return inputs
 
 
 def _deep_merge_model_cfg(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
@@ -164,36 +127,20 @@ def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[
         pass
 
     # Apply per-model overlay (schema/category/output fixes).
-    # This is critical for correct UX (e.g. remove-background must request an image, not a prompt).
-    # Overlay file may be either:
-    #   {"overrides": {"model_id": {...}}}
-    # or legacy:
-    #   {"models": {"model_id": {...}}}
-    # or a plain dict keyed by model_id.
+    # This is critical for correct UX and correct payload building.
+    # IMPORTANT: overlay format historically changed; use a single loader.
     try:
-        if OVERLAY_PATH.exists():
-            with open(OVERLAY_PATH, "r", encoding="utf-8") as f:
-                overlay = json.load(f) or {}
+        from app.kie.overlay_loader import load_kie_overlay
 
-            models_overlay = None
-            if isinstance(overlay, dict):
-                if isinstance(overlay.get("overrides"), dict):
-                    models_overlay = overlay.get("overrides")
-                elif isinstance(overlay.get("models"), dict):
-                    models_overlay = overlay.get("models")
-                else:
-                    # Heuristic: if keys look like model_ids (vendor/name), treat as overrides.
-                    if any(isinstance(k, str) and "/" in k for k in overlay.keys()):
-                        models_overlay = overlay
-
-            models = data.get("models", {})
-            if isinstance(models, dict) and isinstance(models_overlay, dict):
-                for mid, ov in models_overlay.items():
-                    if mid in models and isinstance(models[mid], dict) and isinstance(ov, dict):
-                        models[mid] = _deep_merge_model_cfg(models[mid], ov)
-                data["models"] = models
+        models = data.get("models", {})
+        overrides = load_kie_overlay(OVERLAY_PATH) if OVERLAY_PATH.exists() else {}
+        if isinstance(models, dict) and overrides:
+            for mid, ov in overrides.items():
+                if mid in models and isinstance(models[mid], dict) and isinstance(ov, dict):
+                    models[mid] = _deep_merge_model_cfg(models[mid], ov)
+            data["models"] = models
     except Exception as e:
-        logger.warning(f"Failed to apply KIE overlay: {e}")
+        logger.warning("Failed to apply KIE overlay: %s", e)
 
 
     models = data.get("models", {})
@@ -284,16 +231,7 @@ def build_payload(
 
     from app.kie.validator import validate_model_inputs, validate_payload_before_create_task
 
-    # Normalize + inject automatic defaults (text-to-image family).
-    # This prevents the common Kie error: {"code":500,"msg":"This field is required"}
-    # when the backend expects aspect_ratio/num_images but the UX only asked for a prompt.
-    inputs: Dict[str, Any] = dict(user_inputs or {})
-    _inject_text2image_defaults(model_schema, inputs)
-
-    validate_model_inputs(model_id, model_schema, inputs)
-
-    # From here on, use normalized inputs everywhere.
-    user_inputs = inputs
+    validate_model_inputs(model_id, model_schema, user_inputs)
 
     # V7 format detection: has 'parameters' instead of 'input_schema'
     is_v7 = 'parameters' in model_schema and 'endpoint' in model_schema
@@ -390,7 +328,17 @@ def build_payload(
         looks_nested = schema_is_dict and bool(schema_keys & {"properties", "required", "optional"})
         looks_flat_fields = schema_is_dict and input_schema and all(isinstance(v, dict) for v in input_schema.values())
 
-        is_direct_format = (not has_input_wrapper) and looks_flat_fields and not looks_nested
+        # Respect explicit payload_format when present in the source of truth.
+        payload_format_hint = str(model_schema.get("payload_format") or "").lower()
+        force_direct = payload_format_hint == "direct"
+        if force_direct and has_input_wrapper:
+            logger.warning(
+                "payload_format=direct but schema has input wrapper; falling back to wrapped format | model=%s",
+                model_id,
+            )
+            force_direct = False
+
+        is_direct_format = force_direct or ((not has_input_wrapper) and looks_flat_fields and not looks_nested)
 
         # CRITICAL: Use api_endpoint for Kie.ai API (not model_id)
         api_endpoint = model_schema.get('api_endpoint', model_id)
@@ -418,10 +366,23 @@ def build_payload(
     # КРИТИЧНО: Для ПРЯМОГО формата (veo3_fast, V4) поля НЕ фильтруются
     # т.к. они УЖЕ на верхнем уровне и являются обязательными
     if is_direct_format:
-        # Для прямого формата берём ВСЕ поля из schema (включая системные)
-        properties = input_schema
-        required_fields = [k for k, v in properties.items() if v.get('required', False)]
-        optional_fields = [k for k in properties.keys() if k not in required_fields]
+        # Direct format: fields live at the payload root (no input wrapper)
+        if isinstance(input_schema, dict) and 'properties' in input_schema:
+            required_fields = input_schema.get('required', [])
+            properties = input_schema.get('properties', {}) or {}
+            optional_fields = [k for k in properties.keys() if k not in required_fields]
+        else:
+            properties = input_schema
+            required_fields = [k for k, v in properties.items() if v.get('required', False)]
+            optional_fields = [k for k in properties.keys() if k not in required_fields]
+
+        # Filter system fields for most direct models.
+        # (Keep legacy behavior for veo3_fast/V4 where system fields are part of the contract.)
+        if model_id not in {'veo3_fast', 'V4'}:
+            required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
+            optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
+            properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
+
         logger.debug(f"Direct format: {len(required_fields)} required, {len(optional_fields)} optional")
     elif 'properties' in input_schema:
         # Nested format
@@ -639,8 +600,19 @@ def build_payload(
     # КРИТИЧНО: Для ПРЯМОГО формата добавляем model field
     if is_direct_format:
         if 'model' not in payload:
-            payload['model'] = model_id
-            logger.debug(f"Added model field for direct format: {model_id}")
+            payload['model'] = api_endpoint
+            logger.debug(f"Added model field for direct format: {api_endpoint}")
+
+    # Fill schema defaults (aspect_ratio, duration, etc.) when present.
+    # This keeps wizard lean but matches real Kie contract.
+    try:
+        schema_for_defaults = {'properties': properties} if isinstance(properties, dict) else {}
+        if is_direct_format:
+            payload = _apply_schema_defaults(payload, schema_for_defaults)
+        else:
+            payload['input'] = _apply_schema_defaults(payload.get('input') or {}, schema_for_defaults)
+    except Exception:
+        logger.debug("Failed to apply schema defaults", exc_info=True)
     
     validate_payload_before_create_task(model_id, payload, model_schema)
     return payload

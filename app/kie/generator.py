@@ -17,6 +17,33 @@ from app.utils.public_url import get_public_base_url
 
 logger = logging.getLogger(__name__)
 
+
+def _mask_for_logs(value, *, _depth: int = 0):
+    """Mask potentially sensitive values in payload logs."""
+    if _depth > 6:
+        return "..."
+
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            ks = str(k).lower()
+            if any(x in ks for x in ("token", "api_key", "apikey", "secret", "authorization", "sig")):
+                out[k] = "***"
+            else:
+                out[k] = _mask_for_logs(v, _depth=_depth + 1)
+        return out
+
+    if isinstance(value, list):
+        return [_mask_for_logs(v, _depth=_depth + 1) for v in value[:50]]
+
+    if isinstance(value, str):
+        # Avoid logging huge prompts / base64 blobs
+        if len(value) > 500:
+            return value[:200] + "..." + value[-60:]
+        return value
+
+    return value
+
 # Test mode flag
 TEST_MODE = os.getenv('TEST_MODE', 'false').lower() == 'true'
 KIE_STUB = os.getenv('KIE_STUB', 'false').lower() == 'true'
@@ -179,6 +206,16 @@ class KieGenerator:
                 logger.info(f"🧩 payload built model={_model} keys={list(_p.keys())} prompt_len={_prompt_len}")
             except Exception:
                 logger.debug("payload built (failed to summarize)")
+
+            # Log full payload (masked) for debugging contract issues
+            try:
+                masked = _mask_for_logs(payload)
+                s = json.dumps(masked, ensure_ascii=False)
+                if len(s) > 2500:
+                    s = s[:2000] + "..." + s[-300:]
+                logger.info("📤 Kie payload (masked): %s", s)
+            except Exception:
+                logger.debug("Failed to log full payload")
             
             # Create task
             api_client = self._get_api_client()
@@ -371,6 +408,10 @@ class KieGenerator:
         
         except (ValueError, ModelContractError) as e:
             # Payload building error
+            if isinstance(e, ModelContractError):
+                logger.error("Model contract error: model=%s missing=%s", model_id, getattr(e, "missing", None))
+            else:
+                logger.error("Payload build error: model=%s error=%s", model_id, str(e))
             return {
                 'success': False,
                 'message': f"❌ Ошибка в параметрах: {str(e)}\n\nНажмите /start для возврата в меню.",
