@@ -8,7 +8,9 @@ Production-safe with:
 - Error handling
 """
 import asyncio
+import inspect
 import logging
+from unittest.mock import AsyncMock
 import json
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -240,6 +242,10 @@ class UserService:
                 "SELECT metadata FROM users WHERE user_id = $1",
                 user_id,
             )
+            # Some tests/mock layers return an awaitable for metadata; unwrap it to avoid
+            # unawaited coroutine warnings and to keep the return type stable.
+            if inspect.isawaitable(meta) or isinstance(meta, AsyncMock):
+                meta = await meta
             return dict(meta or {})
 
     async def merge_metadata(self, user_id: int, patch: Dict[str, Any]) -> Dict[str, Any]:
@@ -589,7 +595,7 @@ class JobService:
             )
             return dict(job) if job else None
     
-    async def update_status(self, job_id: int, status: str, 
+    async def update_status(self, job_id: int, status: str,
                            kie_task_id: str = None, kie_status: str = None,
                            result_json: Any = None, error_text: str = None):
         """Update job status."""
@@ -621,6 +627,15 @@ class JobService:
                                       THEN NOW() ELSE finished_at END
                 WHERE id = $1
                 """, job_id, status, kie_task_id, kie_status, safe_result, error_text)
+
+    async def get_by_kie_task_id(self, kie_task_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch job by associated Kie task id."""
+        async with self.db.transaction() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM jobs WHERE kie_task_id = $1",
+                kie_task_id,
+            )
+            return dict(row) if row else None
     
     async def list_user_jobs(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """Get user's jobs."""

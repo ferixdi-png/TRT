@@ -2193,7 +2193,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         flow_ctx.collected = dict(data.get("user_inputs") or {})
     uid = callback.from_user.id if callback.from_user else 0
     rid = get_request_id()
-    test_mode = str(os.getenv("TEST_MODE", "1")).lower() in {"1", "true", "yes"}
+    test_mode = str(os.getenv("TEST_MODE", "0")).lower() in {"1", "true", "yes"}
 
 
     with TraceContext(user_id=uid, model_id=flow_ctx.model_id, request_id=rid):

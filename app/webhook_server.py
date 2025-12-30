@@ -342,6 +342,9 @@ async def start_webhook_server(
     # even if we also poll for results. Keeping it separate from the Telegram webhook
     # path avoids exposing the bot webhook secret.
     async def kie_callback(request: web.Request) -> web.Response:
+        from app.database.service import db_service
+        from app.database.services import JobService
+        from app.kie.callback_handler import process_kie_callback
         try:
             payload = await request.json()
         except Exception:
@@ -354,6 +357,13 @@ async def start_webhook_server(
             request.content_length or 0,
             isinstance(payload, dict),
         )
+        if db_service and db_service.pool and isinstance(payload, dict):
+            try:
+                job_id = await process_kie_callback(payload, JobService(db_service))
+                if job_id:
+                    log.info("💾 Kie callback persisted job_id=%s", job_id)
+            except Exception:
+                log.exception("Failed to persist Kie callback")
         # We don't rely on callbacks for the main flow (we poll), but we keep the endpoint
         # to satisfy providers that require it.
         return web.json_response({"ok": True})

@@ -159,8 +159,18 @@ def build_input_spec_from_schema(model_id: str, schema: Dict[str, Any]) -> Input
         logger.warning(f"No schema properties for {model_id}, using empty spec")
         return InputSpec(model_id=model_id, fields=[])
     
-    required_fields = schema.get("required", [])
-    properties = schema.get("properties", {})
+    required_fields = list(schema.get("required", []))
+    properties = dict(schema.get("properties", {}))
+
+    # FREE invariant: z-image must expose aspect_ratio even if overlay/schema snapshot lacks it.
+    if model_id == "z-image" and "aspect_ratio" not in properties:
+        properties["aspect_ratio"] = {
+            "type": "string",
+            "enum": ["1:1", "4:3", "3:4", "16:9", "9:16"],
+            "default": "1:1",
+        }
+        if "aspect_ratio" not in required_fields:
+            required_fields.append("aspect_ratio")
     
     for field_name, field_schema in properties.items():
         field_type_str = field_schema.get("type", "string")
@@ -291,17 +301,12 @@ def get_input_spec(model_config: Dict[str, Any]) -> InputSpec:
         return cat in {"text-to-image", "t2i"}
 
     def _suppress_t2i_defaults(spec: InputSpec, cfg: Dict[str, Any]) -> InputSpec:
-        """Hide technical defaults for text2image models.
+        """Expose full schema for text2image models (required + optional).
 
-        These fields are auto-injected in app.kie.builder, and user can override them via wizard settings.
+        Previous iterations removed common fields (aspect_ratio/num_images/seed),
+        but product requirement now demands users can set both required and optional
+        inputs per schema. Keep schema intact for UI rendering.
         """
-        if not spec or not getattr(spec, "fields", None):
-            return spec
-        if not _is_text2image(cfg):
-            return spec
-
-        auto_fields = {"aspect_ratio", "aspectRatio", "num_images", "numImages", "seed", "seeds"}
-        spec.fields = [f for f in spec.fields if f.name not in auto_fields]
         return spec
 
     # Try schema-based first
