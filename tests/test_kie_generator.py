@@ -224,6 +224,46 @@ def test_parse_record_info_waiting():
 
 
 @pytest.mark.asyncio
+async def test_z_image_create_task_injects_aspect_ratio():
+    """Ensure create_task gets aspect_ratio even when user input is empty."""
+
+    class CapturingClient:
+        def __init__(self):
+            self.last_payload = None
+
+        async def create_task(self, payload, callback_url=None, **kwargs):
+            self.last_payload = payload
+            return {"code": 200, "msg": "success", "data": {"taskId": "task-1"}}
+
+        async def get_record_info(self, task_id):
+            return {
+                "state": "success",
+                "resultJson": json.dumps({"resultUrls": ["https://example.com/res.jpg"]}),
+            }
+
+    generator = KieGenerator()
+    generator.source_of_truth = {
+        "models": [
+            {
+                "model_id": "z-image",
+                "payload_format": "direct",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"prompt": {"type": "string"}},
+                    "required": ["prompt"],
+                },
+            }
+        ]
+    }
+    generator.api_client = CapturingClient()
+
+    result = await generator.generate("z-image", {"prompt": "котик", "aspect_ratio": ""}, timeout=2)
+
+    assert result["success"] is True
+    assert generator.api_client.last_payload["input"]["aspect_ratio"] == "1:1"
+
+
+@pytest.mark.asyncio
 async def test_stub_client_supports_dual_signatures_and_polling():
     generator = KieGenerator()
     stub = generator._get_stub_client()
