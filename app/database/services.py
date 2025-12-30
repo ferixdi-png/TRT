@@ -595,7 +595,7 @@ class JobService:
             )
             return dict(job) if job else None
     
-    async def update_status(self, job_id: int, status: str, 
+    async def update_status(self, job_id: int, status: str,
                            kie_task_id: str = None, kie_status: str = None,
                            result_json: Any = None, error_text: str = None):
         """Update job status."""
@@ -627,16 +627,65 @@ class JobService:
                                       THEN NOW() ELSE finished_at END
                 WHERE id = $1
                 """, job_id, status, kie_task_id, kie_status, safe_result, error_text)
+
+    async def get_by_kie_task_id(self, kie_task_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch job by associated Kie task id."""
+        async with self.db.transaction() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM jobs WHERE kie_task_id = $1",
+                kie_task_id,
+            )
+            return dict(row) if row else None
+
+    async def mark_replied(self, job_id: int, result_json: Any = None, error_text: str | None = None) -> bool:
+        """Atomically set replied_at if not already set.
+
+        Returns True only for the first caller; subsequent calls are no-ops (False).
+        """
+        async with self.db.transaction() as conn:
+            try:
+                row = await conn.fetchrow(
+                    """
+                    UPDATE jobs
+                       SET replied_at = NOW(),
+                           result_json = COALESCE($2, result_json),
+                           error_text = COALESCE($3, error_text),
+                           updated_at = NOW()
+                     WHERE id = $1 AND replied_at IS NULL
+                 RETURNING replied_at
+                    """,
+                    job_id,
+                    result_json,
+                    error_text,
+                )
+            except (asyncpg.exceptions.DataError, TypeError):
+                safe_result = _to_json_str(result_json) if result_json is not None else None
+                row = await conn.fetchrow(
+                    """
+                    UPDATE jobs
+                       SET replied_at = NOW(),
+                           result_json = COALESCE($2, result_json),
+                           error_text = COALESCE($3, error_text),
+                           updated_at = NOW()
+                     WHERE id = $1 AND replied_at IS NULL
+                 RETURNING replied_at
+                    """,
+                    job_id,
+                    safe_result,
+                    error_text,
+                )
+            return bool(row)
     
     async def list_user_jobs(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get user's jobs."""
+        """Get user's jobs with result/error fields for history."""
         async with self.db.transaction() as conn:
             rows = await conn.fetch("""
-                SELECT id, model_id, status, price_rub, created_at, finished_at
-                FROM jobs
-                WHERE user_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2
+                SELECT id, model_id, status, price_rub, created_at, finished_at,
+                       result_json, error_text, replied_at
+                  FROM jobs
+                 WHERE user_id = $1
+              ORDER BY created_at DESC
+                 LIMIT $2
             """, user_id, limit)
             return [dict(row) for row in rows]
 

@@ -264,6 +264,41 @@ async def test_z_image_create_task_injects_aspect_ratio():
 
 
 @pytest.mark.asyncio
+ codex/audit-and-fix-first-free-model-i39rtr
+async def test_progress_callback_is_awaited(monkeypatch):
+    polls = 0
+
+    class StubClient:
+        async def create_task(self, payload, callback_url=None, **kwargs):
+            return {"code": 200, "data": {"taskId": "task-progress"}}
+
+        async def get_record_info(self, task_id):
+            nonlocal polls
+            polls += 1
+            if polls == 1:
+                return {"state": "waiting", "progress": 25}
+            return {"state": "success", "resultJson": json.dumps({"resultUrls": ["https://example.com/out"]})}
+
+    generator = KieGenerator(api_client=StubClient())
+    generator._heartbeat_interval = 0
+    progress_cb = AsyncMock()
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    result = await generator.generate(
+        "z-image",
+        {"prompt": "cat", "aspect_ratio": "1:1"},
+        progress_callback=progress_cb,
+        timeout=5,
+    )
+
+    assert result["success"] is True
+    progress_cb.assert_awaited()
+
+
+@pytest.mark.asyncio
+
+ main
 async def test_stub_client_supports_dual_signatures_and_polling():
     generator = KieGenerator()
     stub = generator._get_stub_client()

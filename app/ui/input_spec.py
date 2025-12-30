@@ -301,17 +301,12 @@ def get_input_spec(model_config: Dict[str, Any]) -> InputSpec:
         return cat in {"text-to-image", "t2i"}
 
     def _suppress_t2i_defaults(spec: InputSpec, cfg: Dict[str, Any]) -> InputSpec:
-        """Hide technical defaults for text2image models.
+        """Expose full schema for text2image models (required + optional).
 
-        These fields are auto-injected in app.kie.builder, and user can override them via wizard settings.
+        Previous iterations removed common fields (aspect_ratio/num_images/seed),
+        but product requirement now demands users can set both required and optional
+        inputs per schema. Keep schema intact for UI rendering.
         """
-        if not spec or not getattr(spec, "fields", None):
-            return spec
-        if not _is_text2image(cfg):
-            return spec
-
-        auto_fields = {"aspect_ratio", "aspectRatio", "num_images", "numImages", "seed", "seeds"}
-        spec.fields = [f for f in spec.fields if f.name not in auto_fields]
         return spec
 
     # Try schema-based first

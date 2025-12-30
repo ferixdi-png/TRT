@@ -1446,7 +1446,7 @@ async def balance_cb(callback: CallbackQuery) -> None:
 async def history_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.clear()
-    history = get_charge_manager().get_user_history(callback.from_user.id, limit=10)
+    history = await get_charge_manager().get_user_history_async(callback.from_user.id, limit=10)
     
     if not history:
         await callback.message.edit_text(
@@ -1490,7 +1490,7 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.edit_text("⚠️ Ошибка.")
         return
     
-    history = get_charge_manager().get_user_history(callback.from_user.id, limit=10)
+    history = await get_charge_manager().get_user_history_async(callback.from_user.id, limit=10)
     if idx >= len(history):
         await callback.message.edit_text("⚠️ Генерация не найдена.")
         return

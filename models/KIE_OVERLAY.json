@@ -346,6 +346,17 @@
       }
     },
     "google/imagen4-fast": {
+      "input_schema": {
+        "type": "object",
+        "required": ["prompt"],
+        "properties": {
+          "prompt": {"type": "string", "maxLength": 10000},
+          "negative_prompt": {"type": "string", "maxLength": 10000},
+          "aspect_ratio": {"type": "string", "enum": ["1:1", "4:3", "3:4", "16:9", "9:16"], "default": "1:1"},
+          "num_images": {"type": "string", "enum": ["1", "2", "3", "4"], "default": "1"},
+          "seed": {"type": "number"}
+        }
+      },
       "ui": {
         "popular_score": 90,
         "format_group": "text2image",

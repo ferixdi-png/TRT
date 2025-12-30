@@ -1,3 +1,4 @@
+import asyncio
 import os
 from types import SimpleNamespace
 
@@ -16,9 +17,16 @@ async def test_generate_with_payment_minimal(monkeypatch):
 
     captured = {}
 
-    async def fake_generate(self, model_id, user_inputs, progress_callback=None, timeout=300):
+    async def fake_generate(self, model_id, user_inputs, progress_callback=None, timeout=300, task_id_callback=None):
         captured["model_id"] = model_id
         captured["user_inputs"] = dict(user_inputs)
+        if task_id_callback:
+            if asyncio.iscoroutinefunction(task_id_callback):
+                await task_id_callback("stub-task")
+            else:
+                maybe_coro = task_id_callback("stub-task")
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
         return {"success": True, "result_urls": ["https://example.com/out.png"], "task_id": "stub-task"}
 
     monkeypatch.setattr(integration.KieGenerator, "generate", fake_generate)
