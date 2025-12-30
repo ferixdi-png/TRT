@@ -499,8 +499,15 @@ def build_payload(
             # Common field mappings
             if field_name in ['prompt', 'text', 'input', 'message']:
                 value = user_inputs.get('text') or user_inputs.get('prompt') or user_inputs.get('input')
-            elif field_name in ['url', 'link', 'source_url']:
-                value = user_inputs.get('url') or user_inputs.get('link')
+            elif field_name in ['url', 'link', 'source_url', 'image_url', 'image', 'video_url', 'audio_url']:
+                value = (
+                    user_inputs.get('url')
+                    or user_inputs.get('link')
+                    or user_inputs.get('image_url')
+                    or user_inputs.get('image')
+                    or user_inputs.get('video_url')
+                    or user_inputs.get('audio_url')
+                )
             elif field_name in ['file', 'file_id', 'file_url']:
                 value = user_inputs.get('file') or user_inputs.get('file_id') or user_inputs.get('file_url')
         
@@ -622,7 +629,15 @@ def build_payload(
         payload['input'] = _apply_schema_defaults(payload.get('input') or {}, schema_for_defaults)
     except Exception:
         logger.debug("Failed to apply schema defaults", exc_info=True)
-    
+
+    # FREE tier invariant: recraft/remove-background requires `image` (URL) as the primary field.
+    # Keep `image_url` for schema compatibility but mirror into `image` to satisfy Kie contract/tests.
+    if model_id == "recraft/remove-background":
+        image_value = payload['input'].get('image') or payload['input'].get('image_url')
+        if image_value:
+            payload['input'].setdefault('image_url', image_value)
+            payload['input']['image'] = image_value
+
     validate_payload_before_create_task(model_id, payload, model_schema)
     return payload
 
