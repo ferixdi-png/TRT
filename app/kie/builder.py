@@ -634,6 +634,11 @@ def build_payload(
     except Exception:
         logger.debug("Failed to apply schema defaults", exc_info=True)
 
+    # Hard guard: z-image must always send aspect_ratio even if overlay defaults are missing
+    # (protects against registry snapshots without overlay defaults, reproducing prod 500).
+    if model_id == "z-image" and 'aspect_ratio' not in payload['input']:
+        payload['input']['aspect_ratio'] = "1:1"
+
     # FREE tier invariant: recraft/remove-background requires `image` (URL) as the primary field.
     # Keep `image_url` for schema compatibility but mirror into `image` to satisfy Kie contract/tests.
     if model_id == "recraft/remove-background":

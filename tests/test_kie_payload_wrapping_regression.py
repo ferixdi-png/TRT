@@ -53,6 +53,12 @@ def test_z_image_payload_adds_default_aspect_ratio():
     assert payload["input"]["aspect_ratio"] == "1:1"
 
 
+def test_z_image_payload_injects_aspect_ratio_without_overlay(source_of_truth_snapshot):
+    payload = build_payload("z-image", {"prompt": "котик"}, source_of_truth_snapshot)
+
+    assert payload["input"]["aspect_ratio"] == "1:1"
+
+
 def test_google_imagen4_fast_payload_is_wrapped(google_free_snapshot):
     payload = build_payload("google/imagen4-fast", {"prompt": "котик"}, google_free_snapshot)
 
