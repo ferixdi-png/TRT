@@ -636,6 +636,45 @@ class JobService:
                 kie_task_id,
             )
             return dict(row) if row else None
+
+    async def mark_replied(self, job_id: int, result_json: Any = None, error_text: str | None = None) -> bool:
+        """Atomically set replied_at if not already set.
+
+        Returns True only for the first caller; subsequent calls are no-ops (False).
+        """
+        async with self.db.transaction() as conn:
+            try:
+                row = await conn.fetchrow(
+                    """
+                    UPDATE jobs
+                       SET replied_at = NOW(),
+                           result_json = COALESCE($2, result_json),
+                           error_text = COALESCE($3, error_text),
+                           updated_at = NOW()
+                     WHERE id = $1 AND replied_at IS NULL
+                 RETURNING replied_at
+                    """,
+                    job_id,
+                    result_json,
+                    error_text,
+                )
+            except (asyncpg.exceptions.DataError, TypeError):
+                safe_result = _to_json_str(result_json) if result_json is not None else None
+                row = await conn.fetchrow(
+                    """
+                    UPDATE jobs
+                       SET replied_at = NOW(),
+                           result_json = COALESCE($2, result_json),
+                           error_text = COALESCE($3, error_text),
+                           updated_at = NOW()
+                     WHERE id = $1 AND replied_at IS NULL
+                 RETURNING replied_at
+                    """,
+                    job_id,
+                    safe_result,
+                    error_text,
+                )
+            return bool(row)
     
     async def list_user_jobs(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """Get user's jobs."""

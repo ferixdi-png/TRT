@@ -26,6 +26,7 @@ from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
 
 from app.kie.normalize import detect_output_type
+from app.utils.trace import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,13 @@ async def start_generation(
                     error_text=None,
                 )
 
+                if not await job_service.mark_replied(job_id, result_json=result):
+                    logger.info(
+                        "reply_once skipped",
+                        extra={"stage": "reply", "request_id": get_request_id(), "task_id": kie_task_id, "model_id": model_id},
+                    )
+                    return
+
                 # Result UX
                 try:
                     await bot.edit_message_text(
@@ -248,6 +256,13 @@ async def start_generation(
                 )
 
                 err = result.get("error") or result.get("message") or "Неизвестная ошибка"
+
+                if not await job_service.mark_replied(job_id, result_json=result, error_text=str(err)):
+                    logger.info(
+                        "reply_once skipped",
+                        extra={"stage": "reply", "request_id": get_request_id(), "task_id": kie_task_id, "model_id": model_id},
+                    )
+                    return
                 try:
                     await bot.edit_message_text(
                         chat_id=message.chat.id,
