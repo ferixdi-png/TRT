@@ -12,6 +12,8 @@ from typing import Dict, Any
 import requests
 
 from app.utils.public_url import get_public_base_url
+from app.utils.payload_hash import payload_hash
+from app.utils.trace import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +37,20 @@ class KieApiClient:
         }
 
     def _post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info(f"POST {url} with payload: {payload}")
+        ph = payload_hash(payload)
+        logger.info(
+            "POST %s | model=%s",
+            url,
+            payload.get("model"),
+            extra={"stage": "api_post", "payload_hash": ph, "model_id": payload.get("model"), "request_id": get_request_id()},
+        )
         response = requests.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
-        logger.info(f"Response status: {response.status_code}, body: {response.text[:500]}")
+        logger.info(
+            "Response status: %s, body: %s",
+            response.status_code,
+            response.text[:500],
+            extra={"stage": "api_post_response", "payload_hash": ph, "model_id": payload.get("model"), "request_id": get_request_id()},
+        )
         response.raise_for_status()
         return response.json()
 
@@ -60,6 +73,7 @@ class KieApiClient:
         """
         url = f"{self._api_base()}/jobs/createTask"
         max_retries = 3
+        ph = payload_hash(payload)
 
         # Kie нередко требует callBackUrl даже если документация
         # помечает его как optional. Поэтому если не передали —
@@ -84,14 +98,38 @@ class KieApiClient:
             payload.get("model"),
             bool(payload.get("callBackUrl")),
             list((payload.get("input") or {}).keys()),
+            extra={
+                "stage": "create_task", "payload_hash": ph, "model_id": payload.get("model"), "request_id": get_request_id()
+            },
         )
         for attempt in range(max_retries):
             try:
                 return await asyncio.to_thread(self._post, url, payload)
             except requests.RequestException as exc:
-                logger.warning(f"Kie createTask attempt {attempt+1}/{max_retries} failed: {exc}")
+                logger.warning(
+                    "Kie createTask attempt %s/%s failed: %s",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                    extra={
+                        "stage": "create_task_retry",
+                        "payload_hash": ph,
+                        "model_id": payload.get("model"),
+                        "request_id": get_request_id(),
+                    },
+                )
                 if attempt == max_retries - 1:
-                    logger.error("Kie createTask failed after retries: %s", exc, exc_info=True)
+                    logger.error(
+                        "Kie createTask failed after retries: %s",
+                        exc,
+                        exc_info=True,
+                        extra={
+                            "stage": "create_task_fail",
+                            "payload_hash": ph,
+                            "model_id": payload.get("model"),
+                            "request_id": get_request_id(),
+                        },
+                    )
                     return {"error": str(exc), "state": "fail"}
                 await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
 

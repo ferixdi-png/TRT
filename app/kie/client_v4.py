@@ -24,6 +24,8 @@ from app.kie.router import (
 )
 
 from app.kie.rate_limit import KieAccountLimiter
+from app.utils.payload_hash import payload_hash
+from app.utils.trace import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +103,15 @@ class KieApiClientV4:
         # Полный URL для category-specific API
         url = f"{base_url}{endpoint}"
         
-        logger.info(f"Creating task for {model_id} ({category}): POST {url}")
-        logger.debug(f"Payload: {payload}")
+        ph = payload_hash(payload)
+        logger.info(
+            f"Creating task for {model_id} ({category}): POST {url}",
+            extra={"stage": "v4_create_task", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
+        )
+        logger.debug(
+            f"Payload: {payload}",
+            extra={"stage": "v4_create_task_payload", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
+        )
         
         # Account-wide limiter: Kie enforces 20 new generation requests / 10 seconds per account.
         # Excess requests return 429 and are not queued.
@@ -118,8 +127,14 @@ class KieApiClientV4:
             try:
                 response = await asyncio.to_thread(self._make_request, url, payload)
 
-                logger.info(f"Response status: {response.status_code}")
-                logger.debug(f"Response body: {response.text[:500]}")
+                logger.info(
+                    f"Response status: {response.status_code}",
+                    extra={"stage": "v4_create_task_response", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
+                )
+                logger.debug(
+                    f"Response body: {response.text[:500]}",
+                    extra={"stage": "v4_create_task_response", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
+                )
 
                 # Handle account rate-limit explicitly
                 if response.status_code == 429:
@@ -137,6 +152,7 @@ class KieApiClientV4:
                         attempt + 1,
                         max_attempts,
                         sleep_s,
+                        extra={"stage": "v4_create_task_retry", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
                     )
                     await asyncio.sleep(sleep_s)
                     continue
@@ -151,6 +167,7 @@ class KieApiClientV4:
                         attempt + 1,
                         max_attempts,
                         sleep_s,
+                        extra={"stage": "v4_create_task_retry", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
                     )
                     await asyncio.sleep(sleep_s)
                     continue
@@ -173,7 +190,11 @@ class KieApiClientV4:
                     await asyncio.sleep(sleep_s)
                     continue
 
-                logger.error(f"Create task failed: {exc}", exc_info=True)
+                logger.error(
+                    f"Create task failed: {exc}",
+                    exc_info=True,
+                    extra={"stage": "v4_create_task_fail", "payload_hash": ph, "model_id": model_id, "request_id": get_request_id()},
+                )
                 return {"error": str(exc), "state": "fail"}
     
     async def get_record_info(self, task_id: str) -> Dict[str, Any]:

@@ -12,7 +12,6 @@ RULES:
 import logging
 import os
 import time
-from datetime import datetime, timedelta
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -21,6 +20,10 @@ logger = logging.getLogger(__name__)
 _cached_rate: Optional[float] = None
 _cache_timestamp: Optional[float] = None
 _cache_duration = 12 * 3600  # 12 hours in seconds
+
+
+def _is_test_mode() -> bool:
+    return os.getenv("TEST_MODE") == "1"
 
 
 def get_usd_to_rub_rate(force_refresh: bool = False) -> float:
@@ -35,27 +38,34 @@ def get_usd_to_rub_rate(force_refresh: bool = False) -> float:
     """
     global _cached_rate, _cache_timestamp
     
+    if _is_test_mode():
+        fallback = _get_fallback_rate()
+        _cache_timestamp = _cache_timestamp or time.time()
+        _cached_rate = _cached_rate or fallback
+        logger.debug("TEST_MODE=1: using fallback FX rate without network")
+        return _cached_rate
+
     # Check cache
     if not force_refresh and _cached_rate and _cache_timestamp:
         age = time.time() - _cache_timestamp
         if age < _cache_duration:
             logger.debug(f"Using cached FX rate: {_cached_rate} (age: {age/3600:.1f}h)")
             return _cached_rate
-    
+
     # Try to fetch fresh rate
     fresh_rate = _fetch_fresh_rate()
-    
+
     if fresh_rate:
         _cached_rate = fresh_rate
         _cache_timestamp = time.time()
         logger.info(f"Updated FX rate: {fresh_rate} RUB/USD")
         return fresh_rate
-    
+
     # Fallback to cached rate if available
     if _cached_rate:
         logger.warning("Could not fetch fresh FX rate, using stale cache")
         return _cached_rate
-    
+
     # Final fallback to ENV or default
     fallback = _get_fallback_rate()
     logger.warning(f"Using fallback FX rate: {fallback} RUB/USD")
@@ -168,9 +178,4 @@ def credits_to_rub(
     return usd_to_rub(usd_amount, markup)
 
 
-# Initialize on import
-try:
-    _initial_rate = get_usd_to_rub_rate()
-    logger.info(f"FX module initialized: {_initial_rate} RUB/USD")
-except Exception as e:
-    logger.error(f"FX initialization failed: {e}")
+# Avoid network calls on import/collection; rates are fetched lazily.

@@ -239,25 +239,41 @@ def build_payload(
     if is_v7:
         # V7: Specialized endpoints, direct parameters (not wrapped in 'input')
         parameters_schema = model_schema.get('parameters', {})
-        api_endpoint = model_schema.get('endpoint')
-        
-        # V7: параметры идут напрямую в payload (БЕЗ обертки 'input')
-        payload = {}
-        
+        api_endpoint = model_schema.get('endpoint') or model_id
+
+        # Build raw parameters first
+        raw_params: Dict[str, Any] = {}
+
         # Добавляем параметры из user_inputs
         for param_name, param_spec in parameters_schema.items():
             if param_name in user_inputs:
-                payload[param_name] = user_inputs[param_name]
+                raw_params[param_name] = user_inputs[param_name]
             elif param_spec.get('default') is not None:
-                payload[param_name] = param_spec['default']
+                raw_params[param_name] = param_spec['default']
             elif param_spec.get('required'):
                 # Для обязательных параметров без значения - пытаемся подобрать
                 if param_name == 'prompt' and 'text' in user_inputs:
-                    payload['prompt'] = user_inputs['text']
+                    raw_params['prompt'] = user_inputs['text']
                 elif param_name == 'model':
                     # Используем model_id из schema как default
-                    payload['model'] = model_schema.get('model_id')
-        
+                    raw_params['model'] = model_schema.get('model_id')
+
+        # Wrap parameters into the V3 createTask format to avoid 422 "input cannot be null"
+        payload = {
+            'model': api_endpoint,
+            'input': raw_params,
+        }
+
+        # Validate using synthetic schema derived from parameters
+        synthetic_schema = {
+            'input_schema': {
+                'type': 'object',
+                'properties': parameters_schema,
+                'required': [k for k, v in parameters_schema.items() if v.get('required')],
+            }
+        }
+
+        validate_payload_before_create_task(model_id, payload, synthetic_schema)
         logger.info(f"V7 payload for {model_id}: {payload}")
         return payload
     
@@ -353,9 +369,9 @@ def build_payload(
         # Even if the source-of-truth marks payload_format=direct, that refers to how the
         # model's user fields are represented (flat properties), not that they belong at
         # the payload root. Root-level user fields cause Kie to return 422 (input cannot be null).
-        payload = {
+        payload: Dict[str, Any] = {
             'model': api_endpoint,  # Use endpoint/model name for Kie
-            'input': {}             # All user fields go under 'input'
+            'input': {},            # All user fields go under 'input'
         }
         if payload_format_hint in {"direct", "flat"}:
             logger.info(f"Using WRAPPED format for {model_id} (payload_format={payload_format_hint} -> input wrapper required)")
@@ -363,6 +379,7 @@ def build_payload(
             logger.info(f"Using WRAPPED format for {model_id} (input wrapper)")
 
         # From this point on, we always populate payload['input'] (never root fields) for V3.
+        input_container = payload['input']
     
     # Parse input_schema: support BOTH flat and nested formats
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
@@ -428,7 +445,7 @@ def build_payload(
         # Text-to-X models: need prompt
         if category in ['t2i', 't2v', 'tts', 'music', 'sfx', 'text-to-image', 'text-to-video'] or 'text' in model_id.lower():
             if prompt_value:
-                payload['input']['prompt'] = prompt_value
+                input_container['prompt'] = prompt_value
             else:
                 raise ValueError(f"Model {model_id} requires 'prompt' or 'text' field")
         
@@ -437,26 +454,26 @@ def build_payload(
             if url_value:
                 # Determine correct field name based on category
                 if 'image' in category or category in ['i2v', 'i2i', 'upscale', 'bg_remove']:
-                    payload['input']['image_url'] = url_value
+                    input_container['image_url'] = url_value
                 elif 'video' in category or category == 'v2v':
-                    payload['input']['video_url'] = url_value
+                    input_container['video_url'] = url_value
                 else:
-                    payload['input']['source_url'] = url_value
+                    input_container['source_url'] = url_value
             elif file_value:
-                payload['input']['file_id'] = file_value
+                input_container['file_id'] = file_value
             else:
                 raise ValueError(f"Model {model_id} (category: {category}) requires 'url' or 'file' field")
             
             # Optional prompt for guided processing
             if prompt_value:
-                payload['input']['prompt'] = prompt_value
+                input_container['prompt'] = prompt_value
         
         # Audio models
         elif category in ['stt', 'audio_isolation']:
             if url_value:
-                payload['input']['audio_url'] = url_value
+                input_container['audio_url'] = url_value
             elif file_value:
-                payload['input']['file_id'] = file_value
+                input_container['file_id'] = file_value
             else:
                 raise ValueError(f"Model {model_id} (category: {category}) requires audio file or URL")
         
@@ -465,7 +482,7 @@ def build_payload(
             logger.warning(f"Unknown category '{category}' for {model_id}, accepting all user inputs")
             for key, value in user_inputs.items():
                 if value is not None:
-                    payload['input'][key] = value
+                    input_container[key] = value
         
         return payload
     
@@ -565,7 +582,7 @@ def build_payload(
                     except (ValueError, TypeError):
                         raise ValueError(f"Field '{field_name}' must be a number")
             
-            payload['input'][field_name] = value
+            input_container[field_name] = value
     
     # Process optional fields
     for field_name in optional_fields:
@@ -595,7 +612,7 @@ def build_payload(
                 except (ValueError, TypeError):
                     continue
             
-            payload['input'][field_name] = value
+            input_container[field_name] = value
     
 
     # Fill schema defaults (aspect_ratio, duration, etc.) when present.

@@ -66,10 +66,14 @@ def _mask_for_logs(value, *, _depth: int = 0):
 
     return value
 
-# Test mode flag
-TEST_MODE = os.getenv('TEST_MODE', 'false').lower() == 'true'
-KIE_STUB = os.getenv('KIE_STUB', 'false').lower() == 'true'
-USE_V4_API = os.getenv('KIE_USE_V4', 'false').lower() == 'true'  # Default to V3 (safe)
+# Test mode flag (accept truthy variants like "1"/"true")
+def _env_flag(name: str, default: str = 'false') -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "y", "on"}
+
+
+TEST_MODE = _env_flag('TEST_MODE')
+KIE_STUB = _env_flag('KIE_STUB')
+USE_V4_API = _env_flag('KIE_USE_V4')  # Default to V3 (safe)
 
 # Import at module level to avoid circular imports and for isinstance check
 try:
@@ -111,69 +115,66 @@ class KieGenerator:
     
     def _get_stub_client(self):
         """Get stub client for testing."""
+
         class StubClient:
-            async def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-                """Stub create_task."""
-                model = payload.get('model', 'unknown')
+            def __init__(self):
+                self._poll_counts: Dict[str, int] = {}
+
+            async def create_task(self, *args, callback_url=None, **kwargs) -> Dict[str, Any]:
+                """Stub create_task supporting V3 and V4 call signatures."""
+
+                payload: Dict[str, Any] = {}
+                model: str = "unknown"
+
+                # V3 style: create_task(payload, callback_url=None, **kwargs)
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    model = payload.get("model") or payload.get("model_id") or model
+
+                # V4 style: create_task(model_id, payload, **kwargs)
+                elif len(args) >= 2:
+                    model = str(args[0]) if args[0] is not None else model
+                    payload = args[1] if isinstance(args[1], dict) else payload
+
+                elif "payload" in kwargs and isinstance(kwargs.get("payload"), dict):
+                    payload = kwargs.get("payload")
+                    model = payload.get("model") or payload.get("model_id") or kwargs.get("model_id", model)
+
+                task_id = f"stub_task_{model}"
+                self._poll_counts[task_id] = 0
+
                 return {
-                    'taskId': f"stub_task_{model}",
-                    'status': 'waiting'
+                    "code": 200,
+                    "taskId": task_id,
+                    "data": {"taskId": task_id, "status": "waiting"},
                 }
-            
+
             async def get_record_info(self, task_id: str) -> Dict[str, Any]:
-                """Stub get_record_info."""
-                # Simulate different states for testing
-                if 'text' in task_id or 'test_text' in task_id:
+                """Stub get_record_info with deterministic polling states."""
+                poll_number = self._poll_counts.get(task_id, 0)
+
+                if "fail" in task_id:
                     return {
-                        'state': 'success',
-                        'resultJson': json.dumps({
-                            'resultUrls': ['https://example.com/result1.txt']
-                        })
+                        "state": "fail",
+                        "failCode": "TEST_ERROR",
+                        "failMsg": "Test error message",
                     }
-                elif 'image' in task_id or 'test_image' in task_id:
-                    return {
-                        'state': 'success',
-                        'resultJson': json.dumps({
-                            'resultUrls': ['https://example.com/result1.jpg']
-                        })
-                    }
-                elif 'video' in task_id or 'test_video' in task_id:
-                    return {
-                        'state': 'success',
-                        'resultJson': json.dumps({
-                            'resultUrls': ['https://example.com/result1.mp4']
-                        })
-                    }
-                elif 'audio' in task_id or 'test_audio' in task_id:
-                    return {
-                        'state': 'success',
-                        'resultJson': json.dumps({
-                            'resultUrls': ['https://example.com/result1.mp3']
-                        })
-                    }
-                elif 'url' in task_id or 'test_url' in task_id:
-                    return {
-                        'state': 'success',
-                        'resultJson': json.dumps({
-                            'resultUrls': ['https://example.com/processed.jpg']
-                        })
-                    }
-                elif 'file' in task_id or 'test_file' in task_id:
-                    return {
-                        'state': 'success',
-                        'resultJson': json.dumps({
-                            'resultUrls': ['https://example.com/processed_file.pdf']
-                        })
-                    }
-                elif 'fail' in task_id:
-                    return {
-                        'state': 'fail',
-                        'failCode': 'TEST_ERROR',
-                        'failMsg': 'Test error message'
-                    }
-                else:
-                    return {'state': 'waiting'}
-        
+
+                if poll_number == 0:
+                    self._poll_counts[task_id] = 1
+                    return {"state": "running"}
+
+                self._poll_counts[task_id] = poll_number + 1
+                return {
+                    "state": "success",
+                    "resultJson": json.dumps(
+                        {
+                            "mediaUrl": f"https://example.com/{task_id}.mp4",
+                            "resultUrls": [f"https://example.com/{task_id}.mp4"],
+                        }
+                    ),
+                }
+
         return StubClient()
     
     async def generate(
@@ -305,11 +306,17 @@ class KieGenerator:
                         getattr(cls, "code", "EXC"),
                         str(e),
                         exc_info=True,
-                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                        extra={
+                            "stage": "create_task",
+                            "payload_hash": ph,
+                            "model_id": model_id,
+                            "request_id": get_request_id(),
+                        },
                     )
                     return {
                         "success": False,
-                        "message": "❌ Ошибка API при старте генерации. Попробуйте ещё раз позже.",
+                        "message": f"❌ Ошибка API при старте генерации. Код запроса: {get_request_id()}",
+                        "user_friendly_message": f"❌ Ошибка API при старте генерации. Код запроса: {get_request_id()}",
                         "result_urls": [],
                         "result_object": None,
                         "error_code": getattr(cls, "code", "API_ERROR"),
@@ -330,11 +337,17 @@ class KieGenerator:
                         "%s create_task returned None | %s",
                         err.code,
                         err.debug_reason,
-                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                        extra={
+                            "stage": "create_task",
+                            "payload_hash": ph,
+                            "model_id": model_id,
+                            "request_id": get_request_id(),
+                        },
                     )
                     return {
                         "success": False,
-                        "message": "❌ Ошибка API: не получен ответ от сервера",
+                        "message": f"❌ Ошибка API: не получен ответ от сервера. Код запроса: {get_request_id()}",
+                        "user_friendly_message": f"❌ Ошибка API: не получен ответ от сервера. Код запроса: {get_request_id()}",
                         "result_urls": [],
                         "result_object": None,
                         "error_code": "NO_RESPONSE",
@@ -348,11 +361,17 @@ class KieGenerator:
                     logger.error(
                         "API error in create_task: %s",
                         error_msg,
-                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                        extra={
+                            "stage": "create_task",
+                            "payload_hash": ph,
+                            "model_id": model_id,
+                            "request_id": get_request_id(),
+                        },
                     )
                     return {
                         "success": False,
-                        "message": f"❌ Ошибка API: {error_msg}",
+                        "message": f"❌ Ошибка API: {error_msg}. Код запроса: {get_request_id()}",
+                        "user_friendly_message": f"❌ Ошибка API: {error_msg}. Код запроса: {get_request_id()}",
                         "result_urls": [],
                         "result_object": None,
                         "error_code": "API_CONNECTION_ERROR",
@@ -362,10 +381,38 @@ class KieGenerator:
 
                 # Extract taskId from response (can be at top level or in data object)
                 task_id = create_response.get("taskId") if isinstance(create_response, dict) else None
+                upstream_code = create_response.get("code") if isinstance(create_response, dict) else None
+                upstream_msg = create_response.get("msg") if isinstance(create_response, dict) else None
                 if not task_id and isinstance(create_response, dict) and create_response.get("data"):
                     data = create_response.get("data")
                     if isinstance(data, dict):
                         task_id = data.get("taskId")
+
+                if isinstance(create_response, dict) and upstream_code not in (None, 0, 200):
+                    logger.error(
+                        "Create task failed code=%s msg=%s",
+                        upstream_code,
+                        upstream_msg,
+                        extra={
+                            "stage": "create_task",
+                            "payload_hash": ph,
+                            "model_id": model_id,
+                            "request_id": get_request_id(),
+                            "upstream_code": upstream_code,
+                            "upstream_msg": upstream_msg,
+                        },
+                    )
+                    message = upstream_msg or "Неизвестная ошибка"
+                    return {
+                        "success": False,
+                        "message": f"❌ Ошибка API: {message}. Код запроса: {get_request_id()}",
+                        "user_friendly_message": f"❌ Ошибка API: {message}. Код запроса: {get_request_id()}",
+                        "result_urls": [],
+                        "result_object": None,
+                        "error_code": f"API_ERROR_{upstream_code}",
+                        "error_message": f"{message}. Response: {create_response}",
+                        "task_id": None,
+                    }
 
                 if not task_id:
                     error_code = create_response.get("code") if isinstance(create_response, dict) else None
@@ -374,11 +421,19 @@ class KieGenerator:
                     logger.error(
                         "No taskId in response. Full response: %s",
                         create_response,
-                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                        extra={
+                            "stage": "create_task",
+                            "payload_hash": ph,
+                            "model_id": model_id,
+                            "request_id": get_request_id(),
+                            "upstream_code": error_code,
+                            "upstream_msg": error_msg,
+                        },
                     )
                     return {
                         "success": False,
-                        "message": f"❌ Ошибка API: {error_msg}",
+                        "message": f"❌ Ошибка API: {error_msg}. Код запроса: {get_request_id()}",
+                        "user_friendly_message": f"❌ Ошибка API: {error_msg}. Код запроса: {get_request_id()}",
                         "result_urls": [],
                         "result_object": None,
                         "error_code": f"API_ERROR_{error_code}" if error_code else "NO_TASK_ID",

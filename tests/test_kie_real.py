@@ -203,7 +203,10 @@ async def test_suno_generate_lyrics(generator):
     source_of_truth = load_source_of_truth()
     models = {m['model_id']: m for m in source_of_truth.get('models', [])}
     model = models.get('suno-generate-lyrics', {})
-    
+
+    if not model:
+        pytest.skip("Model suno-generate-lyrics not present in source of truth", allow_module_level=False)
+
     inputs = get_minimal_inputs(model)
     if inputs is None:
         pytest.skip("Model requires file input")

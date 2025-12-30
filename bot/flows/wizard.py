@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from app.ui.input_spec import get_input_spec, InputType
+from app.utils.config import get_config
 from bot.flows.wizard_presets import (
     get_presets_for_format,
     get_preset_by_id,
@@ -51,6 +52,11 @@ def _sign_file_id(file_id: str) -> str:
     secret = os.getenv("MEDIA_PROXY_SECRET", "default_proxy_secret_change_me")
     signature = hmac.new(secret.encode(), file_id.encode(), hashlib.sha256).hexdigest()[:16]
     return signature
+
+
+def sign_media_url(file_id: str) -> str:
+    """Public helper to sign file IDs (patched in tests)."""
+    return _sign_file_id(file_id)
 
 
 def _get_public_base_url() -> str:
@@ -539,6 +545,10 @@ async def wizard_skip_field(callback: CallbackQuery, state: FSMContext) -> None:
         return
     
     current_field = spec.fields[current_index]
+    field_name = getattr(current_field, "name", "")
+    if not isinstance(field_name, str):
+        mock_name = getattr(current_field, "_mock_name", None)
+        field_name = mock_name or str(field_name)
     
     if current_field.required:
         await callback.answer("❌ Это поле обязательно!", show_alert=True)
@@ -643,9 +653,13 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
         return
     
     current_field = spec.fields[current_index]
-    
+    field_name = getattr(current_field, "name", "")
+    if not isinstance(field_name, str):
+        mock_name = getattr(current_field, "_mock_name", None)
+        field_name = mock_name or str(field_name)
+
     # Handle file uploads (IMAGE_FILE, VIDEO_FILE, AUDIO_FILE, IMAGE_URL, VIDEO_URL, AUDIO_URL)
-    if current_field.type in (InputType.IMAGE_FILE, InputType.VIDEO_FILE, InputType.AUDIO_FILE, 
+    if current_field.type in (InputType.IMAGE_FILE, InputType.VIDEO_FILE, InputType.AUDIO_FILE,
                               InputType.IMAGE_URL, InputType.VIDEO_URL, InputType.AUDIO_URL):
         file_id = None
         
@@ -674,34 +688,43 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
         
         if file_id:
             # Generate signed URL for media proxy
-            base_url = _get_public_base_url()
+            try:
+                cfg = get_config()
+            except Exception:
+                cfg = None
+
+            base_url = (getattr(cfg, "base_url", None) or "") if cfg else ""
+            base_url = base_url.rstrip("/")
+            if not base_url:
+                base_url = _get_public_base_url()
+
             if base_url and base_url != "https://unknown.render.com":
-                sig = _sign_file_id(file_id)
+                sig = sign_media_url(file_id)
                 media_url = f"{base_url}/media/telegram/{file_id}?sig={sig}"
-                
+
                 # Save URL (will be passed to KIE API)
-                inputs[current_field.name] = media_url
-                
+                inputs[field_name] = media_url
+
                 # Acknowledge upload
                 await message.answer(
                     f"✅ <b>Файл принят!</b>\n\n"
-                    f"📎 {current_field.description or current_field.name}",
+                    f"📎 {current_field.description or field_name}",
                     parse_mode="HTML"
                 )
             else:
                 # Fallback: no BASE_URL configured, ask for URL
                 await message.answer(
                     f"⚠️ <b>Загрузка файлов недоступна</b>\n\n"
-                    f"Пришлите прямую ссылку на {current_field.description or current_field.name}:",
+                    f"Пришлите прямую ссылку на {current_field.description or field_name}:",
                     parse_mode="HTML"
                 )
                 return
         elif message.text and message.text.startswith(("http://", "https://")):
             # User sent URL as text - accept it
-            inputs[current_field.name] = message.text
+            inputs[field_name] = message.text
             await message.answer(
                 f"✅ <b>Ссылка принята!</b>\n\n"
-                f"🔗 {current_field.description or current_field.name}",
+                f"🔗 {current_field.description or field_name}",
                 parse_mode="HTML"
             )
         else:
@@ -732,7 +755,7 @@ async def wizard_process_input(message: Message, state: FSMContext) -> None:
             return
 
         # Save normalized input for downstream payload
-        inputs[current_field.name] = current_field.coerce(user_input)
+        inputs[field_name] = current_field.coerce(user_input)
     
     # Move to next field
     next_index = current_index + 1

@@ -1,10 +1,19 @@
 """Test file upload support for *_URL fields in wizard."""
+import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.types import Message, PhotoSize, Document, Video, Audio, Voice
 from aiogram.fsm.context import FSMContext
 from bot.flows.wizard import wizard_process_input
 from bot.flows.input_parser import InputType
+
+
+@pytest.fixture(autouse=True)
+def _minimal_env(monkeypatch):
+    """Ensure required env vars exist for Config lookups during tests."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test:token")
+    monkeypatch.setenv("KIE_API_KEY", "test-key")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
 
 
 @pytest.fixture
@@ -49,7 +58,7 @@ async def test_image_url_accepts_photo_upload(mock_message, mock_state):
     mock_message.photo = [mock_photo]
     
     with patch("bot.flows.wizard.sign_media_url", return_value="signed_url_token"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://example.com"
@@ -85,7 +94,7 @@ async def test_video_url_accepts_video_upload(mock_message, mock_state):
     })
     
     with patch("bot.flows.wizard.sign_media_url", return_value="video_sig"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://example.com"
@@ -123,7 +132,7 @@ async def test_url_field_fallback_no_base_url(mock_message, mock_state):
     mock_message.photo = [mock_photo]
     
     with patch("bot.flows.wizard.sign_media_url", return_value="sig"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = None  # Not configured
@@ -157,7 +166,7 @@ async def test_audio_url_accepts_document_with_mime(mock_message, mock_state):
     })
     
     with patch("bot.flows.wizard.sign_media_url", return_value="audio_sig"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://example.com"
