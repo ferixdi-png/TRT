@@ -174,6 +174,12 @@ async def start_generation(
 
     async def _runner() -> None:
         try:
+            async def _on_task_id(task_id: str):
+                try:
+                    await job_service.update_status(job_id, "queued", kie_task_id=task_id, kie_status="waiting")
+                except Exception:
+                    logger.debug("Failed to persist task_id", exc_info=True)
+
             result = await generate_with_payment(
                 model_id=model_id,
                 user_inputs=user_inputs,
@@ -182,6 +188,7 @@ async def start_generation(
                 reserve_balance=True,
                 task_id=f"job:{job_id}",
                 progress_callback=progress_cb,
+                task_id_callback=_on_task_id,
                 timeout=timeout,
                 charge_manager=cm,
             )

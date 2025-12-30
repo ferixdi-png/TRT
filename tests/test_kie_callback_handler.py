@@ -62,3 +62,34 @@ async def test_reply_once_callback_then_poll():
 
     assert send.await_count == 1
     assert svc.calls[0][1] == {"from": "callback"}
+
+class _MemoryJobService:
+    def __init__(self): self.job = {"id": 1, "kie_task_id": None, "status": "draft"}
+    async def update_status(self, job_id: int, status: str, kie_task_id=None, kie_status=None, result_json=None, error_text=None):
+        if job_id == self.job["id"]:
+            self.job.update({"kie_task_id": kie_task_id or self.job["kie_task_id"], "status": status or self.job["status"]})
+            if result_json is not None: self.job["result_json"] = result_json
+    async def get_by_kie_task_id(self, task_id: str):
+        return self.job if self.job.get("kie_task_id") == task_id else None
+
+
+@pytest.mark.asyncio
+async def test_callback_maps_job_after_task_id_callback():
+    from app.kie.generator import KieGenerator
+
+    class _StubClient:
+        async def create_task(self, payload, callback_url=None): return {"code": 200, "data": {"taskId": "cb-task"}}
+        async def get_record_info(self, task_id: str): return {"state": "success", "resultJson": "{\"resultUrls\":[\"u1\"]}"}
+
+    svc = _MemoryJobService(); gen = KieGenerator(api_client=_StubClient())
+
+    async def _persist_task(task_id: str):
+        await svc.update_status(1, "queued", kie_task_id=task_id, kie_status="waiting")
+
+    await gen.generate("z-image", {"prompt": "hi", "aspect_ratio": "1:1"}, task_id_callback=_persist_task)
+
+    payload = {"data": {"taskId": "cb-task", "state": "success", "resultJson": "{\"resultUrls\":[\"u1\"]}"}}
+    job_id = await process_kie_callback(payload, svc)
+    assert job_id == 1
+    assert svc.job.get("status") == "succeeded"
+    assert svc.job.get("result_json") == {"resultUrls": ["u1"]}

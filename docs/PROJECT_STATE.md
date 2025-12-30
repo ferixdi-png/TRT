@@ -6,7 +6,7 @@
 - Storage: prefers Postgres via DATABASE_URL, falls back to JSON
 
 ## 2) Release Gates
-- [ ] G1 Foundation — stage logs need audit; progress callbacks awaited; callback persistence wired; reply-once guard added (DB-backed)
+- [ ] G1 Foundation — stage logs need audit; progress callbacks awaited; callback persistence wired; reply-once guard added (DB-backed); taskId persisted early
 - [ ] G2 Free 100% — payload contracts ok; z-image guarded; callback parser handles resultUrl/resultUrls; poll/callback history verification + reply-once e2e pending
 - [ ] G3 Payments — TEST_MODE default off; regression ensures paid flows don't skip billing when env unset
 - [ ] G4 Buttons — map below, coverage incomplete
@@ -41,7 +41,7 @@
 - “Подтвердить” (confirm_cb) → generation start — value: launches paid/free pipeline; now defaults to production (TEST_MODE off by default); covered by regression for paid flow default
 
 ## 7) Known issues
-- Free models beyond z-image/google not exercised end-to-end; callback persistence only wired, needs history verification.
+- Free models beyond z-image/google not exercised end-to-end; callback persistence wired, history verification pending.
 - Stage logging coverage for request_id/payload_hash needs inspection.
 - Optional fields for text2image models were hidden; now exposed, but UI flow per-model still needs audit (advanced settings UX).
 - z-image aspect_ratio default injected even when overlay missing; need poll/history validation to mark path green.

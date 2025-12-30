@@ -182,6 +182,7 @@ class KieGenerator:
         model_id: str,
         user_inputs: Dict[str, Any],
         progress_callback: Optional[Callable[[str], None]] = None,
+        task_id_callback: Optional[Callable[[str], Any]] = None,
         timeout: int = 300
     ) -> Dict[str, Any]:
         """
@@ -224,6 +225,20 @@ class KieGenerator:
                         "progress callback failed",
                         exc_info=True,
                         extra={"stage": "progress", "payload_hash": ph, "model_id": model_id},
+                    )
+
+            async def _maybe_call_task_id(task_id: str) -> None:
+                if not task_id_callback:
+                    return
+                try:
+                    res = task_id_callback(task_id)
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception:
+                    logger.debug(
+                        "task_id callback failed",
+                        exc_info=True,
+                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
                     )
 
             try:
@@ -401,6 +416,9 @@ class KieGenerator:
                     data = create_response.get("data")
                     if isinstance(data, dict):
                         task_id = data.get("taskId")
+
+                if task_id:
+                    await _maybe_call_task_id(task_id)
 
                 if isinstance(create_response, dict) and upstream_code not in (None, 0, 200):
                     logger.error(
