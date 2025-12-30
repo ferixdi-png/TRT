@@ -159,8 +159,18 @@ def build_input_spec_from_schema(model_id: str, schema: Dict[str, Any]) -> Input
         logger.warning(f"No schema properties for {model_id}, using empty spec")
         return InputSpec(model_id=model_id, fields=[])
     
-    required_fields = schema.get("required", [])
-    properties = schema.get("properties", {})
+    required_fields = list(schema.get("required", []))
+    properties = dict(schema.get("properties", {}))
+
+    # FREE invariant: z-image must expose aspect_ratio even if overlay/schema snapshot lacks it.
+    if model_id == "z-image" and "aspect_ratio" not in properties:
+        properties["aspect_ratio"] = {
+            "type": "string",
+            "enum": ["1:1", "4:3", "3:4", "16:9", "9:16"],
+            "default": "1:1",
+        }
+        if "aspect_ratio" not in required_fields:
+            required_fields.append("aspect_ratio")
     
     for field_name, field_schema in properties.items():
         field_type_str = field_schema.get("type", "string")
