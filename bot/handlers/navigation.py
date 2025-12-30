@@ -46,6 +46,11 @@ def _build_main_menu_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+async def handle_main_menu(callback: CallbackQuery, state: FSMContext):
+    """Compatibility wrapper for legacy tests/routes."""
+    return await cb_menu_main(callback, state)
+
+
 @router.callback_query(F.data == "main_menu")
 async def cb_main_menu(callback: CallbackQuery, state: FSMContext):
     """Legacy alias: main_menu -> menu:main.

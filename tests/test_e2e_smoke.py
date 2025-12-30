@@ -249,21 +249,22 @@ async def test_paid_generation_refunds_on_failure(mock_kie_client):
         mock_mgr = AsyncMock()
         mock_mgr.reserve = AsyncMock(return_value=True)
         mock_mgr.commit = AsyncMock()
-        mock_mgr.rollback = AsyncMock()
+        mock_mgr.release_charge = AsyncMock()
+        mock_mgr.db_service = None  # prevent referral/db paths from using AsyncMock transaction
+        mock_mgr.add_to_history = Mock()
         mock_charge_mgr.return_value = mock_mgr
-        
-        # Try generation (will fail)
-        with pytest.raises(Exception):
-            await generate_with_payment(
-                model_id="test_model",
-                user_inputs={"prompt": "test"},
-                user_id=123,
-                amount=10.0,
-                charge_manager=mock_mgr
-            )
-        
-        # Verify refund was called
-        # (actual test would need to verify rollback/release)
+
+        # Try generation (will fail) but should return structured error without crash
+        result = await generate_with_payment(
+            model_id="test_model",
+            user_inputs={"prompt": "test"},
+            user_id=123,
+            amount=10.0,
+            charge_manager=mock_mgr
+        )
+
+        assert result.get("success") is False
+        mock_mgr.release_charge.assert_awaited()
 
 
 @pytest.mark.asyncio

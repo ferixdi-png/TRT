@@ -110,16 +110,16 @@ class InputField:
 @dataclass
 class InputSpec:
     """Complete input specification for a model."""
-    model_id: str
-    fields: List[InputField]
+    model_id: str = ""
+    fields: List[InputField] = None
     
     def get_required_fields(self) -> List[InputField]:
         """Get list of required fields."""
-        return [f for f in self.fields if f.required]
+        return [f for f in (self.fields or []) if f.required]
     
     def get_field(self, name: str) -> Optional[InputField]:
         """Get field by name."""
-        for field in self.fields:
+        for field in self.fields or []:
             if field.name == name:
                 return field
         return None
@@ -310,6 +310,25 @@ def get_input_spec(model_config: Dict[str, Any]) -> InputSpec:
         spec = _suppress_t2i_defaults(spec, model_config)
         if spec.fields:
             return spec
+
+    # Legacy direct inputs mapping (used in smoke tests)
+    inputs_map = model_config.get("inputs") if hasattr(model_config, "get") else None
+    if isinstance(inputs_map, dict) and inputs_map:
+        fields: list[InputField] = []
+        for name, meta in inputs_map.items():
+            # meta can be a simple dict or compatibility object with attributes
+            meta_dict = meta if isinstance(meta, dict) else meta.__dict__
+            fields.append(
+                InputField(
+                    name=name,
+                    type=InputType(meta_dict.get("type", "text")),
+                    required=bool(meta_dict.get("required", False)),
+                    description=meta_dict.get("description") or meta_dict.get("name") or name,
+                )
+            )
+        legacy_spec = InputSpec(model_id=model_id, fields=fields)
+        if legacy_spec.fields:
+            return legacy_spec
     
     # Fallback to heuristic
     category = model_config.get("category", "")
