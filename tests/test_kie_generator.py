@@ -264,6 +264,7 @@ async def test_z_image_create_task_injects_aspect_ratio():
 
 
 @pytest.mark.asyncio
+ codex/audit-and-fix-first-free-model-i39rtr
 async def test_progress_callback_is_awaited(monkeypatch):
     polls = 0
 
@@ -296,6 +297,8 @@ async def test_progress_callback_is_awaited(monkeypatch):
 
 
 @pytest.mark.asyncio
+
+ main
 async def test_stub_client_supports_dual_signatures_and_polling():
     generator = KieGenerator()
     stub = generator._get_stub_client()
