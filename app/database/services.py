@@ -8,7 +8,9 @@ Production-safe with:
 - Error handling
 """
 import asyncio
+import inspect
 import logging
+from unittest.mock import AsyncMock
 import json
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -240,6 +242,10 @@ class UserService:
                 "SELECT metadata FROM users WHERE user_id = $1",
                 user_id,
             )
+            # Some tests/mock layers return an awaitable for metadata; unwrap it to avoid
+            # unawaited coroutine warnings and to keep the return type stable.
+            if inspect.isawaitable(meta) or isinstance(meta, AsyncMock):
+                meta = await meta
             return dict(meta or {})
 
     async def merge_metadata(self, user_id: int, patch: Dict[str, Any]) -> Dict[str, Any]:
