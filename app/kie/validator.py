@@ -254,10 +254,15 @@ def validate_model_inputs(
             # Common field mappings
             if field_name in ['prompt', 'text', 'input', 'message']:
                 value = user_inputs.get('text') or user_inputs.get('prompt') or user_inputs.get('input')
-            elif field_name in ['url', 'link', 'source_url', 'image_url', 'video_url', 'audio_url']:
-                value = (user_inputs.get('url') or user_inputs.get('link') or 
-                        user_inputs.get('image_url') or user_inputs.get('video_url') or 
-                        user_inputs.get('audio_url'))
+            elif field_name in ['url', 'link', 'source_url', 'image_url', 'image', 'video_url', 'audio_url']:
+                value = (
+                    user_inputs.get('url')
+                    or user_inputs.get('link')
+                    or user_inputs.get('image_url')
+                    or user_inputs.get('image')
+                    or user_inputs.get('video_url')
+                    or user_inputs.get('audio_url')
+                )
             elif field_name in ['file', 'file_id', 'file_url']:
                 value = user_inputs.get('file') or user_inputs.get('file_id') or user_inputs.get('file_url')
             

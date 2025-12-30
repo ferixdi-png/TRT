@@ -190,6 +190,18 @@ def test_parse_record_info_success():
     assert len(parsed['result_urls']) > 0
 
 
+def test_parse_record_info_single_result_url_key():
+    """Handle singular resultUrl key inside resultJson payload."""
+    record_info = {
+        'state': 'success',
+        'resultJson': json.dumps({
+            'resultUrl': 'https://example.com/only.jpg'
+        })
+    }
+    parsed = parse_record_info(record_info)
+    assert parsed['result_urls'] == ['https://example.com/only.jpg']
+
+
 def test_parse_record_info_fail():
     """Test parsing fail state."""
     record_info = {
