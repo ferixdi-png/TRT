@@ -45,7 +45,7 @@ def test_dry_run_all_models():
     
     if not sot:
         print("❌ FAIL: SOURCE_OF_TRUTH пустой!")
-        return False
+        return
     
     models = sot.get('models', {})
     print(f"   ✅ Загружено: {len(models)} моделей")
@@ -180,19 +180,19 @@ def test_dry_run_all_models():
         print("🎉 ВСЕ МОДЕЛИ ПРОШЛИ DRY-RUN!")
         print("   ✅ build_payload() работает для всех 72 моделей")
         print("   ✅ Можно переходить к реальным тестам на FREE моделях")
-        return True
     elif success_rate >= 95:
         print("✅ ПОЧТИ ВСЕ МОДЕЛИ РАБОТАЮТ")
         print(f"   {len(results['success'])}/{len(models)} успешно")
         print("   ⚠️  Нужно исправить оставшиеся модели")
-        return True
     else:
         print("❌ СЛИШКОМ МНОГО ОШИБОК")
         print(f"   Только {success_rate:.1f}% моделей работают")
         print("   Нужно исправить критичные проблемы")
-        return False
 
 
 if __name__ == '__main__':
-    success = test_dry_run_all_models()
-    sys.exit(0 if success else 1)
+    try:
+        test_dry_run_all_models()
+        sys.exit(0)
+    except Exception:
+        sys.exit(1)

@@ -190,6 +190,18 @@ def test_parse_record_info_success():
     assert len(parsed['result_urls']) > 0
 
 
+def test_parse_record_info_single_result_url_key():
+    """Handle singular resultUrl key inside resultJson payload."""
+    record_info = {
+        'state': 'success',
+        'resultJson': json.dumps({
+            'resultUrl': 'https://example.com/only.jpg'
+        })
+    }
+    parsed = parse_record_info(record_info)
+    assert parsed['result_urls'] == ['https://example.com/only.jpg']
+
+
 def test_parse_record_info_fail():
     """Test parsing fail state."""
     record_info = {
@@ -209,6 +221,78 @@ def test_parse_record_info_waiting():
     parsed = parse_record_info(record_info)
     assert parsed['state'] == 'waiting'
     assert 'wait' in parsed['message'].lower() or '⏳' in parsed['message']
+
+
+@pytest.mark.asyncio
+async def test_z_image_create_task_injects_aspect_ratio():
+    """Ensure create_task gets aspect_ratio even when user input is empty."""
+
+    class CapturingClient:
+        def __init__(self):
+            self.last_payload = None
+
+        async def create_task(self, payload, callback_url=None, **kwargs):
+            self.last_payload = payload
+            return {"code": 200, "msg": "success", "data": {"taskId": "task-1"}}
+
+        async def get_record_info(self, task_id):
+            return {
+                "state": "success",
+                "resultJson": json.dumps({"resultUrls": ["https://example.com/res.jpg"]}),
+            }
+
+    generator = KieGenerator()
+    generator.source_of_truth = {
+        "models": [
+            {
+                "model_id": "z-image",
+                "payload_format": "direct",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"prompt": {"type": "string"}},
+                    "required": ["prompt"],
+                },
+            }
+        ]
+    }
+    generator.api_client = CapturingClient()
+
+    result = await generator.generate("z-image", {"prompt": "котик", "aspect_ratio": ""}, timeout=2)
+
+    assert result["success"] is True
+    assert generator.api_client.last_payload["input"]["aspect_ratio"] == "1:1"
+
+
+@pytest.mark.asyncio
+async def test_progress_callback_is_awaited(monkeypatch):
+    polls = 0
+
+    class StubClient:
+        async def create_task(self, payload, callback_url=None, **kwargs):
+            return {"code": 200, "data": {"taskId": "task-progress"}}
+
+        async def get_record_info(self, task_id):
+            nonlocal polls
+            polls += 1
+            if polls == 1:
+                return {"state": "waiting", "progress": 25}
+            return {"state": "success", "resultJson": json.dumps({"resultUrls": ["https://example.com/out"]})}
+
+    generator = KieGenerator(api_client=StubClient())
+    generator._heartbeat_interval = 0
+    progress_cb = AsyncMock()
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    result = await generator.generate(
+        "z-image",
+        {"prompt": "cat", "aspect_ratio": "1:1"},
+        progress_callback=progress_cb,
+        timeout=5,
+    )
+
+    assert result["success"] is True
+    progress_cb.assert_awaited()
 
 
 @pytest.mark.asyncio
