@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.payments.integration import generate_with_payment
 from app.database.generation_events import log_generation_event
+from app.database.services import UserService
 
 
 @pytest.mark.asyncio
@@ -34,6 +35,37 @@ async def test_log_generation_event_uses_fetchval():
     sql = call_args[0][0]
     assert 'RETURNING id' in sql
     assert 'INSERT INTO generation_events' in sql
+
+
+@pytest.mark.asyncio
+async def test_get_metadata_unwraps_awaitable():
+    """Ensure get_metadata awaits awaitable results from mocked DB drivers."""
+
+    class FakeConn:
+        def __init__(self):
+            async def _meta():
+                return {"referral_free_uses": 3}
+
+            # Returning a coroutine triggers the unwrap path
+            self.fetchval = AsyncMock(return_value=_meta())
+
+    class FakeDB:
+        def __init__(self):
+            self._conn = FakeConn()
+
+        def transaction(self):
+            return self
+
+        async def __aenter__(self):
+            return self._conn
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    svc = UserService(FakeDB())
+    meta = await svc.get_metadata(user_id=123)
+
+    assert meta.get("referral_free_uses") == 3
 
 
 @pytest.mark.asyncio

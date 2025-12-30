@@ -530,10 +530,10 @@ class ChargeManager:
         return {'success': False, 'error_code': 'refund_failed', 'refund_id': None}
 
     def add_to_history(self, user_id: int, model_id: str, inputs: Dict[str, Any], result: str, success: bool) -> None:
-        """Add generation to user history."""
+        """Add generation to in-memory history (fallback when DB unavailable)."""
         if user_id not in self._generation_history:
             self._generation_history[user_id] = []
-        
+
         record = {
             'timestamp': datetime.now().isoformat(),
             'model_id': model_id,
@@ -546,9 +546,34 @@ class ChargeManager:
         self._generation_history[user_id] = self._generation_history[user_id][:20]
 
     def get_user_history(self, user_id: int, limit: int = 10) -> list:
-        """Get user generation history."""
+        """Get user generation history (fallback to in-memory cache)."""
         history = self._generation_history.get(user_id, [])
         return history[:limit]
+
+    async def get_user_history_async(self, user_id: int, limit: int = 10) -> list:
+        """Get user generation history from DB when available, else fallback."""
+        if self.db_service:
+            try:
+                from app.database.services import JobService
+
+                js = JobService(self.db_service)
+                jobs = await js.list_user_jobs(user_id, limit=limit)
+                return [
+                    {
+                        'id': job.get('id'),
+                        'model_id': job.get('model_id'),
+                        'status': job.get('status'),
+                        'task_id': job.get('kie_task_id'),
+                        'result': job.get('result_json'),
+                        'error': job.get('error_text'),
+                        'finished_at': job.get('finished_at'),
+                    }
+                    for job in jobs
+                ]
+            except Exception:
+                logger.debug("History DB fetch failed, using fallback", exc_info=True)
+
+        return self.get_user_history(user_id, limit)
 
 
 # Global instance
