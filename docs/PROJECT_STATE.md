@@ -7,7 +7,7 @@
 
 ## 2) Release Gates
 - [ ] G1 Foundation (CI green, stage logs) — tests partial, stage logs need audit
-- [ ] G2 Free 100% — payload contracts in progress; callback parser now normalizes singular resultUrl
+- [ ] G2 Free 100% — payload contracts in progress; z-image now auto-fills required aspect_ratio; callback parser normalizes singular resultUrl
 - [ ] G3 Payments — default TEST_MODE forced to off; regression ensures paid flows don't skip billing when env unset
 - [ ] G4 Buttons — map below, coverage incomplete
 - [ ] G5 Referral — present in codebase, needs validation/logging
@@ -15,7 +15,7 @@
 ## 3) FREE TOP-5 status matrix
 | Model | payload ok? | wizard ok? | createTask ok? | poll/callback ok? | media send ok? | history ok? |
 |-------|-------------|------------|----------------|-------------------|----------------|-------------|
-| z-image | ✅ contract tests | ☐ | ☐ | ☐ | ☐ | ☐ |
+| z-image | ✅ contract tests (adds default aspect_ratio) | ☐ | ☐ | ☐ | ☐ | ☐ |
 | recraft/remove-background | ✅ contract tests (image+image_url mirrored) | ✅ mini-e2e confirm | ☐ | ☐ | ☐ | ☐ |
 | infinitalk/from-audio | ✅ contract+schema overlay | ☐ | ☐ | ☐ | ☐ | ☐ |
 | google/imagen4-fast | ✅ contract tests | ✅ mini-e2e confirm | ☐ | ☐ | ☐ | ☐ |
@@ -35,6 +35,7 @@
 - Free models beyond z-image/google not exercised end-to-end; callbacks/persistence unverified.
 - Stage logging coverage for request_id/payload_hash needs inspection.
 - Legacy PROJECT_STATE at repo root is outdated; use this file going forward.
+- z-image aspect_ratio default now injected; need createTask/poll validation to mark path green.
 
 ## 7) Next iteration plan
 - Verify poll/callback parsing stores history for one free model; now parser covers resultUrl/resultUrls.

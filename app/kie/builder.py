@@ -490,9 +490,13 @@ def build_payload(
     for field_name in required_fields:
         field_spec = properties.get(field_name, {})
         field_type = field_spec.get('type', 'string')
-        
+
         # Get value from user_inputs
         value = user_inputs.get(field_name)
+
+        # Schema default fallback (e.g., aspect_ratio)
+        if value is None and field_spec.get('default') is not None:
+            value = field_spec.get('default')
         
         # If not provided, try common aliases
         if value is None:

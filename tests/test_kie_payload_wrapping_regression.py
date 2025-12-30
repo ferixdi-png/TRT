@@ -47,6 +47,12 @@ def test_z_image_payload_is_wrapped(source_of_truth_snapshot):
     assert "prompt" not in payload
 
 
+def test_z_image_payload_adds_default_aspect_ratio():
+    payload = build_payload("z-image", {"prompt": "котик"})
+
+    assert payload["input"]["aspect_ratio"] == "1:1"
+
+
 def test_google_imagen4_fast_payload_is_wrapped(google_free_snapshot):
     payload = build_payload("google/imagen4-fast", {"prompt": "котик"}, google_free_snapshot)
 

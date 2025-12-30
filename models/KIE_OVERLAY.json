@@ -309,6 +309,21 @@
       }
     },
     "z-image": {
+      "input_schema": {
+        "type": "object",
+        "required": ["prompt", "aspect_ratio"],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": ["1:1", "4:3", "3:4", "16:9", "9:16"],
+            "default": "1:1"
+          }
+        }
+      },
       "ui": {
         "popular_score": 98,
         "format_group": "text2image",
@@ -324,7 +339,8 @@
           "Отлично для тестов и массовой генерации"
         ],
         "input_hints": {
-          "prompt": "📝 Что на картинке"
+          "prompt": "📝 Что на картинке",
+          "aspect_ratio": "Пропорции кадра (по умолчанию 1:1)"
         },
         "output_hint": "Изображение (быстро)"
       }

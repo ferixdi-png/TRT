@@ -265,12 +265,14 @@ def validate_model_inputs(
                 )
             elif field_name in ['file', 'file_id', 'file_url']:
                 value = user_inputs.get('file') or user_inputs.get('file_id') or user_inputs.get('file_url')
-            
+
             if value is None:
+                if field_spec.get('default') is not None:
+                    continue
                 raise ModelContractError(
-                    f"Model {model_id} requires field '{field_name}' (type: {field_type}), "
-                    f"but it is missing from user inputs"
-                )
+                        f"Model {model_id} requires field '{field_name}' (type: {field_type}), "
+                        f"but it is missing from user inputs"
+                    )
     
     # Validate field types and constraints
     for field_name in all_fields:
