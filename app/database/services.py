@@ -677,14 +677,15 @@ class JobService:
             return bool(row)
     
     async def list_user_jobs(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get user's jobs."""
+        """Get user's jobs with result/error fields for history."""
         async with self.db.transaction() as conn:
             rows = await conn.fetch("""
-                SELECT id, model_id, status, price_rub, created_at, finished_at
-                FROM jobs
-                WHERE user_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2
+                SELECT id, model_id, status, price_rub, created_at, finished_at,
+                       result_json, error_text, replied_at
+                  FROM jobs
+                 WHERE user_id = $1
+              ORDER BY created_at DESC
+                 LIMIT $2
             """, user_id, limit)
             return [dict(row) for row in rows]
 
