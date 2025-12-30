@@ -4,7 +4,7 @@
 - Deploy: Render webhook (`main_render.py`), KIE_BASE_URL=https://api.kie.ai (Iteration 18 PR recreation branch)
 - Required env: TELEGRAM_BOT_TOKEN, KIE_API_KEY; optional: FREE_TIER_MODEL_IDS (defaults to top-5 cheapest)
 - Storage: prefers Postgres via DATABASE_URL, falls back to JSON
-- Iteration 20: merge conflicts re-audited (no markers found), targeted callback/history/payload tests rerun and green
+- Iteration 21: merge-conflict audit repeated (no markers in repo), targeted callback/history/payload tests rerun and green
 
 ## 2) Release Gates
 - [ ] G1 Foundation — stage logs need audit; progress callbacks awaited; callback persistence wired; reply-once guard added (DB-backed); taskId persisted early
