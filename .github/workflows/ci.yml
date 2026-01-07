@@ -36,6 +36,10 @@ jobs:
       run: |
         python -m pytest tests/test_callback_handlers.py -v
     
+    - name: Check model schema validation
+      run: |
+        python -m pytest tests/test_model_schema_validation.py -v
+    
     - name: Compile Python files
       run: |
         python -m compileall -q .
