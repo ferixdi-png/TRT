@@ -9,6 +9,18 @@ from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Импортируем mask на уровне модуля для безопасности
+try:
+    from app.utils.mask import mask
+except ImportError:
+    # Fallback если mask недоступен
+    def mask(value: str) -> str:
+        if not value:
+            return '[EMPTY]'
+        if len(value) <= 8:
+            return '****'
+        return f"{value[:2]}...{value[-2:]}"
+
 # Обязательные ENV ключи (контракт)
 REQUIRED_ENV_KEYS = [
     'ADMIN_ID',
@@ -127,7 +139,6 @@ def startup_validation() -> bool:
         for key in format_errors:
             value = os.getenv(key, '')
             # Маскируем значение для безопасности
-            from app.utils.mask import mask
             masked_value = mask(value) if value else '[EMPTY]'
             logger.error(f"  - {key}: {masked_value}")
         logger.error("=" * 60)
