@@ -492,7 +492,10 @@ async def process_prompt(message: Message, state: FSMContext):
     prompt = message.text.strip()
     
     if not prompt:
-        await message.answer("❌ Промпт не может быть пустым. Попробуйте ещё раз:")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="marketing:main")]
+        ])
+        await message.answer("❌ Промпт не может быть пустым. Попробуйте ещё раз:", reply_markup=keyboard)
         return
     
     data = await state.get_data()
@@ -500,14 +503,20 @@ async def process_prompt(message: Message, state: FSMContext):
     model = get_model_by_id(model_id)
     
     if not model:
-        await message.answer("❌ Ошибка: модель не найдена")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ В меню", callback_data="marketing:main")]
+        ])
+        await message.answer("❌ Ошибка: модель не найдена", reply_markup=keyboard)
         await state.clear()
         return
     
     # Calculate price
     price = model.get("price")
     if not price:
-        await message.answer("❌ Ошибка: цена модели не определена")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ В меню", callback_data="marketing:main")]
+        ])
+        await message.answer("❌ Ошибка: цена модели не определена", reply_markup=keyboard)
         await state.clear()
         return
     
