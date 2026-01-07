@@ -449,5 +449,7 @@ python -m pytest tests/ -v
 
 ### Коммиты
 
-- Следующий: fix: ensure atomic balance operations in transactions - no nested connections
+- `2d98e5e` - fix: ensure mark_payment_status uses same transaction for balance update
+- `a6596a6` - docs: update quality log with sixth cycle - atomic balance operations fix
+- `031dde2` - fix: ensure atomic balance operations in transactions - no nested connections
 
