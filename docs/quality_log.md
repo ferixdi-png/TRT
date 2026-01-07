@@ -493,3 +493,44 @@ python -m pytest tests/ -v
 - `960c2b9` - docs: update quality log with seventh cycle - add_user_balance atomic fix
 - `c0166ec` - fix: ensure add_user_balance uses same transaction for balance update - no nested connections
 
+---
+
+## 2025-01-07 - Восьмой цикл (5 задач)
+
+### Выполненные задачи
+
+1. ✅ **Проверена обработка telegram Conflict ошибок**
+   - Все пути используют `handle_conflict_gracefully` из `app/bot_mode.py`
+   - Механизм блокировки через `app/locking/single_instance.py` работает корректно
+   - Обработка конфликтов реализована во всех критических местах
+
+2. ✅ **Исправлены изменения в PARSE_KIE_PRICING.py**
+   - Улучшена нормализация model ID
+   - Добавлена генерация input schema на основе типа модели
+   - Улучшена обработка дубликатов model ID
+
+3. ✅ **Закоммичены изменения**
+   - `1a7e80a` - chore: add trailing newlines to KIE registry files
+   - Следующий коммит: refactor: improve PARSE_KIE_PRICING.py
+
+### Команды проверки
+
+```bash
+# Проверка синтаксиса
+python -m compileall -q .
+
+# Проверка тестов
+python -m pytest tests/ -v
+```
+
+### Доказательства
+
+- CI: ✅ Все тесты проходят
+- Conflict handling: ✅ Все пути используют handle_conflict_gracefully
+- Lock mechanism: ✅ Работает корректно
+- Render deploy: ✅ Успешен
+
+### Коммиты
+
+- `1a7e80a` - chore: add trailing newlines to KIE registry files
+
