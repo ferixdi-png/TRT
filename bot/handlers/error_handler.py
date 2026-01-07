@@ -1,14 +1,24 @@
 """
 Global error handler - user-friendly error messages.
-Contract: All errors caught, user always gets response.
+Contract: All errors caught, user always gets response with keyboard (no dead ends).
 """
 from aiogram import Router
-from aiogram.types import ErrorEvent
+from aiogram.types import ErrorEvent, InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="error_handler")
+
+
+def _error_fallback_keyboard() -> InlineKeyboardMarkup:
+    """Fallback keyboard for error messages - always provide navigation."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+            [InlineKeyboardButton(text="❓ Поддержка", callback_data="menu:support")],
+        ]
+    )
 
 
 @router.error()
@@ -53,26 +63,29 @@ async def global_error_handler(event: ErrorEvent):
             "• Обратиться в поддержку, если проблема повторяется"
         )
     
+    # Always provide keyboard to avoid dead ends
+    keyboard = _error_fallback_keyboard()
+    
     # Determine update type and respond accordingly
     try:
         if update.message:
-            await update.message.answer(error_message)
+            await update.message.answer(error_message, reply_markup=keyboard)
         elif update.callback_query:
             callback = update.callback_query
             await callback.answer("⚠️ Ошибка")
             try:
-                await callback.message.answer(error_message)
+                await callback.message.answer(error_message, reply_markup=keyboard)
             except Exception as msg_err:
                 # If edit fails, try to send new message (catch Telegram API errors)
                 # MASTER PROMPT: No bare except - catch Exception for Telegram API failures
                 logger.debug(f"Failed to send error message via callback: {msg_err}")
                 try:
-                    await callback.message.answer(error_message)
+                    await callback.message.answer(error_message, reply_markup=keyboard)
                 except Exception as retry_err:
                     logger.debug(f"Retry also failed: {retry_err}")
                     pass
         elif update.edited_message:
-            await update.edited_message.answer(error_message)
+            await update.edited_message.answer(error_message, reply_markup=keyboard)
     except Exception as e:
         # Last resort - log but don't crash
         logger.critical(f"Failed to send error message to user: {e}")

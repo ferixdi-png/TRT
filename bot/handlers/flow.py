@@ -1815,7 +1815,14 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     flow_ctx = InputContext(**data.get("flow_ctx"))
     model = next((m for m in _get_models_list() if m.get("model_id") == flow_ctx.model_id), None)
     if not model:
-        await callback.message.edit_text("⚠️ Модель не найдена.")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")],
+            [InlineKeyboardButton(text="📂 Выбрать модель", callback_data="menu:generate")]
+        ])
+        await callback.message.edit_text(
+            "⚠️ Модель не найдена.\n\nПопробуйте выбрать другую модель.",
+            reply_markup=keyboard
+        )
         await state.clear()
         return
 
