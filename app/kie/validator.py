@@ -254,18 +254,25 @@ def validate_model_inputs(
             # Common field mappings
             if field_name in ['prompt', 'text', 'input', 'message']:
                 value = user_inputs.get('text') or user_inputs.get('prompt') or user_inputs.get('input')
-            elif field_name in ['url', 'link', 'source_url', 'image_url', 'video_url', 'audio_url']:
-                value = (user_inputs.get('url') or user_inputs.get('link') or 
-                        user_inputs.get('image_url') or user_inputs.get('video_url') or 
-                        user_inputs.get('audio_url'))
+            elif field_name in ['url', 'link', 'source_url', 'image_url', 'image', 'video_url', 'audio_url']:
+                value = (
+                    user_inputs.get('url')
+                    or user_inputs.get('link')
+                    or user_inputs.get('image_url')
+                    or user_inputs.get('image')
+                    or user_inputs.get('video_url')
+                    or user_inputs.get('audio_url')
+                )
             elif field_name in ['file', 'file_id', 'file_url']:
                 value = user_inputs.get('file') or user_inputs.get('file_id') or user_inputs.get('file_url')
-            
+
             if value is None:
+                if field_spec.get('default') is not None:
+                    continue
                 raise ModelContractError(
-                    f"Model {model_id} requires field '{field_name}' (type: {field_type}), "
-                    f"but it is missing from user inputs"
-                )
+                        f"Model {model_id} requires field '{field_name}' (type: {field_type}), "
+                        f"but it is missing from user inputs"
+                    )
     
     # Validate field types and constraints
     for field_name in all_fields:
