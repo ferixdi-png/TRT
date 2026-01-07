@@ -200,12 +200,22 @@ class PostgresStorage(BaseStorage):
             return await self.get_user_balance(user_id)
     
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
-        """Вычесть из баланса"""
+        """Вычесть из баланса (atomic, with transaction)"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
-                current = await self.get_user_balance(user_id)
-                if current >= amount:
+                # Проверяем баланс в той же транзакции
+                user = await conn.fetchrow("SELECT balance FROM users WHERE id = $1", user_id)
+                if not user:
+                    # Создаем пользователя если не существует
+                    await conn.execute(
+                        "INSERT INTO users (id, balance) VALUES ($1, 0.00) ON CONFLICT (id) DO NOTHING",
+                        user_id
+                    )
+                    user = await conn.fetchrow("SELECT balance FROM users WHERE id = $1", user_id)
+                
+                current_balance = float(user['balance'])
+                if current_balance >= amount:
                     await conn.execute(
                         "UPDATE users SET balance = balance - $1 WHERE id = $2",
                         amount, user_id
