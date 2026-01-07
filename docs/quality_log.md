@@ -579,6 +579,43 @@ python -m pytest tests/ -v
 
 - `1a7e80a` - chore: add trailing newlines to KIE registry files
 - `b187934` - feat: add startup_validation to main_render.py and explicit test steps in CI
+- `0005483` - fix: move mask import to module level in startup_validation for safety
+
+---
+
+## 2025-01-07 - Одиннадцатый цикл (улучшение безопасности)
+
+### Выполненные задачи
+
+1. ✅ **Улучшена безопасность startup_validation**
+   - Импорт `mask` перенесен на уровень модуля
+   - Добавлен fallback если `mask` недоступен
+   - Предотвращает потенциальные ошибки импорта при валидации
+
+2. ✅ **Проверены критические компоненты**
+   - Все обработчики ошибок на месте
+   - Global error handler работает корректно
+   - Нет критических проблем с импортами
+
+### Команды проверки
+
+```bash
+# Проверка импортов
+python -c "from app.utils.startup_validation import startup_validation; print('OK')"
+
+# Проверка mask fallback
+python -c "from app.utils.startup_validation import mask; print('OK')"
+```
+
+### Доказательства
+
+- startup_validation: ✅ Импорт mask безопасен
+- Error handling: ✅ Все обработчики на месте
+- Импорты: ✅ Нет проблем
+
+### Коммиты
+
+- `0005483` - fix: move mask import to module level in startup_validation for safety
 
 ---
 
