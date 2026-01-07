@@ -75,12 +75,16 @@ def ensure_data_directory(data_dir: str) -> bool:
 def load_and_validate_settings():
     """Загружает и валидирует настройки из ENV"""
     from app.config import get_settings
+    from app.utils.startup_validation import startup_validation
     
     logger.info("=" * 60)
     logger.info("BOT STARTING")
     logger.info("=" * 60)
     
     try:
+        # Валидируем обязательные ENV переменные
+        startup_validation()
+        
         # Логируем ENV snapshot
         log_env_snapshot()
         

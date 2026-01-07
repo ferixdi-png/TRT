@@ -40,11 +40,27 @@ jobs:
       run: |
         python -m pytest tests/test_model_schema_validation.py -v
     
+    - name: Check health endpoint
+      run: |
+        python -m pytest tests/test_healthcheck.py -v
+    
+    - name: Check log sanitization
+      run: |
+        python -m pytest tests/test_log_sanitization.py -v
+    
+    - name: Check payments idempotency
+      run: |
+        python -m pytest tests/test_payments_idempotency.py -v
+    
+    - name: Run E2E smoke tests
+      run: |
+        python -m pytest tests/test_all_scenarios_e2e.py -v
+    
     - name: Compile Python files
       run: |
         python -m compileall -q .
     
-    - name: Run tests
+    - name: Run all tests
       run: |
         pytest -q
       env:
