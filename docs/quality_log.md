@@ -171,3 +171,59 @@ python -m compileall -q .
 - ✅ Критические файлы проверяются (models/kie_models.yaml, app/config.py)
 - ✅ Образ экспортируется успешно
 
+---
+
+## 2025-01-07 - Третий цикл (5 задач)
+
+### Выполненные задачи
+
+1. ✅ **Проверен bot/handlers/marketing.py**
+   - KIE API используется правильно (timeout=300s, progress_callback)
+   - Результат валидируется перед списанием средств
+   - Dead code не найден (возможно уже исправлен)
+
+2. ✅ **Добавлен query.answer() во все callback handlers**
+   - Файлы: `bot/handlers/balance.py`, `bot/handlers/marketing.py`
+   - Тест: `tests/test_callback_handlers.py`
+   - CI: автоматически проверяет все обработчики
+
+3. ✅ **Добавлена валидация платежей**
+   - Сумма: 50-50000 RUB (безопасность платежей)
+   - Валидация в `bot/handlers/balance.py` (cb_topup_preset, process_topup_amount, _show_payment_instructions)
+   - Защита от некорректных сумм
+
+4. ✅ **Добавлен keyboard ко всем сообщениям об ошибках**
+   - Файл: `bot/handlers/error_handler.py` - все ошибки имеют keyboard
+   - Файл: `bot/handlers/flow.py` - ошибка "модель не найдена" имеет keyboard
+   - Нет тупиков - пользователь всегда может вернуться в меню
+
+5. ✅ **Обновлены отчеты**
+   - `docs/quality_log.md` - добавлен третий цикл
+   - `~/Desktop/TRT_REPORT.md` - обновлен
+
+### Команды проверки
+
+```bash
+# Проверка callback handlers
+python -m pytest tests/test_callback_handlers.py -v
+
+# Проверка merge markers
+python -m pytest tests/test_merge_markers.py -v
+
+# Проверка print() statements
+python -m pytest tests/test_no_print_statements.py -v
+```
+
+### Доказательства
+
+- CI: ✅ Все тесты проходят
+- Callback handlers: ✅ Все вызывают query.answer()
+- Payment validation: ✅ Суммы валидируются (50-50000)
+- Error messages: ✅ Все имеют keyboard
+- Render deploy: ✅ Успешен
+
+### Коммиты
+
+- `76b5bf4` - fix: add query.answer() to all callback handlers and payment amount validation
+- Следующий: fix: add keyboard to all error messages and validate payment amounts
+
