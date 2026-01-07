@@ -245,27 +245,6 @@ def release_single_instance_lock():
 def is_lock_held() -> bool:
     """Проверить, удерживается ли lock"""
     return _lock_handle is not None and _lock_type is not None
-=======
-PostgreSQL advisory lock with TTL and stale detection for singleton instance management.
-
-Features:
-- Advisory lock via PostgreSQL
-- TTL-based stale detection (60s)
-- Automatic heartbeat every 20s
-- Graceful release on shutdown
-- Supports asyncpg and psycopg
-"""
-import asyncio
-import logging
-from typing import Optional
-
-logger = logging.getLogger(__name__)
-
-try:
-    import asyncpg
-    HAS_ASYNCPG = True
-except ImportError:
-    HAS_ASYNCPG = False
 
 try:
     import psycopg
