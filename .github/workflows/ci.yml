@@ -32,6 +32,10 @@ jobs:
       run: |
         python -m pytest tests/test_no_print_statements.py -v
     
+    - name: Check callback handlers
+      run: |
+        python -m pytest tests/test_callback_handlers.py -v
+    
     - name: Compile Python files
       run: |
         python -m compileall -q .

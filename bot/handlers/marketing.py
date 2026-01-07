@@ -630,6 +630,7 @@ async def process_prompt(message: Message, state: FSMContext):
 @router.callback_query(F.data == "mgen:confirm")
 async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
     """Confirm and start actual KIE generation with full database integration + free tier support."""
+    await callback.answer()  # Always answer callback
     import uuid
     from datetime import datetime, timezone
     

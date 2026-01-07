@@ -136,6 +136,7 @@ async def cb_balance_topup(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("topup:amount:"))
 async def cb_topup_preset(callback: CallbackQuery, state: FSMContext):
     """Quick topup with preset amount."""
+    await callback.answer()  # Always answer callback
     amount = int(callback.data.split(":", 2)[2])
     await _show_payment_instructions(callback, state, Decimal(amount))
 
@@ -163,6 +164,11 @@ async def process_topup_amount(message: Message, state: FSMContext):
 async def _show_payment_instructions(callback: CallbackQuery, state: FSMContext, amount: Decimal):
     """Show payment instructions (callback version)."""
     import os
+    
+    # Validate amount range: 50-50000 RUB (payment safety)
+    if amount < 50 or amount > 50000:
+        await callback.answer("❌ Сумма должна быть от 50 до 50 000₽", show_alert=True)
+        return
     
     # Payment credentials from ENV
     bank = os.getenv("PAYMENT_BANK", "Сбербанк")
