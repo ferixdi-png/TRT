@@ -489,5 +489,6 @@ python -m pytest tests/ -v
 
 ### Коммиты
 
-- Следующий: fix: ensure add_user_balance uses same transaction for balance update - no nested connections
+- `960c2b9` - docs: update quality log with seventh cycle - add_user_balance atomic fix
+- `c0166ec` - fix: ensure add_user_balance uses same transaction for balance update - no nested connections
 
