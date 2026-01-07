@@ -163,10 +163,35 @@ async def run(settings, application):
     global _application
     
     # Singleton lock должен быть получен ДО любых async операций
-    from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock
+    from app.locking.single_instance import acquire_single_instance_lock, release_single_instance_lock
     
-    if not acquire_singleton_lock():
-        # acquire_singleton_lock уже вызвал exit(0) если lock не получен
+    lock_acquired = acquire_single_instance_lock()
+    
+    if not lock_acquired:
+        # PASSIVE MODE: lock не получен, запускаем только healthcheck
+        logger.warning("=" * 60)
+        logger.warning("[PASSIVE MODE] Singleton lock not acquired")
+        logger.warning("[PASSIVE MODE] Telegram runner disabled")
+        logger.warning("[PASSIVE MODE] Healthcheck server only")
+        logger.warning("=" * 60)
+        
+        # Запускаем healthcheck сервер (если PORT задан)
+        if settings.port > 0:
+            logger.info(f"[PASSIVE] Starting healthcheck server on port {settings.port}")
+            await start_health_server(port=settings.port)
+            
+            # Держим процесс живым для healthcheck
+            logger.info("[PASSIVE] Healthcheck server running, keeping process alive...")
+            try:
+                # Бесконечный цикл для поддержания healthcheck
+                while True:
+                    await asyncio.sleep(60)  # Проверяем каждую минуту
+            except KeyboardInterrupt:
+                logger.info("[PASSIVE] Shutting down healthcheck server")
+        else:
+            logger.warning("[PASSIVE] PORT not set, cannot start healthcheck server")
+            logger.warning("[PASSIVE] Exiting (no work to do)")
+        
         return
     
     try:
@@ -355,7 +380,7 @@ async def run(settings, application):
         await stop_health_server()
         
         # Освобождаем singleton lock
-        release_singleton_lock()
+        release_single_instance_lock()
 
 
 async def main():

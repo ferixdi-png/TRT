@@ -247,3 +247,6 @@ Parameter 'image_urls' is not supported for kling/v2-5-turbo-image-to-video-pro 
 8. **НЕТ параметра aspect_ratio** - в отличие от text-to-video версии, параметр `aspect_ratio` не поддерживается!
 9. **НЕТ параметра sound** - в отличие от других моделей Kling, параметр `sound` не поддерживается!
 
+
+
+

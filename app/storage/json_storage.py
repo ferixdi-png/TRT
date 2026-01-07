@@ -387,11 +387,18 @@ class JsonStorage(BaseStorage):
         payment_method: str,
         payment_id: Optional[str] = None,
         screenshot_file_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
+        idempotency_key: Optional[str] = None
     ) -> str:
-        """Добавить платеж"""
+        """Добавить платеж с поддержкой idempotency"""
         pay_id = payment_id or str(uuid.uuid4())
         data = await self._load_json(self.payments_file)
+        
+        # Если передан idempotency_key, проверяем существующий платеж
+        if idempotency_key:
+            for existing_payment in data.values():
+                if existing_payment.get('idempotency_key') == idempotency_key:
+                    return existing_payment['payment_id']
         
         payment = {
             'payment_id': pay_id,
@@ -400,6 +407,7 @@ class JsonStorage(BaseStorage):
             'payment_method': payment_method,
             'screenshot_file_id': screenshot_file_id,
             'status': status,
+            'idempotency_key': idempotency_key,
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat(),
             'admin_id': None,
@@ -417,12 +425,13 @@ class JsonStorage(BaseStorage):
         admin_id: Optional[int] = None,
         notes: Optional[str] = None
     ) -> None:
-        """Обновить статус платежа"""
+        """Обновить статус платежа с автоматическим rollback при cancel/failed"""
         data = await self._load_json(self.payments_file)
         if payment_id not in data:
             raise ValueError(f"Payment {payment_id} not found")
         
         payment = data[payment_id]
+        old_status = payment.get('status')
         payment['status'] = status
         payment['updated_at'] = datetime.now().isoformat()
         
@@ -432,8 +441,21 @@ class JsonStorage(BaseStorage):
             payment['notes'] = notes
         
         # Если платеж одобрен, добавляем баланс
-        if status == "approved" and payment.get('status') != "approved":
+        if status == "approved" and old_status != "approved":
             await self.add_user_balance(payment['user_id'], payment['amount'])
+        
+        # Если платеж отменен или провалился, освобождаем резервы (если были)
+        if status in ("cancelled", "failed", "rejected"):
+            reserves_data = await self._load_json(self.data_dir / "balance_reserves.json")
+            user_id = payment['user_id']
+            for reserve_id, reserve in list(reserves_data.items()):
+                if (reserve.get('user_id') == user_id and 
+                    reserve.get('status') == 'reserved'):
+                    reserve['status'] = 'released'
+                    reserve['updated_at'] = datetime.now().isoformat()
+                    # Возвращаем баланс
+                    await self.add_user_balance(user_id, reserve['amount'])
+            await self._save_json(self.data_dir / "balance_reserves.json", reserves_data)
         
         await self._save_json(self.payments_file, data)
     
@@ -459,6 +481,118 @@ class JsonStorage(BaseStorage):
         
         payments.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return payments[:limit]
+    
+    # ==================== BALANCE RESERVES (IDEMPOTENCY) ====================
+    
+    async def reserve_balance_for_generation(
+        self,
+        user_id: int,
+        amount: float,
+        model_id: str,
+        task_id: str,
+        idempotency_key: Optional[str] = None
+    ) -> bool:
+        """Резервирует баланс для генерации (idempotent)"""
+        reserves_file = self.data_dir / "balance_reserves.json"
+        reserves_data = await self._load_json(reserves_file)
+        
+        # Проверяем баланс
+        balance = await self.get_user_balance(user_id)
+        if balance < amount:
+            return False  # Недостаточно средств
+        
+        # Генерируем idempotency_key если не передан
+        if not idempotency_key:
+            idempotency_key = f"{task_id}:{user_id}:{model_id}"
+        
+        # Проверяем существующий резерв по idempotency_key
+        for reserve in reserves_data.values():
+            if reserve.get('idempotency_key') == idempotency_key:
+                return reserve.get('status') == 'reserved'
+        
+        # Проверяем существующий резерв по task_id
+        for reserve in reserves_data.values():
+            if (reserve.get('task_id') == task_id and 
+                reserve.get('user_id') == user_id and 
+                reserve.get('model_id') == model_id):
+                return reserve.get('status') == 'reserved'
+        
+        # Создаем новый резерв
+        reserve_id = str(uuid.uuid4())
+        reserve = {
+            'id': reserve_id,
+            'user_id': user_id,
+            'task_id': task_id,
+            'model_id': model_id,
+            'amount': amount,
+            'idempotency_key': idempotency_key,
+            'status': 'reserved',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        reserves_data[reserve_id] = reserve
+        
+        # Резервируем баланс (вычитаем из доступного)
+        await self.subtract_user_balance(user_id, amount)
+        
+        await self._save_json(reserves_file, reserves_data)
+        return True
+    
+    async def release_balance_reserve(
+        self,
+        user_id: int,
+        task_id: str,
+        model_id: str
+    ) -> bool:
+        """Освобождает зарезервированный баланс (при отмене/ошибке)"""
+        reserves_file = self.data_dir / "balance_reserves.json"
+        reserves_data = await self._load_json(reserves_file)
+        
+        # Находим резерв
+        for reserve_id, reserve in list(reserves_data.items()):
+            if (reserve.get('task_id') == task_id and 
+                reserve.get('user_id') == user_id and 
+                reserve.get('model_id') == model_id and 
+                reserve.get('status') == 'reserved'):
+                
+                # Освобождаем баланс (возвращаем обратно)
+                await self.add_user_balance(user_id, reserve['amount'])
+                
+                # Обновляем статус резерва
+                reserve['status'] = 'released'
+                reserve['updated_at'] = datetime.now().isoformat()
+                
+                await self._save_json(reserves_file, reserves_data)
+                return True
+        
+        return False  # Резерва не было
+    
+    async def commit_balance_reserve(
+        self,
+        user_id: int,
+        task_id: str,
+        model_id: str
+    ) -> bool:
+        """Подтверждает резерв баланса (списывает при успешной генерации)"""
+        reserves_file = self.data_dir / "balance_reserves.json"
+        reserves_data = await self._load_json(reserves_file)
+        
+        # Находим резерв
+        for reserve_id, reserve in list(reserves_data.items()):
+            if (reserve.get('task_id') == task_id and 
+                reserve.get('user_id') == user_id and 
+                reserve.get('model_id') == model_id and 
+                reserve.get('status') == 'reserved'):
+                
+                # Обновляем статус резерва (баланс уже списан при резервировании)
+                reserve['status'] = 'committed'
+                reserve['updated_at'] = datetime.now().isoformat()
+                
+                await self._save_json(reserves_file, reserves_data)
+                return True
+        
+        return False  # Резерва не было
     
     # ==================== REFERRALS ====================
     
@@ -503,6 +637,10 @@ class JsonStorage(BaseStorage):
         await self._save_json(self.free_generations_file, data)
     
     # ==================== UTILITY ====================
+    
+    async def async_test_connection(self) -> bool:
+        """Проверить подключение (async-friendly)"""
+        return True  # JSON storage всегда доступен
     
     def test_connection(self) -> bool:
         """Проверить подключение"""

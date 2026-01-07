@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "source": "docs/*_INTEGRATION.md",
-  "build_timestamp": "2025-12-22T10:16:43.818627+00:00",
+  "build_timestamp": "2025-12-22T10:34:40.625826+00:00",
   "models_count": 75,
   "models": {
     "bytedance/seedream": {
@@ -4154,5 +4154,5 @@
       "description": "Документация по интеграции модели z-image согласно официальной документации KIE AI API."
     }
   },
-  "checksum": "f6c76be93fd03a83c7391b3fc40b263a83d78ff9b50e8617b02b15772b362d4b"
+  "checksum": "85264f7beea43aed343e2d9bf8b2efd1a54752b6bf78f8aadf4295c95a661db8"
 }

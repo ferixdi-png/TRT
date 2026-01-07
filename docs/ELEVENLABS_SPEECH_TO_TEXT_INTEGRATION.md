@@ -222,3 +222,6 @@ INPUT_PREVIEW={'audio_url': 'https://...', 'language_code': '', 'tag_audio_event
 7. **Размер файла** - максимальный размер файла: 200MB (валидация размера на стороне KIE API)
 8. **Уникальные параметры** - модель использует `language_code`, `tag_audio_events`, `diarize` вместо стандартных `language`, `model`, `format`!
 
+
+
+

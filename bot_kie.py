@@ -25246,8 +25246,8 @@ async def _register_all_handlers_internal(application: Application):
             ]
         },
         fallbacks=[CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                   CommandHandler('cancel', cancel)],
-        per_message=True
+                   CommandHandler('cancel', cancel)]
+        # REMOVED per_message=True - it can cause unexpected behavior with message context
     )
     
     # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
@@ -26368,10 +26368,19 @@ async def main():
         try:
             from app.storage.factory import get_storage
             storage = get_storage()
-            if storage.test_connection():
-                storage_status = "✅ доступно"
+            # ВАЖНО: В async контексте используем async_test_connection
+            if hasattr(storage, 'async_test_connection'):
+                test_result = await storage.async_test_connection()
+                if test_result:
+                    storage_status = "✅ доступно"
+                else:
+                    storage_status = "⚠️ тест соединения не прошел"
             else:
-                storage_status = "⚠️ тест соединения не прошел"
+                # Fallback для storage без async метода
+                if storage.test_connection():
+                    storage_status = "✅ доступно"
+                else:
+                    storage_status = "⚠️ тест соединения не прошел"
         except Exception as e:
             storage_status = f"❌ ошибка: {str(e)[:50]}"
         db_status = storage_status  # For compatibility with existing code

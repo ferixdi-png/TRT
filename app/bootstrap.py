@@ -39,10 +39,27 @@ class DependencyContainer:
         # Инициализация storage
         try:
             self.storage = get_storage()
-            if self.storage.test_connection():
-                logger.info("[OK] Storage initialized")
-            else:
-                logger.warning("[WARN] Storage connection test failed")
+            # ВАЖНО: В async контексте используем async_test_connection
+            # Но здесь мы в async функции, так что можем использовать await
+            try:
+                import asyncio
+                loop = asyncio.get_running_loop()
+                # Loop запущен - используем async версию
+                if hasattr(self.storage, 'async_test_connection'):
+                    # Проверяем async версию
+                    test_result = await self.storage.async_test_connection()
+                    if test_result:
+                        logger.info("[OK] Storage initialized (async test)")
+                    else:
+                        logger.warning("[WARN] Storage async connection test failed")
+                else:
+                    logger.info("[OK] Storage initialized (no async test available)")
+            except RuntimeError:
+                # Нет запущенного loop - используем sync версию
+                if self.storage.test_connection():
+                    logger.info("[OK] Storage initialized (sync test)")
+                else:
+                    logger.warning("[WARN] Storage connection test failed")
         except Exception as e:
             logger.error(f"[ERROR] Failed to initialize storage: {e}")
             # Мягкая деградация - продолжаем без storage

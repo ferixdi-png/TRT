@@ -216,3 +216,6 @@ INPUT_PREVIEW={'prompt': 'A lively comic scene...', 'negative_prompt': 'Enter yo
 9. **seed max 500** - `seed` имеет максимум 500 символов (ВАЖНО: string, а не number!)!
 10. **Отличается от google/imagen4-fast** - `aspect_ratio` имеет default "1:1" (вместо "16:9"), `seed` - это string (а не number), и НЕТ параметра `num_images`!
 
+
+
+

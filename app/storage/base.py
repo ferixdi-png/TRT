@@ -177,10 +177,15 @@ class BaseStorage(ABC):
         payment_method: str,
         payment_id: Optional[str] = None,
         screenshot_file_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
+        idempotency_key: Optional[str] = None
     ) -> str:
         """
-        Добавить платеж
+        Добавить платеж с поддержкой idempotency
+        
+        Args:
+            idempotency_key: Ключ идемпотентности (request_id + user_id + model_id)
+                           Если передан и платеж уже существует, возвращает существующий payment_id
         
         Returns:
             payment_id: str - ID платежа
@@ -195,7 +200,61 @@ class BaseStorage(ABC):
         admin_id: Optional[int] = None,
         notes: Optional[str] = None
     ) -> None:
-        """Обновить статус платежа (pending -> approved/rejected)"""
+        """
+        Обновить статус платежа (pending -> approved/rejected)
+        
+        При статусе "cancelled" или "failed" автоматически откатывает резерв/списание баланса
+        """
+        pass
+    
+    @abstractmethod
+    async def reserve_balance_for_generation(
+        self,
+        user_id: int,
+        amount: float,
+        model_id: str,
+        task_id: str,
+        idempotency_key: Optional[str] = None
+    ) -> bool:
+        """
+        Резервирует баланс для генерации (idempotent)
+        
+        Args:
+            idempotency_key: Ключ идемпотентности (task_id + user_id + model_id)
+        
+        Returns:
+            True если резерв успешен, False если недостаточно средств или уже зарезервировано
+        """
+        pass
+    
+    @abstractmethod
+    async def release_balance_reserve(
+        self,
+        user_id: int,
+        task_id: str,
+        model_id: str
+    ) -> bool:
+        """
+        Освобождает зарезервированный баланс (при отмене/ошибке)
+        
+        Returns:
+            True если резерв был освобожден, False если резерва не было
+        """
+        pass
+    
+    @abstractmethod
+    async def commit_balance_reserve(
+        self,
+        user_id: int,
+        task_id: str,
+        model_id: str
+    ) -> bool:
+        """
+        Подтверждает резерв баланса (списывает при успешной генерации)
+        
+        Returns:
+            True если списание успешно, False если резерва не было
+        """
         pass
     
     @abstractmethod
@@ -238,6 +297,14 @@ class BaseStorage(ABC):
     # ==================== UTILITY ====================
     
     @abstractmethod
+    async def async_test_connection(self) -> bool:
+        """
+        Проверить подключение (async-friendly).
+        
+        ВАЖНО: Используется в runtime когда event loop уже запущен.
+        """
+        return True  # Base implementation - переопределяется в подклассах
+    
     def test_connection(self) -> bool:
         """Проверить подключение (синхронно, для инициализации)"""
         pass

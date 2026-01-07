@@ -482,19 +482,40 @@ class PostgresStorage(BaseStorage):
         payment_method: str,
         payment_id: Optional[str] = None,
         screenshot_file_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
+        idempotency_key: Optional[str] = None
     ) -> str:
-        """Добавить платеж"""
+        """Добавить платеж с поддержкой idempotency"""
         pay_id = payment_id or str(uuid.uuid4())
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO payments (payment_id, user_id, amount, payment_method, screenshot_file_id, status)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                """,
-                pay_id, user_id, amount, payment_method, screenshot_file_id, status
-            )
+            # Если передан idempotency_key, проверяем существующий платеж
+            if idempotency_key:
+                existing = await conn.fetchrow(
+                    "SELECT payment_id FROM payments WHERE idempotency_key = $1",
+                    idempotency_key
+                )
+                if existing:
+                    return existing['payment_id']
+            
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO payments (payment_id, user_id, amount, payment_method, screenshot_file_id, status, idempotency_key)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """,
+                    pay_id, user_id, amount, payment_method, screenshot_file_id, status, idempotency_key
+                )
+            except asyncpg.UniqueViolationError:
+                # Если idempotency_key уже существует, возвращаем существующий payment_id
+                if idempotency_key:
+                    existing = await conn.fetchrow(
+                        "SELECT payment_id FROM payments WHERE idempotency_key = $1",
+                        idempotency_key
+                    )
+                    if existing:
+                        return existing['payment_id']
+                raise
         return pay_id
     
     async def mark_payment_status(
@@ -504,7 +525,7 @@ class PostgresStorage(BaseStorage):
         admin_id: Optional[int] = None,
         notes: Optional[str] = None
     ) -> None:
-        """Обновить статус платежа"""
+        """Обновить статус платежа с автоматическим rollback при cancel/failed"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
@@ -522,6 +543,19 @@ class PostgresStorage(BaseStorage):
                     )
                     if payment:
                         await self.add_user_balance(payment['user_id'], float(payment['amount']))
+                
+                # Если платеж отменен или провалился, освобождаем резервы (если были)
+                if status in ("cancelled", "failed", "rejected"):
+                    # Ищем связанные резервы и освобождаем их
+                    await conn.execute(
+                        """
+                        UPDATE balance_reserves 
+                        SET status = 'released', updated_at = NOW()
+                        WHERE user_id IN (SELECT user_id FROM payments WHERE payment_id = $1)
+                        AND status = 'reserved'
+                        """,
+                        payment_id
+                    )
     
     async def get_payment(self, payment_id: str) -> Optional[Dict[str, Any]]:
         """Получить платеж по ID"""
@@ -557,6 +591,158 @@ class PostgresStorage(BaseStorage):
             
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
+    
+    # ==================== BALANCE RESERVES (IDEMPOTENCY) ====================
+    
+    async def reserve_balance_for_generation(
+        self,
+        user_id: int,
+        amount: float,
+        model_id: str,
+        task_id: str,
+        idempotency_key: Optional[str] = None
+    ) -> bool:
+        """
+        Резервирует баланс для генерации (idempotent).
+        
+        Returns:
+            True если резерв успешен, False если недостаточно средств или уже зарезервировано
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # Проверяем баланс
+                user = await conn.fetchrow("SELECT balance FROM users WHERE id = $1", user_id)
+                if not user:
+                    # Создаем пользователя если не существует
+                    await conn.execute(
+                        "INSERT INTO users (id, balance) VALUES ($1, 0.00) ON CONFLICT (id) DO NOTHING",
+                        user_id
+                    )
+                    user = await conn.fetchrow("SELECT balance FROM users WHERE id = $1", user_id)
+                
+                current_balance = float(user['balance'])
+                if current_balance < amount:
+                    return False  # Недостаточно средств
+                
+                # Генерируем idempotency_key если не передан
+                if not idempotency_key:
+                    idempotency_key = f"{task_id}:{user_id}:{model_id}"
+                
+                # Проверяем существующий резерв по idempotency_key
+                existing = await conn.fetchrow(
+                    "SELECT id, status FROM balance_reserves WHERE idempotency_key = $1",
+                    idempotency_key
+                )
+                if existing:
+                    # Резерв уже существует - возвращаем True если он в статусе 'reserved'
+                    return existing['status'] == 'reserved'
+                
+                # Проверяем существующий резерв по task_id
+                existing_task = await conn.fetchrow(
+                    "SELECT id, status FROM balance_reserves WHERE task_id = $1 AND user_id = $2 AND model_id = $3",
+                    task_id, user_id, model_id
+                )
+                if existing_task:
+                    # Резерв уже существует для этой задачи
+                    return existing_task['status'] == 'reserved'
+                
+                # Создаем новый резерв
+                try:
+                    await conn.execute(
+                        """
+                        INSERT INTO balance_reserves (user_id, task_id, model_id, amount, idempotency_key, status)
+                        VALUES ($1, $2, $3, $4, $5, 'reserved')
+                        """,
+                        user_id, task_id, model_id, amount, idempotency_key
+                    )
+                    
+                    # Резервируем баланс (вычитаем из доступного)
+                    await conn.execute(
+                        "UPDATE users SET balance = balance - $1 WHERE id = $2",
+                        amount, user_id
+                    )
+                    
+                    return True
+                except asyncpg.UniqueViolationError:
+                    # Конфликт по уникальному ключу - резерв уже существует
+                    return False
+    
+    async def release_balance_reserve(
+        self,
+        user_id: int,
+        task_id: str,
+        model_id: str
+    ) -> bool:
+        """
+        Освобождает зарезервированный баланс (при отмене/ошибке).
+        
+        Returns:
+            True если резерв был освобожден, False если резерва не было
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # Находим резерв
+                reserve = await conn.fetchrow(
+                    """
+                    SELECT id, amount, status FROM balance_reserves 
+                    WHERE task_id = $1 AND user_id = $2 AND model_id = $3 AND status = 'reserved'
+                    """,
+                    task_id, user_id, model_id
+                )
+                
+                if not reserve:
+                    return False  # Резерва не было
+                
+                # Освобождаем баланс (возвращаем обратно)
+                await conn.execute(
+                    "UPDATE users SET balance = balance + $1 WHERE id = $2",
+                    float(reserve['amount']), user_id
+                )
+                
+                # Обновляем статус резерва
+                await conn.execute(
+                    "UPDATE balance_reserves SET status = 'released', updated_at = NOW() WHERE id = $1",
+                    reserve['id']
+                )
+                
+                return True
+    
+    async def commit_balance_reserve(
+        self,
+        user_id: int,
+        task_id: str,
+        model_id: str
+    ) -> bool:
+        """
+        Подтверждает резерв баланса (списывает при успешной генерации).
+        
+        Returns:
+            True если списание успешно, False если резерва не было
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # Находим резерв
+                reserve = await conn.fetchrow(
+                    """
+                    SELECT id, amount, status FROM balance_reserves 
+                    WHERE task_id = $1 AND user_id = $2 AND model_id = $3 AND status = 'reserved'
+                    """,
+                    task_id, user_id, model_id
+                )
+                
+                if not reserve:
+                    return False  # Резерва не было
+                
+                # Обновляем статус резерва (баланс уже списан при резервировании)
+                await conn.execute(
+                    "UPDATE balance_reserves SET status = 'committed', updated_at = NOW() WHERE id = $1",
+                    reserve['id']
+                )
+                
+                return True
     
     # ==================== REFERRALS ====================
     
@@ -616,5 +802,6 @@ class PostgresStorage(BaseStorage):
             self._pool = None
 
 
-# Алиас для обратной совместимости
+# Алиасы для обратной совместимости
 PGStorage = PostgresStorage
+# Убеждаемся что PostgresStorage экспортируется (уже есть как основной класс)

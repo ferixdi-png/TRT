@@ -145,3 +145,6 @@ tests/test_kie_registry.py::test_get_model_or_fail PASSED
 
 **Models in registry: 75** (из документации)
 
+
+
+

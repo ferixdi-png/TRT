@@ -55,12 +55,16 @@ def ensure_data_directory(data_dir: str) -> bool:
 def load_settings():
     """Загружает и валидирует настройки из ENV"""
     from app.config import get_settings, Settings
+    from app.utils.startup_validation import startup_validation
     
     logger.info("=" * 60)
     logger.info("BOT STARTING")
     logger.info("=" * 60)
     
     try:
+        # Валидируем обязательные ENV переменные
+        startup_validation()
+        
         # Валидируем настройки при загрузке
         settings = get_settings(validate=True)
         
@@ -156,14 +160,39 @@ async def start_health_server(port: int) -> bool:
 
 
 async def run(settings, application):
-    """Запускает бота (polling или webhook)"""
+    """Запускает бота (polling или webhook) или переходит в passive mode"""
     global _application
     
     # Singleton lock должен быть получен ДО любых async операций
-    from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock
+    from app.locking.single_instance import acquire_single_instance_lock, release_single_instance_lock
     
-    if not acquire_singleton_lock():
-        # acquire_singleton_lock уже вызвал exit(0) если lock не получен
+    lock_acquired = acquire_single_instance_lock()
+    
+    if not lock_acquired:
+        # PASSIVE MODE: lock не получен, запускаем только healthcheck
+        logger.warning("=" * 60)
+        logger.warning("[PASSIVE MODE] Singleton lock not acquired")
+        logger.warning("[PASSIVE MODE] Telegram runner disabled")
+        logger.warning("[PASSIVE MODE] Healthcheck server only")
+        logger.warning("=" * 60)
+        
+        # Запускаем healthcheck сервер (если PORT задан)
+        if settings.port:
+            logger.info(f"[PASSIVE] Starting healthcheck server on port {settings.port}")
+            await start_health_server(port=settings.port)
+            
+            # Держим процесс живым для healthcheck
+            logger.info("[PASSIVE] Healthcheck server running, keeping process alive...")
+            try:
+                # Бесконечный цикл для поддержания healthcheck
+                while True:
+                    await asyncio.sleep(60)  # Проверяем каждую минуту
+            except KeyboardInterrupt:
+                logger.info("[PASSIVE] Shutting down healthcheck server")
+        else:
+            logger.warning("[PASSIVE] PORT not set, cannot start healthcheck server")
+            logger.warning("[PASSIVE] Exiting (no work to do)")
+        
         return
     
     try:
@@ -187,8 +216,39 @@ async def run(settings, application):
             logger.info("=" * 60)
             logger.info("Handlers registered and application started")
             
+            # Определяем режим работы бота
+            bot_mode = os.getenv('BOT_MODE', '').lower().strip()
+            
+            # AUTO режим: определяем автоматически если не задан
+            if not bot_mode or bot_mode == 'auto':
+                # Логика AUTO:
+                # - Если RENDER=true и PORT задан -> поднимать healthcheck web
+                # - Telegram runner (polling/webhook) включать только если:
+                #   * TELEGRAM_BOT_TOKEN задан
+                #   * SINGLETON_LOCK получен
+                # - Если lock не получен -> passive mode
+                is_render = os.getenv('RENDER', '').lower() in ('1', 'true', 'yes')
+                has_port = settings.port and settings.port > 0
+                has_token = bool(settings.telegram_bot_token)
+                
+                if has_token and lock_acquired:
+                    # Есть токен и lock получен -> polling
+                    bot_mode = 'polling'
+                    logger.info("[AUTO] BOT_MODE=auto -> polling (token present, lock acquired)")
+                elif is_render and has_port:
+                    # Render с PORT -> passive mode (healthcheck only)
+                    bot_mode = 'passive'
+                    logger.info("[AUTO] BOT_MODE=auto -> passive (Render with PORT, no token or lock)")
+                else:
+                    # По умолчанию passive
+                    bot_mode = 'passive'
+                    logger.info(f"[AUTO] BOT_MODE=auto -> passive (token={has_token}, lock={lock_acquired}, render={is_render}, port={has_port})")
+            else:
+                # Явно заданный режим
+                logger.info(f"[BOT_MODE] Using explicit mode: {bot_mode}")
+            
             # Запускаем polling или webhook
-            if settings.bot_mode == "webhook":
+            if bot_mode == "webhook":
                 if not settings.webhook_url:
                     logger.error("[FAIL] WEBHOOK_URL not set for webhook mode")
                     sys.exit(1)
@@ -355,7 +415,7 @@ async def run(settings, application):
         await stop_health_server()
         
         # Освобождаем singleton lock
-        release_singleton_lock()
+        release_single_instance_lock()
 
 
 async def main():

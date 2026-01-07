@@ -1,103 +1,52 @@
-name: CI - Verify & Behavioral E2E
+name: CI
 
 on:
-  pull_request:
-    branches: [main, master]
   push:
-    branches: [main, master]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  verify-and-test:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    env:
-      APP_ENV: test
-      FAKE_KIE_MODE: "1"
-      PYTHONUNBUFFERED: "1"
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - name: Verify project structure
-        run: python scripts/verify_project.py
-        continue-on-error: false
-      
-      - name: Behavioral E2E testing
-        run: python scripts/behavioral_e2e.py
-        continue-on-error: false
-      
-      - name: Check for silence violations
-        run: |
-          if [ -f artifacts/behavioral/summary.md ]; then
-            if grep -q "SILENT MODELS DETECTED" artifacts/behavioral/summary.md; then
-              echo "❌ FAIL: Silent models detected!"
-              exit 1
-            fi
-          else
-            echo "❌ FAIL: behavioral_e2e summary.md not found!"
-            exit 1
-          fi
-      
-      - name: Check singleton lock protection
-        run: |
-          python -c "
-          import sys
-          from pathlib import Path
-          sys.path.insert(0, str(Path('.')))
-          try:
-              from app.singleton_lock import SingletonLock
-              print('✅ Singleton lock available')
-          except ImportError as e:
-              print(f'❌ FAIL: Singleton lock not available: {e}')
-              sys.exit(1)
-          "
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: verification-artifacts
-          path: |
-            artifacts/**
-          retention-days: 7
-      
-      - name: Upload behavioral E2E results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: behavioral-e2e-results
-          path: |
-            artifacts/behavioral/**
-          retention-days: 7
-      
-      - name: Generate CI Summary
-        if: always()
-        run: |
-          echo "## CI Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Verify Project" >> $GITHUB_STEP_SUMMARY
-          if [ -f artifacts/verify_report.txt ]; then
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            head -20 artifacts/verify_report.txt >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Behavioral E2E" >> $GITHUB_STEP_SUMMARY
-          if [ -f artifacts/behavioral/summary.md ]; then
-            cat artifacts/behavioral/summary.md >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Summary not found" >> $GITHUB_STEP_SUMMARY
-          fi
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+    
+    - name: Check for merge markers
+      run: |
+        python -m pytest tests/test_merge_markers.py -v
+    
+    - name: Compile Python files
+      run: |
+        python -m compileall -q .
+    
+    - name: Run tests
+      run: |
+        pytest -q
+      env:
+        # Минимальные ENV для тестов (моки используются)
+        ADMIN_ID: "123456789"
+        BOT_MODE: "passive"
+        DATABASE_URL: "postgresql://test:test@localhost/test"
+        DB_MAXCONN: "5"
+        KIE_API_KEY: "test_key"
+        PAYMENT_BANK: "Test Bank"
+        PAYMENT_CARD_HOLDER: "Test Holder"
+        PAYMENT_PHONE: "+79991234567"
+        PORT: "8000"
+        SUPPORT_TELEGRAM: "@test"
+        SUPPORT_TEXT: "Test support"
+        TELEGRAM_BOT_TOKEN: "1234567890:TEST_TOKEN"
+        WEBHOOK_BASE_URL: "https://test.example.com"

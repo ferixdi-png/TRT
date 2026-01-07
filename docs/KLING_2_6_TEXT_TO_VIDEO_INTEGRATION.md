@@ -304,3 +304,6 @@ INPUT_PREVIEW={'prompt': 'Visual: In a fashion...', 'sound': False, 'aspect_rati
 4. **Ограничение aspect_ratio**: Только 3 значения (не 8 как у seedream)
 5. **sound обязательный**: Должен быть указан явно
 
+
+
+

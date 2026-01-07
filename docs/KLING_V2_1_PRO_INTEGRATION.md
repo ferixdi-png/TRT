@@ -247,3 +247,6 @@ INPUT_PREVIEW={'prompt': 'POV shot of a gravity surfer...', 'image_url': 'https:
 9. **prompt max 5000** - `prompt` имеет максимум 5000 символов!
 10. **Отличается от других v2-1 моделей** - имеет параметр `tail_image_url` (default ""), которого нет в `kling/v2-1-standard` и `kling/v2-1-master-image-to-video`!
 
+
+
+

@@ -1,13 +1,17 @@
 """
 Унифицированная конфигурация логирования
 Единый логгер, уровни, формат, request-id для операций генерации
+С sanitization секретов в логах
 """
 
 import logging
 import sys
 import uuid
+import os
+import re
 from contextvars import ContextVar
 from typing import Optional
+from app.utils.mask import mask
 
 # Context variable для request-id (для async операций)
 _request_id: ContextVar[Optional[str]] = ContextVar('request_id', default=None)
@@ -60,10 +64,10 @@ def setup_logging(level: int = logging.INFO, include_request_id: bool = True) ->
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Создаем console handler
+    # Создаем console handler с sanitization
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
-    console_handler.setFormatter(logging.Formatter(log_format))
+    console_handler.setFormatter(SanitizingFormatter(log_format))
     
     # Добавляем фильтр для request-id
     if include_request_id:
@@ -91,17 +95,84 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
+def sanitize_log_message(message: str) -> str:
+    """
+    Маскирует секретные значения в логах.
+    
+    Args:
+        message: Исходное сообщение
+        
+    Returns:
+        Сообщение с замаскированными секретами
+    """
+    # Список ключей для маскирования
+    secret_keys = [
+        'TELEGRAM_BOT_TOKEN',
+        'KIE_API_KEY',
+        'DATABASE_URL',
+        'API_KEY',
+        'SECRET',
+        'PASSWORD',
+        'TOKEN',
+    ]
+    
+    # Получаем значения из ENV
+    env_secrets = {}
+    for key in secret_keys:
+        value = os.getenv(key, '')
+        if value:
+            env_secrets[value] = mask(value)
+    
+    # Маскируем в сообщении
+    result = message
+    for secret_value, masked_value in env_secrets.items():
+        if secret_value in result:
+            result = result.replace(secret_value, masked_value)
+    
+    # Маскируем паттерны типа "token=xxx" или "api_key=xxx"
+    patterns = [
+        (r'(token|api_key|secret|password|database_url)\s*[:=]\s*([^\s,;\)]+)', 
+         lambda m: f"{m.group(1)}={mask(m.group(2))}"),
+        (r'(Bearer|Token)\s+([A-Za-z0-9_-]+)', 
+         lambda m: f"{m.group(1)} {mask(m.group(2))}"),
+    ]
+    
+    for pattern, replacement in patterns:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    
+    return result
+
+
+class SanitizingFormatter(logging.Formatter):
+    """Formatter с автоматическим маскированием секретов"""
+    
+    def format(self, record: logging.LogRecord) -> str:
+        """Форматирует запись с маскированием секретов"""
+        original_msg = record.getMessage()
+        sanitized_msg = sanitize_log_message(original_msg)
+        
+        # Создаем копию записи с замаскированным сообщением
+        record_copy = logging.makeLogRecord(record.__dict__)
+        record_copy.msg = sanitized_msg
+        record_copy.args = ()  # Очищаем args, т.к. msg уже форматирован
+        
+        return super().format(record_copy)
+
+
 def log_error_with_stacktrace(logger: logging.Logger, error: Exception, user_message: str = "Ошибка, попробуйте ещё раз") -> None:
     """
-    Логирует ошибку с полным stacktrace в логах
+    Логирует ошибку с полным stacktrace в логах (с маскированием секретов)
     
     Args:
         logger: Логгер
         error: Исключение
         user_message: Короткое сообщение для пользователя (не логируется)
     """
+    error_msg = f"Error: {type(error).__name__}: {error}"
+    sanitized_msg = sanitize_log_message(error_msg)
+    
     logger.error(
-        f"Error: {type(error).__name__}: {error}",
+        sanitized_msg,
         exc_info=True  # Включает полный stacktrace
     )
     # user_message не логируется - оно отправляется пользователю отдельно

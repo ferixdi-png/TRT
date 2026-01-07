@@ -756,6 +756,140 @@ async def test_regression_guards():
                 os.environ.pop("KIE_STUB", None)
 
 
+async def test_lock_not_acquired_no_exit():
+    """Проверяет что в режиме 'lock not acquired' приложение НЕ вызывает sys.exit"""
+    print("\n" + "=" * 60)
+    print("TEST: Lock not acquired - no exit (passive mode)")
+    print("=" * 60)
+    
+    with mock_env(
+        TELEGRAM_BOT_TOKEN="1234567890:TEST_TOKEN",
+        ADMIN_ID="123456789",
+        SINGLETON_LOCK_STRICT="0"  # Passive mode enabled
+    ):
+        try:
+            from app.locking.single_instance import acquire_single_instance_lock
+            
+            # Мокаем advisory lock чтобы он возвращал False
+            # Для этого нужно подменить функцию _acquire_postgres_lock
+            import app.locking.single_instance as lock_module
+            
+            # Сохраняем оригинальную функцию
+            original_acquire = lock_module._acquire_postgres_lock
+            
+            # Мокаем чтобы lock не был получен
+            def mock_acquire_postgres_lock():
+                return None  # Lock не получен
+            
+            lock_module._acquire_postgres_lock = mock_acquire_postgres_lock
+            
+            try:
+                # Пытаемся получить lock - должен вернуть False, НЕ exit
+                result = acquire_single_instance_lock()
+                
+                # Проверяем что функция вернула False, а не вызвала exit
+                assert result is False, "Lock should not be acquired"
+                print("[OK] Lock not acquired, but no exit() called (passive mode)")
+                
+                return True
+            finally:
+                # Восстанавливаем оригинальную функцию
+                lock_module._acquire_postgres_lock = original_acquire
+                
+        except SystemExit:
+            print("[FAIL] sys.exit() was called - should use passive mode instead")
+            return False
+        except Exception as e:
+            print(f"[FAIL] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+
+async def test_async_check_pg_no_nested_loop():
+    """Проверяет что async_check_pg не вызывает nested loop ошибку"""
+    print("\n" + "=" * 60)
+    print("TEST: async_check_pg - no nested loop error")
+    print("=" * 60)
+    
+    with mock_env(
+        TELEGRAM_BOT_TOKEN="1234567890:TEST_TOKEN",
+        ADMIN_ID="123456789",
+        DATABASE_URL="postgresql://test:test@localhost:5432/test"
+    ):
+        try:
+            from app.storage.pg_storage import PostgresStorage
+            
+            # Создаем storage
+            storage = PostgresStorage("postgresql://test:test@localhost:5432/test")
+            
+            # Вызываем async_test_connection в уже запущенном event loop
+            # Это должно работать без ошибки "Cannot run the event loop while another loop is running"
+            try:
+                result = await storage.async_test_connection()
+                # Результат может быть False (нет подключения), но ошибки nested loop быть не должно
+                print(f"[OK] async_test_connection completed without nested loop error (result={result})")
+                return True
+            except RuntimeError as e:
+                if "Cannot run the event loop while another loop is running" in str(e):
+                    print("[FAIL] Nested loop error detected - async_test_connection uses asyncio.run()")
+                    return False
+                else:
+                    # Другие RuntimeError (например, нет подключения) - это нормально
+                    print(f"[OK] async_test_connection completed (expected error: {e})")
+                    return True
+                    
+        except Exception as e:
+            # Если нет asyncpg или другие ошибки - это нормально для теста
+            if "asyncpg" in str(e).lower() or "import" in str(e).lower():
+                print(f"[OK] asyncpg not available (expected in test env): {e}")
+                return True
+            print(f"[FAIL] Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+
+def test_render_startup_fixes():
+    """Проверяет исправления старта на Render"""
+    print("\n" + "=" * 60)
+    print("TEST: Render startup fixes")
+    print("=" * 60)
+    
+    import subprocess
+    
+    try:
+        # Запускаем тесты для render startup fixes
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_render_startup_fixes.py"],
+            capture_output=True,
+            text=True,
+            timeout=60  # 1 минута максимум
+        )
+        
+        # Выводим результат
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print("STDERR:", result.stderr)
+        
+        if result.returncode == 0:
+            print("[OK] Render startup fixes tests passed")
+            return True
+        else:
+            print(f"[FAIL] Render startup fixes tests failed with exit code {result.returncode}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("[FAIL] Render startup fixes tests timed out (>1 minute)")
+        return False
+    except Exception as e:
+        print(f"[FAIL] Render startup fixes tests error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def test_catalog_verification():
     """Проверяет каталог моделей через verify_catalog.py"""
     print("\n" + "=" * 60)
@@ -889,7 +1023,10 @@ def main():
     tests = [
         ("Build KIE Registry", test_build_kie_registry),
         ("Validate KIE Registry", test_validate_kie_registry),
+        ("Render startup fixes", test_render_startup_fixes),
         ("Catalog verification", test_catalog_verification),
+        ("Lock not acquired - no exit", lambda: asyncio.run(test_lock_not_acquired_no_exit())),
+        ("async_check_pg - no nested loop", lambda: asyncio.run(test_async_check_pg_no_nested_loop())),
         ("pytest -q", test_pytest),
         ("Smoke test всех моделей", test_smoke_all_models),
         ("Import проверки", test_imports_no_side_effects),

@@ -247,3 +247,6 @@ INPUT_PREVIEW={'prompt': 'Drone shot, fast traversal...', 'resolution': '720p', 
 9. **prompt max 5000** - `prompt` имеет максимум 5000 символов!
 10. **Отличается от wan/2-2-a14b-speech-to-video-turbo** - это text-to-video (нет `audio_url`), но есть `enable_prompt_expansion` и `acceleration` (которых нет в speech-to-video версии)!
 
+
+
+

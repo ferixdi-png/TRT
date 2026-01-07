@@ -137,12 +137,11 @@ def acquire_single_instance_lock() -> bool:
     """
     Попытаться получить single instance lock (PostgreSQL или filelock).
     
-    КРИТИЧНО: Если DATABASE_URL установлен, PostgreSQL lock ОБЯЗАТЕЛЕН.
-    Если PostgreSQL lock не получен (другой инстанс его держит), процесс должен завершиться,
-    даже если file lock получен. Это предотвращает одновременную работу двух инстансов.
+    НОВОЕ ПОВЕДЕНИЕ: Если lock не получен, НЕ завершаем процесс.
+    Вместо этого переходим в passive mode (healthcheck only, без Telegram runner).
     
     Returns:
-        True если lock получен, False если нет
+        True если lock получен, False если нет (passive mode)
         
     Side effect:
         Сохраняет lock handle в глобальной переменной для последующего освобождения
@@ -150,6 +149,7 @@ def acquire_single_instance_lock() -> bool:
     global _lock_handle, _lock_type, _lock_connection
     
     database_url = os.getenv('DATABASE_URL')
+    strict_mode = os.getenv('SINGLETON_LOCK_STRICT', '0') == '1'
     
     # Пробуем PostgreSQL advisory lock сначала
     lock_data = _acquire_postgres_lock()
@@ -159,16 +159,24 @@ def acquire_single_instance_lock() -> bool:
         _lock_type = 'postgres'
         return True
     
-    # КРИТИЧНО: Если DATABASE_URL установлен, но PostgreSQL lock не получен - это конфликт!
-    # Другой инстанс уже держит PostgreSQL lock, и мы НЕ должны запускаться с file lock.
+    # Если DATABASE_URL установлен, но PostgreSQL lock не получен
     if database_url:
-        logger.error("=" * 60)
-        logger.error("[LOCK] CRITICAL: DATABASE_URL is set, but PostgreSQL lock NOT acquired")
-        logger.error("[LOCK] Another bot instance is already running with PostgreSQL lock")
-        logger.error("[LOCK] This instance will exit to prevent 409 Conflict")
-        logger.error("[LOCK] Exiting gracefully (exit code 0) to prevent restart loop")
-        logger.error("=" * 60)
-        return False
+        logger.warning("=" * 60)
+        logger.warning("[LOCK] WARNING: DATABASE_URL is set, but PostgreSQL lock NOT acquired")
+        logger.warning("[LOCK] Another bot instance is already running with PostgreSQL lock")
+        
+        if strict_mode:
+            # STRICT MODE: exit (для локальной отладки)
+            logger.error("[LOCK] STRICT MODE: Exiting gracefully (exit code 0)")
+            logger.error("=" * 60)
+            import sys
+            sys.exit(0)
+        else:
+            # PASSIVE MODE: не завершаем процесс, переходим в safe mode
+            logger.warning("[LOCK] PASSIVE MODE: Telegram runner will be disabled")
+            logger.warning("[LOCK] Healthcheck server will continue running")
+            logger.warning("=" * 60)
+            return False
     
     # Fallback на filelock ТОЛЬКО если DATABASE_URL не установлен
     lock_handle = _acquire_file_lock()
@@ -179,11 +187,21 @@ def acquire_single_instance_lock() -> bool:
         return True
     
     # Lock не получен - другой экземпляр запущен
-    logger.error("=" * 60)
-    logger.error("[LOCK] FAILED: Another bot instance is already running")
-    logger.error("[LOCK] Exiting gracefully (exit code 0) to prevent restart loop")
-    logger.error("=" * 60)
-    return False
+    logger.warning("=" * 60)
+    logger.warning("[LOCK] WARNING: Another bot instance is already running")
+    
+    if strict_mode:
+        # STRICT MODE: exit
+        logger.error("[LOCK] STRICT MODE: Exiting gracefully (exit code 0)")
+        logger.error("=" * 60)
+        import sys
+        sys.exit(0)
+    else:
+        # PASSIVE MODE: не завершаем процесс
+        logger.warning("[LOCK] PASSIVE MODE: Telegram runner will be disabled")
+        logger.warning("[LOCK] Healthcheck server will continue running")
+        logger.warning("=" * 60)
+        return False
 
 
 def release_single_instance_lock():
