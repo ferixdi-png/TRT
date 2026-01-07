@@ -43,6 +43,20 @@ def mask_path(path: str) -> str:
     return path
 
 
+def mask_webhook_url(url: str | None) -> str | None:
+    """Mask webhook secrets in full URLs for logging."""
+    if not url:
+        return url
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(url)
+        masked_path = mask_path(parts.path)
+        return urlunsplit((parts.scheme, parts.netloc, masked_path, parts.query, parts.fragment))
+    except Exception:
+        return url
+
+
 def _detect_base_url() -> Optional[str]:
     # Prefer explicit config; fall back to common Render vars if present.
     for key in ("WEBHOOK_BASE_URL", "RENDER_EXTERNAL_URL", "PUBLIC_URL", "SERVICE_URL"):
@@ -234,10 +248,16 @@ async def start_webhook_server(
                 return await handler(request)
             
             # Check 2: Legacy /webhook with valid header (fallback)
-            provided_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-            if provided_header and provided_header == secret:
-                # Valid header - allow
-                return await handler(request)
+            allow_header_fallback = os.getenv("WEBHOOK_ALLOW_HEADER_FALLBACK", "").lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+            if allow_header_fallback:
+                provided_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                if provided_header and provided_header == secret:
+                    # Valid header - allow
+                    return await handler(request)
             
             # Neither path nor header valid - deny
             client_ip = request.headers.get("X-Forwarded-For", request.remote)
@@ -336,6 +356,7 @@ async def start_webhook_server(
             return web.json_response({"error": str(e)}, status=500)
 
     app.router.add_get("/", health)
+    app.router.add_get("/health", health)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/readyz", readyz)
     # Optional callback endpoint for Kie.ai. Some endpoints require callBackUrl
@@ -521,7 +542,7 @@ async def start_webhook_server(
                     secret_token=secret,
                     drop_pending_updates=False,
                 )
-                log.info("✅ Webhook registered successfully: %s", info["webhook_url"])
+                log.info("✅ Webhook registered successfully: %s", mask_webhook_url(info["webhook_url"]))
                 
                 # Startup diagnostics: Bot identity + Webhook health
                 try:
@@ -534,7 +555,7 @@ async def start_webhook_server(
                 try:
                     webhook_info = await bot.get_webhook_info()
                     log.info("🔍 WebhookInfo:")
-                    log.info(f"  - URL: {webhook_info.url}")
+                    log.info(f"  - URL: {mask_webhook_url(webhook_info.url)}")
                     log.info(f"  - Pending updates: {webhook_info.pending_update_count}")
                     log.info(f"  - Max connections: {webhook_info.max_connections}")
                     log.info(f"  - IP address: {webhook_info.ip_address or 'N/A'}")

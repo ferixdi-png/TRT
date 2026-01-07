@@ -20,7 +20,26 @@ from app.kie.parser import parse_record_info
 @pytest.fixture
 def generator():
     """Create generator instance."""
-    return KieGenerator()
+    gen = KieGenerator()
+    gen.source_of_truth = {
+        "models": [
+            {
+                "model_id": mid,
+                "payload_format": "direct",
+                "input_schema": {"required": [], "optional": [], "properties": {}},
+            }
+            for mid in [
+                "test_text_model",
+                "test_image_model",
+                "test_video_model",
+                "test_audio_model",
+                "test_url_model",
+                "test_file_model",
+                "test_model",
+            ]
+        ]
+    }
+    return gen
 
 
 @pytest.mark.asyncio
@@ -30,9 +49,8 @@ async def test_text_model(generator):
         model_id='test_text_model',
         user_inputs={'text': 'Hello world', 'prompt': 'Hello world'}
     )
-    assert 'success' in result
-    assert 'message' in result
-    assert 'result_urls' in result
+    assert result['success'] is True
+    assert result['result_urls']
 
 
 @pytest.mark.asyncio
@@ -42,8 +60,7 @@ async def test_image_model(generator):
         model_id='test_image_model',
         user_inputs={'prompt': 'A beautiful sunset', 'width': 1024, 'height': 1024}
     )
-    assert 'success' in result
-    assert 'message' in result
+    assert result['success'] is True
 
 
 @pytest.mark.asyncio
@@ -53,8 +70,7 @@ async def test_video_model(generator):
         model_id='test_video_model',
         user_inputs={'prompt': 'A cat playing', 'duration': 5}
     )
-    assert 'success' in result
-    assert 'message' in result
+    assert result['success'] is True
 
 
 @pytest.mark.asyncio
@@ -64,8 +80,7 @@ async def test_audio_model(generator):
         model_id='test_audio_model',
         user_inputs={'text': 'Hello', 'voice': 'male'}
     )
-    assert 'success' in result
-    assert 'message' in result
+    assert result['success'] is True
 
 
 @pytest.mark.asyncio
@@ -75,8 +90,7 @@ async def test_url_model(generator):
         model_id='test_url_model',
         user_inputs={'url': 'https://example.com/image.jpg'}
     )
-    assert 'success' in result
-    assert 'message' in result
+    assert result['success'] is True
 
 
 @pytest.mark.asyncio
@@ -86,8 +100,7 @@ async def test_file_model(generator):
         model_id='test_file_model',
         user_inputs={'file': 'file_id_123', 'file_id': 'file_id_123'}
     )
-    assert 'success' in result
-    assert 'message' in result
+    assert result['success'] is True
 
 
 @pytest.mark.asyncio
@@ -196,6 +209,29 @@ def test_parse_record_info_waiting():
     parsed = parse_record_info(record_info)
     assert parsed['state'] == 'waiting'
     assert 'wait' in parsed['message'].lower() or '⏳' in parsed['message']
+
+
+@pytest.mark.asyncio
+async def test_stub_client_supports_dual_signatures_and_polling():
+    generator = KieGenerator()
+    stub = generator._get_stub_client()
+
+    # V3 style call
+    resp_v3 = await stub.create_task({"model": "stub-v3", "input": {"prompt": "hi"}})
+    task_v3 = resp_v3["data"]["taskId"]
+    first = await stub.get_record_info(task_v3)
+    assert first["state"].lower() in {"running", "waiting"}
+    parsed_v3 = parse_record_info(await stub.get_record_info(task_v3))
+    assert parsed_v3["state"] == "success"
+    assert parsed_v3["result_urls"]
+
+    # V4 style call
+    resp_v4 = await stub.create_task("stub-v4", {"input": {"prompt": "hi"}})
+    task_v4 = resp_v4["data"]["taskId"]
+    _ = await stub.get_record_info(task_v4)
+    parsed_v4 = parse_record_info(await stub.get_record_info(task_v4))
+    assert parsed_v4["state"] == "success"
+    assert parsed_v4["result_urls"]
 
 
 if __name__ == "__main__":

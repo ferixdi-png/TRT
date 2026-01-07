@@ -9,6 +9,24 @@ Status: ✅ 42/42 models active
 """
 from typing import Dict, List, Optional
 from enum import Enum
+from dataclasses import dataclass
+
+
+class ModelConfig(dict):  # type: ignore
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __getattr__(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            raise AttributeError
+
+
+class InputSpec:  # type: ignore
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class ModelCategory(str, Enum):

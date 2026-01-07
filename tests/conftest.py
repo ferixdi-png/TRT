@@ -3,6 +3,11 @@ import sys
 import os
 import pytest
 
+# Ensure deterministic test configuration
+os.environ.setdefault("TEST_MODE", "1")
+os.environ.setdefault("KIE_STUB", "1")
+os.environ.setdefault("FX_RUB_PER_USD", "100")
+
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:

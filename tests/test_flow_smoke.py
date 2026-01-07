@@ -2,11 +2,16 @@
 Smoke tests for full user flow.
 Tests: start → category → model → inputs → confirm → generation (stub)
 """
+import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.types import Message, CallbackQuery, User, Chat, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
+
+# Stub secrets for config-dependent handlers (no real network calls in smoke tests).
+os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test:token")
+os.environ.setdefault("KIE_API_KEY", "test-key")
 
 from bot.handlers.flow import (
     start_cmd,
@@ -123,13 +128,14 @@ def test_models_by_category():
 async def test_start_command(message, state):
     """Test /start command."""
     await start_cmd(message, state)
-    
+
     # Should answer with welcome message
     assert message.answer.called
     call_args = message.answer.call_args
-    # Updated canonical text
-    assert "создать сегодня" in call_args[0][0] or "нейросеть" in call_args[0][0]
-    
+    text = call_args[0][0]
+    assert "AI Studio" in text
+    assert "премиальных нейросетей" in text
+
     # Should have keyboard
     assert "reply_markup" in call_args[1]
 
@@ -146,7 +152,9 @@ async def test_main_menu(callback, state):
     # Should edit message
     assert callback.message.edit_text.called
     call_args = callback.message.edit_text.call_args
-    assert "Главное меню" in call_args[0][0]
+    text = call_args[0][0]
+    assert "AI Studio" in text
+    assert "Выберите категорию" in text
 
 
 @pytest.mark.asyncio

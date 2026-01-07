@@ -204,8 +204,52 @@ def load_models_sot() -> Dict[str, Dict]:
     merged_models = {}
     for model_id, model in base_models.items():
         enriched = _apply_final_truth(model, model_id)
-        merged_models[model_id] = merge_overlay(enriched, model_id)
-    
+        merged = merge_overlay(enriched, model_id)
+
+        # Normalize output_type for legacy predicates (IMAGE/VIDEO/AUDIO)
+        output_type = str(merged.get("output_type", "")).upper()
+        if not output_type or output_type == "OTHER":
+            cat = str(merged.get("category", "")).lower()
+            if "audio" in cat or "voice" in cat or "speech" in cat:
+                output_type = "AUDIO"
+            elif "video" in cat:
+                output_type = "VIDEO"
+            elif "image" in cat or "photo" in cat:
+                output_type = "IMAGE"
+        allowed = {"IMAGE", "IMAGE_URL", "VIDEO", "VIDEO_URL", "AUDIO", "AUDIO_URL"}
+        if output_type and output_type not in allowed:
+            output_type = "IMAGE"
+
+        if output_type:
+            merged["output_type"] = output_type
+
+        # Derive simple `inputs` map from json-schema `input_schema` if missing
+        if "inputs" not in merged:
+            inputs: Dict[str, Dict] = {}
+            schema = merged.get("input_schema") or {}
+            props = schema.get("properties") or {}
+            required = set(schema.get("required") or [])
+
+            for field_name, spec in props.items():
+                field_type = str(spec.get("type", "text")).lower()
+                ui_type = "TEXT"
+                if "image" in field_name.lower():
+                    ui_type = "IMAGE_URL"
+                elif "audio" in field_name.lower():
+                    ui_type = "AUDIO_URL"
+                elif "video" in field_name.lower():
+                    ui_type = "VIDEO_URL"
+
+                inputs[field_name] = {
+                    "type": ui_type,
+                    "required": field_name in required,
+                }
+
+            if inputs:
+                merged["inputs"] = inputs
+
+        merged_models[model_id] = merged
+
     return merged_models
 
 
