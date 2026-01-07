@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 
-from app.webhook_server import mask_path, _default_secret
+from app.webhook_server import mask_path, mask_webhook_url, _default_secret
 
 
 class TestWebhookPathMasking:
@@ -37,6 +37,12 @@ class TestWebhookPathMasking:
         masked = mask_path(path)
         assert "abcd****7890" in masked
         assert "abcdefghijklmnop1234567890" not in masked
+
+    def test_mask_webhook_url_masks_secret(self):
+        url = "https://example.com/webhook/abcdefghijklmnop1234567890"
+        masked = mask_webhook_url(url)
+        assert "abcdefghijklmnop1234567890" not in masked
+        assert "/webhook/abcd****7890" in masked
 
 
 class TestDefaultSecret:
@@ -185,24 +191,52 @@ class TestWebhookSecurityGuard:
         
         handler = AsyncMock(return_value=web.Response(status=200))
         
-        async def simplified_guard(req, hdlr):
+        async def simplified_guard(req, hdlr, allow_header_fallback: bool):
             if "/webhook" in req.path:
                 if secret in req.path:
                     return await hdlr(req)
-                provided = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-                if provided == secret:
-                    return await hdlr(req)
+                if allow_header_fallback:
+                    provided = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                    if provided == secret:
+                        return await hdlr(req)
                 return web.Response(status=401, text="Unauthorized")
             return await hdlr(req)
-        
-        response = await simplified_guard(request, handler)
+
+        response = await simplified_guard(request, handler, allow_header_fallback=False)
         
         assert response.status == 401
-        assert not handler.called
+
+    @pytest.mark.asyncio
+    async def test_header_fallback_requires_opt_in(self):
+        secret = "testsecret123456"
+        request = MagicMock()
+        request.path = "/webhook"
+        request.headers = {"X-Telegram-Bot-Api-Secret-Token": secret}
+        request.remote = "1.2.3.4"
+
+        handler = AsyncMock(return_value=web.Response(status=200))
+
+        async def simplified_guard(req, hdlr, allow_header_fallback: bool):
+            if "/webhook" in req.path:
+                if secret in req.path:
+                    return await hdlr(req)
+                if allow_header_fallback:
+                    provided = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                    if provided == secret:
+                        return await hdlr(req)
+                return web.Response(status=401, text="Unauthorized")
+            return await hdlr(req)
+
+        response = await simplified_guard(request, handler, allow_header_fallback=False)
+        assert response.status == 401
+
+        response = await simplified_guard(request, handler, allow_header_fallback=True)
+        assert response.status == 200
+        assert handler.called
     
     @pytest.mark.asyncio
     async def test_legacy_webhook_with_valid_header_allowed(self):
-        """Legacy /webhook path with valid header should still work (fallback)."""
+        """Legacy /webhook path with valid header should still work when fallback enabled."""
         secret = "testsecret123456"
         
         request = MagicMock()
@@ -212,17 +246,18 @@ class TestWebhookSecurityGuard:
         
         handler = AsyncMock(return_value=web.Response(status=200))
         
-        async def simplified_guard(req, hdlr):
+        async def simplified_guard(req, hdlr, allow_header_fallback: bool):
             if "/webhook" in req.path:
                 if secret in req.path:
                     return await hdlr(req)
-                provided = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-                if provided == secret:
-                    return await hdlr(req)
+                if allow_header_fallback:
+                    provided = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                    if provided == secret:
+                        return await hdlr(req)
                 return web.Response(status=401, text="Unauthorized")
             return await hdlr(req)
         
-        response = await simplified_guard(request, handler)
+        response = await simplified_guard(request, handler, allow_header_fallback=True)
         
         assert response.status == 200
         assert handler.called

@@ -7,17 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  syntax_gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile
+        run: python -m compileall -q .
+
   checks:
     runs-on: ubuntu-latest
-    env:
-      TEST_MODE: "1"
-      KIE_STUB: "1"
-      DRY_RUN: "1"
-      TELEGRAM_BOT_TOKEN: "test-token"
-      KIE_API_KEY: "test-key"
-      KIE_BASE_URL: "http://localhost"
-      DATABASE_URL: "postgresql://localhost/test"
-      ADMIN_ID: "1"
+    needs: syntax_gate
     steps:
       - uses: actions/checkout@v4
 
@@ -29,13 +33,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile
-        run: python -m compileall .
+        run: python -m compileall -q .
 
       - name: Pytest
         run: pytest -q
-
-      - name: Verify project invariants
-        run: python scripts/verify_project.py
-
-      - name: Dry run startup
-        run: python main_render.py

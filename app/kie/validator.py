@@ -419,9 +419,14 @@ def validate_payload_before_create_task(model_id: str, payload: Dict[str, Any], 
         raise ModelContractError("Payload is missing required root field 'model'")
 
     if 'input' not in payload or not isinstance(payload.get('input'), dict):
-        raise ModelContractError("Payload is missing required field 'input' (Kie createTask requires wrapped payload)")
+        raise ModelContractError(
+            "Payload is missing required field 'input' (Kie V3 createTask requires wrapped payload)"
+        )
 
     input_data = payload['input']
+
+    if not input_data:
+        raise ModelContractError("Payload 'input' cannot be empty for createTask (wrap even for direct models)")
 
     # Normalize schema into properties + required list
     input_schema = (model_schema or {}).get('input_schema') or {}

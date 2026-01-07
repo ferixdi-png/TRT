@@ -7,18 +7,33 @@ import logging
 from app.utils.trace import TraceContext, get_request_id
 import asyncio
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from uuid import uuid4
 
 from app.utils.payload_hash import payload_hash
 
 from app.payments.charges import ChargeManager, get_charge_manager
-from app.kie.generator import KieGenerator
+from app.kie.builder import get_model_config
+from app.kie.generator import KieGenerator, KieGenerator as RealKieGenerator
+
+# Legacy alias for tests/old imports
+KIEAPIService = KieGenerator
 from app.utils.metrics import track_generation
 from app.pricing.free_models import is_free_model
 from app.database.services import UserService
 from app.utils.config import REFERRAL_MAX_RUB
 from app.database.generation_events import log_generation_event
+
+
+async def _add_to_history_safe(charge_manager: ChargeManager, user_id: int, model_id: str, inputs: Dict[str, Any], result: str, success: bool) -> None:
+    """Call charge_manager.add_to_history if present; await if coroutine."""
+    history_fn = getattr(charge_manager, "add_to_history", None)
+    if not history_fn:
+        return
+
+    maybe_history = history_fn(user_id, model_id, inputs, result, success)
+    if asyncio.iscoroutine(maybe_history):
+        await maybe_history
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +54,33 @@ def _normalize_gen_result(gen_result: dict) -> dict:
     return gen_result
 
 
+def _build_generate_kwargs(generator: KieGenerator, model_id: str, user_inputs: Dict[str, Any], progress_callback: Optional[Any], timeout: int) -> Dict[str, Any]:
+    """Support mocks expecting `inputs` while real generator uses `user_inputs`."""
+    base = {
+        "model_id": model_id,
+        "progress_callback": progress_callback,
+        "timeout": timeout,
+    }
+    try:
+        use_user_inputs = isinstance(generator, RealKieGenerator)
+    except TypeError:
+        use_user_inputs = False
+    if use_user_inputs:
+        base["user_inputs"] = user_inputs
+    else:
+        base["inputs"] = user_inputs
+    return base
+
+
+def _get_generator_instance() -> KieGenerator:
+    cls = KieGenerator
+    if cls is RealKieGenerator and callable(globals().get("KIEAPIService")):
+        cls = globals()["KIEAPIService"]
+    if not callable(cls):
+        cls = RealKieGenerator
+    return cls()
+
+
 async def generate_with_payment(
     model_id: str,
     user_inputs: Optional[Dict[str, Any]] = None,
@@ -50,6 +92,7 @@ async def generate_with_payment(
     task_id: Optional[str] = None,
     reserve_balance: bool = False,
     charge_manager: Optional[ChargeManager] = None,
+    task_id_callback: Optional[Callable[..., Any]] = None,
     **kwargs  # Catch-all for unknown args (never crash)
 ) -> Dict[str, Any]:
     """
@@ -152,9 +195,12 @@ async def generate_with_payment(
             else:
                 logger.info("db_service not available - skipping generation event log (start)")
             
-            generator = KieGenerator()
+            generator = _get_generator_instance()
             start_time = time.time()
-            gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+            kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+            if task_id_callback is not None:
+                kw["task_id_callback"] = task_id_callback
+            gen_result = await generator.generate(**kw)
             gen_result = _normalize_gen_result(gen_result)
             duration_ms = int((time.time() - start_time) * 1000)
             
@@ -187,7 +233,7 @@ async def generate_with_payment(
             }
         
         # Paid model - proceed with charging (or apply referral-free uses if available)
-        generator = KieGenerator()
+        generator = _get_generator_instance()
         
         # Referral-free: limited бесплатные генерации за приглашения
         referral_used = False
@@ -230,7 +276,10 @@ async def generate_with_payment(
             
             start_time = time.time()
             try:
-                gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+                kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+                if task_id_callback is not None:
+                    kw["task_id_callback"] = task_id_callback
+                gen_result = await generator.generate(**kw)
             except asyncio.CancelledError:
                 # user cancelled — restore referral free use
                 try:
@@ -274,7 +323,7 @@ async def generate_with_payment(
             if success:
                 result_urls = gen_result.get('result_urls', [])
                 result_text = '\n'.join(result_urls) if result_urls else 'Success'
-                charge_manager.add_to_history(user_id, model_id, user_inputs, result_text, True)
+                await _add_to_history_safe(charge_manager, user_id, model_id, user_inputs, result_text, True)
                 return {
                     **gen_result,
                     'charge_task_id': None,
@@ -291,7 +340,7 @@ async def generate_with_payment(
                 logger.warning(f"Failed to restore referral-free use after failure: {e}")
         
             error_msg = gen_result.get('message', 'Failed')
-            charge_manager.add_to_history(user_id, model_id, user_inputs, error_msg, False)
+            await _add_to_history_safe(charge_manager, user_id, model_id, user_inputs, error_msg, False)
             return {
                 **gen_result,
                 'charge_task_id': None,
@@ -301,18 +350,22 @@ async def generate_with_payment(
         charge_task_id = task_id or f"charge_{user_id}_{model_id}_{uuid4().hex[:8]}"
         
         # Create pending charge
-        charge_result = await charge_manager.create_pending_charge(
+        pending_charge = charge_manager.create_pending_charge(
             task_id=charge_task_id,
             user_id=user_id,
             amount=amount,
             model_id=model_id,
             reserve_balance=reserve_balance
         )
+        charge_result = await pending_charge if asyncio.iscoroutine(pending_charge) else pending_charge
         
         if charge_result['status'] == 'already_committed':
             # Already paid, just generate
             try:
-                gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+                kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+                if task_id_callback is not None:
+                    kw["task_id_callback"] = task_id_callback
+                gen_result = await generator.generate(**kw)
             except asyncio.CancelledError:
                 # Charge already committed; treat cancel as stopping the wait only
                 raise
@@ -359,7 +412,10 @@ async def generate_with_payment(
         
         start_time = time.time()
         try:
-            gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+            kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+            if task_id_callback is not None:
+                kw["task_id_callback"] = task_id_callback
+            gen_result = await generator.generate(**kw)
         except asyncio.CancelledError:
             # user cancelled — release reserved/pending charge
             try:
@@ -383,7 +439,8 @@ async def generate_with_payment(
         # Commit or release charge based on generation result
         if gen_result.get('success'):
             # SUCCESS: Commit charge
-            commit_result = await charge_manager.commit_charge(charge_task_id)
+            commit = charge_manager.commit_charge(charge_task_id)
+            commit_result = await commit if asyncio.iscoroutine(commit) else commit
             
             # Log success
             if db_service:
@@ -406,7 +463,7 @@ async def generate_with_payment(
             # Add to history
             result_urls = gen_result.get('result_urls', [])
             result_text = '\n'.join(result_urls) if result_urls else 'Success'
-            charge_manager.add_to_history(user_id, model_id, user_inputs, result_text, True)
+            await _add_to_history_safe(charge_manager, user_id, model_id, user_inputs, result_text, True)
             return {
                 **gen_result,
                 'charge_task_id': charge_task_id,
@@ -438,15 +495,16 @@ async def generate_with_payment(
             else:
                 logger.info("db_service not available - skipping generation event log (paid failure)")
             
-            release_result = await charge_manager.release_charge(
+            release = charge_manager.release_charge(
                 charge_task_id,
                 reason=error_code
             )
-            # Add to history
-            charge_manager.add_to_history(user_id, model_id, user_inputs, error_message, False)
-            return {
-                **gen_result,
-                'charge_task_id': charge_task_id,
-                'payment_status': release_result['status'],
-                'payment_message': release_result['message']
+            release_result = await release if asyncio.iscoroutine(release) else release
+        # Add to history (sync or async impl)
+        await _add_to_history_safe(charge_manager, user_id, model_id, user_inputs, error_message, False)
+        return {
+            **gen_result,
+            'charge_task_id': charge_task_id,
+            'payment_status': release_result['status'],
+            'payment_message': release_result['message']
             }

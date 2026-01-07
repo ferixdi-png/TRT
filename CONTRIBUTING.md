@@ -19,6 +19,13 @@
 
 ### ✅ Обязательные проверки:
 
+Перед PR:
+1. `make check`
+2. Команда запускает `compileall` и `pytest`
+3. Используйте перед каждым PR
+4. Если нет `make`: `./scripts/check.sh`
+5. PR без `make check` не принимаются
+
 ```bash
 # 1. Компиляция без ошибок
 python -m compileall .

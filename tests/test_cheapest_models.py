@@ -5,6 +5,7 @@ These were experimental price validation tests during early development.
 """
 
 import pytest
+from app.kie.builder import build_payload
 
 def test_recraft_upscale():
     """Test deprecated: Model not in production registry."""

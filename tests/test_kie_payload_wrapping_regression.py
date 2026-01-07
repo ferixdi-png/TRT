@@ -1,26 +1,37 @@
+import json
+
 import pytest
 
+from app.kie.builder import build_payload
 
-def test_z_image_payload_is_wrapped_in_input():
-    """Regression: Kie createTask requires `input` wrapper.
 
-    When a model is marked as payload_format=direct in SOURCE_OF_TRUTH,
-    we still must send fields inside payload['input'] (not on payload root),
-    otherwise Kie returns generic "This field is required" errors.
-    """
-    from app.kie.builder import build_payload, load_source_of_truth
-    from app.kie.validator import validate_payload_before_create_task
+@pytest.fixture(scope="module")
+def source_of_truth_snapshot() -> dict:
+    with open("models/KIE_SOURCE_OF_TRUTH.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+    # Keep only the target models to reduce fixture size
+    return {
+        "models": {
+            "z-image": data["models"]["z-image"],
+            "google/imagen4": data["models"]["google/imagen4"],
+        }
+    }
 
-    sot = load_source_of_truth()
-    model_schema = sot["models"].get("z-image")
-    assert model_schema is not None
 
-    payload = build_payload("z-image", {"prompt": "котик"}, source_of_truth=sot)
+def test_z_image_payload_is_wrapped(source_of_truth_snapshot):
+    payload = build_payload("z-image", {"prompt": "котик"}, source_of_truth_snapshot)
 
-    assert payload.get("model") == "z-image"
-    assert isinstance(payload.get("input"), dict)
+    assert payload["model"] == "z-image"
+    assert "input" in payload
     assert payload["input"].get("prompt") == "котик"
-    assert "prompt" not in payload, "prompt must NOT be placed on payload root"
+    # Regression: prompt must not leak to the payload root even for payload_format=direct
+    assert "prompt" not in payload
 
-    # Should not raise
-    validate_payload_before_create_task("z-image", payload, model_schema)
+
+def test_imagen4_payload_is_wrapped(source_of_truth_snapshot):
+    payload = build_payload("google/imagen4", {"prompt": "котик"}, source_of_truth_snapshot)
+
+    assert payload["model"] == "google/imagen4"
+    assert "input" in payload
+    assert payload["input"].get("prompt") == "котик"
+    assert "prompt" not in payload

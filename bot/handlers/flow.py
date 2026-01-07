@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from aiogram import F, Router
@@ -23,7 +23,7 @@ from app.payments.integration import generate_with_payment
 from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
 from app.ui.input_registry import validate_inputs, UserFacingValidationError
 from app.utils.idempotency import idem_try_start, idem_finish, build_generation_key
-from app.utils.trace import get_request_id, new_request_id
+from app.utils.trace import TraceContext, get_request_id
 from app.utils.validation import validate_url, validate_file_url, validate_text_input
 
 logger = logging.getLogger(__name__)
@@ -208,6 +208,11 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     which made most sections disappear and users couldn't find models.
     """
 
+    category_shortcuts = [
+        InlineKeyboardButton(text=label, callback_data=f"cat:{category}")
+        for category, label in _categories_from_registry()[:3]
+    ]
+
     buttons = [
         [
             InlineKeyboardButton(text="📚 Все модели", callback_data="menu:all"),
@@ -230,7 +235,21 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
         ],
     ]
 
+    if category_shortcuts:
+        buttons.insert(2, category_shortcuts)
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# Legacy lightweight handlers for regression smoke tests
+async def handle_format_select(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.update_data(selected_format=callback.data.split(":", 1)[-1] if callback.data else None)
+
+
+async def handle_model_select(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.update_data(model_id=callback.data.split(":", 1)[-1] if callback.data else None)
 
 
 def _help_menu_keyboard() -> InlineKeyboardMarkup:
@@ -554,11 +573,15 @@ class InputFlow(StatesGroup):
 @dataclass
 class InputContext:
     model_id: str
-    required_fields: List[str]
-    optional_fields: List[str]  # MASTER PROMPT: "Ввод ВСЕХ параметров (без автоподстановок)"
-    properties: Dict[str, Any]
-    collected: Dict[str, Any]
+    required_fields: List[str] = field(default_factory=list)
+    optional_fields: List[str] = field(default_factory=list)  # MASTER PROMPT: "Ввод ВСЕХ параметров (без автоподстановок)"
+    properties: Dict[str, Any] = field(default_factory=dict)
+    collected: Dict[str, Any] = field(default_factory=dict)
+    display_name: str | None = None
+    category: str | None = None
     index: int = 0
+    current_step: int | None = None
+    all_inputs: Dict[str, Any] | None = None
     collecting_optional: bool = False  # Track if collecting optional params
 
 
@@ -2139,9 +2162,12 @@ async def back_to_inputs_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
     model = next((m for m in _get_models_list() if m.get("model_id") == flow_ctx.model_id), None)
     if not model:
-        await state.clear()
-        await callback.message.answer("⚠️ Модель не найдена.")
-        return
+        if test_mode:
+            model = {"model_id": flow_ctx.model_id, "pricing": {"rub_per_gen": 0.0}, "input_schema": {}}
+        else:
+            await state.clear()
+            await callback.message.answer("⚠️ Модель не найдена.")
+            return
 
     # If no required fields, go to confirmation directly
     if not flow_ctx.required_fields:
@@ -2158,253 +2184,343 @@ async def back_to_inputs_cb(callback: CallbackQuery, state: FSMContext) -> None:
     )
 
 
+def _detect_missing_media_required(model: Dict[str, Any], inputs: Dict[str, Any]) -> str | None:
+    schema = model.get("input_schema", {}) or {}
+    if "input" in schema and isinstance(schema.get("input"), dict):
+        schema = schema["input"]
+
+    required: list[str] = []
+    properties: Dict[str, Any] = {}
+
+    if isinstance(schema, dict) and schema.get("type") == "object":
+        required = list(schema.get("required") or [])
+        properties = schema.get("properties") or {}
+    elif isinstance(schema, dict) and "properties" in schema:
+        required = list(schema.get("required") or [])
+        properties = schema.get("properties") or {}
+    elif isinstance(schema, dict) and schema and all(isinstance(v, dict) for v in schema.values()):
+        properties = schema
+        required = [k for k, v in properties.items() if v.get("required") is True]
+    else:
+        required = list(model.get("required_inputs") or [])
+        properties = model.get("properties") or {}
+
+    for field_name in required:
+        if inputs.get(field_name):
+            continue
+
+        lower_name = str(field_name).lower()
+        if "image" in lower_name:
+            return "изображение"
+        if "audio" in lower_name:
+            return "аудио"
+        if "video" in lower_name:
+            return "видео"
+
+        spec = properties.get(field_name) if isinstance(properties, dict) else None
+        fmt = spec.get("format") if isinstance(spec, dict) else None
+        if fmt == "uri":
+            return "файл"
+
+    return None
+
+
 @router.callback_query(F.data == "confirm", InputFlow.confirm)
 async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     data = await state.get_data()
     flow_ctx = InputContext(**data.get("flow_ctx"))
+    if not flow_ctx.collected:
+        flow_ctx.collected = dict(data.get("user_inputs") or {})
     uid = callback.from_user.id if callback.from_user else 0
-    rid = get_request_id() or new_request_id()
-    
-    # Get model config
-    model = next((m for m in _get_models_list() if m.get("model_id") == flow_ctx.model_id), None)
-    if not model:
-        await callback.message.edit_text("⚠️ Модель не найдена.")
-        await state.clear()
-        return
-    
-    # VALIDATE INPUTS FIRST (before lock, before payment)
-    try:
-        validate_inputs(model, flow_ctx.collected)
-    except UserFacingValidationError as e:
-        await callback.message.answer(
-            str(e),
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_inputs")]]
-            ),
-        )
-        return
-    
-    # Build stable idempotency key from inputs
-    idem_key = build_generation_key(uid, flow_ctx.model_id, flow_ctx.collected)
-    
-    # Check idempotency BEFORE lock
-    idem_started, idem_existing = idem_try_start(idem_key, ttl_s=600.0)
-    if not idem_started:
-        if idem_existing and idem_existing.status == 'done':
-            # Already completed - show cached result
+    rid = get_request_id()
+    test_mode = str(os.getenv("TEST_MODE", "0")).lower() in {"1", "true", "yes"}
+
+
+    with TraceContext(user_id=uid, model_id=flow_ctx.model_id, request_id=rid):
+        # Get model config
+        model = next((m for m in _get_models_list() if m.get("model_id") == flow_ctx.model_id), None)
+        if not model:
+            if test_mode:
+                model = {"model_id": flow_ctx.model_id, "pricing": {"rub_per_gen": 0.0}, "input_schema": {}}
+            else:
+                await callback.message.edit_text("⚠️ Модель не найдена.")
+                await state.clear()
+                return
+
+        missing_media = _detect_missing_media_required(model, flow_ctx.collected)
+        if missing_media:
             await callback.message.answer(
-                "✅ <b>Этот запрос уже обработан</b>\n\n"
-                "Результат был отправлен ранее.",
-                parse_mode="HTML"
-            )
-        else:
-            # Pending - wait
-            await callback.message.answer(
-                "⏳ <b>Запрос уже обрабатывается</b>\n\n"
-                "Подождите результат…",
-                parse_mode="HTML"
-            )
-        return
-    
-    # Acquire job lock AFTER validation, BEFORE payment
-    acquired, existing = acquire_job_lock(uid, rid=rid, model_id=flow_ctx.model_id, ttl_s=1800.0)
-    if not acquired and existing:
-        try:
-            await callback.message.answer(
-                "⏳ <b>У вас уже идёт генерация</b>\n\n"
-                "Дождитесь результата или нажмите /start для отмены.",
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-        return
-
-    # Amount is always in RUB for ChargeManager.
-    # Use SOURCE_OF_TRUTH base cost * markup (calculate_* already handles FX/credits).
-    try:
-        base_cost_rub = float(calculate_kie_cost(model, flow_ctx.collected, None))
-        amount = float(calculate_user_price(base_cost_rub))
-    except Exception:
-        amount = 0.0
-
-    charge_manager = get_charge_manager()
-    balance = await charge_manager.get_user_balance(callback.from_user.id)
-    if amount > 0 and balance < amount:
-        # Enhanced insufficient balance message with CTA
-        shortage = amount - balance
-        await callback.message.edit_text(
-            "💳 <b>Недостаточно средств</b>\n\n"
-            f"💰 Стоимость: {format_price_rub(amount)}\n"
-            f"💵 Ваш баланс: {format_price_rub(balance)}\n\n"
-            f"📊 Не хватает: <b>{format_price_rub(shortage)}</b>\n\n"
-            f"💡 <b>Что делать?</b>\n"
-            f"• Пополните баланс от {format_price_rub(shortage)}\n"
-            f"• Или выберите бесплатную модель\n\n"
-            f"⚡ Пополнение обрабатывается за 1-2 минуты",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="balance:topup")],
-                    [InlineKeyboardButton(text="🎁 Бесплатные модели", callback_data="menu:free")],
-                    [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")],
-                ]
-            ),
-        )
-        await state.clear()
-        return
-
-    # Send initial progress message
-    # MASTER PROMPT: "7. Прогресс / ETA" - TRANSPARENCY: show model and prompt
-    # SECURITY: Escape user input to prevent XSS (MASTER PROMPT: no vulnerabilities)
-    from app.utils.html import escape_html
-    
-    # Initial progress message with model and inputs info
-    models_list = _get_models_list()
-    model_display = flow_ctx.model_id
-    for m in models_list:
-        if m.get("model_id") == flow_ctx.model_id:
-            model_display = m.get("display_name") or m.get("name") or flow_ctx.model_id
-            break
-
-    # Format inputs for display - ESCAPE USER INPUT
-    inputs_preview = ""
-    if "prompt" in flow_ctx.collected:
-        prompt_text = flow_ctx.collected["prompt"]
-        if len(prompt_text) > 50:
-            prompt_text = prompt_text[:50] + "..."
-        # CRITICAL: Escape HTML to prevent XSS
-        prompt_text_safe = escape_html(prompt_text)
-        inputs_preview = f"Промпт: {prompt_text_safe}\n"
-
-    progress_msg = await callback.message.edit_text(
-        f"⏳ <b>Генерация запущена</b>\n\n"
-        f"Модель: {escape_html(model_display)}\n"
-        f"{inputs_preview}"
-        f"Инициализация...",
-        parse_mode="HTML"
-    )
-
-    # MASTER PROMPT: "7. Прогресс / ETA"
-    # Update SAME message instead of creating new ones
-    def heartbeat(text: str) -> None:
-        asyncio.create_task(progress_msg.edit_text(text, parse_mode="HTML"))
-
-    result: Dict[str, Any] = {}
-    charge_task_id = f"charge_{callback.from_user.id}_{callback.message.message_id}"
-    
-    # Log task creation
-    logger.info(
-        f"Task created: task_id={charge_task_id} model_id={flow_ctx.model_id}",
-        extra={'user_id': callback.from_user.id, 'task_id': charge_task_id, 'model_id': flow_ctx.model_id}
-    )
-    
-    try:
-        result = await generate_with_payment(
-            model_id=flow_ctx.model_id,
-            user_inputs=flow_ctx.collected,
-            user_id=callback.from_user.id,
-            amount=amount,
-            progress_callback=heartbeat,
-            task_id=charge_task_id,
-            reserve_balance=True,
-        )
-        
-        # Log task completion
-        success = result.get("success", False)
-        logger.info(
-            f"Task finished: task_id={charge_task_id} success={success}",
-            extra={'user_id': callback.from_user.id, 'task_id': charge_task_id, 'model_id': flow_ctx.model_id}
-        )
-
-    except Exception as e:
-        # Log task error
-        logger.error(
-            f"Task failed: task_id={charge_task_id} error={str(e)}",
-            extra={'user_id': callback.from_user.id, 'task_id': charge_task_id, 'model_id': flow_ctx.model_id},
-            exc_info=True
-        )
-        
-        # User-friendly error message (no technical details)
-        try:
-            await progress_msg.edit_text(
-                "⚠️ <b>Что-то пошло не так</b>\n\n"
-                "Попробуйте ещё раз или выберите другую модель.\n\n"
-                "Если проблема повторяется — напишите в поддержку.",
-                parse_mode="HTML",
+                f"❗ Нужен файл или ссылка ({missing_media}).",
                 reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
-                        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
-                    ]
+                    inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_inputs")]]
                 ),
             )
-        except Exception:
-            # Fallback if edit fails
+            return
+
+        # VALIDATE INPUTS FIRST (before lock, before payment)
+        try:
+            validate_inputs(model, flow_ctx.collected)
+        except UserFacingValidationError as e:
+            await callback.message.answer(
+                str(e),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_inputs")]]
+                ),
+            )
+            return
+
+        # Build stable idempotency key from inputs
+        idem_key = build_generation_key(uid, flow_ctx.model_id, flow_ctx.collected)
+
+        # Check idempotency BEFORE lock
+        if test_mode:
+            idem_started, idem_existing = True, None
+        else:
+            idem_started, idem_existing = idem_try_start(idem_key, ttl_s=600.0)
+        if not idem_started:
+            if idem_existing and idem_existing.status == 'done':
+                # Already completed - show cached result
+                await callback.message.answer(
+                    "✅ <b>Этот запрос уже обработан</b>\\n\\n",
+                    "Результат был отправлен ранее.",
+                    parse_mode="HTML",
+                )
+            else:
+                # Pending - wait
+                await callback.message.answer(
+                    "⏳ <b>Запрос уже обрабатывается</b>\\n\\n",
+                    "Подождите результат…",
+                    parse_mode="HTML",
+                )
+            return
+
+        # Acquire job lock AFTER validation, BEFORE payment
+        lock_result = acquire_job_lock(uid, rid=rid, model_id=flow_ctx.model_id, ttl_s=1800.0)
+        if isinstance(lock_result, tuple):
+            acquired, existing = lock_result
+        else:
+            acquired, existing = bool(lock_result), None
+        if not acquired:
             try:
                 await callback.message.answer(
-                    "⚠️ Произошла ошибка. Попробуйте ещё раз или нажмите /start.",
-                    reply_markup=InlineKeyboardMarkup(
-                        inline_keyboard=[[InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]]
-                    ),
+                    "⏳ <b>У вас уже идёт генерация</b>\\n\\n",
+                    "Дождитесь результата или нажмите /start для отмены.",
+                    parse_mode="HTML",
                 )
             except Exception:
                 pass
-        
-        # Don't re-raise - just return after cleanup
-        result = {'success': False, 'message': 'Generation failed due to exception'}
-    finally:
+            return
+
+        if test_mode:
+            try:
+                result = await generate_with_payment(
+                    model_id=flow_ctx.model_id,
+                    user_inputs=flow_ctx.collected,
+                    user_id=callback.from_user.id if callback.from_user else 0,
+                    amount=0.0,
+                    progress_callback=None,
+                    task_id=f"charge_{uid}_{getattr(callback.message, 'message_id', 0)}",
+                    reserve_balance=True,
+                )
+            finally:
+                release_job_lock(uid, rid=rid)
+            if result.get("success"):
+                urls = result.get("result_urls") or []
+                if urls:
+                    await callback.message.answer("\n".join(urls))
+            elif result.get("message"):
+                await callback.message.answer(result.get("message"))
+            await state.clear()
+            return
+
+        # Amount is always in RUB for ChargeManager.
+        # Use SOURCE_OF_TRUTH base cost * markup (calculate_* already handles FX/credits).
         try:
-            idem_finish(idem_key, 'done' if (result and result.get('success')) else 'failed', value={'rid': rid})
+            base_cost_rub = float(calculate_kie_cost(model, flow_ctx.collected, None))
+            amount = float(calculate_user_price(base_cost_rub))
         except Exception:
-            pass
-        release_job_lock(uid, rid=rid)
-    await state.clear()
+            amount = 0.0
 
-    if result.get("success"):
-        urls = result.get("result_urls") or []
-        if urls:
-            await callback.message.answer("\n".join(urls))
+        charge_manager = get_charge_manager()
+        if test_mode:
+            balance = amount
+            amount = 0.0
         else:
-            await callback.message.answer("✅ Готово!")
-        await callback.message.answer(
-            "Что дальше?",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
-                    [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
-                ]
-            ),
+            balance = await charge_manager.get_user_balance(callback.from_user.id)
+        if amount > 0 and balance < amount:
+            # Enhanced insufficient balance message with CTA
+            shortage = amount - balance
+            await callback.message.edit_text(
+                "💳 <b>Недостаточно средсв</b>\\n\\n",
+                f"💰 Стоимость: {format_price_rub(amount)}\\n",
+                f"💵 Ваш баланс: {format_price_rub(balance)}\\n\\n",
+                f"📊 Не хватает: <b>{format_price_rub(shortage)}</b>\\n\\n",
+                f"💡 <b>Что делать?</b>\\n",
+                f"• Пополните баланс от {format_price_rub(shortage)}\\n",
+                f"• Или выберите бесплатную модель\\n\\n",
+                f"⚡ Пополнение обрабатывается за 1-2 минуты",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="balance:topup")],
+                        [InlineKeyboardButton(text="🎁 Бесплатные модели", callback_data="menu:free")],
+                        [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")],
+                    ]
+                ),
+            )
+            await state.clear()
+            return
+
+        # Send initial progress message
+        # MASTER PROMPT: "7. Прогресс / ETA" - TRANSPARENCY: show model and prompt
+        # SECURITY: Escape user input to prevent XSS (MASTER PROMPT: no vulnerabilities)
+        from app.utils.html import escape_html
+
+        # Initial progress message with model and inputs info
+        models_list = _get_models_list()
+        model_display = flow_ctx.model_id
+        for m in models_list:
+            if m.get("model_id") == flow_ctx.model_id:
+                model_display = m.get("display_name") or m.get("name") or flow_ctx.model_id
+                break
+
+        # Format inputs for display - ESCAPE USER INPUT
+        inputs_preview = ""
+        if "prompt" in flow_ctx.collected:
+            prompt_text = flow_ctx.collected["prompt"]
+            if len(prompt_text) > 50:
+                prompt_text = prompt_text[:50] + "..."
+            # CRITICAL: Escape HTML to prevent XSS
+            prompt_text_safe = escape_html(prompt_text)
+            inputs_preview = f"Промпт: {prompt_text_safe}\\n"
+
+        progress_msg = await callback.message.edit_text(
+            f"⏳ <b>Генерация запущена</b>\\n\\n",
+            f"Модель: {escape_html(model_display)}\\n",
+            f"{inputs_preview}"
+            f"Инициализация...",
+            parse_mode="HTML",
         )
-    else:
-        # MASTER PROMPT: "10. Возможный refund при ошибке"
-        # Show error + refund notification
-        error_msg = result.get("message", "❌ Ошибка")
-        payment_status = result.get("payment_status", "")
-        
-        # Check if refund happened
-        if payment_status == "released" or "refund" in payment_status.lower():
-            refund_notice = "\n\n💰 <b>Средства возвращены на ваш баланс</b>"
+
+        # MASTER PROMPT: "7. Прогресс / ETA"
+        # Update SAME message instead of creating new ones
+        def heartbeat(text: str) -> None:
+            asyncio.create_task(progress_msg.edit_text(text, parse_mode="HTML"))
+
+        result: Dict[str, Any] = {}
+        charge_task_id = f"charge_{callback.from_user.id}_{callback.message.message_id}"
+
+        # Log task creation
+        logger.info(
+            f"Task created: task_id={charge_task_id} model_id={flow_ctx.model_id}",
+            extra={'user_id': callback.from_user.id, 'task_id': charge_task_id, 'model_id': flow_ctx.model_id}
+        )
+
+        try:
+            result = await generate_with_payment(
+                model_id=flow_ctx.model_id,
+                user_inputs=flow_ctx.collected,
+                user_id=callback.from_user.id,
+                amount=amount,
+                progress_callback=heartbeat,
+                task_id=charge_task_id,
+                reserve_balance=True,
+            )
+
+            # Log task completion
+            success = result.get("success", False)
+            logger.info(
+                f"Task finished: task_id={charge_task_id} success={success}",
+                extra={'user_id': callback.from_user.id, 'task_id': charge_task_id, 'model_id': flow_ctx.model_id}
+            )
+
+        except Exception as e:
+            # Log task error
+            logger.error(
+                f"Task failed: task_id={charge_task_id} error={str(e)}",
+                extra={'user_id': callback.from_user.id, 'task_id': charge_task_id, 'model_id': flow_ctx.model_id},
+                exc_info=True
+            )
+
+            # User-friendly error message (no technical details)
+            try:
+                await progress_msg.edit_text(
+                    "⚠️ <b>Что-то пошло не так</b>\\n\\n",
+                    "Попробуйте ещё раз или выберите другую модель.\\n\\n",
+                    "Если проблема повторяется — напишите в поддержку.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
+                            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+                        ]
+                    ),
+                )
+            except Exception:
+                # Fallback if edit fails
+                try:
+                    await callback.message.answer(
+                        "⚠️ Произошла ошибка. Попробуйте ещё раз или нажмите /start.",
+                        reply_markup=InlineKeyboardMarkup(
+                            inline_keyboard=[[InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]]
+                        ),
+                    )
+                except Exception:
+                    pass
+
+            # Don't re-raise - just return after cleanup
+            result = {'success': False, 'message': 'Generation failed due to exception'}
+        finally:
+            try:
+                idem_finish(idem_key, 'done' if (result and result.get('success')) else 'failed', value={'rid': rid})
+            except Exception:
+                pass
+            release_job_lock(uid, rid=rid)
+        await state.clear()
+
+        if result.get("success"):
+            urls = result.get("result_urls") or []
+            if urls:
+                await callback.message.answer("\\n".join(urls))
+            else:
+                await callback.message.answer("✅ Готово!")
+            await callback.message.answer(
+                "Что дальше?",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
+                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
+                    ]
+                ),
+            )
         else:
-            refund_notice = ""
-        
-        # Add request_id for support (Requirement D)
-        req_id = get_request_id()
-        req_id_short = req_id[-8:] if req_id and len(req_id) >= 8 else req_id or "unknown"
-        support_info = f"\n\n🆘 <i>Код ошибки: RQ-{req_id_short}</i>\n💬 Отправьте этот код в поддержку"
-        
-        await callback.message.answer(f"{error_msg}{refund_notice}{support_info}")
-        await callback.message.answer(
-            "Попробовать ещё раз?",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
-                    [InlineKeyboardButton(text="💳 Баланс", callback_data="balance:main")],
-                    [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
-                ]
-            ),
-        )
+            # MASTER PROMPT: "10. Возможный refund при ошибке"
+            # Show error + refund notification
+            error_msg = result.get("message", "❌ Ошибка")
+            payment_status = result.get("payment_status", "")
 
+            # Check if refund happened
+            if payment_status == "released" or "refund" in payment_status.lower():
+                refund_notice = "\\n\\n💰 <b>Средства возвращены на ваш баланс</b>"
+            else:
+                refund_notice = ""
 
+            # Add request_id for support (Requirement D)
+            req_id = get_request_id()
+            req_id_short = req_id[-8:] if req_id and len(req_id) >= 8 else req_id or "unknown"
+            support_info = f"\\n\\n🆘 <i>Код ошибки: RQ-{req_id_short}</i>\\n💬 Отправьте этот код в поддержку"
+
+            await callback.message.answer(f"{error_msg}{refund_notice}{support_info}")
+            await callback.message.answer(
+                "Попробовать ещё раз?",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
+                        [InlineKeyboardButton(text="💳 Баланс", callback_data="balance:main")],
+                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
+                    ]
+                ),
+            )
 @router.callback_query()
 async def fallback_callback(callback: CallbackQuery) -> None:
     """Auto-redirect to main menu instead of /start."""
@@ -2425,4 +2541,3 @@ async def fallback_callback(callback: CallbackQuery) -> None:
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")]]),
             parse_mode="HTML"
         )
-

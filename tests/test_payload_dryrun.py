@@ -31,7 +31,7 @@ def get_minimal_inputs(model_id: str, model: dict) -> dict:
     
     inputs = {}
     
-    for field in required:
+    for field in required or properties.keys():
         prop = properties.get(field, {})
         field_type = prop.get("type", "string")
         
@@ -66,12 +66,12 @@ def get_minimal_inputs(model_id: str, model: dict) -> dict:
         
         else:
             # Generic fallback
-            inputs[field] = "test"
-    
-    # If no required fields, add prompt
-    if not inputs:
+            inputs[field] = prop.get("default", "test") or "test"
+
+    # If no required fields were specified at all, still send a prompt to avoid empty payloads
+    if not required and not inputs:
         inputs["prompt"] = "test"
-    
+
     return inputs
 
 
@@ -83,55 +83,29 @@ def test_all_models_payload_buildable(source_of_truth):
         mid: m for mid, m in models.items()
         if m.get("enabled", True) and not mid.endswith("_processor")
     }
-    
+
     assert len(enabled_models) == 42, f"Expected 42 enabled models, got {len(enabled_models)}"
-    
+
     failed = []
-    skipped = []
-    
+
     for model_id, model in enabled_models.items():
         try:
-            # Get minimal inputs
             user_inputs = get_minimal_inputs(model_id, model)
-            
-            # Skip models that require real files (can't dry-run without upload)
-            schema = model.get("input_schema", {})
-            required = schema.get("required", [])
-            
-            # If requires file upload (not URL), skip for now
-            if any(field in ["file", "image", "video", "audio"] for field in required):
-                # Check if it's file type (not URL)
-                props = schema.get("properties", {})
-                if any(props.get(f, {}).get("format") == "binary" for f in required):
-                    skipped.append(model_id)
-                    continue
-            
-            # Try to build payload
             payload = build_payload(model_id, user_inputs, source_of_truth)
-            
+
             # Basic validation
             assert isinstance(payload, dict), f"{model_id}: payload not dict"
             assert "model" in payload or "model_id" in payload, f"{model_id}: no model field"
-            
+            assert payload.get("input"), f"{model_id}: empty input payload"
         except Exception as e:
             failed.append((model_id, str(e)))
-    
-    # Report
+
     if failed:
         print(f"\n❌ Failed models ({len(failed)}):")
         for mid, err in failed:
             print(f"  {mid}: {err}")
-    
-    if skipped:
-        print(f"\n⏭️  Skipped models requiring file upload ({len(skipped)}):")
-        for mid in skipped:
-            print(f"  {mid}")
-    
-    print(f"\n✅ Success: {len(enabled_models) - len(failed) - len(skipped)}/{len(enabled_models)}")
-    
-    # Test should pass if at least 80% work
-    success_rate = (len(enabled_models) - len(failed)) / len(enabled_models)
-    assert success_rate >= 0.8, f"Too many failures: {len(failed)}/{len(enabled_models)}"
+
+    assert not failed, f"Models failed dry-run: {failed}"
 
 
 def test_specific_model_examples():

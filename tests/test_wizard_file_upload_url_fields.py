@@ -1,10 +1,19 @@
 """Test file upload support for *_URL fields in wizard."""
+import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from aiogram.types import Message, PhotoSize, Document, Video, Audio, Voice
+from aiogram.types import CallbackQuery, Message, PhotoSize, Document, Video, Audio, Voice
 from aiogram.fsm.context import FSMContext
-from bot.flows.wizard import wizard_process_input
+from bot.flows.wizard import wizard_process_input, wizard_confirm_and_generate
 from bot.flows.input_parser import InputType
+
+
+@pytest.fixture(autouse=True)
+def _minimal_env(monkeypatch):
+    """Ensure required env vars exist for Config lookups during tests."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test:token")
+    monkeypatch.setenv("KIE_API_KEY", "test-key")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
 
 
 @pytest.fixture
@@ -49,7 +58,7 @@ async def test_image_url_accepts_photo_upload(mock_message, mock_state):
     mock_message.photo = [mock_photo]
     
     with patch("bot.flows.wizard.sign_media_url", return_value="signed_url_token"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://example.com"
@@ -85,7 +94,7 @@ async def test_video_url_accepts_video_upload(mock_message, mock_state):
     })
     
     with patch("bot.flows.wizard.sign_media_url", return_value="video_sig"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://example.com"
@@ -123,7 +132,7 @@ async def test_url_field_fallback_no_base_url(mock_message, mock_state):
     mock_message.photo = [mock_photo]
     
     with patch("bot.flows.wizard.sign_media_url", return_value="sig"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = None  # Not configured
@@ -157,7 +166,7 @@ async def test_audio_url_accepts_document_with_mime(mock_message, mock_state):
     })
     
     with patch("bot.flows.wizard.sign_media_url", return_value="audio_sig"), \
-         patch("app.utils.config.get_config") as mock_config:
+         patch("bot.flows.wizard.get_config") as mock_config:
         
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://example.com"
@@ -170,3 +179,36 @@ async def test_audio_url_accepts_document_with_mime(mock_message, mock_state):
         
         assert "audio_url" in inputs
         assert "AUDIO_DOC_789" in inputs["audio_url"]
+
+
+@pytest.mark.asyncio
+async def test_confirm_requires_media_input(mock_state):
+    """Confirm should block when required media input is missing."""
+    callback = MagicMock(spec=CallbackQuery)
+    callback.message = MagicMock(spec=Message)
+    callback.message.answer = AsyncMock()
+    callback.answer = AsyncMock()
+    callback.from_user = MagicMock(id=12345)
+
+    mock_state.get_data = AsyncMock(return_value={
+        "model_config": {
+            "model_id": "image-required",
+            "input_schema": {
+                "type": "object",
+                "required": ["image_url"],
+                "properties": {"image_url": {"type": "string", "format": "uri"}},
+            },
+        },
+        "wizard_inputs": {},
+    })
+
+    with patch("bot.services.generation_runner.start_generation", new_callable=AsyncMock) as start_generation:
+        await wizard_confirm_and_generate(callback, mock_state)
+
+    assert start_generation.call_count == 0
+    assert callback.message.answer.called
+    args, kwargs = callback.message.answer.call_args
+    assert "Нужен файл или ссылка" in args[0]
+    reply_markup = kwargs.get("reply_markup")
+    assert reply_markup is not None
+    assert reply_markup.inline_keyboard[0][0].text == "⬅️ Назад"

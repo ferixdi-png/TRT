@@ -9,6 +9,13 @@ AI генератор для изображений, видео и аудио ч
 - [✅ Production Ready Report v23](./PRODUCTION_READY_v23.md) ⭐ NEW
 - [📝 Changelog v23](./CHANGELOG_v23.md) ⭐ NEW
 
+Перед PR:
+1. `make check`
+2. Команда запускает `compileall` и `pytest`
+3. Используйте перед каждым PR
+4. Если нет `make`: `./scripts/check.sh`
+5. PR без `make check` не принимаются
+
 **📊 Статус:** ✅ Production Ready v23 | 42 моделей | Docker 218MB | Webhook stable
 
 **🎯 v23 Highlights:**
