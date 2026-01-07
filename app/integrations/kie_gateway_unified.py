@@ -371,8 +371,8 @@ class UnifiedKIEGateway:
                     try:
                         import json
                         result_json = json.loads(result_json_str)
-                    except:
-                        logger.warning(f"Failed to parse resultJson: {result_json_str}")
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.warning(f"Failed to parse resultJson: {result_json_str}: {e}")
                 
                 return {
                     "ok": True,

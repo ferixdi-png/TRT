@@ -274,7 +274,8 @@ def _parse_table_row(line: str, required: bool) -> Optional[InputField]:
                     default = float(default_str)
                     if default.is_integer():
                         default = int(default)
-                except:
+                except (ValueError, AttributeError) as e:
+                    logger.debug(f"Could not convert default to int: {e}")
                     default = default_str
             elif field_type == "boolean":
                 default = default_str.lower() in ('true', '1', 'yes', 'да')
@@ -343,7 +344,8 @@ def _enrich_schema_from_allowed_values(schema: Dict[str, InputField], section: s
                     field.default = float(default_str)
                     if field.default.is_integer():
                         field.default = int(field.default)
-                except:
+                except (ValueError, AttributeError) as e:
+                    logger.debug(f"Could not convert field.default to int: {e}")
                     field.default = default_str
             elif field.type == "boolean":
                 field.default = default_str.lower() in ('true', '1', 'yes', 'да')
