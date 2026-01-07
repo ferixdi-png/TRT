@@ -12,7 +12,11 @@ _user_id: contextvars.ContextVar[str] = contextvars.ContextVar("user_id", defaul
 _model_id: contextvars.ContextVar[str] = contextvars.ContextVar("model_id", default="-")
 
 def get_request_id() -> str:
-    return _request_id.get()
+    rid = _request_id.get()
+    if not rid or rid == "-":
+        rid = new_request_id()
+        _request_id.set(rid)
+    return rid
 
 def get_user_id() -> str:
     return _user_id.get()
@@ -33,7 +37,10 @@ class TraceTokens:
 class TraceContext:
     """Context manager to set request-scoped trace values."""
     def __init__(self, user_id: Optional[int] = None, model_id: Optional[str] = None, request_id: Optional[str] = None):
-        self._rid = request_id or new_request_id()
+        if not request_id or request_id == "-":
+            self._rid = new_request_id()
+        else:
+            self._rid = request_id
         self._uid = str(user_id) if user_id is not None else "-"
         self._mid = str(model_id) if model_id is not None else "-"
         self._tokens: Optional[TraceTokens] = None

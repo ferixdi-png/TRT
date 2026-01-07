@@ -1,6 +1,6 @@
 """Test format-based catalog navigation."""
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 from aiogram.types import CallbackQuery
 from bot.handlers.marketing import format_catalog_screen
 
@@ -9,9 +9,9 @@ from bot.handlers.marketing import format_catalog_screen
 def mock_callback():
     """Mock Telegram callback query."""
     cb = MagicMock(spec=CallbackQuery)
-    cb.answer = pytest.mock.AsyncMock()
+    cb.answer = AsyncMock()
     cb.message = MagicMock()
-    cb.message.edit_text = pytest.mock.AsyncMock()
+    cb.message.edit_text = AsyncMock()
     cb.from_user = MagicMock(id=12345)
     return cb
 
@@ -24,7 +24,7 @@ async def test_format_catalog_text_to_image(mock_callback):
     
     with patch("bot.handlers.marketing.Path") as mock_path, \
          patch("bot.handlers.marketing.get_model") as mock_get_model, \
-         patch("builtins.open", pytest.mock.mock_open(read_data='{"model_to_formats": {"z-image": ["text-to-image"], "flux-2/pro-text-to-image": ["text-to-image"]}}')):
+         patch("builtins.open", mock_open(read_data='{"model_to_formats": {"z-image": ["text-to-image"], "flux-2/pro-text-to-image": ["text-to-image"]}}')):
         
         mock_path.return_value.exists.return_value = True
         
@@ -57,7 +57,7 @@ async def test_format_catalog_image_to_video(mock_callback):
     
     with patch("bot.handlers.marketing.Path") as mock_path, \
          patch("bot.handlers.marketing.get_model") as mock_get_model, \
-         patch("builtins.open", pytest.mock.mock_open(read_data='{"model_to_formats": {"sora-2-image-to-video": ["image-to-video"], "z-image": ["text-to-image"]}}')):
+         patch("builtins.open", mock_open(read_data='{"model_to_formats": {"sora-2-image-to-video": ["image-to-video"], "z-image": ["text-to-image"]}}')):
         
         mock_path.return_value.exists.return_value = True
         
@@ -87,7 +87,7 @@ async def test_format_catalog_video_aggregate(mock_callback):
     
     with patch("bot.handlers.marketing.Path") as mock_path, \
          patch("bot.handlers.marketing.get_model") as mock_get_model, \
-         patch("builtins.open", pytest.mock.mock_open(read_data='{"model_to_formats": {"sora-2-text-to-video": ["text-to-video"], "sora-2-image-to-video": ["image-to-video"], "z-image": ["text-to-image"]}}')):
+         patch("builtins.open", mock_open(read_data='{"model_to_formats": {"sora-2-text-to-video": ["text-to-video"], "sora-2-image-to-video": ["image-to-video"], "z-image": ["text-to-image"]}}')):
         
         mock_path.return_value.exists.return_value = True
         
@@ -117,7 +117,7 @@ async def test_format_catalog_no_models(mock_callback):
     mock_callback.data = "format_catalog:nonexistent-format"
     
     with patch("bot.handlers.marketing.Path") as mock_path, \
-         patch("builtins.open", pytest.mock.mock_open(read_data='{"model_to_formats": {}}')):
+         patch("builtins.open", mock_open(read_data='{"model_to_formats": {}}')):
         
         mock_path.return_value.exists.return_value = True
         
