@@ -367,9 +367,6 @@ async def generate_with_payment(
                 if task_id_callback is not None:
                     kw["task_id_callback"] = task_id_callback
                 gen_result = await generator.generate(**kw)
-                gen_result = await generator.generate(
-                    **_build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
-                )
             except asyncio.CancelledError:
                 # Charge already committed; treat cancel as stopping the wait only
                 raise
