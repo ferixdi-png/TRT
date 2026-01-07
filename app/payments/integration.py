@@ -94,6 +94,7 @@ async def generate_with_payment(
     task_id: Optional[str] = None,
     reserve_balance: bool = False,
     charge_manager: Optional[ChargeManager] = None,
+    task_id_callback: Optional[Any] = None,
     **kwargs  # Catch-all for unknown args (never crash)
 ) -> Dict[str, Any]:
     """
@@ -198,6 +199,9 @@ async def generate_with_payment(
             
             generator = _get_generator_instance()
             start_time = time.time()
+            kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+            if task_id_callback is not None:
+                kw["task_id_callback"] = task_id_callback
             gen_result = await generator.generate(
                 **_build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
             )
@@ -280,6 +284,8 @@ async def generate_with_payment(
             start_time = time.time()
             try:
                 kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+                if task_id_callback is not None:
+                    kw["task_id_callback"] = task_id_callback
                 kw["task_id_callback"] = task_id_callback
                 gen_result = await generator.generate(**kw)
             except asyncio.CancelledError:
@@ -364,6 +370,10 @@ async def generate_with_payment(
         if charge_result['status'] == 'already_committed':
             # Already paid, just generate
             try:
+                kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+                if task_id_callback is not None:
+                    kw["task_id_callback"] = task_id_callback
+                gen_result = await generator.generate(**kw)
                 gen_result = await generator.generate(
                     **_build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
                 )
@@ -414,6 +424,8 @@ async def generate_with_payment(
         start_time = time.time()
         try:
             kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+            if task_id_callback is not None:
+                kw["task_id_callback"] = task_id_callback
             kw["task_id_callback"] = task_id_callback
             gen_result = await generator.generate(**kw)
         except asyncio.CancelledError:

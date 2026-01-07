@@ -17,6 +17,9 @@ async def test_generate_with_payment_minimal(monkeypatch):
 
     captured = {}
 
+    async def fake_generate(self, model_id, user_inputs, progress_callback=None, timeout=300):
+        captured["model_id"] = model_id
+        captured["user_inputs"] = dict(user_inputs)
     async def fake_generate(self, model_id, user_inputs, progress_callback=None, timeout=300, task_id_callback=None):
         captured["model_id"] = model_id
         captured["user_inputs"] = dict(user_inputs)
@@ -94,6 +97,7 @@ async def test_confirm_handler_e2e_smoke(monkeypatch):
     """Lightweight e2e: wizard confirmation -> generator -> success message."""
 
     from bot.handlers import flow
+    monkeypatch.setenv("TEST_MODE", "1")
 
     model = {
         "model_id": "z-image",
@@ -144,6 +148,7 @@ async def test_confirm_handler_e2e_smoke(monkeypatch):
 @pytest.mark.asyncio
 async def test_confirm_requires_media_input(monkeypatch):
     from bot.handlers import flow
+    monkeypatch.setenv("TEST_MODE", "1")
 
     model = {
         "model_id": "media-model",
@@ -176,6 +181,8 @@ async def test_confirm_handler_e2e_google_imagen4(monkeypatch):
     monkeypatch.setattr(flow, "release_job_lock", lambda *args, **kwargs: None)
     monkeypatch.setattr(flow, "idem_finish", lambda *args, **kwargs: None)
 
+    async def fake_generate_with_payment(**kwargs):
+        raise AssertionError("generate_with_payment should not be called")
     class DummyChargeManager:
         async def get_user_balance(self, user_id):
             return 0.0
@@ -188,6 +195,11 @@ async def test_confirm_handler_e2e_google_imagen4(monkeypatch):
     monkeypatch.setattr(flow, "generate_with_payment", fake_generate_with_payment)
 
     flow_ctx = {
+        "model_id": "media-model",
+        "required_fields": ["image_url"],
+        "optional_fields": [],
+        "properties": model["input_schema"]["properties"],
+        "collected": {},
         "model_id": "google/imagen4",
         "required_fields": ["prompt"],
         "optional_fields": [],
@@ -307,6 +319,7 @@ async def test_confirm_handler_e2e_google_imagen4_fast(monkeypatch):
 
     await flow.confirm_cb(callback, state)
 
+    assert any("Нужен файл или ссылка" in msg for msg in message.messages)
     assert any("https://example.com/out4.png" in msg for msg in message.messages)
     assert callback.answered is True
 
