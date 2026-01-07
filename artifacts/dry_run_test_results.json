@@ -1,0 +1,298 @@
+{
+  "total": 72,
+  "success": 0,
+  "failed": 72,
+  "warnings": 0,
+  "success_models": [],
+  "failed_details": [
+    {
+      "model": "bytedance/seedream",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/seedream-v4-text-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/seedream-v4-edit",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "z-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "google/imagen4-fast",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "google/imagen4-ultra",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "google/imagen4",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "google/nano-banana-edit",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "google/nano-banana",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "nano-banana-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "flux-2/pro-image-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "flux-2/pro-text-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "flux-2/flex-image-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "flux-2/flex-text-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "grok-imagine/text-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "grok-imagine/upscale",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "topaz/image-upscale",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "recraft/remove-background",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "recraft/crisp-upscale",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "ideogram/v3-reframe",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "ideogram/character-edit",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "ideogram/character-remix",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "ideogram/character",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "qwen/text-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "qwen/image-to-image",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "qwen/image-edit",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "grok-imagine/text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "grok-imagine/image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling-2.6/text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling-2.6/image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/ai-avatar-v1-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v1-avatar-standard",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v2-1-master-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v2-1-master-text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v2-1-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v2-1-standard",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/v1-pro-fast-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/v1-pro-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/v1-pro-text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/v1-lite-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "bytedance/v1-lite-text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "hailuo/2-3-image-to-video-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "hailuo/2-3-image-to-video-standard",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "hailuo/02-text-to-video-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "hailuo/02-text-to-video-standard",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "hailuo/02-image-to-video-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "hailuo/02-image-to-video-standard",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-2-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-2-text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-2-pro-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-2-pro-text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-watermark-remover",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-2-pro-storyboard/index",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "sora-2-characters",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-6-image-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-6-text-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-6-video-to-video",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-2-a14b-image-to-video-turbo",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-2-a14b-text-to-video-turbo",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-2-animate-move",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-2-animate-replace",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "wan/2-2-a14b-speech-to-video-turbo",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "topaz/video-upscale",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "infinitalk/from-audio",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "elevenlabs/text-to-speech-turbo-2-5",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "elevenlabs/speech-to-text",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "elevenlabs/sound-effect-v2",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "elevenlabs/audio-isolation",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v2-5-turbo-image-to-video-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "kling/v2-5-turbo-text-to-video-pro",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "veo3_fast",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    },
+    {
+      "model": "V4",
+      "error": "build_payload failed: build_payload() got an unexpected keyword argument 'prompt'"
+    }
+  ],
+  "warnings_details": []
+}

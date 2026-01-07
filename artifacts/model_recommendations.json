@@ -1,0 +1,165 @@
+{
+  "best_by_category": {
+    "image": [
+      {
+        "model_id": "z-image",
+        "name": "z-image",
+        "price": 0.0,
+        "category": "image"
+      },
+      {
+        "model_id": "qwen/text-to-image",
+        "name": "Qwen - Text to Image",
+        "price": 0.0,
+        "category": "image"
+      },
+      {
+        "model_id": "qwen/image-to-image",
+        "name": "Qwen - Image to Image",
+        "price": 0.0,
+        "category": "image"
+      }
+    ],
+    "other": [
+      {
+        "model_id": "google/nano-banana-edit",
+        "name": "Google - Nano Banana Edit",
+        "price": 1.58,
+        "category": "other"
+      },
+      {
+        "model_id": "ideogram/v3-reframe",
+        "name": "Ideogram - v3-reframe",
+        "price": 3.95,
+        "category": "other"
+      },
+      {
+        "model_id": "google/nano-banana",
+        "name": "Google - Nano Banana",
+        "price": 7.11,
+        "category": "other"
+      }
+    ],
+    "enhance": [
+      {
+        "model_id": "recraft/crisp-upscale",
+        "name": "Recraft - Image Upscale",
+        "price": 0.2,
+        "category": "enhance"
+      },
+      {
+        "model_id": "recraft/remove-background",
+        "name": "recraft/remove-background",
+        "price": 0.4,
+        "category": "enhance"
+      },
+      {
+        "model_id": "grok-imagine/upscale",
+        "name": "Grok Imagine - Image Upscale",
+        "price": 3.95,
+        "category": "enhance"
+      }
+    ],
+    "video": [
+      {
+        "model_id": "grok-imagine/text-to-video",
+        "name": "Grok Imagine - Text to Video",
+        "price": 7.9,
+        "category": "video"
+      },
+      {
+        "model_id": "sora-2-text-to-video",
+        "name": "Sora2 - Text to Video",
+        "price": 9.88,
+        "category": "video"
+      },
+      {
+        "model_id": "hailuo/02-text-to-video-standard",
+        "name": "Hailuo Standard - Text to Video",
+        "price": 19.75,
+        "category": "video"
+      }
+    ],
+    "avatar": [
+      {
+        "model_id": "kling/ai-avatar-v1-pro",
+        "name": "Kling - AI Avatar V1 Pro",
+        "price": 1580.0,
+        "category": "avatar"
+      },
+      {
+        "model_id": "kling/v1-avatar-standard",
+        "name": "Kling - V1 Avatar Standard",
+        "price": 1580.0,
+        "category": "avatar"
+      }
+    ],
+    "music": [
+      {
+        "model_id": "elevenlabs/audio-isolation",
+        "name": "elevenlabs/audio-isolation",
+        "price": 0.08,
+        "category": "music"
+      },
+      {
+        "model_id": "infinitalk/from-audio",
+        "name": "Infinitalk - From Audio",
+        "price": 1580.0,
+        "category": "music"
+      }
+    ],
+    "audio": [
+      {
+        "model_id": "elevenlabs/sound-effect-v2",
+        "name": "elevenlabs/sound-effect-v2",
+        "price": 0.09,
+        "category": "audio"
+      },
+      {
+        "model_id": "elevenlabs/speech-to-text",
+        "name": "elevenlabs/speech-to-text",
+        "price": 1.38,
+        "category": "audio"
+      },
+      {
+        "model_id": "elevenlabs/text-to-speech-turbo-2-5",
+        "name": "elevenlabs/text-to-speech-turbo-2-5",
+        "price": 2.37,
+        "category": "audio"
+      }
+    ]
+  },
+  "quick_actions": {
+    "trending": [
+      "flux-2/flex-text-to-image",
+      "grok-imagine/text-to-video",
+      "sora-2-text-to-video",
+      "hailuo/02-text-to-video-standard"
+    ],
+    "free": [
+      "z-image",
+      "qwen/text-to-image",
+      "qwen/image-to-image",
+      "qwen/image-edit"
+    ],
+    "popular_by_use": {
+      "instagram": [
+        "flux-2/flex-text-to-image",
+        "ideogram/character"
+      ],
+      "tiktok": [
+        "sora-2-text-to-video",
+        "grok-imagine/text-to-video"
+      ],
+      "youtube": [
+        "hailuo/02-text-to-video-pro",
+        "kling-2.6/image-to-video"
+      ],
+      "design": [
+        "flux-2/pro-text-to-image",
+        "bytedance/seedream"
+      ]
+    }
+  },
+  "generated_at": "2025-12-25"
+}

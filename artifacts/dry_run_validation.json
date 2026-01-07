@@ -1,0 +1,446 @@
+{
+  "total": 72,
+  "success": 69,
+  "errors": 3,
+  "warnings": 0,
+  "details": [
+    {
+      "model_id": "bytedance/seedream",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/seedream-v4-text-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/seedream-v4-edit",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "z-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "google/imagen4-fast",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "google/imagen4-ultra",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "google/imagen4",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "google/nano-banana-edit",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "google/nano-banana",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "nano-banana-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "flux-2/pro-image-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "flux-2/pro-text-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "flux-2/flex-image-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "flux-2/flex-text-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "grok-imagine/text-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "grok-imagine/upscale",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "topaz/image-upscale",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "recraft/remove-background",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "recraft/crisp-upscale",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "ideogram/v3-reframe",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "ideogram/character-edit",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "ideogram/character-remix",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "ideogram/character",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "qwen/text-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "qwen/image-to-image",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "qwen/image-edit",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "grok-imagine/text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "grok-imagine/image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling-2.6/text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling-2.6/image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v1-avatar-standard",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v2-1-master-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v2-1-master-text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v2-1-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v2-1-standard",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/v1-pro-fast-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/v1-pro-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/v1-pro-text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/v1-lite-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "bytedance/v1-lite-text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "hailuo/2-3-image-to-video-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "hailuo/2-3-image-to-video-standard",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-standard",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-standard",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-2-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-2-text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-2-pro-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-2-pro-text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-watermark-remover",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-2-pro-storyboard/index",
+      "status": "error",
+      "errors": [
+        "No input_schema defined"
+      ],
+      "warnings": []
+    },
+    {
+      "model_id": "sora-2-characters",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-6-image-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-6-text-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-6-video-to-video",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-2-a14b-image-to-video-turbo",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-2-a14b-text-to-video-turbo",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-2-animate-move",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-2-animate-replace",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "topaz/video-upscale",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "infinitalk/from-audio",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "elevenlabs/text-to-speech-turbo-2-5",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "elevenlabs/speech-to-text",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "elevenlabs/sound-effect-v2",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "elevenlabs/audio-isolation",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "status": "success",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "model_id": "veo3_fast",
+      "status": "error",
+      "errors": [
+        "Missing required field: input"
+      ],
+      "warnings": []
+    },
+    {
+      "model_id": "V4",
+      "status": "error",
+      "errors": [
+        "Missing required field: input"
+      ],
+      "warnings": []
+    }
+  ]
+}

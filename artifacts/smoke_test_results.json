@@ -1,0 +1,60 @@
+{
+  "timestamp": "2025-12-24T13:46:16.347239",
+  "dry_run": false,
+  "total_models": 5,
+  "successful": 0,
+  "failed": 5,
+  "total_cost": 0,
+  "results": [
+    {
+      "model_id": "recraft/crisp-upscale",
+      "display_name": "Recraft Crisp Upscale",
+      "price": 0.36,
+      "success": false,
+      "stage": "create",
+      "error": "Failed to create task",
+      "request_id": null,
+      "duration": 0.46944451332092285
+    },
+    {
+      "model_id": "qwen/z-image",
+      "display_name": "Qwen Z-Image",
+      "price": 0.57,
+      "success": false,
+      "stage": "create",
+      "error": "Failed to create task",
+      "request_id": null,
+      "duration": 0.20145702362060547
+    },
+    {
+      "model_id": "recraft/remove-background",
+      "display_name": "Recraft Remove Background",
+      "price": 0.71,
+      "success": false,
+      "stage": "create",
+      "error": "Failed to create task",
+      "request_id": null,
+      "duration": 0.22233057022094727
+    },
+    {
+      "model_id": "midjourney/image-to-image:relaxed-v3",
+      "display_name": "Midjourney",
+      "price": 2.14,
+      "success": false,
+      "stage": "create",
+      "error": "Failed to create task",
+      "request_id": null,
+      "duration": 0.20514583587646484
+    },
+    {
+      "model_id": "midjourney/text-to-image:relaxed-v3",
+      "display_name": "Midjourney",
+      "price": 2.14,
+      "success": false,
+      "stage": "create",
+      "error": "Failed to create task",
+      "request_id": null,
+      "duration": 0.20686984062194824
+    }
+  ]
+}

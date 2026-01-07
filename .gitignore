@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Environment variables (NEVER commit .env files!)
 .env
 .env.*
@@ -12,12 +13,20 @@ services_config.json
 render.yaml
 .github_token
 
+=======
+>>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+<<<<<<< HEAD
+=======
+env/
+venv/
+ENV/
+>>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
 build/
 develop-eggs/
 dist/
@@ -34,6 +43,7 @@ wheels/
 .installed.cfg
 *.egg
 
+<<<<<<< HEAD
 # Virtual environments
 venv/
 ENV/
@@ -47,6 +57,15 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 pnpm-lock.yaml
+=======
+# Результаты работы
+kie_full_api.json
+kie_scraper.log
+kie_scraper_stats.json
+missing_report.txt
+repository_analysis.json
+next_data_*.json
+>>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
 
 # IDE
 .vscode/
@@ -58,6 +77,7 @@ pnpm-lock.yaml
 # OS
 .DS_Store
 Thumbs.db
+<<<<<<< HEAD
 desktop.ini
 
 # Logs
@@ -125,3 +145,14 @@ artifacts/verify_last_pass.json
 # *.sh
 # *.ps1
 
+=======
+
+# Локальные файлы
+*.rar
+*.lnk
+desktop.ini
+*.bat
+5656-main/
+Новая папка/
+bot.rar
+>>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6

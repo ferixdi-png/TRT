@@ -1,0 +1,69 @@
+{
+  "timestamp": "2025-12-25T07:16:36.272661",
+  "total_tested": 6,
+  "successful": 4,
+  "failed": 2,
+  "total_cost": 41.09,
+  "results": [
+    {
+      "model_id": "grok-imagine/upscale",
+      "display_name": "Grok Imagine - Image Upscale",
+      "price": 3.95,
+      "category": "enhance",
+      "success": false,
+      "error": "API error: record not found",
+      "task_id": null,
+      "timestamp": "2025-12-25T07:16:22.806114"
+    },
+    {
+      "model_id": "ideogram/character-remix",
+      "display_name": "Ideogram - character-remix",
+      "price": 7.11,
+      "category": "other",
+      "success": false,
+      "error": "API error: File type not supported",
+      "task_id": null,
+      "timestamp": "2025-12-25T07:16:25.090842"
+    },
+    {
+      "model_id": "ideogram/character-edit",
+      "display_name": "Ideogram - character-edit",
+      "price": 9.48,
+      "category": "other",
+      "success": true,
+      "error": null,
+      "task_id": "1ac36a329862806c2eeee3734d7f0cf7",
+      "timestamp": "2025-12-25T07:16:27.325503"
+    },
+    {
+      "model_id": "sora-2-image-to-video",
+      "display_name": "Sora2 - Image to Video",
+      "price": 9.88,
+      "category": "image",
+      "success": true,
+      "error": null,
+      "task_id": "a1da8626d6e854f33493ba5b6fc62326",
+      "timestamp": "2025-12-25T07:16:29.557471"
+    },
+    {
+      "model_id": "sora-2-text-to-video",
+      "display_name": "Sora2 - Text to Video",
+      "price": 9.88,
+      "category": "video",
+      "success": true,
+      "error": null,
+      "task_id": "02fcbaf91cc548a117ec5a3a68b55e3e",
+      "timestamp": "2025-12-25T07:16:31.807409"
+    },
+    {
+      "model_id": "hailuo/2-3-image-to-video-standard",
+      "display_name": "Hailuo - Image to Video",
+      "price": 11.85,
+      "category": "image",
+      "success": true,
+      "error": null,
+      "task_id": "d402b68fbfef16f51b0f904c353287ab",
+      "timestamp": "2025-12-25T07:16:34.031958"
+    }
+  ]
+}

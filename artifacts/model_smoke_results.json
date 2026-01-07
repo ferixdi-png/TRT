@@ -1,0 +1,1078 @@
+{
+  "summary": {
+    "total": 80,
+    "passed": 80,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "results": [
+    {
+      "model_id": "bytedance/seedance",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/seedream",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/seedream-v4-edit",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/seedream-v4-text-to-image",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/v1-lite-image-to-video",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/v1-lite-text-to-video",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/v1-pro-fast-image-to-video",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/v1-pro-image-to-video",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "bytedance/v1-pro-text-to-video",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "elevenlabs/audio-isolation",
+      "category": "audio_isolation",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "audio_url"
+      ],
+      "generated_payload": {
+        "audio_url": "test"
+      }
+    },
+    {
+      "model_id": "elevenlabs/sound-effect",
+      "category": "sfx",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "elevenlabs/sound-effect-v2",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "elevenlabs/speech-to-text",
+      "category": "stt",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "audio_url"
+      ],
+      "generated_payload": {
+        "audio_url": "test"
+      }
+    },
+    {
+      "model_id": "elevenlabs/text-to-speech",
+      "category": "tts",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "text"
+      ],
+      "generated_payload": {
+        "text": "test"
+      }
+    },
+    {
+      "model_id": "elevenlabs/text-to-speech-multilingual-v2",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "flux-2/flex-image-to-image",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "flux-2/flex-text-to-image",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "flux-2/pro-image-to-image",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "flux-2/pro-text-to-image",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "flux/kontext",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/imagen4",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/imagen4-fast",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/imagen4-ultra",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/nano-banana",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/nano-banana-edit",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/nano-banana-pro",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/veo-3",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "google/veo-3.1",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "grok-imagine/image-to-video",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "grok-imagine/text-to-image",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "grok-imagine/text-to-video",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "grok/imagine",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-pro",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-standard",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-pro",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-standard",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/2-3-image-to-video-pro",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/2-3-image-to-video-standard",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "hailuo/2.3",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/character",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/character-edit",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/character-remix",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/v3-edit",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/v3-reframe",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/v3-remix",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "ideogram/v3-text-to-image",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "infinitalk/from-audio",
+      "category": "lip_sync",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "video_url",
+        "audio_url"
+      ],
+      "generated_payload": {
+        "video_url": "test",
+        "audio_url": "test"
+      }
+    },
+    {
+      "model_id": "kling-2.6/image-to-video",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "kling-2.6/text-to-video",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "category": "lip_sync",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "video_url",
+        "audio_url"
+      ],
+      "generated_payload": {
+        "video_url": "test",
+        "audio_url": "test"
+      }
+    },
+    {
+      "model_id": "kling/v1-avatar-standard",
+      "category": "lip_sync",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "video_url",
+        "audio_url"
+      ],
+      "generated_payload": {
+        "video_url": "test",
+        "audio_url": "test"
+      }
+    },
+    {
+      "model_id": "kling/v2-1-master-image-to-video",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "kling/v2-1-master-text-to-video",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "kling/v2-1-pro",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "kling/v2-1-standard",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "midjourney/api",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "openai/4o-image",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "qwen/image-edit",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "qwen/image-to-image",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "qwen/text-to-image",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "recraft/crisp-upscale",
+      "category": "upscale",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "recraft/remove-background",
+      "category": "bg_remove",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "runway/gen-4",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "seedream/4.5-edit",
+      "category": "i2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url",
+        "prompt"
+      ],
+      "generated_payload": {
+        "url": "test",
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "seedream/4.5-text-to-image",
+      "category": "t2i",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "suno/v5",
+      "category": "music",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "topaz/image-upscale",
+      "category": "upscale",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "topaz/video-upscale",
+      "category": "upscale",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-2-a14b-image-to-video-turbo",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-2-a14b-text-to-video-turbo",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-2-animate-move",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-2-animate-replace",
+      "category": "other",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-5-image-to-video",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-5-text-to-video",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-6-image-to-video",
+      "category": "i2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "url"
+      ],
+      "generated_payload": {
+        "url": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-6-text-to-video",
+      "category": "t2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "prompt"
+      ],
+      "generated_payload": {
+        "prompt": "test"
+      }
+    },
+    {
+      "model_id": "wan/2-6-video-to-video",
+      "category": "v2v",
+      "status": "OK",
+      "stage": "complete",
+      "error": "",
+      "required_fields": [
+        "video_url"
+      ],
+      "generated_payload": {
+        "video_url": "test"
+      }
+    }
+  ]
+}

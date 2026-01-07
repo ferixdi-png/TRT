@@ -1,0 +1,121 @@
+{
+  "qwen/z-image": {
+    "usd_per_gen": 0.004,
+    "rub_per_gen": 0.63,
+    "credits_per_gen": 0.8,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "google/nano-banana-pro": {
+    "usd_per_gen": 0.105,
+    "rub_per_gen": 16.59,
+    "credits_per_gen": 21.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "flux-2/pro": {
+    "usd_per_gen": 0.025,
+    "rub_per_gen": 3.95,
+    "credits_per_gen": 5.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "wan/2.5": {
+    "usd_per_gen": 0.3,
+    "rub_per_gen": 47.4,
+    "credits_per_gen": 60.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "google/veo-3.1": {
+    "usd_per_gen": 0.75,
+    "rub_per_gen": 118.5,
+    "credits_per_gen": 150.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "grok-imagine/image-to-video": {
+    "usd_per_gen": 0.1,
+    "rub_per_gen": 15.8,
+    "credits_per_gen": 20.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "grok-imagine/text-to-video": {
+    "usd_per_gen": 0.1,
+    "rub_per_gen": 15.8,
+    "credits_per_gen": 20.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "elevenlabs/speech-to-text": {
+    "usd_per_gen": 3.0,
+    "rub_per_gen": 474.0,
+    "credits_per_gen": 600.0,
+    "is_free": true,
+    "source": "kie_pricing_page_real"
+  },
+  "elevenlabs/audio-isolation": {
+    "usd_per_gen": 5.0,
+    "rub_per_gen": 790.0,
+    "credits_per_gen": 1000.0,
+    "is_free": true,
+    "source": "kie_pricing_page_real"
+  },
+  "elevenlabs/text-to-speech": {
+    "usd_per_gen": 5.0,
+    "rub_per_gen": 790.0,
+    "credits_per_gen": 1000.0,
+    "is_free": true,
+    "source": "kie_pricing_page_real"
+  },
+  "elevenlabs/text-to-speech-multilingual-v2": {
+    "usd_per_gen": 5.0,
+    "rub_per_gen": 790.0,
+    "credits_per_gen": 1000.0,
+    "is_free": true,
+    "source": "kie_pricing_page_real"
+  },
+  "elevenlabs/sound-effect": {
+    "usd_per_gen": 8.0,
+    "rub_per_gen": 1264.0,
+    "credits_per_gen": 1600.0,
+    "is_free": true,
+    "source": "kie_pricing_page_real"
+  },
+  "elevenlabs/sound-effect-v2": {
+    "usd_per_gen": 8.0,
+    "rub_per_gen": 1264.0,
+    "credits_per_gen": 1600.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "google/nano-banana": {
+    "usd_per_gen": 8.0,
+    "rub_per_gen": 1264.0,
+    "credits_per_gen": 1600.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "recraft/remove-background": {
+    "usd_per_gen": 8.0,
+    "rub_per_gen": 1264.0,
+    "credits_per_gen": 1600.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "bytedance/seedream": {
+    "usd_per_gen": 10.0,
+    "rub_per_gen": 1580.0,
+    "credits_per_gen": 2000.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  },
+  "flux-2/flex-text-to-image": {
+    "usd_per_gen": 10.0,
+    "rub_per_gen": 1580.0,
+    "credits_per_gen": 2000.0,
+    "is_free": false,
+    "source": "kie_pricing_page_real"
+  }
+}

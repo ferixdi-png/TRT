@@ -1,8 +1,13 @@
+<<<<<<< HEAD
 # Используем Python образ вместо Node.js
+=======
+# Production Dockerfile for Render
+>>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
 FROM python:3.11-slim
 
 WORKDIR /app
 
+<<<<<<< HEAD
 # Install system dependencies (essential + OCR support)
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -53,3 +58,17 @@ RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml 
 
 # Start the bot using Render-first entrypoint
 CMD ["python3", "main_render.py"]
+=======
+# Копируем зависимости
+COPY requirements.txt .
+
+# Устанавливаем зависимости
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копируем весь проект
+COPY . .
+
+# Production entrypoint - Telegram bot
+CMD ["python", "main_render.py"]
+
+>>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
