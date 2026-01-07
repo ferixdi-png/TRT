@@ -9,7 +9,6 @@ import logging
 from typing import Dict, Any, Optional, Callable
 from datetime import datetime, timedelta
 import os
-from contextlib import nullcontext
 
 from app.kie.builder import build_payload, load_source_of_truth
 from app.kie.validator import ModelContractError
@@ -18,7 +17,7 @@ from app.utils.errors import classify_api_failure, classify_exception
 from app.kie.router import is_v4_model, build_category_payload
 from app.utils.public_url import get_public_base_url
 from app.utils.payload_hash import payload_hash
-from app.utils.trace import TraceContext, get_request_id
+from app.utils.trace import TraceContext, get_request_id, new_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -203,14 +202,26 @@ class KieGenerator:
             - error_code: Optional[str]
             - error_message: Optional[str]
         """
-        ctx = TraceContext(model_id=model_id) if get_request_id() == "-" else nullcontext()
-        with ctx:
-            ph = payload_hash({"model": model_id, "inputs": user_inputs})
+        request_id = get_request_id()
+        if not request_id or request_id == "-":
+            request_id = new_request_id()
+        ph = payload_hash({"model": model_id, "inputs": user_inputs})
+
+        def _x(stage: str, **kw: Any) -> Dict[str, Any]:
+            return {
+                "stage": stage,
+                "request_id": request_id,
+                "model_id": model_id,
+                "payload_hash": ph,
+                **kw,
+            }
+
+        with TraceContext(model_id=model_id, request_id=request_id):
             logger.info(
                 "▶️ generation start timeout=%ss inputs=%s",
                 timeout,
                 list(user_inputs.keys()),
-                extra={"stage": "start", "payload_hash": ph, "model_id": model_id},
+                extra=_x("start"),
             )
 
             async def _maybe_call_progress(message: str) -> None:
@@ -254,14 +265,14 @@ class KieGenerator:
                     logger.info(
                         "Using V4 API for model %s",
                         model_id,
-                        extra={"stage": "payload_build", "payload_hash": ph, "model_id": model_id},
+                        extra=_x("payload_build"),
                     )
                     payload = build_category_payload(model_id, user_inputs)
                 else:
                     logger.info(
                         "Using V3 API for model %s",
                         model_id,
-                        extra={"stage": "payload_build", "payload_hash": ph, "model_id": model_id},
+                        extra=_x("payload_build"),
                     )
                     payload = build_payload(model_id, user_inputs, self.source_of_truth)
 
@@ -279,13 +290,13 @@ class KieGenerator:
                         _model,
                         list(_p.keys()),
                         _prompt_len,
-                        extra={"stage": "payload_built", "payload_hash": ph, "model_id": model_id},
+                        extra=_x("payload_built"),
                     )
                 except Exception:
                     logger.debug(
                         "payload built (failed to summarize)",
                         exc_info=True,
-                        extra={"stage": "payload_built", "payload_hash": ph, "model_id": model_id},
+                        extra=_x("payload_built"),
                     )
 
                 # Log full payload (masked) for debugging contract issues
@@ -297,13 +308,13 @@ class KieGenerator:
                     logger.info(
                         "📤 Kie payload (masked): %s",
                         s,
-                        extra={"stage": "payload_log", "payload_hash": ph, "model_id": model_id},
+                        extra=_x("payload_log"),
                     )
                 except Exception:
                     logger.debug(
                         "Failed to log full payload",
                         exc_info=True,
-                        extra={"stage": "payload_log", "payload_hash": ph, "model_id": model_id},
+                        extra=_x("payload_log"),
                     )
 
                 # Create task
@@ -356,7 +367,7 @@ class KieGenerator:
                 logger.info(
                     "Create task response: %s",
                     create_response,
-                    extra={"stage": "create_task_response", "payload_hash": ph, "model_id": model_id},
+                    extra=_x("create_task_response"),
                 )
 
                 # Check if response is None or has error
@@ -484,12 +495,7 @@ class KieGenerator:
                         logger.error(
                             "Timeout waiting for task: %ss",
                             timeout,
-                            extra={
-                                "stage": "timeout",
-                                "payload_hash": ph,
-                                "model_id": model_id,
-                                "task_id": task_id,
-                            },
+                            extra=_x("timeout", task_id=task_id),
                         )
                         return {
                             "success": False,
@@ -516,6 +522,7 @@ class KieGenerator:
                                 "payload_hash": ph,
                                 "model_id": model_id,
                                 "task_id": task_id,
+                                "request_id": request_id,
                             },
                         )
                         return {
@@ -548,14 +555,14 @@ class KieGenerator:
                         "poll state=%s failCode=%s",
                         state,
                         fail_code,
-                        extra={"stage": "poll", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                        extra=_x("poll", task_id=task_id),
                     )
 
                     if state == "success":
                         logger.info(
                             "✅ generation success urls=%s",
                             len(parsed.get("result_urls") or []),
-                            extra={"stage": "success", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                            extra=_x("success", task_id=task_id),
                         )
                         return {
                             "success": True,
@@ -573,7 +580,7 @@ class KieGenerator:
                             "generation failed code=%s msg=%s",
                             parsed.get("error_code"),
                             parsed.get("error_message"),
-                            extra={"stage": "fail", "payload_hash": ph, "task_id": task_id, "model_id": model_id},
+                            extra=_x("fail", task_id=task_id),
                         )
                         return {
                             "success": False,

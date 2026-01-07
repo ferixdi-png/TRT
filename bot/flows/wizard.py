@@ -823,6 +823,53 @@ async def wizard_show_confirmation(message_or_callback, state: FSMContext) -> No
         await message_or_callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
 
+def _detect_missing_media_required(model_config: Dict[str, Any], payload: Dict[str, Any]) -> str | None:
+    schema = model_config.get("input_schema", {}) or {}
+    if "input" in schema and isinstance(schema.get("input"), dict):
+        schema = schema["input"]
+
+    if not isinstance(schema, dict):
+        return None
+
+    required = []
+    properties = {}
+
+    if schema.get("type") == "object":
+        required = list(schema.get("required") or [])
+        properties = schema.get("properties") or {}
+    elif "properties" in schema:
+        required = list(schema.get("required") or [])
+        properties = schema.get("properties") or {}
+    elif schema and all(isinstance(v, dict) for v in schema.values()):
+        properties = schema
+        required = [k for k, v in properties.items() if v.get("required") is True]
+
+    for field_name in required:
+        field_value = payload.get(field_name)
+        if field_value:
+            continue
+
+        field_type = None
+        lower_name = str(field_name).lower()
+        if "image" in lower_name:
+            field_type = "изображение"
+        elif "audio" in lower_name:
+            field_type = "аудио"
+        elif "video" in lower_name:
+            field_type = "видео"
+
+        if field_type is None:
+            spec = properties.get(field_name) if isinstance(properties, dict) else None
+            fmt = spec.get("format") if isinstance(spec, dict) else None
+            if fmt == "uri":
+                field_type = "файл"
+
+        if field_type:
+            return field_type
+
+    return None
+
+
 @router.callback_query(F.data == "wizard:confirm", WizardState.confirming)
 async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext) -> None:
     """Confirm and start generation (queued/running/ready with cancel)."""
@@ -842,6 +889,15 @@ async def wizard_confirm_and_generate(callback: CallbackQuery, state: FSMContext
     for field_name, field_spec in properties.items():
         if field_name not in payload and isinstance(field_spec, dict) and "default" in field_spec:
             payload[field_name] = field_spec["default"]
+
+    missing_media = _detect_missing_media_required(model_config, payload)
+    if missing_media:
+        text = f"❗ Нужен файл или ссылка ({missing_media})."
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="wizard:edit")]]
+        )
+        await callback.message.answer(text, reply_markup=kb)
+        return
 
     # Price (with markup)
     from decimal import Decimal

@@ -142,6 +142,20 @@ async def test_confirm_handler_e2e_smoke(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_confirm_requires_media_input(monkeypatch):
+    from bot.handlers import flow
+
+    model = {
+        "model_id": "media-model",
+        "display_name": "Media Model",
+        "input_schema": {
+            "type": "object",
+            "required": ["image_url"],
+            "properties": {"image_url": {"type": "string", "format": "uri"}},
+        },
+    }
+
+    monkeypatch.setattr(flow, "_get_models_list", lambda: [model])
 async def test_confirm_handler_e2e_google_imagen4(monkeypatch):
     """Mini e2e for google/imagen4 to keep free-tier confirm path covered."""
 

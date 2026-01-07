@@ -198,6 +198,9 @@ async def generate_with_payment(
             
             generator = _get_generator_instance()
             start_time = time.time()
+            gen_result = await generator.generate(
+                **_build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
+            )
             kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
             kw["task_id_callback"] = task_id_callback
             gen_result = await generator.generate(**kw)
