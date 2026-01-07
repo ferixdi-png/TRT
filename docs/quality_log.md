@@ -160,6 +160,14 @@ python -m compileall -q .
 ### Коммиты
 
 - `70145b4` - fix: remove merge markers from Dockerfile - critical deploy blocker
+- `f451c0b` - feat: add CI guard for print() statements and branch policy docs
+- `3848523` - docs: update quality log with second cycle tasks
 - `204c66f` - docs: fix Git Remote policy - ALWAYS push to TRT repository
-- Следующий коммит: feat: add CI guard for print() statements and branch policy docs
+
+### Render Deploy
+
+- ✅ **Деплой успешен** - Dockerfile исправлен, образ собирается корректно
+- ✅ Все зависимости устанавливаются (python-telegram-bot, asyncpg, psycopg2-binary и др.)
+- ✅ Критические файлы проверяются (models/kie_models.yaml, app/config.py)
+- ✅ Образ экспортируется успешно
 
