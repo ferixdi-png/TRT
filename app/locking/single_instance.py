@@ -485,5 +485,4 @@ class SingletonLock:
             except Exception as e:
                 logger.warning(f"Error closing connection: {e}")
             self._connection = None
->>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
 
