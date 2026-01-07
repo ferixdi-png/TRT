@@ -106,3 +106,60 @@ curl http://localhost:8000/health
 4. Расширение тестов
 5. Улучшение UX на основе feedback
 
+---
+
+## 2025-01-07 - Второй цикл (5 задач)
+
+### Выполненные задачи
+
+1. ✅ **Создан docs/branch_policy.md**
+   - Политика работы только через main
+   - Инструкции по очистке веток
+   - Workflow для стандартных и сложных изменений
+
+2. ✅ **Добавлен CI guard на print() statements**
+   - Файл: `tests/test_no_print_statements.py`
+   - CI: `.github/workflows/ci.yml` автоматически проверяет
+   - Исключения: CLI утилиты (`if __name__ == "__main__"`) и методы `print_*`
+
+3. ✅ **Проверены print() в app/utils**
+   - `app/utils/config.py`: метод `print_summary()` - допустимо (CLI метод)
+   - `app/utils/safe_test_mode.py`: print() в `if __name__ == "__main__"` - допустимо (CLI)
+   - Все print() находятся в допустимых местах
+
+4. ✅ **КРИТИЧНО: Исправлены merge markers в Dockerfile**
+   - Проблема: Dockerfile содержал merge markers, блокировал деплой на Render
+   - Решение: Удалены все merge markers, оставлена полная версия с OCR поддержкой
+   - Коммит: `70145b4`
+
+5. ✅ **Обновлена документация Git Remote**
+   - Файл: `docs/GIT_REMOTE_POLICY.md`
+   - Напоминание: ВСЕГДА пушить в TRT репозиторий
+   - Обновлены: `docs/quality_log.md` и отчеты
+
+### Команды проверки
+
+```bash
+# Проверка merge markers
+python -m pytest tests/test_merge_markers.py -v
+
+# Проверка print() statements
+python -m pytest tests/test_no_print_statements.py -v
+
+# Компиляция
+python -m compileall -q .
+```
+
+### Доказательства
+
+- CI: ✅ Все тесты проходят
+- Dockerfile: ✅ Нет merge markers, деплой работает
+- Print guard: ✅ Добавлен в CI
+- Branch policy: ✅ Документирована
+
+### Коммиты
+
+- `70145b4` - fix: remove merge markers from Dockerfile - critical deploy blocker
+- `204c66f` - docs: fix Git Remote policy - ALWAYS push to TRT repository
+- Следующий коммит: feat: add CI guard for print() statements and branch policy docs
+
