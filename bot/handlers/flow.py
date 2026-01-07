@@ -2184,6 +2184,47 @@ async def back_to_inputs_cb(callback: CallbackQuery, state: FSMContext) -> None:
     )
 
 
+def _detect_missing_media_required(model: Dict[str, Any], inputs: Dict[str, Any]) -> str | None:
+    schema = model.get("input_schema", {}) or {}
+    if "input" in schema and isinstance(schema.get("input"), dict):
+        schema = schema["input"]
+
+    required: list[str] = []
+    properties: Dict[str, Any] = {}
+
+    if isinstance(schema, dict) and schema.get("type") == "object":
+        required = list(schema.get("required") or [])
+        properties = schema.get("properties") or {}
+    elif isinstance(schema, dict) and "properties" in schema:
+        required = list(schema.get("required") or [])
+        properties = schema.get("properties") or {}
+    elif isinstance(schema, dict) and schema and all(isinstance(v, dict) for v in schema.values()):
+        properties = schema
+        required = [k for k, v in properties.items() if v.get("required") is True]
+    else:
+        required = list(model.get("required_inputs") or [])
+        properties = model.get("properties") or {}
+
+    for field_name in required:
+        if inputs.get(field_name):
+            continue
+
+        lower_name = str(field_name).lower()
+        if "image" in lower_name:
+            return "изображение"
+        if "audio" in lower_name:
+            return "аудио"
+        if "video" in lower_name:
+            return "видео"
+
+        spec = properties.get(field_name) if isinstance(properties, dict) else None
+        fmt = spec.get("format") if isinstance(spec, dict) else None
+        if fmt == "uri":
+            return "файл"
+
+    return None
+
+
 @router.callback_query(F.data == "confirm", InputFlow.confirm)
 async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
@@ -2206,6 +2247,16 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.edit_text("⚠️ Модель не найдена.")
                 await state.clear()
                 return
+
+        missing_media = _detect_missing_media_required(model, flow_ctx.collected)
+        if missing_media:
+            await callback.message.answer(
+                f"❗ Нужен файл или ссылка ({missing_media}).",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_inputs")]]
+                ),
+            )
+            return
 
         # VALIDATE INPUTS FIRST (before lock, before payment)
         try:
@@ -2491,4 +2542,3 @@ async def fallback_callback(callback: CallbackQuery) -> None:
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")]]),
             parse_mode="HTML"
         )
-

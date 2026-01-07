@@ -131,3 +131,47 @@ async def test_confirm_handler_e2e_smoke(monkeypatch):
 
     assert any("https://example.com/out.png" in msg for msg in message.messages)
     assert callback.answered is True
+
+
+@pytest.mark.asyncio
+async def test_confirm_requires_media_input(monkeypatch):
+    from bot.handlers import flow
+
+    model = {
+        "model_id": "media-model",
+        "display_name": "Media Model",
+        "input_schema": {
+            "type": "object",
+            "required": ["image_url"],
+            "properties": {"image_url": {"type": "string", "format": "uri"}},
+        },
+    }
+
+    monkeypatch.setattr(flow, "_get_models_list", lambda: [model])
+    monkeypatch.setattr(flow, "idem_try_start", lambda *args, **kwargs: (True, None))
+    monkeypatch.setattr(flow, "acquire_job_lock", lambda *args, **kwargs: (True, None))
+    monkeypatch.setattr(flow, "release_job_lock", lambda *args, **kwargs: None)
+    monkeypatch.setattr(flow, "idem_finish", lambda *args, **kwargs: None)
+
+    async def fake_generate_with_payment(**kwargs):
+        raise AssertionError("generate_with_payment should not be called")
+
+    monkeypatch.setattr(flow, "generate_with_payment", fake_generate_with_payment)
+
+    flow_ctx = {
+        "model_id": "media-model",
+        "required_fields": ["image_url"],
+        "optional_fields": [],
+        "properties": model["input_schema"]["properties"],
+        "collected": {},
+        "index": 0,
+        "collecting_optional": False,
+    }
+
+    message = FakeMessage()
+    callback = FakeCallback(message)
+    state = FakeState({"flow_ctx": flow_ctx})
+
+    await flow.confirm_cb(callback, state)
+
+    assert any("Нужен файл или ссылка" in msg for msg in message.messages)
