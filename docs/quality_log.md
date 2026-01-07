@@ -290,7 +290,6 @@ python -m pytest tests/ -v
 
 ```
 SyntaxError: invalid syntax (single_instance.py, line 488)
->>>>>>> cbb364c8c317bf2ab285b1261d4d267c35b303d6
 ```
 
 ### Решение
