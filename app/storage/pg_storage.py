@@ -187,9 +187,10 @@ class PostgresStorage(BaseStorage):
             )
     
     async def add_user_balance(self, user_id: int, amount: float) -> float:
-        """Добавить к балансу"""
+        """Добавить к балансу (atomic, returns new balance)"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
+            # Выполняем операцию и получаем новый баланс в одной транзакции
             await conn.execute(
                 """
                 INSERT INTO users (id, balance) VALUES ($1, $2)
@@ -197,7 +198,9 @@ class PostgresStorage(BaseStorage):
                 """,
                 user_id, amount
             )
-            return await self.get_user_balance(user_id)
+            # Получаем новый баланс в той же транзакции
+            row = await conn.fetchrow("SELECT balance FROM users WHERE id = $1", user_id)
+            return float(row['balance']) if row else 0.0
     
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
         """Вычесть из баланса (atomic, with transaction)"""
