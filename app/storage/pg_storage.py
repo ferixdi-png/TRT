@@ -545,14 +545,21 @@ class PostgresStorage(BaseStorage):
                     status, admin_id, notes, payment_id
                 )
                 
-                # Если платеж одобрен, добавляем баланс
+                # Если платеж одобрен, добавляем баланс (в той же транзакции)
                 if status == "approved":
                     payment = await conn.fetchrow(
                         "SELECT user_id, amount FROM payments WHERE payment_id = $1",
                         payment_id
                     )
                     if payment:
-                        await self.add_user_balance(payment['user_id'], float(payment['amount']))
+                        # Добавляем баланс атомарно в той же транзакции
+                        await conn.execute(
+                            """
+                            INSERT INTO users (id, balance) VALUES ($1, $2)
+                            ON CONFLICT (id) DO UPDATE SET balance = users.balance + $2
+                            """,
+                            payment['user_id'], float(payment['amount'])
+                        )
                 
                 # Если платеж отменен или провалился, освобождаем резервы (если были)
                 if status in ("cancelled", "failed", "rejected"):
