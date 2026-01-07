@@ -124,7 +124,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     idempotency_key TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    finished_at TIMESTAMP
+    finished_at TIMESTAMP,
+    replied_at TIMESTAMP
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key);
@@ -275,6 +276,19 @@ async def apply_schema(connection):
                         ALTER COLUMN result_json TYPE jsonb
                         USING '{}'::jsonb;
                 END;
+            END IF;
+        END $$;
+    """)
+
+    # Add replied_at for reply-once idempotency (safe for existing DBs)
+    await connection.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'jobs' AND column_name = 'replied_at'
+            ) THEN
+                ALTER TABLE jobs ADD COLUMN replied_at TIMESTAMP;
             END IF;
         END $$;
     """)

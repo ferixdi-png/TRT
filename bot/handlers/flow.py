@@ -1446,7 +1446,7 @@ async def balance_cb(callback: CallbackQuery) -> None:
 async def history_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.clear()
-    history = get_charge_manager().get_user_history(callback.from_user.id, limit=10)
+    history = await get_charge_manager().get_user_history_async(callback.from_user.id, limit=10)
     
     if not history:
         await callback.message.edit_text(
@@ -1490,7 +1490,7 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.edit_text("⚠️ Ошибка.")
         return
     
-    history = get_charge_manager().get_user_history(callback.from_user.id, limit=10)
+    history = await get_charge_manager().get_user_history_async(callback.from_user.id, limit=10)
     if idx >= len(history):
         await callback.message.edit_text("⚠️ Генерация не найдена.")
         return
@@ -2258,6 +2258,86 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
             )
             return
 
+        # VALIDATE INPUTS FIRST (before lock, before payment)
+        try:
+            validate_inputs(model, flow_ctx.collected)
+        except UserFacingValidationError as e:
+            if not test_mode:
+                await callback.message.answer(
+                    str(e),
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_inputs")]]
+                    ),
+            )
+            return
+
+        # Build stable idempotency key from inputs
+        idem_key = build_generation_key(uid, flow_ctx.model_id, flow_ctx.collected)
+
+        # Check idempotency BEFORE lock
+        if test_mode:
+            idem_started, idem_existing = True, None
+        else:
+            idem_started, idem_existing = idem_try_start(idem_key, ttl_s=600.0)
+        if not idem_started:
+            if idem_existing and idem_existing.status == 'done':
+                # Already completed - show cached result
+                await callback.message.answer(
+                    "✅ <b>Этот запрос уже обработан</b>\\n\\n",
+                    "Результат был отправлен ранее.",
+                    parse_mode="HTML",
+                )
+            else:
+                # Pending - wait
+                await callback.message.answer(
+                    "⏳ <b>Запрос уже обрабатывается</b>\\n\\n",
+                    "Подождите результат…",
+                    parse_mode="HTML",
+                )
+            return
+
+        # Acquire job lock AFTER validation, BEFORE payment
+        lock_result = acquire_job_lock(uid, rid=rid, model_id=flow_ctx.model_id, ttl_s=1800.0)
+        if isinstance(lock_result, tuple):
+            acquired, existing = lock_result
+        else:
+            acquired, existing = bool(lock_result), None
+        if not acquired:
+            try:
+                await callback.message.answer(
+                    "⏳ <b>У вас уже идёт генерация</b>\\n\\n",
+                    "Дождитесь результата или нажмите /start для отмены.",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return
+
+        if test_mode:
+            try:
+                result = await generate_with_payment(
+                    model_id=flow_ctx.model_id,
+                    user_inputs=flow_ctx.collected,
+                    user_id=callback.from_user.id if callback.from_user else 0,
+                    amount=0.0,
+                    progress_callback=None,
+                    task_id=f"charge_{uid}_{getattr(callback.message, 'message_id', 0)}",
+                    reserve_balance=True,
+                )
+            finally:
+                release_job_lock(uid, rid=rid)
+            if result.get("success"):
+                urls = result.get("result_urls") or []
+                if urls:
+                    await callback.message.answer("\n".join(urls))
+            elif result.get("message"):
+                await callback.message.answer(result.get("message"))
+            await state.clear()
+            return
+
+        # Amount is always in RUB for ChargeManager.
+        # Use SOURCE_OF_TRUTH base cost * markup (calculate_* already handles FX/credits).
+        try:
         # VALIDATE INPUTS FIRST (before lock, before payment)
         try:
             validate_inputs(model, flow_ctx.collected)

@@ -181,6 +181,7 @@ class KieGenerator:
         model_id: str,
         user_inputs: Dict[str, Any],
         progress_callback: Optional[Callable[[str], None]] = None,
+        task_id_callback: Optional[Callable[[str], Any]] = None,
         timeout: int = 300
     ) -> Dict[str, Any]:
         """
@@ -222,6 +223,34 @@ class KieGenerator:
                 list(user_inputs.keys()),
                 extra=_x("start"),
             )
+
+            async def _maybe_call_progress(message: str) -> None:
+                if not progress_callback:
+                    return
+                try:
+                    res = progress_callback(message)
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception:
+                    logger.debug(
+                        "progress callback failed",
+                        exc_info=True,
+                        extra={"stage": "progress", "payload_hash": ph, "model_id": model_id},
+                    )
+
+            async def _maybe_call_task_id(task_id: str) -> None:
+                if not task_id_callback:
+                    return
+                try:
+                    res = task_id_callback(task_id)
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception:
+                    logger.debug(
+                        "task_id callback failed",
+                        exc_info=True,
+                        extra={"stage": "create_task", "payload_hash": ph, "model_id": model_id},
+                    )
 
             try:
                 # Load source of truth if needed
@@ -399,6 +428,9 @@ class KieGenerator:
                     if isinstance(data, dict):
                         task_id = data.get("taskId")
 
+                if task_id:
+                    await _maybe_call_task_id(task_id)
+
                 if isinstance(create_response, dict) and upstream_code not in (None, 0, 200):
                     logger.error(
                         "Create task failed code=%s msg=%s",
@@ -563,26 +595,25 @@ class KieGenerator:
                     if state == "waiting":
                         time_since_heartbeat = (datetime.now() - last_heartbeat).total_seconds()
                         if time_since_heartbeat >= self._heartbeat_interval:
-                            if progress_callback:
-                                progress_percent = parsed.get("progress", 0)
-                                eta_seconds = parsed.get("eta")
+                            progress_percent = parsed.get("progress", 0)
+                            eta_seconds = parsed.get("eta")
 
-                                if progress_percent and progress_percent > 0:
-                                    bar_length = 10
-                                    filled = int(progress_percent / 10)
-                                    bar = "█" * filled + "░" * (bar_length - filled)
+                            if progress_percent and progress_percent > 0:
+                                bar_length = 10
+                                filled = int(progress_percent / 10)
+                                bar = "█" * filled + "░" * (bar_length - filled)
 
-                                    if eta_seconds:
-                                        progress_callback(
-                                            f"⏳ <b>Генерация</b>\n\n{bar} {progress_percent}%\nОсталось: ~{eta_seconds} сек"
-                                        )
-                                    else:
-                                        progress_callback(f"⏳ <b>Генерация</b>\n\n{bar} {progress_percent}%")
-                                elif eta_seconds:
-                                    progress_callback(f"⏳ <b>Генерация...</b>\n\nОсталось: ~{eta_seconds} сек")
+                                if eta_seconds:
+                                    await _maybe_call_progress(
+                                        f"⏳ <b>Генерация</b>\n\n{bar} {progress_percent}%\nОсталось: ~{eta_seconds} сек"
+                                    )
                                 else:
-                                    dots = "." * (int(elapsed) % 4)
-                                    progress_callback(f"⏳ <b>Генерация{dots}</b>\n\nПрошло: {int(elapsed)} сек")
+                                    await _maybe_call_progress(f"⏳ <b>Генерация</b>\n\n{bar} {progress_percent}%")
+                            elif eta_seconds:
+                                await _maybe_call_progress(f"⏳ <b>Генерация...</b>\n\nОсталось: ~{eta_seconds} сек")
+                            else:
+                                dots = "." * (int(elapsed) % 4)
+                                await _maybe_call_progress(f"⏳ <b>Генерация{dots}</b>\n\nПрошло: {int(elapsed)} сек")
 
                             last_heartbeat = datetime.now()
 

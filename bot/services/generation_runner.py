@@ -26,6 +26,7 @@ from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
 
 from app.kie.normalize import detect_output_type
+from app.utils.trace import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,12 @@ async def start_generation(
 
     async def _runner() -> None:
         try:
+            async def _on_task_id(task_id: str):
+                try:
+                    await job_service.update_status(job_id, "queued", kie_task_id=task_id, kie_status="waiting")
+                except Exception:
+                    logger.debug("Failed to persist task_id", exc_info=True)
+
             result = await generate_with_payment(
                 model_id=model_id,
                 user_inputs=user_inputs,
@@ -181,6 +188,7 @@ async def start_generation(
                 reserve_balance=True,
                 task_id=f"job:{job_id}",
                 progress_callback=progress_cb,
+                task_id_callback=_on_task_id,
                 timeout=timeout,
                 charge_manager=cm,
             )
@@ -195,6 +203,13 @@ async def start_generation(
                     result_json=result,
                     error_text=None,
                 )
+
+                if not await job_service.mark_replied(job_id, result_json=result):
+                    logger.info(
+                        "reply_once skipped",
+                        extra={"stage": "reply", "request_id": get_request_id(), "task_id": kie_task_id, "model_id": model_id},
+                    )
+                    return
 
                 # Result UX
                 try:
@@ -248,6 +263,13 @@ async def start_generation(
                 )
 
                 err = result.get("error") or result.get("message") or "Неизвестная ошибка"
+
+                if not await job_service.mark_replied(job_id, result_json=result, error_text=str(err)):
+                    logger.info(
+                        "reply_once skipped",
+                        extra={"stage": "reply", "request_id": get_request_id(), "task_id": kie_task_id, "model_id": model_id},
+                    )
+                    return
                 try:
                     await bot.edit_message_text(
                         chat_id=message.chat.id,

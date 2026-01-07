@@ -69,7 +69,7 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
                     result['result_object'] = result_json
                     
                     # Try different keys for URLs
-                    url_keys = ['resultUrls', 'result_urls', 'urls', 'results', 'output', 'files']
+                    url_keys = ['resultUrls', 'resultUrl', 'result_urls', 'urls', 'results', 'output', 'files']
                     for key in url_keys:
                         if key in result_json:
                             urls = result_json[key]
@@ -113,7 +113,7 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
         
         # Also check direct resultUrls field
         if not result['result_urls']:
-            direct_urls = record_info.get('resultUrls') or record_info.get('result_urls')
+            direct_urls = record_info.get('resultUrls') or record_info.get('resultUrl') or record_info.get('result_urls')
             if direct_urls:
                 if isinstance(direct_urls, list):
                     result['result_urls'] = [str(url) for url in direct_urls if url]

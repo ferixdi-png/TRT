@@ -363,6 +363,9 @@ async def start_webhook_server(
     # even if we also poll for results. Keeping it separate from the Telegram webhook
     # path avoids exposing the bot webhook secret.
     async def kie_callback(request: web.Request) -> web.Response:
+        from app.database.service import db_service
+        from app.database.services import JobService
+        from app.kie.callback_handler import process_kie_callback
         try:
             payload = await request.json()
         except Exception:
@@ -375,6 +378,43 @@ async def start_webhook_server(
             request.content_length or 0,
             isinstance(payload, dict),
         )
+        if db_service and db_service.pool and isinstance(payload, dict):
+            try:
+                job_service = JobService(db_service)
+                job_id = await process_kie_callback(payload, job_service)
+                if job_id:
+                    log.info("💾 Kie callback persisted job_id=%s", job_id)
+                    job = await job_service.get(job_id)
+                    data = payload.get("data") if isinstance(payload, dict) else {}
+                    state = (data.get("state") or "").lower()
+                    res = data.get("resultJson") or data.get("result_json")
+                    if isinstance(res, str):
+                        try:
+                            import json
+                            res = json.loads(res)
+                        except Exception:
+                            pass
+
+                    async def _send_from_callback():
+                        chat_id = job.get("user_id")
+                        if state == "fail":
+                            await bot.send_message(chat_id, f"❌ Генерация завершилась ошибкой: {data.get('failMsg') or ''}")
+                            return
+                        output_url = None
+                        if isinstance(res, dict):
+                            urls = res.get("resultUrls") or res.get("resultUrl") or res.get("result_urls") or []
+                            if isinstance(urls, str):
+                                output_url = urls
+                            elif urls:
+                                output_url = urls[0]
+                        await bot.send_message(chat_id, f"📎 Результат: {output_url}" if output_url else "✅ Задача завершена")
+
+                    if job:
+                        replied = await job_service.mark_replied(job_id, result_json=res, error_text=data.get("failMsg"))
+                        if replied:
+                            await _send_from_callback()
+            except Exception:
+                log.exception("Failed to persist Kie callback")
         # We don't rely on callbacks for the main flow (we poll), but we keep the endpoint
         # to satisfy providers that require it.
         return web.json_response({"ok": True})
