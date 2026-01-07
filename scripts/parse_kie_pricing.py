@@ -8,8 +8,10 @@ import re
 from pathlib import Path
 
 # Load pricing data
-pricing_file = Path("/workspaces/5656/kie_pricing_raw.txt")
-output_file = Path("/workspaces/5656/models/kie_parsed_models.json")
+# Use relative paths from project root
+project_root = Path(__file__).parent.parent
+pricing_file = project_root / "kie_pricing_raw.txt"
+output_file = project_root / "models" / "kie_parsed_models.json"
 
 def parse_model_line(line: str) -> dict:
     """Parse single line: 'Model Name, category, variant|price'"""
