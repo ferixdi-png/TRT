@@ -28,6 +28,10 @@ jobs:
       run: |
         python -m pytest tests/test_merge_markers.py -v
     
+    - name: Check for print() statements
+      run: |
+        python -m pytest tests/test_no_print_statements.py -v
+    
     - name: Compile Python files
       run: |
         python -m compileall -q .
