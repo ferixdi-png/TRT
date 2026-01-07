@@ -264,8 +264,7 @@ async def test_z_image_create_task_injects_aspect_ratio():
 
 
 @pytest.mark.asyncio
- codex/audit-and-fix-first-free-model-i39rtr
-async def test_progress_callback_is_awaited(monkeypatch):
+ async def test_progress_callback_is_awaited(monkeypatch):
     polls = 0
 
     class StubClient:

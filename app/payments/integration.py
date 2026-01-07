@@ -94,7 +94,6 @@ async def generate_with_payment(
     task_id: Optional[str] = None,
     reserve_balance: bool = False,
     charge_manager: Optional[ChargeManager] = None,
-    task_id_callback: Optional[Any] = None,
     **kwargs  # Catch-all for unknown args (never crash)
 ) -> Dict[str, Any]:
     """
@@ -202,11 +201,6 @@ async def generate_with_payment(
             kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
             if task_id_callback is not None:
                 kw["task_id_callback"] = task_id_callback
-            gen_result = await generator.generate(
-                **_build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
-            )
-            kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
-            kw["task_id_callback"] = task_id_callback
             gen_result = await generator.generate(**kw)
             gen_result = _normalize_gen_result(gen_result)
             duration_ms = int((time.time() - start_time) * 1000)
@@ -286,7 +280,6 @@ async def generate_with_payment(
                 kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
                 if task_id_callback is not None:
                     kw["task_id_callback"] = task_id_callback
-                kw["task_id_callback"] = task_id_callback
                 gen_result = await generator.generate(**kw)
             except asyncio.CancelledError:
                 # user cancelled — restore referral free use
@@ -426,7 +419,6 @@ async def generate_with_payment(
             kw = _build_generate_kwargs(generator, model_id, user_inputs, progress_callback, timeout)
             if task_id_callback is not None:
                 kw["task_id_callback"] = task_id_callback
-            kw["task_id_callback"] = task_id_callback
             gen_result = await generator.generate(**kw)
         except asyncio.CancelledError:
             # user cancelled — release reserved/pending charge

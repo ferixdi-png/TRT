@@ -2337,7 +2337,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
         # Amount is always in RUB for ChargeManager.
         # Use SOURCE_OF_TRUTH base cost * markup (calculate_* already handles FX/credits).
-        try:
+
         # VALIDATE INPUTS FIRST (before lock, before payment)
         try:
             validate_inputs(model, flow_ctx.collected)
