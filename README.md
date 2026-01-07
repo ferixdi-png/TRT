@@ -478,3 +478,44 @@ scraper.export_models_by_category('exports')
 ## 📝 Лицензия
 
 MIT
+
+## Syntx Parity Checklist
+
+This checklist ensures feature parity with Syntx reference implementation.
+
+### Core Features
+- [x] Model registry loading from SOURCE_OF_TRUTH
+- [x] Payment integration with charge/refund flow
+- [x] Free tier model detection and handling
+- [x] Webhook security (path-based + optional header fallback)
+- [x] Health check endpoints (/health, /healthz, /readyz)
+- [x] Request ID correlation in logs
+- [x] Startup validation (42 models locked)
+- [x] Multi-instance support (no singleton lock)
+
+### Security
+- [x] Secret masking in logs (webhook paths, tokens)
+- [x] Header fallback only with WEBHOOK_ALLOW_HEADER_FALLBACK env flag
+- [x] No secrets logged in production
+- [x] Webhook path-based authentication (primary)
+- [x] Optional header-based authentication (fallback, env-controlled)
+
+### Testing
+- [x] Unit tests for generator (test mode, stub mode)
+- [x] Smoke tests (no real API keys required)
+- [x] CI runs compileall + pytest
+- [x] Test mode support (TEST_MODE, KIE_STUB env vars)
+
+### Deployment
+- [x] Render webhook mode support
+- [x] Startup validation passes
+- [x] Health checks respond correctly
+- [x] No secrets in logs
+- [x] Pricing/free tier regressions checked
+
+### Run Smoke Test Locally
+\\\ash
+# No real API keys needed
+TEST_MODE=1 KIE_STUB=1 DRY_RUN=1 pytest tests/test_smoke.py -v
+\\\
+
