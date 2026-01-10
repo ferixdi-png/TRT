@@ -41,9 +41,18 @@ def _bool_env(name: str, default: bool = False) -> bool:
 
 
 def _derive_secret_path_from_token(token: str) -> str:
-    # Stable, URL-safe secret. Keep it short.
-    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    return digest[:24]
+    """Derive a stable URL-safe secret path.
+
+    Compatibility note:
+    Older deployments used the bot token with ':' removed as the webhook path.
+    We keep that behavior as the default to avoid silent 404s after redeploys.
+    """
+
+    cleaned = token.strip().replace(":", "")
+    # Keep it reasonably short but stable.
+    if len(cleaned) > 64:
+        cleaned = cleaned[-64:]
+    return cleaned
 
 
 @dataclass(frozen=True)
