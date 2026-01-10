@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from pathlib import Path
 
-from aiohttp import web
-from aiohttp.test_utils import AioHTTPTestCase, make_mocked_request
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from aiohttp.test_utils import make_mocked_request
 from telegram import Bot
 
 from app.utils.healthcheck import health_handler, webhook_handler, set_start_time
@@ -39,25 +41,13 @@ def _assert_required_env_keys() -> None:
 
 
 async def _assert_health_endpoints() -> None:
-    class _HealthApp(AioHTTPTestCase):
-        async def get_application(self):
-            app = web.Application()
-            app.router.add_get("/health", health_handler)
-            app.router.add_head("/health", health_handler)
-            app.router.add_get("/", health_handler)
-            app.router.add_head("/", health_handler)
-            return app
-
-    case = _HealthApp()
-    await case.setUpAsync()
-    try:
-        set_start_time()
-        resp = await case.client.request("GET", "/health")
-        assert resp.status == 200
-        resp = await case.client.request("HEAD", "/")
-        assert resp.status == 200
-    finally:
-        await case.tearDownAsync()
+    set_start_time()
+    request = make_mocked_request("GET", "/health")
+    response = await health_handler(request)
+    assert response.status == 200
+    request = make_mocked_request("HEAD", "/")
+    response = await health_handler(request)
+    assert response.status == 200
 
 
 async def _assert_webhook_handler() -> None:

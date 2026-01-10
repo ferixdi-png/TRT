@@ -105,6 +105,8 @@ async def start_health_server(
         set_start_time()  # Устанавливаем время старта
 
         app = web.Application()
+        app.router.add_get("/health", health_handler)
+        app.router.add_get("/", health_handler)  # Для совместимости
         app.router.add_get('/health', health_handler)
         app.router.add_head('/health', health_handler)
         app.router.add_get('/', health_handler)  # Для совместимости

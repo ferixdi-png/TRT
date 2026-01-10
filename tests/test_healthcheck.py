@@ -90,6 +90,11 @@ async def test_health_handler_direct():
 
     text = response.text
     data = json.loads(text)
+
+    assert data["status"] == "ok"
+    assert "uptime" in data
+    assert "storage" in data
+    assert "kie_mode" in data
     
     assert data['status'] == 'ok'
     assert 'uptime' in data
