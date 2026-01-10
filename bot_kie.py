@@ -1,20 +1,28 @@
-    from app.config import get_settings
-    from app.utils.webhook import build_webhook_url, get_webhook_base_url, get_webhook_secret_path
+"""Compatibility shim for the legacy bot_kie entrypoint."""
+from __future__ import annotations
 
-    settings = get_settings(validate=False)
-    BOT_TOKEN = settings.telegram_bot_token
-    CONFIG_DATABASE_URL = settings.database_url
-    BOT_MODE = settings.bot_mode
-    WEBHOOK_BASE_URL = settings.webhook_base_url
-    WEBHOOK_URL = settings.webhook_url
-    from app.utils.webhook import build_webhook_url, get_webhook_base_url, get_webhook_secret_path
-    WEBHOOK_BASE_URL = get_webhook_base_url()
-    WEBHOOK_URL = build_webhook_url(WEBHOOK_BASE_URL, get_webhook_secret_path(BOT_TOKEN or ""))
-            if os.getenv("PORT") and get_webhook_base_url():
-        webhook_base_url = WEBHOOK_BASE_URL or get_webhook_base_url()
-        webhook_url = WEBHOOK_URL or build_webhook_url(
-            webhook_base_url,
-            get_webhook_secret_path(BOT_TOKEN or "")
-        )
-            logger.error("❌ WEBHOOK_BASE_URL not set for webhook mode!")
-            logger.error("   Set WEBHOOK_BASE_URL environment variable or use BOT_MODE=polling")
+from typing import Optional
+
+from app.bootstrap import build_application
+from app.config import Settings, get_settings
+from app.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
+async def create_bot_application(settings: Optional[Settings] = None):
+    """Create the Telegram application using the shared bootstrap."""
+    if settings is None:
+        settings = get_settings(validate=False)
+    return await build_application(settings)
+
+
+async def main():
+    """Run the main application entrypoint."""
+    from app.main import main as app_main
+
+    logger.info("[BOT_KIE] Delegating startup to app.main")
+    await app_main()
+
+
+__all__ = ["create_bot_application", "main"]
