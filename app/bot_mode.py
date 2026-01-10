@@ -13,6 +13,8 @@ from telegram.error import Conflict
 
 logger = logging.getLogger(__name__)
 
+from app.utils.webhook import get_webhook_base_url
+
 BotMode = Literal["polling", "webhook"]
 
 
@@ -25,8 +27,8 @@ def get_bot_mode() -> BotMode:
     
     # Автоопределение для Render
     if not mode:
-        # Если есть PORT и WEBHOOK_URL - вероятно webhook режим
-        if os.getenv("PORT") and os.getenv("WEBHOOK_URL"):
+        # Если есть PORT и WEBHOOK_BASE_URL/WEBHOOK_URL - вероятно webhook режим
+        if os.getenv("PORT") and get_webhook_base_url():
             mode = "webhook"
         else:
             mode = "polling"
@@ -82,7 +84,7 @@ async def ensure_webhook_mode(bot: Bot, webhook_url: str) -> bool:
         True если готов к webhook, False если ошибка
     """
     if not webhook_url:
-        logger.error("❌ WEBHOOK_URL not set for webhook mode")
+        logger.error("❌ WEBHOOK_BASE_URL not set for webhook mode")
         return False
     
     try:
@@ -126,7 +128,6 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
 
 
 

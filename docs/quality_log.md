@@ -114,6 +114,25 @@ curl http://localhost:8000/health
 
 ---
 
+## 2025-01-XX - Webhook env contract fix
+
+### Выполненные задачи
+
+1. ✅ **Обновлен webhook env контракт**
+   - `WEBHOOK_BASE_URL` требуется только при `BOT_MODE=webhook`
+   - `WEBHOOK_URL` стал deprecated alias, не блокирует запуск
+   - Полный webhook URL собирается в коде из base URL
+
+2. ✅ **Добавлены регрессионные тесты**
+   - Тесты для webhook env контракта
+   - Проверка healthcheck в webhook режиме
+
+3. ✅ **Обновлена документация**
+   - `docs/env.md`
+   - `docs/quality_log.md`
+
+---
+
 ## 2025-01-07 - Второй цикл (5 задач)
 
 ### Выполненные задачи
@@ -753,4 +772,3 @@ pytest tests/ -v
 ### Коммиты
 
 - `b187934` - feat: add startup_validation to main_render.py and explicit test steps in CI
-
