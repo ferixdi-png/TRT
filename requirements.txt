@@ -34,3 +34,6 @@ ruff>=0.4.8
 
 # File locking
 filelock>=3.13.0
+
+# Telegram runtime (production)
+aiogram>=3.4.1,<4

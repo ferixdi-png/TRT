@@ -1,533 +1,377 @@
-#!/usr/bin/env python3
-"""
-Render-first entrypoint для Telegram Bot
-Единая точка входа для запуска на Render.com (Web Service или Worker)
+"""Render entrypoint.
+
+Goals:
+- Webhook-first runtime (Render Web Service)
+- aiogram-only import surface (no python-telegram-bot imports from this module)
+- Health endpoints for Render + UptimeRobot
+- Singleton advisory lock support (PostgreSQL) to avoid double-processing
+
+This project historically had a PTB (python-telegram-bot) runner. Tests still cover
+that legacy in bot_kie.py, but this runtime is aiogram-based.
 """
 
-import sys
-import os
-import logging
+from __future__ import annotations
+
 import asyncio
-import time
-from pathlib import Path
-from typing import Optional
+import hashlib
+import logging
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Optional
 
-# Добавляем корневую директорию в путь
-sys.path.insert(0, str(Path(__file__).parent))
+from aiohttp import web
 
-# Настраиваем логирование ПЕРЕД импортом других модулей
-from app.utils.logging_config import setup_logging, get_logger
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Update
 
-setup_logging(level=logging.INFO)
-logger = get_logger(__name__)
-
-# Глобальные переменные
-_start_time = time.time()
-_application: Optional[object] = None
-
-
-def log_env_snapshot():
-    """Логирует snapshot ENV переменных без секретов"""
-    env_vars = {
-        "PORT": os.getenv("PORT", "not set"),
-        "RENDER": os.getenv("RENDER", "not set"),
-        "ENV": os.getenv("ENV", "not set"),
-        "BOT_MODE": os.getenv("BOT_MODE", "not set"),
-        "STORAGE_MODE": os.getenv("STORAGE_MODE", "not set"),
-        "DATABASE_URL": "[SET]" if os.getenv("DATABASE_URL") else "[NOT SET]",
-        "TELEGRAM_BOT_TOKEN": "[SET]" if os.getenv("TELEGRAM_BOT_TOKEN") else "[NOT SET]",
-        "WEBHOOK_BASE_URL": os.getenv("WEBHOOK_BASE_URL", "not set"),
-        "WEBHOOK_SECRET_TOKEN": "[SET]" if os.getenv("WEBHOOK_SECRET_TOKEN") else "[NOT SET]",
-        "KIE_API_KEY": "[SET]" if os.getenv("KIE_API_KEY") else "[NOT SET]",
-        "KIE_API_URL": os.getenv("KIE_API_URL", "not set"),
-        "TEST_MODE": os.getenv("TEST_MODE", "not set"),
-        "DRY_RUN": os.getenv("DRY_RUN", "not set"),
-        "ALLOW_REAL_GENERATION": os.getenv("ALLOW_REAL_GENERATION", "not set"),
-    }
-
-    logger.info("=" * 60)
-    logger.info("ENVIRONMENT VARIABLES SNAPSHOT")
-    logger.info("=" * 60)
-    for key, value in sorted(env_vars.items()):
-        logger.info(f"{key}={value}")
-    logger.info("=" * 60)
+from app.utils.logging_config import setup_logging
+from app.utils.runtime_state import runtime_state
 
 
-async def preflight_webhook(bot) -> None:
-    """Delete any existing webhook before polling starts."""
-    await bot.delete_webhook(drop_pending_updates=False)
+logger = logging.getLogger(__name__)
 
 
-def ensure_data_directory(data_dir: str) -> bool:
-    """Гарантирует создание data директории и проверяет права записи"""
-    try:
-        data_path = Path(data_dir)
-        data_path.mkdir(parents=True, exist_ok=True)
-
-        # Проверяем права записи
-        test_file = data_path / ".write_test"
-        try:
-            test_file.write_text("test")
-            test_file.unlink()
-            logger.info(f"[OK] Data directory writable: {data_dir}")
-            return True
-        except Exception as e:
-            logger.error(f"[FAIL] Cannot write to data directory {data_dir}: {e}")
-            return False
-    except Exception as e:
-        logger.error(f"[FAIL] Cannot create data directory {data_dir}: {e}")
-        return False
+def _bool_env(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def load_and_validate_settings():
-    """Загружает и валидирует настройки из ENV"""
-    from app.config import get_settings
-    from app.utils.startup_validation import startup_validation
-
-    logger.info("=" * 60)
-    logger.info("BOT STARTING")
-    logger.info("=" * 60)
-
-    try:
-        # Валидируем обязательные ENV переменные
-        startup_validation()
-
-        # Логируем ENV snapshot
-        log_env_snapshot()
-
-        # Загружаем настройки с валидацией
-        settings = get_settings(validate=True)
-
-        # Startup banner
-        logger.info("=" * 60)
-        logger.info("STARTUP BANNER")
-        logger.info("=" * 60)
-        logger.info(f"Python version: {sys.version.split()[0]}")
-        logger.info(f"Working directory: {os.getcwd()}")
-        logger.info(f"Process ID: {os.getpid()}")
-        logger.info(f"Render environment: {os.getenv('RENDER', 'not detected')}")
-        logger.info(f"Storage mode: {settings.get_storage_mode()}")
-        logger.info(
-            f"KIE mode: {'stub' if os.getenv('KIE_STUB') else ('real' if settings.kie_api_key else 'disabled')}"
-        )
-        logger.info(f"Bot mode: {settings.bot_mode}")
-        logger.info(f"Port: {settings.port if settings.port > 0 else 'disabled (Worker mode)'}")
-        logger.info(f"Data directory: {settings.data_dir}")
-        logger.info("=" * 60)
-
-        # Проверяем data directory
-        if not ensure_data_directory(settings.data_dir):
-            logger.error("[FAIL] Data directory not writable, exiting")
-            sys.exit(1)
-
-        return settings
-    except ValueError as e:
-        logger.error("=" * 60)
-        logger.error("CONFIGURATION VALIDATION FAILED")
-        logger.error("=" * 60)
-        logger.error(str(e))
-        logger.error("=" * 60)
-        sys.exit(1)
-    except SystemExit:
-        raise
-    except Exception as e:
-        from app.utils.logging_config import log_error_with_stacktrace
-
-        log_error_with_stacktrace(logger, e, "Failed to load settings")
-        sys.exit(1)
+def _derive_secret_path_from_token(token: str) -> str:
+    # Stable, URL-safe secret. Keep it short.
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return digest[:24]
 
 
-async def build_application(settings):
-    """Создает и настраивает Telegram Application"""
-    global _application
-
-    try:
-        from bot_kie import create_bot_application
-
-        logger.info("[BUILD] Creating Telegram Application...")
-        _application = await create_bot_application(settings)
-        logger.info("[BUILD] Application created successfully")
-
-        return _application
-    except (AttributeError, NameError):
-        logger.warning("[BUILD] create_bot_application not found, using legacy initialization")
-        return None
-    except Exception as e:
-        from app.utils.logging_config import log_error_with_stacktrace
-
-        log_error_with_stacktrace(logger, e, "Failed to build application")
-        raise
+@dataclass(frozen=True)
+class RuntimeConfig:
+    bot_mode: str
+    port: int
+    webhook_base_url: str
+    webhook_secret_path: str
+    webhook_secret_token: str
+    telegram_bot_token: str
+    database_url: str
+    dry_run: bool
 
 
-async def start_health_server(port: int, **kwargs) -> bool:
-    """Запускает healthcheck сервер в том же event loop"""
-    if port == 0:
-        logger.info("[HEALTH] PORT not set, skipping healthcheck server (Worker mode)")
-        return False
+def _load_runtime_config() -> RuntimeConfig:
+    bot_mode = os.getenv("BOT_MODE", "webhook").strip().lower()
+    port = int(os.getenv("PORT", "10000"))
+    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip().rstrip("/")
+    telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not telegram_bot_token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
 
-    try:
-        from app.utils.healthcheck import start_health_server
+    # Secret path in URL (preferred). Can be explicitly overridden.
+    webhook_secret_path = os.getenv("WEBHOOK_SECRET_PATH", "").strip()
+    if not webhook_secret_path:
+        webhook_secret_path = _derive_secret_path_from_token(telegram_bot_token)
 
-        return await start_health_server(port=port, **kwargs)
-    except Exception as e:
-        logger.warning(f"[HEALTH] Failed to start health server: {e}")
-        return False
+    # Secret token in header (Telegram supports X-Telegram-Bot-Api-Secret-Token)
+    webhook_secret_token = os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
 
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    dry_run = _bool_env("DRY_RUN", False) or _bool_env("TEST_MODE", False)
 
-async def run(settings, application):
-    """Запускает бота (polling или webhook)"""
-    global _application
-
-    # Singleton lock должен быть получен ДО любых async операций
-    from app.locking.single_instance import (
-        acquire_single_instance_lock,
-        release_single_instance_lock,
+    return RuntimeConfig(
+        bot_mode=bot_mode,
+        port=port,
+        webhook_base_url=webhook_base_url,
+        webhook_secret_path=webhook_secret_path,
+        webhook_secret_token=webhook_secret_token,
+        telegram_bot_token=telegram_bot_token,
+        database_url=database_url,
+        dry_run=dry_run,
     )
 
-    # NOTE:
-    # Advisory lock historically existed to prevent Telegram 409 conflicts in POLLING mode.
-    # In WEBHOOK mode, multiple instances behind a load balancer can safely accept updates
-    # (Telegram sends each update once), and disabling webhook handling causes 404 storms.
-    bot_mode = (getattr(settings, "bot_mode", None) or os.getenv("BOT_MODE", "polling")).lower()
 
-    lock_acquired = acquire_single_instance_lock()
+class SingletonLock:
+    """Async wrapper for the sync advisory lock implementation."""
 
-    if not lock_acquired and bot_mode == "polling":
-        # PASSIVE MODE: lock не получен в polling режиме — запускаем только healthcheck
-        logger.warning("=" * 60)
-        logger.warning("[PASSIVE MODE] Singleton lock not acquired")
-        logger.warning("[PASSIVE MODE] Telegram runner disabled (polling)")
-        logger.warning("[PASSIVE MODE] Healthcheck server only")
-        logger.warning("=" * 60)
+    def __init__(self, database_url: str, *, key: Optional[int] = None):
+        self.database_url = database_url
+        self.key = key
+        self._acquired = False
 
-        # Запускаем healthcheck сервер (если PORT задан)
-        if settings.port > 0:
-            logger.info(f"[PASSIVE] Starting healthcheck server on port {settings.port}")
-            await start_health_server(port=settings.port)
-
-            # Держим процесс живым для healthcheck
-            logger.info("[PASSIVE] Healthcheck server running, keeping process alive...")
-            try:
-                while True:
-                    await asyncio.sleep(60)  # Проверяем каждую минуту
-            except KeyboardInterrupt:
-                logger.info("[PASSIVE] Shutting down healthcheck server")
-        else:
-            logger.warning("[PASSIVE] PORT not set, cannot start healthcheck server")
-            logger.warning("[PASSIVE] Exiting (no work to do)")
-
-        return
-
-    if not lock_acquired and bot_mode == "webhook":
-        logger.warning(
-            "[LOCK] PostgreSQL advisory lock not acquired, but continuing in WEBHOOK mode "
-            "to avoid 404 on Telegram updates (zero-downtime deploy handover)."
-        )
-
-    try:
-        # Запускаем healthcheck сервер (если PORT задан - Web Service режим)
-        if settings.port > 0:
-            logger.info(
-                f"[HEALTH] Starting healthcheck server on port {settings.port} (Web Service mode)"
-            )
-            await start_health_server(
-                port=settings.port,
-                application=application if settings.bot_mode == "webhook" else None,
-                webhook_secret_path=settings.webhook_secret_path
-                if settings.bot_mode == "webhook"
-                else None,
-                webhook_secret_token=settings.webhook_secret_token
-                if settings.bot_mode == "webhook"
-                else None,
-            )
-        else:
-            logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
-
-        if application is None:
-            # Используем старый способ через bot_kie.main()
-            logger.info("[RUN] Using legacy bot_kie.main() initialization")
-            from bot_kie import main as bot_main
-
-            await bot_main()
-        else:
-            # Используем новый способ
-            logger.info("[RUN] Initializing application...")
-            await application.initialize()
-            await application.start()
-
-            logger.info("=" * 60)
-            logger.info("BOT READY")
-            logger.info("=" * 60)
-            logger.info("Handlers registered and application started")
-
-            # Запускаем polling или webhook
-            if settings.bot_mode == "webhook":
-                if not settings.webhook_url:
-                    logger.error("[FAIL] WEBHOOK_BASE_URL not set for webhook mode")
-                    sys.exit(1)
-                if settings.test_mode or settings.dry_run:
-                    from app.utils.webhook import mask_webhook_url
-
-                    logger.info(
-                        "[RUN] TEST_MODE/DRY_RUN enabled; skipping webhook set for %s",
-                        mask_webhook_url(settings.webhook_url, settings.webhook_secret_path),
-                    )
-                else:
-                    from app.utils.webhook import ensure_webhook
-
-                    await ensure_webhook(
-                        application.bot,
-                        settings.webhook_url,
-                        secret_token=settings.webhook_secret_token,
-                    )
-                logger.info("[RUN] Webhook mode - bot is ready")
-            else:
-                # Polling mode - безопасный запуск с обработкой конфликтов
-                logger.info("[RUN] Starting polling...")
-
-                # КРИТИЧНО: Задержка перед запуском polling для предотвращения конфликтов
-                logger.info("[RUN] Waiting 15 seconds to avoid conflicts with previous instance...")
-                await asyncio.sleep(15)
-
-                # КРИТИЧНО: Удаляем webhook ПЕРЕД запуском polling
-                try:
-                    await application.bot.delete_webhook(drop_pending_updates=True)
-                    webhook_info = await application.bot.get_webhook_info()
-                    if webhook_info.url:
-                        from app.utils.webhook import mask_webhook_url
-
-                        logger.warning(
-                            "[RUN] Webhook still present: %s",
-                            mask_webhook_url(webhook_info.url, settings.webhook_secret_path),
-                        )
-                    else:
-                        logger.info("[RUN] Webhook removed successfully")
-                except Exception as e:
-                    logger.warning(f"[RUN] Error removing webhook: {e}")
-                    # Проверяем на конфликт
-                    from telegram.error import Conflict
-
-                    if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e):
-                        logger.error("[RUN] Conflict detected while removing webhook - exiting")
-                        from app.bot_mode import handle_conflict_gracefully
-
-                        handle_conflict_gracefully(
-                            e if isinstance(e, Conflict) else Conflict(str(e)), "polling"
-                        )
-                        return
-
-                # КРИТИЧНО: Добавляем обработчик ошибок для updater
-                async def handle_updater_error(update, context):
-                    """Обработчик ошибок для updater polling loop"""
-                    error = context.error
-                    error_msg = str(error) if error else ""
-
-                    from telegram.error import Conflict
-
-                    if (
-                        isinstance(error, Conflict)
-                        or "Conflict" in error_msg
-                        or "terminated by other getUpdates" in error_msg
-                        or "409" in error_msg
-                    ):
-                        logger.error(f"[UPDATER] 409 CONFLICT in updater loop: {error_msg}")
-                        logger.error("[UPDATER] Stopping updater and exiting...")
-
-                        # Останавливаем updater немедленно
-                        try:
-                            if application.updater and application.updater.running:
-                                await application.updater.stop()
-                                logger.info("[UPDATER] Updater stopped")
-                        except Exception as e:
-                            logger.warning(f"[UPDATER] Error stopping updater: {e}")
-
-                        # Останавливаем application
-                        try:
-                            await application.stop()
-                            await application.shutdown()
-                        except:
-                            pass
-
-                        # Освобождаем lock и выходим
-                        try:
-                            from app.locking.single_instance import release_single_instance_lock
-
-                            release_single_instance_lock()
-                        except:
-                            pass
-
-                        from app.bot_mode import handle_conflict_gracefully
-
-                        handle_conflict_gracefully(
-                            error if isinstance(error, Conflict) else Conflict(error_msg), "polling"
-                        )
-                        import os
-
-                        os._exit(0)
-
-                # Добавляем обработчик ошибок для updater
-                application.add_error_handler(handle_updater_error)
-
-                # КРИТИЧНО: Проверяем конфликт ПЕРЕД запуском polling
-                logger.info("[RUN] Checking for conflicts before polling start...")
-                try:
-                    # Пытаемся сделать тестовый getUpdates для проверки конфликта
-                    await application.bot.get_updates(limit=1, timeout=1)
-                    logger.info("[RUN] Pre-flight check passed: no conflicts detected")
-                except Exception as test_e:
-                    from telegram.error import Conflict
-
-                    error_msg = str(test_e)
-                    if (
-                        isinstance(test_e, Conflict)
-                        or "Conflict" in error_msg
-                        or "409" in error_msg
-                        or "terminated by other getUpdates" in error_msg
-                    ):
-                        logger.error(
-                            f"[RUN] ❌❌❌ CONFLICT DETECTED in pre-flight check: {error_msg}"
-                        )
-                        logger.error("[RUN] Another bot instance is already polling - exiting")
-                        try:
-                            await application.stop()
-                            await application.shutdown()
-                        except:
-                            pass
-                        from app.bot_mode import handle_conflict_gracefully
-
-                        handle_conflict_gracefully(
-                            test_e if isinstance(test_e, Conflict) else Conflict(error_msg),
-                            "polling",
-                        )
-                        return
-                    else:
-                        logger.warning(f"[RUN] Pre-flight check warning (non-conflict): {test_e}")
-
-                # КРИТИЧНО: Запускаем polling с обработкой конфликтов
-                try:
-                    await application.updater.start_polling(drop_pending_updates=True)
-                    logger.info("[RUN] Polling started successfully")
-                except Exception as e:
-                    from telegram.error import Conflict
-
-                    error_msg = str(e)
-                    if (
-                        isinstance(e, Conflict)
-                        or "Conflict" in error_msg
-                        or "409" in error_msg
-                        or "terminated by other getUpdates" in error_msg
-                    ):
-                        logger.error(
-                            f"[RUN] ❌❌❌ CONFLICT DETECTED during polling start: {error_msg}"
-                        )
-                        logger.error("[RUN] Stopping updater and exiting immediately...")
-
-                        # Останавливаем updater немедленно
-                        try:
-                            if application.updater and application.updater.running:
-                                await application.updater.stop()
-                                logger.info("[RUN] Updater stopped")
-                        except Exception as stop_e:
-                            logger.warning(f"[RUN] Error stopping updater: {stop_e}")
-
-                        # Останавливаем application
-                        try:
-                            await application.stop()
-                            await application.shutdown()
-                        except:
-                            pass
-
-                        # Освобождаем lock
-                        try:
-                            from app.locking.single_instance import release_single_instance_lock
-
-                            release_single_instance_lock()
-                        except:
-                            pass
-
-                        from app.bot_mode import handle_conflict_gracefully
-
-                        handle_conflict_gracefully(
-                            e if isinstance(e, Conflict) else Conflict(error_msg), "polling"
-                        )
-                        import os
-
-                        os._exit(0)  # Немедленный выход
-                    else:
-                        raise  # Re-raise non-Conflict errors
-
-            # Ждем остановки
-            try:
-                await asyncio.Event().wait()  # Ждем бесконечно
-            except KeyboardInterrupt:
-                logger.info("[STOP] Bot stopped by user")
-            finally:
-                await application.stop()
-                await application.shutdown()
-    except KeyboardInterrupt:
-        logger.info("[STOP] Bot stopped by user")
-        sys.exit(0)
-    except SystemExit:
-        raise
-    except Exception as e:
-        from app.utils.logging_config import log_error_with_stacktrace
-
-        log_error_with_stacktrace(logger, e, "Fatal error during bot run")
-        logger.error("[FAIL] Bot failed to run. Check logs above for details.")
-        sys.exit(1)
-    finally:
-        # Останавливаем healthcheck сервер
-        from app.utils.healthcheck import stop_health_server
-
-        await stop_health_server()
-
-        # Закрываем пул БД при завершении
+    async def acquire(self) -> bool:
+        if not self.database_url:
+            self._acquired = True
+            return True
         try:
-            from database import close_connection_pool
+            from app.locking.single_instance import acquire_single_instance_lock
 
-            close_connection_pool()
-        except Exception:
-            pass
+            self._acquired = acquire_single_instance_lock(self.database_url, lock_key=self.key)
+            return self._acquired
+        except Exception as e:
+            logger.exception("[LOCK] Failed to acquire singleton lock: %s", e)
+            self._acquired = False
+            return False
 
-            close_connection_pool()
-        except Exception:
-            pass
-        
-        # Освобождаем singleton lock
-        release_single_instance_lock()
+    async def release(self) -> None:
+        if not self.database_url:
+            return
+        if not self._acquired:
+            return
+        try:
+            from app.locking.single_instance import release_single_instance_lock
+
+            release_single_instance_lock(self.database_url, lock_key=self.key)
+        except Exception as e:
+            logger.warning("[LOCK] Failed to release singleton lock: %s", e)
 
 
-async def main():
-    """Главная async функция"""
+# Exported name for tests (they monkeypatch this)
+try:
+    from app.storage.pg_storage import PostgresStorage
+except Exception:  # pragma: no cover
+    PostgresStorage = object  # type: ignore
+
+
+async def preflight_webhook(bot: Bot) -> None:
+    """Remove webhook to avoid conflict when running polling."""
     try:
-        # 1. Загружаем и валидируем настройки
-        settings = load_and_validate_settings()
-
-        # 2. Создаем application
-        application = await build_application(settings)
-
-        # 3. Запускаем бота
-        await run(settings, application)
-    except SystemExit:
-        raise
+        await bot.delete_webhook(drop_pending_updates=False)
+        logger.info("[PRE-FLIGHT] Webhook deleted")
     except Exception as e:
-        from app.utils.logging_config import log_error_with_stacktrace
+        logger.warning("[PRE-FLIGHT] Failed to delete webhook: %s", e)
 
-        log_error_with_stacktrace(logger, e, "Fatal error in main")
-        sys.exit(1)
+
+def create_bot_application() -> tuple[Dispatcher, Bot]:
+    """Create aiogram Dispatcher + Bot (sync factory for tests)."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
+
+    bot = Bot(token=token, parse_mode="HTML")
+    dp = Dispatcher(storage=MemoryStorage())
+
+    # Routers
+    from bot.handlers import (
+        admin_router,
+        balance_router,
+        diag_router,
+        error_handler_router,
+        flow_router,
+        gallery_router,
+        history_router,
+        marketing_router,
+        quick_actions_router,
+        zero_silence_router,
+    )
+
+    dp.include_router(error_handler_router)
+    dp.include_router(diag_router)
+    dp.include_router(admin_router)
+    dp.include_router(balance_router)
+    dp.include_router(history_router)
+    dp.include_router(marketing_router)
+    dp.include_router(gallery_router)
+    dp.include_router(quick_actions_router)
+    dp.include_router(flow_router)
+    dp.include_router(zero_silence_router)
+
+    return dp, bot
+
+
+def _build_webhook_url(cfg: RuntimeConfig) -> str:
+    base = cfg.webhook_base_url.rstrip("/")
+    return f"{base}/webhook/{cfg.webhook_secret_path}" if base else ""
+
+
+def _health_payload(active: bool) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "active": active,
+        "bot_mode": runtime_state.bot_mode,
+        "storage_mode": runtime_state.storage_mode,
+        "lock_acquired": runtime_state.lock_acquired,
+        "instance_id": runtime_state.instance_id,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _make_web_app(
+    *,
+    dp: Dispatcher,
+    bot: Bot,
+    cfg: RuntimeConfig,
+    active: bool,
+) -> web.Application:
+    app = web.Application()
+
+    async def health(_request: web.Request) -> web.Response:
+        return web.json_response(_health_payload(active))
+
+    async def root(_request: web.Request) -> web.Response:
+        return web.json_response(_health_payload(active))
+
+    async def webhook(request: web.Request) -> web.Response:
+        secret = request.match_info.get("secret")
+        if secret != cfg.webhook_secret_path:
+            # Hide existence
+            raise web.HTTPNotFound()
+
+        # Enforce Telegram header secret if configured
+        if cfg.webhook_secret_token:
+            header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            if header != cfg.webhook_secret_token:
+                raise web.HTTPUnauthorized()
+
+        if not active:
+            # Force Telegram retry to land on the active instance.
+            raise web.HTTPServiceUnavailable()
+
+        try:
+            payload = await request.json()
+        except Exception:
+            return web.Response(status=400, text="bad json")
+
+        try:
+            update = Update.model_validate(payload)
+            await dp.feed_update(bot, update)
+        except Exception as e:
+            logger.exception("[WEBHOOK] Failed to process update: %s", e)
+            # 200 to prevent Telegram storm; errors are logged.
+            return web.Response(status=200, text="ok")
+
+        return web.Response(status=200, text="ok")
+
+    app.router.add_get("/health", health)
+    app.router.add_get("/", root)
+    app.router.add_head("/", root)
+    app.router.add_post("/webhook/{secret}", webhook)
+
+    async def on_shutdown(_app: web.Application) -> None:
+        await bot.session.close()
+
+    app.on_shutdown.append(on_shutdown)
+    return app
+
+
+async def _start_web_server(app: web.Application, port: int) -> web.AppRunner:
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+    return runner
+
+
+async def main() -> None:
+    setup_logging()
+
+    cfg = _load_runtime_config()
+    runtime_state.bot_mode = cfg.bot_mode
+    runtime_state.last_start_time = datetime.now(timezone.utc).isoformat()
+
+    logger.info("=" * 60)
+    logger.info("STARTUP (aiogram)")
+    logger.info("BOT_MODE=%s PORT=%s", cfg.bot_mode, cfg.port)
+    logger.info("WEBHOOK_BASE_URL=%s", cfg.webhook_base_url or "(not set)")
+    logger.info("WEBHOOK_SECRET_PATH=%s", (cfg.webhook_secret_path[:6] + "..."))
+    logger.info("WEBHOOK_SECRET_TOKEN=%s", "SET" if cfg.webhook_secret_token else "(not set)")
+    logger.info("DRY_RUN=%s", cfg.dry_run)
+    logger.info("=" * 60)
+
+    dp, bot = create_bot_application()
+
+    # Singleton lock (acquire early to avoid double init during rolling deploys)
+    lock = SingletonLock(cfg.database_url)
+    lock_acquired = await lock.acquire()
+    runtime_state.lock_acquired = lock_acquired
+
+    active = bool(lock_acquired)
+    if not active:
+        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode")
+    else:
+        logger.info("[LOCK] Acquired - ACTIVE")
+
+    # Database service (optional, only in ACTIVE mode)
+    db_service = None
+    free_manager = None
+    if active and cfg.database_url:
+        try:
+            from app.database.services import DatabaseService
+            from app.free.manager import FreeModelManager
+
+            db_service = DatabaseService(cfg.database_url)
+            await db_service.initialize()
+            free_manager = FreeModelManager(db_service)
+
+            from bot.handlers.balance import set_database_service as set_balance_db
+            from bot.handlers.history import set_database_service as set_history_db
+            from bot.handlers.marketing import (
+                set_database_service as set_marketing_db,
+                set_free_manager,
+            )
+
+            set_balance_db(db_service)
+            set_history_db(db_service)
+            set_marketing_db(db_service)
+            set_free_manager(free_manager)
+
+            logger.info("[DB] DatabaseService initialized and injected into handlers")
+        except Exception as e:
+            logger.warning("[DB] Database init skipped/failed: %s", e)
+            db_service = None
+
+    runner: Optional[web.AppRunner] = None
+    try:
+        if cfg.bot_mode == "polling":
+            # Polling mode does not need the web server, but we still support
+            # optional healthcheck if PORT is exposed.
+            if not active:
+                # Keep service alive for Render while old instance drains.
+                await asyncio.Event().wait()
+                return
+
+            await preflight_webhook(bot)
+            await dp.start_polling(bot)
+            return
+
+        # webhook
+        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active=active)
+        runner = await _start_web_server(app, cfg.port)
+        logger.info("[HEALTH] Server started on port %s", cfg.port)
+
+        if active and (not cfg.dry_run):
+            webhook_url = _build_webhook_url(cfg)
+            if not webhook_url:
+                raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
+
+            from app.utils.webhook import ensure_webhook
+
+            await ensure_webhook(
+                bot,
+                webhook_url=webhook_url,
+                secret_token=cfg.webhook_secret_token or None,
+            )
+
+        # Keep running forever
+        await asyncio.Event().wait()
+    finally:
+        try:
+            if runner is not None:
+                await runner.cleanup()
+        except Exception:
+            pass
+        try:
+            await bot.session.close()
+        except Exception:
+            pass
+        try:
+            if db_service is not None:
+                await db_service.close()
+        except Exception:
+            pass
+        try:
+            await lock.release()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
-    # Запускаем async main
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("[STOP] Bot stopped by user")
-        sys.exit(0)
-    except SystemExit:
-        raise
-    except Exception as e:
-        from app.utils.logging_config import log_error_with_stacktrace
-
-        log_error_with_stacktrace(logger, e, "Fatal error in asyncio.run")
-        sys.exit(1)
+    asyncio.run(main())
