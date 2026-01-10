@@ -250,7 +250,7 @@ async def run(settings, application):
             # Запускаем polling или webhook
             if bot_mode == "webhook":
                 if not settings.webhook_url:
-                    logger.error("[FAIL] WEBHOOK_URL not set for webhook mode")
+                    logger.error("[FAIL] WEBHOOK_BASE_URL not set for webhook mode")
                     sys.exit(1)
                 await application.bot.set_webhook(settings.webhook_url)
                 logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
