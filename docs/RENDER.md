@@ -50,8 +50,6 @@ startCommand: python -m app.main
 | `STORAGE_MODE` | Режим хранения (auto/postgres/json) | `auto` |
 | `BOT_MODE` | Режим работы (polling/webhook) | `polling` |
 | `WEBHOOK_BASE_URL` | Базовый URL для webhook | Не задан |
-| `WEBHOOK_SECRET` | Секрет для webhook URL/заголовка | Не задан |
-| `WEBHOOK_SECRET_TOKEN` | Секрет для заголовка webhook | Не задан |
 | `WEBHOOK_URL` | Legacy alias для webhook base URL (deprecated) | Не задан |
 | `KIE_STUB` | Использовать stub вместо реального API | `0` (реальный API) |
 | `PAYMENT_PHONE` | Номер телефона для СБП | Не задан |

@@ -133,23 +133,6 @@ curl http://localhost:8000/health
 
 ---
 
-## 2026-01-10 - Webhook endpoint and release smoke check
-
-### Выполненные задачи
-
-1. ✅ **Webhook endpoint**
-   - Добавлен `POST /webhook/<secret>` в health server
-   - Апдейты прокидываются в PTB application
-
-2. ✅ **Webhook секреты**
-   - `WEBHOOK_SECRET` используется для пути и `X-Telegram-Bot-Api-Secret-Token`
-   - Если `WEBHOOK_SECRET` не задан, используется sha256 от `TELEGRAM_BOT_TOKEN`
-
-3. ✅ **Release smoke workflow**
-   - Добавлен GitHub Action `smoke` (install → compileall → pytest)
-
----
-
 ## 2025-01-07 - Второй цикл (5 задач)
 
 ### Выполненные задачи

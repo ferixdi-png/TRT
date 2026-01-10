@@ -28,14 +28,12 @@ def clear_webhook_env():
 def test_webhook_mode_accepts_base_url_only():
     os.environ["BOT_MODE"] = "webhook"
     os.environ["WEBHOOK_BASE_URL"] = "https://example.com"
-    os.environ["WEBHOOK_SECRET"] = "secret"
 
     validate_webhook_requirements()
 
 
 def test_webhook_mode_requires_base_url():
     os.environ["BOT_MODE"] = "webhook"
-    os.environ["WEBHOOK_SECRET"] = "secret"
 
     with pytest.raises(ValueError, match="WEBHOOK_BASE_URL"):
         validate_webhook_requirements()

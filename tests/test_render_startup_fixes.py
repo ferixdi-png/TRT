@@ -140,10 +140,7 @@ def test_webhook_mode_keeps_healthcheck_running():
                 settings = MagicMock(spec=Settings)
                 settings.port = 10000
                 settings.telegram_bot_token = "test_token"
-                settings.bot_mode = "webhook"
-                settings.webhook_secret_path = "secret"
-                settings.webhook_secret_token = "secret"
-                settings.webhook_url = "https://example.com/webhook/secret"
+                settings.webhook_url = "https://example.com/webhook/test_token"
 
                 bot = MagicMock()
                 bot.set_webhook = AsyncMock(return_value=True)
@@ -160,12 +157,7 @@ def test_webhook_mode_keeps_healthcheck_running():
 
                 asyncio.run(test_run())
 
-                mock_health.assert_called_once_with(
-                    port=10000,
-                    application=application,
-                    webhook_secret_path="secret",
-                    webhook_secret_token="secret",
-                )
+                mock_health.assert_called_once_with(port=10000)
                 bot.set_webhook.assert_awaited_once_with(settings.webhook_url)
 
 

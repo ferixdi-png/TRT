@@ -22,8 +22,6 @@
 | `SUPPORT_TEXT` | Текст поддержки | Строка (например: `Напишите нам в поддержку`) | Отображение информации о поддержке |
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram бота | Строка (токен от @BotFather) | Подключение к Telegram API |
 | `WEBHOOK_BASE_URL` | Базовый URL для webhook | URL (например: `https://your-bot.onrender.com`) | Webhook режим работы бота |
-| `WEBHOOK_SECRET` | Секрет для webhook URL (опционально) | Строка (например: `my-secret`) | Формирует путь `/webhook/<secret>` |
-| `WEBHOOK_SECRET_TOKEN` | Секрет для заголовка (опционально) | Строка (например: `my-secret-token`) | Проверка `X-Telegram-Bot-Api-Secret-Token` |
 | `WEBHOOK_URL` | Legacy alias для webhook base URL (deprecated) | URL (например: `https://your-bot.onrender.com`) | Webhook режим работы бота |
 
 ## Валидация
@@ -56,8 +54,6 @@ SUPPORT_TELEGRAM=@support
 SUPPORT_TEXT=Напишите нам в поддержку
 TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 WEBHOOK_BASE_URL=https://your-bot.onrender.com
-WEBHOOK_SECRET=your-secret-value
-WEBHOOK_SECRET_TOKEN=your-secret-token
 # WEBHOOK_URL=https://your-bot.onrender.com  # optional legacy alias
 ```
 

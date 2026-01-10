@@ -10,7 +10,7 @@ from typing import List, Tuple
 logger = logging.getLogger(__name__)
 
 # Keep imports after logger setup to avoid circular dependencies
-from app.utils.webhook import get_webhook_base_url, get_webhook_secret_path
+from app.utils.webhook import get_webhook_base_url
 # Импортируем mask на уровне модуля для безопасности
 try:
     from app.utils.mask import mask
@@ -115,10 +115,6 @@ def validate_webhook_requirements() -> None:
     webhook_base = get_webhook_base_url()
     if not webhook_base:
         raise ValueError("WEBHOOK_BASE_URL is required for webhook mode")
-
-    webhook_secret = get_webhook_secret_path()
-    if not webhook_secret:
-        raise ValueError("WEBHOOK_SECRET or ADMIN_ID+TELEGRAM_BOT_TOKEN is required for webhook mode")
 
 
 def startup_validation() -> bool:

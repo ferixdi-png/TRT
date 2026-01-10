@@ -11,12 +11,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from app.utils.webhook import (
-    build_webhook_url,
-    get_webhook_base_url,
-    get_webhook_secret_path,
-    get_webhook_secret_token,
-)
+from app.utils.webhook import build_webhook_url, get_webhook_base_url, get_webhook_secret_path
 
 # Глобальный экземпляр settings (singleton)
 _settings: Optional['Settings'] = None
@@ -69,8 +64,7 @@ class Settings:
         # Bot mode
         self.bot_mode = os.getenv('BOT_MODE', 'polling').lower()
         self.webhook_base_url = get_webhook_base_url()
-        self.webhook_secret_path = get_webhook_secret_path()
-        self.webhook_secret_token = get_webhook_secret_token()
+        self.webhook_secret_path = get_webhook_secret_path(self.telegram_bot_token)
         self.webhook_url = build_webhook_url(self.webhook_base_url, self.webhook_secret_path)
         
         # Port for healthcheck
