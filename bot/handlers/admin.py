@@ -1,8 +1,11 @@
 """
 Admin panel handlers - полное управление системой.
 """
+import json
 import logging
+import os
 from decimal import Decimal
+from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -23,6 +26,30 @@ _admin_service = None
 _free_manager = None
 
 
+def _strict_admin_id() -> int | None:
+    admin_id = os.getenv("ADMIN_ID")
+    if not admin_id:
+        return None
+    try:
+        return int(admin_id)
+    except ValueError as e:
+        logger.error(f"Failed to parse ADMIN_ID from env: {e}")
+        return None
+
+
+def _is_strict_admin(user_id: int) -> bool:
+    admin_id = _strict_admin_id()
+    return admin_id is not None and user_id == admin_id
+
+
+async def _ensure_strict_admin(message: Message) -> bool:
+    if not _is_strict_admin(message.from_user.id):
+        logger.warning("Unauthorized admin command by user_id=%s", message.from_user.id)
+        await message.answer("⛔️ Доступ запрещён")
+        return False
+    return True
+
+
 def set_services(db_service, admin_service, free_manager):
     """Set services for handlers."""
     global _db_service, _admin_service, _free_manager
@@ -39,6 +66,148 @@ class AdminStates(StatesGroup):
     enter_topup_amount = State()
     enter_charge_amount = State()
     enter_ban_reason = State()
+
+
+@router.message(Command("admin_stats"))
+async def cmd_admin_stats(message: Message):
+    """Admin stats for last 24 hours."""
+    if not await _ensure_strict_admin(message):
+        return
+    if not _db_service:
+        await message.answer("⚠️ База данных недоступна")
+        return
+
+    async with _db_service.get_connection() as conn:
+        total_jobs = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM jobs
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+            """
+        ) or 0
+        success_jobs = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM jobs
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+              AND status = 'done'
+            """
+        ) or 0
+        failed_jobs = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM jobs
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+              AND status = 'failed'
+            """
+        ) or 0
+        revenue = await conn.fetchval(
+            """
+            SELECT COALESCE(SUM(price_rub), 0) FROM jobs
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+              AND status = 'done'
+            """
+        ) or Decimal("0.00")
+
+    logger.info("Admin %s requested 24h stats", message.from_user.id)
+    await message.answer(
+        "📊 <b>Статистика за 24 часа</b>\n\n"
+        f"Всего задач: {total_jobs}\n"
+        f"Успешных: {success_jobs}\n"
+        f"Неудачных: {failed_jobs}\n"
+        f"Выручка: {format_price_rub(revenue)}"
+    )
+
+
+@router.message(Command("admin_user"))
+async def cmd_admin_user(message: Message):
+    """Show user balance and last 10 jobs by user_id."""
+    if not await _ensure_strict_admin(message):
+        return
+    if not _db_service or not _admin_service:
+        await message.answer("⚠️ База данных недоступна")
+        return
+
+    parts = (message.text or "").strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Использование: /admin_user <id>")
+        return
+    try:
+        user_id = int(parts[1])
+    except ValueError as e:
+        logger.error("Failed to parse admin_user id '%s': %s", parts[1], e)
+        await message.answer("❌ Неверный формат. Использование: /admin_user <id>")
+        return
+
+    user_info = await _admin_service.get_user_info(user_id)
+    if not user_info:
+        await message.answer(f"❌ Пользователь {user_id} не найден")
+        return
+
+    async with _db_service.get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT model_id, status, price_rub, created_at
+            FROM jobs
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 10
+            """,
+            user_id
+        )
+
+    jobs_lines = []
+    for row in rows:
+        created = row["created_at"].strftime("%d.%m %H:%M")
+        price = format_price_rub(row["price_rub"])
+        jobs_lines.append(f"• {created} | {row['model_id']} | {row['status']} | {price}")
+    jobs_text = "\n".join(jobs_lines) if jobs_lines else "Нет задач"
+
+    logger.info("Admin %s requested user info for %s", message.from_user.id, user_id)
+    await message.answer(
+        "👤 <b>Пользователь</b>\n\n"
+        f"ID: <code>{user_info['user_id']}</code>\n"
+        f"Username: @{user_info['username'] or '—'}\n"
+        f"Имя: {user_info['first_name'] or '—'}\n\n"
+        f"💰 Баланс: {format_price_rub(user_info['balance']['balance_rub'])}\n"
+        f"🔒 Резерв: {format_price_rub(user_info['balance']['hold_rub'])}\n\n"
+        f"🧾 Последние 10 задач:\n{jobs_text}"
+    )
+
+
+@router.message(Command("admin_toggle_model"))
+async def cmd_admin_toggle_model(message: Message):
+    """Enable/disable model by model_id."""
+    if not await _ensure_strict_admin(message):
+        return
+    if not _admin_service:
+        await message.answer("⚠️ Сервис админа недоступен")
+        return
+
+    parts = (message.text or "").strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Использование: /admin_toggle_model <model_id>")
+        return
+    model_id = parts[1].strip()
+    source_file = Path("models/KIE_SOURCE_OF_TRUTH.json")
+    if not source_file.exists():
+        await message.answer("❌ Source of truth не найден")
+        return
+
+    data = json.loads(source_file.read_text())
+    model_entry = next((m for m in data.get("models", []) if m.get("model_id") == model_id), None)
+    if not model_entry:
+        await message.answer("❌ Модель не найдена")
+        return
+
+    if "disabled_reason" in model_entry:
+        await _admin_service.enable_model(message.from_user.id, model_id, reason="admin_toggle")
+        action = "enabled"
+        status_text = "✅ Модель включена"
+    else:
+        await _admin_service.disable_model(message.from_user.id, model_id, reason="admin_toggle")
+        action = "disabled"
+        status_text = "⛔️ Модель отключена"
+
+    logger.info("Admin %s toggled model %s -> %s", message.from_user.id, model_id, action)
+    await message.answer(f"{status_text}: <code>{model_id}</code>")
 
 
 @router.message(Command("admin"))
@@ -621,5 +790,3 @@ async def cb_admin_models_resync(callback: CallbackQuery):
 
 # Export
 __all__ = ["router", "set_services"]
-
-

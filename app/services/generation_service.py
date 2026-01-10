@@ -11,6 +11,7 @@ from datetime import datetime
 from app.utils.logging_config import get_logger
 from app.integrations.kie_stub import get_kie_client_or_stub
 from app.storage import get_storage
+from app.storage.status import normalize_job_status
 
 logger = get_logger(__name__)
 
@@ -58,7 +59,7 @@ class GenerationService:
             params=params,
             price=price,
             task_id=task_id,  # external_task_id будет сохранен как task_id
-            status="pending"
+            status="queued"
         )
         
         logger.info(f"[GEN] Generation created: job_id={job_id}, task_id={task_id}, user_id={user_id}")
@@ -111,9 +112,10 @@ class GenerationService:
                 while True:
                     elapsed = asyncio.get_event_loop().time() - start_time
                     if elapsed > timeout:
-                        await self.storage.update_job_status(job_id, "timeout")
+                        timeout_message = "Task timed out while waiting for completion."
+                        await self.storage.update_job_status(job_id, "failed", error_message=timeout_message)
                         if on_error:
-                            await on_error("Timeout")
+                            await on_error(timeout_message)
                         break
                     
                     # Получаем статус от KIE
@@ -125,11 +127,12 @@ class GenerationService:
                         continue
                     
                     state = status.get('state', 'pending')
+                    normalized_state = normalize_job_status(state)
                     
                     # Обновляем статус в storage
                     await self.storage.update_job_status(
                         job_id,
-                        state,
+                        normalized_state,
                         result_urls=status.get('resultUrls', []),
                         error_message=status.get('failMsg')
                     )
@@ -137,22 +140,22 @@ class GenerationService:
                     # Вызываем callback прогресса
                     if on_progress:
                         progress_messages = {
-                            'pending': 'В очереди',
-                            'processing': 'В работе',
-                            'completed': 'Готово',
+                            'queued': 'В очереди',
+                            'running': 'В работе',
+                            'done': 'Готово',
                             'failed': 'Ошибка'
                         }
-                        message = progress_messages.get(state, state)
-                        await on_progress(state, message)
+                        message = progress_messages.get(normalized_state, normalized_state)
+                        await on_progress(normalized_state, message)
                     
-                    if state == 'completed':
+                    if normalized_state == 'done':
                         result_urls = status.get('resultUrls', [])
                         if on_complete:
                             await on_complete(result_urls)
                         break
                     
-                    if state == 'failed':
-                        error_msg = status.get('failMsg', 'Unknown error')
+                    if normalized_state == 'failed':
+                        error_msg = status.get('failMsg', 'Generation failed.')
                         if on_error:
                             await on_error(error_msg)
                         break
@@ -161,10 +164,11 @@ class GenerationService:
                     await asyncio.sleep(poll_interval)
             
             except Exception as e:
+                error_message = f"Unexpected error while polling job: {e}"
                 logger.error(f"[GEN] Polling error for job {job_id}: {e}", exc_info=True)
-                await self.storage.update_job_status(job_id, "failed", error_message=str(e))
+                await self.storage.update_job_status(job_id, "failed", error_message=error_message)
                 if on_error:
-                    await on_error(str(e))
+                    await on_error(error_message)
             finally:
                 # Удаляем задачу из списка
                 self._polling_tasks.pop(job_id, None)
@@ -204,27 +208,36 @@ class GenerationService:
             }
         
         # Используем wait_for_task из клиента
-        result = await self.kie_client.wait_for_task(task_id, timeout=timeout)
-        
-        if result.get('state') == 'completed':
-            result_urls = result.get('resultUrls', [])
-            await self.storage.update_job_status(job_id, 'completed', result_urls=result_urls)
-            return {
-                'ok': True,
-                'result_urls': result_urls
-            }
-        else:
-            error = result.get('error') or result.get('failMsg', 'Unknown error')
+        try:
+            result = await self.kie_client.wait_for_task(task_id, timeout=timeout)
+            
+            normalized_state = normalize_job_status(result.get('state', 'failed'))
+            if normalized_state == 'done':
+                result_urls = result.get('resultUrls', [])
+                await self.storage.update_job_status(job_id, 'done', result_urls=result_urls)
+                return {
+                    'ok': True,
+                    'result_urls': result_urls
+                }
+            error = result.get('error') or result.get('failMsg', 'Generation failed.')
             await self.storage.update_job_status(job_id, 'failed', error_message=error)
             return {
                 'ok': False,
                 'error': error
             }
+        except Exception as e:
+            error_message = f"Unexpected error while waiting for generation: {e}"
+            logger.error(f"[GEN] Wait error for job {job_id}: {e}", exc_info=True)
+            await self.storage.update_job_status(job_id, 'failed', error_message=error_message)
+            return {
+                'ok': False,
+                'error': error_message
+            }
     
     async def cancel_generation(self, job_id: str) -> bool:
         """Отменить генерацию"""
         try:
-            await self.storage.update_job_status(job_id, "cancelled")
+            await self.storage.update_job_status(job_id, "canceled")
             
             # Отменяем polling задачу если есть
             if job_id in self._polling_tasks:

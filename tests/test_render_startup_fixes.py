@@ -125,6 +125,50 @@ def test_passive_mode_healthcheck_only():
             mock_health.assert_called_once_with(port=10000)
 
 
+def test_webhook_mode_keeps_healthcheck_running():
+    """
+    Проверяет что при валидном webhook конфиге healthcheck остается поднятым.
+    """
+    with patch.dict(os.environ, {"BOT_MODE": "webhook"}):
+        with patch('app.locking.single_instance.acquire_single_instance_lock', return_value=True):
+            with patch('app.main.start_health_server', new_callable=AsyncMock) as mock_health:
+                mock_health.return_value = True
+
+                from app.config import Settings
+                from app.main import run
+
+                settings = MagicMock(spec=Settings)
+                settings.port = 10000
+                settings.telegram_bot_token = "test_token"
+                settings.bot_mode = "webhook"
+                settings.webhook_secret_path = "secret"
+                settings.webhook_secret_token = "secret"
+                settings.webhook_url = "https://example.com/webhook/secret"
+
+                bot = MagicMock()
+                bot.set_webhook = AsyncMock(return_value=True)
+
+                application = MagicMock()
+                application.initialize = AsyncMock()
+                application.start = AsyncMock()
+                application.bot = bot
+
+                import asyncio
+
+                async def test_run():
+                    await run(settings, application)
+
+                asyncio.run(test_run())
+
+                mock_health.assert_called_once_with(
+                    port=10000,
+                    application=application,
+                    webhook_secret_path="secret",
+                    webhook_secret_token="secret",
+                )
+                bot.set_webhook.assert_awaited_once_with(settings.webhook_url)
+
+
 def test_sync_test_connection_detects_running_loop():
     """
     Проверяет что sync test_connection обнаруживает запущенный loop и предупреждает.
@@ -164,4 +208,3 @@ def reset_env():
         os.environ['DATABASE_URL'] = old_db
     elif 'DATABASE_URL' in os.environ:
         del os.environ['DATABASE_URL']
-

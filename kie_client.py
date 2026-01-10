@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 
 from app.utils.retry import async_retry
+from app.utils.correlation import correlation_tag
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,13 @@ class KIEClient:
         self.retry_max_attempts = int(os.getenv('KIE_RETRY_MAX_ATTEMPTS', '3'))
         self.retry_base_delay = float(os.getenv('KIE_RETRY_BASE_DELAY', '1.0'))
         self.retry_max_delay = float(os.getenv('KIE_RETRY_MAX_DELAY', '60.0'))
+
+    def _normalize_exception(self, error: Exception) -> "KIEClientError":
+        if isinstance(error, asyncio.TimeoutError):
+            return KIEClientError("Request to KIE timed out", user_message="Сервис KIE временно недоступен. Попробуйте позже.")
+        if isinstance(error, aiohttp.ClientError):
+            return KIEClientError("Network error while contacting KIE", user_message="Не удалось связаться с KIE. Попробуйте позже.")
+        return KIEClientError(str(error), user_message="Произошла ошибка KIE. Попробуйте позже.")
 
     def _headers(self) -> Dict[str, str]:
         headers = {
@@ -67,56 +75,59 @@ class KIEClient:
         
         # CRITICAL: Log exact payload being sent to KIE API (for compliance verification)
         import json
-        logger.info(f"📤 KIE API Request: POST {url}")
-        logger.info(f"📤 KIE API Payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+        logger.info(f"{correlation_tag()} 📤 KIE API Request: POST {url}")
+        logger.info(f"{correlation_tag()} 📤 KIE API Payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
         
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as s:
-            async with s.post(url, headers=self._headers(), json=payload) as resp:
-                text = await resp.text()
-                if resp.status == 200:
-                    try:
-                        data = await resp.json()
-                        if isinstance(data, dict) and data.get('code') == 200:
-                            task_id = data.get('data', {}).get('taskId')
-                            if task_id:
-                                return {'ok': True, 'taskId': task_id}
-                            else:
-                                return {'ok': False, 'error': 'No taskId in response'}
-                        else:
-                            error_msg = data.get('msg', 'Unknown error')
-                            logger.error(f"❌ KIE API Error (code {data.get('code')}): {error_msg}")
-                            logger.error(f"❌ KIE API Full Response: {json.dumps(data, ensure_ascii=False, indent=2)}")
-                            return {'ok': False, 'error': error_msg}
-                    except Exception as e:
-                        logger.error(f"❌ Failed to parse KIE API response: {e}, text: {text[:500]}")
-                        return {'ok': False, 'error': f'Failed to parse response: {e}'}
-                else:
-                    # CRITICAL: Log full error response for debugging 422 and other errors
-                    try:
-                        error_data = await resp.json()
-                        error_msg = error_data.get('msg', text)
-                        error_code = error_data.get('code', resp.status)
-                        logger.error(f"❌ KIE API HTTP {resp.status} Error (code {error_code}): {error_msg}")
-                        logger.error(f"❌ KIE API Full Error Response: {json.dumps(error_data, ensure_ascii=False, indent=2)}")
-                        
-                        # Используем обработчик ошибок для логирования
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as s:
+                async with s.post(url, headers=self._headers(), json=payload) as resp:
+                    text = await resp.text()
+                    if resp.status == 200:
                         try:
-                            from error_handler_providers import get_error_handler
-                            handler = get_error_handler()
-                            handler.handle_api_error(
-                                status_code=resp.status,
-                                response_data=error_data,
-                                request_details={
-                                    "model": model_id,
-                                    "payload": payload
-                                }
-                            )
-                        except ImportError:
-                            pass  # Обработчик недоступен
-                    except:
-                        error_msg = text
-                        logger.error(f"❌ KIE API HTTP {resp.status} Error (raw): {text[:500]}")
-                    return {'ok': False, 'status': resp.status, 'error': error_msg}
+                            data = await resp.json()
+                            if isinstance(data, dict) and data.get('code') == 200:
+                                task_id = data.get('data', {}).get('taskId')
+                                if task_id:
+                                    return {'ok': True, 'taskId': task_id}
+                                else:
+                                    return {'ok': False, 'error': 'No taskId in response'}
+                            else:
+                                error_msg = data.get('msg', 'Unknown error')
+                                logger.error(f"{correlation_tag()} ❌ KIE API Error (code {data.get('code')}): {error_msg}")
+                                logger.error(f"{correlation_tag()} ❌ KIE API Full Response: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                                return {'ok': False, 'error': error_msg}
+                        except Exception as e:
+                            logger.error(f"{correlation_tag()} ❌ Failed to parse KIE API response: {e}, text: {text[:500]}")
+                            return {'ok': False, 'error': f'Failed to parse response: {e}'}
+                    else:
+                        # CRITICAL: Log full error response for debugging 422 and other errors
+                        try:
+                            error_data = await resp.json()
+                            error_msg = error_data.get('msg', text)
+                            error_code = error_data.get('code', resp.status)
+                            logger.error(f"{correlation_tag()} ❌ KIE API HTTP {resp.status} Error (code {error_code}): {error_msg}")
+                            logger.error(f"{correlation_tag()} ❌ KIE API Full Error Response: {json.dumps(error_data, ensure_ascii=False, indent=2)}")
+                            
+                            # Используем обработчик ошибок для логирования
+                            try:
+                                from error_handler_providers import get_error_handler
+                                handler = get_error_handler()
+                                handler.handle_api_error(
+                                    status_code=resp.status,
+                                    response_data=error_data,
+                                    request_details={
+                                        "model": model_id,
+                                        "payload": payload
+                                    }
+                                )
+                            except ImportError:
+                                pass  # Обработчик недоступен
+                        except:
+                            error_msg = text
+                            logger.error(f"{correlation_tag()} ❌ KIE API HTTP {resp.status} Error (raw): {text[:500]}")
+                        return {'ok': False, 'status': resp.status, 'error': error_msg}
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            raise self._normalize_exception(e)
     
     async def _get_task_status_internal(self, task_id: str) -> Dict[str, Any]:
         """Internal method for get_task_status with retry logic applied."""
@@ -129,39 +140,42 @@ class KIEClient:
         url = f"{self.base_url}/api/v1/jobs/recordInfo"
         params = {"taskId": task_id}
         
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as s:
-            async with s.get(url, headers=self._headers(), params=params) as resp:
-                text = await resp.text()
-                if resp.status == 200:
-                    try:
-                        data = await resp.json()
-                        if isinstance(data, dict) and data.get('code') == 200:
-                            task_data = data.get('data', {})
-                            return {
-                                'ok': True,
-                                'taskId': task_data.get('taskId'),
-                                'state': task_data.get('state'),  # waiting, success, fail
-                                'resultJson': task_data.get('resultJson'),
-                                'resultUrls': task_data.get('resultUrls', []),
-                                'failCode': task_data.get('failCode'),
-                                'failMsg': task_data.get('failMsg'),
-                                'errorMessage': task_data.get('errorMessage'),
-                                'completeTime': task_data.get('completeTime'),
-                                'createTime': task_data.get('createTime')
-                            }
-                        else:
-                            error_msg = data.get('msg', 'Unknown error')
-                            return {'ok': False, 'error': error_msg}
-                    except Exception as e:
-                        logger.error(f"❌ Failed to parse KIE API response: {e}, text: {text[:500]}")
-                        return {'ok': False, 'error': f'Failed to parse response: {e}'}
-                else:
-                    try:
-                        error_data = await resp.json()
-                        error_msg = error_data.get('msg', text)
-                    except:
-                        error_msg = text
-                    return {'ok': False, 'status': resp.status, 'error': error_msg}
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as s:
+                async with s.get(url, headers=self._headers(), params=params) as resp:
+                    text = await resp.text()
+                    if resp.status == 200:
+                        try:
+                            data = await resp.json()
+                            if isinstance(data, dict) and data.get('code') == 200:
+                                task_data = data.get('data', {})
+                                return {
+                                    'ok': True,
+                                    'taskId': task_data.get('taskId'),
+                                    'state': task_data.get('state'),  # waiting, success, fail
+                                    'resultJson': task_data.get('resultJson'),
+                                    'resultUrls': task_data.get('resultUrls', []),
+                                    'failCode': task_data.get('failCode'),
+                                    'failMsg': task_data.get('failMsg'),
+                                    'errorMessage': task_data.get('errorMessage'),
+                                    'completeTime': task_data.get('completeTime'),
+                                    'createTime': task_data.get('createTime')
+                                }
+                            else:
+                                error_msg = data.get('msg', 'Unknown error')
+                                return {'ok': False, 'error': error_msg}
+                        except Exception as e:
+                            logger.error(f"{correlation_tag()} ❌ Failed to parse KIE API response: {e}, text: {text[:500]}")
+                            return {'ok': False, 'error': f'Failed to parse response: {e}'}
+                    else:
+                        try:
+                            error_data = await resp.json()
+                            error_msg = error_data.get('msg', text)
+                        except:
+                            error_msg = text
+                        return {'ok': False, 'status': resp.status, 'error': error_msg}
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            raise self._normalize_exception(e)
 
     async def list_models(self) -> List[Dict[str, Any]]:
         """Return list of models from the KIE API. If API key missing, return []"""
@@ -322,10 +336,12 @@ class KIEClient:
                         except:
                             error_msg = text
                         return {'ok': False, 'status': resp.status, 'error': error_msg}
-        except asyncio.TimeoutError:
-            return {'ok': False, 'error': 'Request to KIE timed out'}
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            normalized = self._normalize_exception(e)
+            return {'ok': False, 'error': normalized.user_message}
         except Exception as e:
-            return {'ok': False, 'error': str(e)}
+            normalized = self._normalize_exception(e)
+            return {'ok': False, 'error': normalized.user_message}
 
     async def create_task(self, model_id: str, input_data: Any, callback_url: str = None) -> Dict[str, Any]:
         """Create a generation task. Returns task ID for status polling. Uses retry logic for network errors."""
@@ -339,13 +355,13 @@ class KIEClient:
                 max_attempts=self.retry_max_attempts,
                 base_delay=self.retry_base_delay,
                 max_delay=self.retry_max_delay,
-                exceptions=(aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError)
+                exceptions=(aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError, KIEClientError)
             )
-        except (aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError) as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError, KIEClientError) as e:
             # After all retries failed, return error dict instead of raising
-            import json
+            normalized = self._normalize_exception(e)
             logger.error(f"❌ KIE API create_task failed after {self.retry_max_attempts} attempts: {e}")
-            return {'ok': False, 'error': str(e)}
+            return {'ok': False, 'error': normalized.user_message}
     
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """Get task status and results by task ID. Uses retry logic for network errors."""
@@ -359,12 +375,13 @@ class KIEClient:
                 max_attempts=self.retry_max_attempts,
                 base_delay=self.retry_base_delay,
                 max_delay=self.retry_max_delay,
-                exceptions=(aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError)
+                exceptions=(aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError, KIEClientError)
             )
-        except (aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError) as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ClientConnectionError, KIEClientError) as e:
             # After all retries failed, return error dict instead of raising
+            normalized = self._normalize_exception(e)
             logger.error(f"❌ KIE API get_task_status failed after {self.retry_max_attempts} attempts: {e}")
-            return {'ok': False, 'error': str(e)}
+            return {'ok': False, 'error': normalized.user_message}
     
     async def wait_task(self, task_id: str, timeout_s: int = 900, poll_s: int = 3) -> Dict[str, Any]:
         """
@@ -482,14 +499,21 @@ class KIEClient:
                             if resp.status != 404:
                                 # For non-404 errors, return immediately
                                 return last_error
-            except asyncio.TimeoutError:
-                return {'ok': False, 'error': 'Request to KIE timed out'}
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                normalized = self._normalize_exception(e)
+                return {'ok': False, 'error': normalized.user_message}
             except Exception as e:
                 last_error = {'ok': False, 'error': str(e)}
                 continue
         
         # All endpoints failed
         return last_error or {'ok': False, 'error': 'All endpoints returned 404'}
+
+
+class KIEClientError(Exception):
+    def __init__(self, message: str, user_message: str):
+        super().__init__(message)
+        self.user_message = user_message
 
 
 # Module-level client for convenience

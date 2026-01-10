@@ -16,6 +16,7 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
 
 from app.storage.base import BaseStorage
+from app.storage.status import normalize_job_status
 
 logger = logging.getLogger(__name__)
 
@@ -371,10 +372,11 @@ class PostgresStorage(BaseStorage):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "queued"
     ) -> str:
         """Добавить задачу генерации"""
         job_id = task_id or str(uuid.uuid4())
+        normalized_status = normalize_job_status(status)
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             # Сохраняем task_id как external_task_id
@@ -383,7 +385,7 @@ class PostgresStorage(BaseStorage):
                 INSERT INTO generation_jobs (job_id, user_id, model_id, model_name, params, price, status, external_task_id)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
-                job_id, user_id, model_id, model_name, json.dumps(params), price, status, task_id
+                job_id, user_id, model_id, model_name, json.dumps(params), price, normalized_status, task_id
             )
         return job_id
     
@@ -397,8 +399,9 @@ class PostgresStorage(BaseStorage):
         """Обновить статус задачи"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
+            normalized_status = normalize_job_status(status)
             updates = ["status = $2"]
-            params = [job_id, status]
+            params = [job_id, normalized_status]
             
             if result_urls is not None:
                 updates.append("result_urls = $3")
