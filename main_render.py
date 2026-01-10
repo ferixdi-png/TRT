@@ -36,7 +36,6 @@ def log_env_snapshot():
         "STORAGE_MODE": os.getenv("STORAGE_MODE", "not set"),
         "DATABASE_URL": "[SET]" if os.getenv("DATABASE_URL") else "[NOT SET]",
         "TELEGRAM_BOT_TOKEN": "[SET]" if os.getenv("TELEGRAM_BOT_TOKEN") else "[NOT SET]",
-        "WEBHOOK_BASE_URL": os.getenv("WEBHOOK_BASE_URL", "not set"),
         "WEBHOOK_SECRET_TOKEN": "[SET]" if os.getenv("WEBHOOK_SECRET_TOKEN") else "[NOT SET]",
         "KIE_API_KEY": "[SET]" if os.getenv("KIE_API_KEY") else "[NOT SET]",
         "KIE_API_URL": os.getenv("KIE_API_URL", "not set"),
