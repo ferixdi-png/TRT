@@ -108,7 +108,8 @@ class RuntimeConfig:
 
 def _load_runtime_config() -> RuntimeConfig:
     bot_mode = os.getenv("BOT_MODE", "webhook").strip().lower()
-    port = int(os.getenv("PORT", "10000"))
+    port_env = os.getenv("PORT")
+    port = int(port_env) if port_env else 0
     webhook_base_url = get_webhook_base_url().strip().rstrip("/")
     telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not telegram_bot_token:
@@ -323,12 +324,19 @@ async def main() -> None:
     setup_logging()
 
     cfg = _load_runtime_config()
-    runtime_state.bot_mode = cfg.bot_mode
+    effective_bot_mode = cfg.bot_mode
+    if effective_bot_mode == "webhook" and not cfg.webhook_base_url:
+        logger.warning(
+            "[CONFIG] WEBHOOK_BASE_URL missing in webhook mode; falling back to polling"
+        )
+        effective_bot_mode = "polling"
+
+    runtime_state.bot_mode = effective_bot_mode
     runtime_state.last_start_time = datetime.now(timezone.utc).isoformat()
 
     logger.info("=" * 60)
     logger.info("STARTUP (aiogram)")
-    logger.info("BOT_MODE=%s PORT=%s", cfg.bot_mode, cfg.port)
+    logger.info("BOT_MODE=%s PORT=%s", effective_bot_mode, cfg.port or "(not set)")
     logger.info("WEBHOOK_BASE_URL=%s", cfg.webhook_base_url or "(not set)")
     logger.info("WEBHOOK_SECRET_PATH=%s", (cfg.webhook_secret_path[:6] + "..."))
     logger.info("WEBHOOK_SECRET_TOKEN=%s", "SET" if cfg.webhook_secret_token else "(not set)")
@@ -391,7 +399,7 @@ async def main() -> None:
                 logger.warning("[DB] Database init skipped/failed: %s", e)
                 db_service = None
 
-        if not cfg.dry_run:
+        if effective_bot_mode == "webhook" and not cfg.dry_run:
             webhook_url = _build_webhook_url(cfg)
             if not webhook_url:
                 raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
@@ -425,10 +433,13 @@ async def main() -> None:
                 return
 
     try:
-        if cfg.bot_mode == "polling":
+        if effective_bot_mode == "polling":
+            app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
+            if cfg.port:
+                runner = await _start_web_server(app, cfg.port)
+                logger.info("[HEALTH] Server started on port %s", cfg.port)
+
             if not active_state.active:
-                # In polling mode we cannot bind the port-less worker on Render reliably.
-                # Keep process alive (health-only is not used here).
                 await asyncio.Event().wait()
                 return
 
@@ -438,8 +449,9 @@ async def main() -> None:
 
         # webhook mode
         app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
-        runner = await _start_web_server(app, cfg.port)
-        logger.info("[HEALTH] Server started on port %s", cfg.port)
+        if cfg.port:
+            runner = await _start_web_server(app, cfg.port)
+            logger.info("[HEALTH] Server started on port %s", cfg.port)
 
         if active_state.active:
             await init_active_services()
