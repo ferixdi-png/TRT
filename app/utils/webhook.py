@@ -19,9 +19,35 @@ def get_webhook_base_url() -> str:
     return os.getenv("WEBHOOK_URL", "").strip() or os.getenv("WEBHOOK_BASE_URL", "").strip()
 
 
+def derive_webhook_secret_path(token: str) -> str:
+    """Derive a stable URL-safe secret path.
+
+    Why:
+    - Telegram webhook URL path must be URL-safe (':' is awkward)
+    - Repo historically used bot token with ':' removed, which works
+    - Keeping the same derivation avoids silent 404s after redeploys
+
+    Implementation:
+    - strip
+    - remove ':'
+    - keep last 64 chars (stable, not too long)
+    """
+
+    cleaned = (token or "").strip().replace(":", "")
+    if len(cleaned) > 64:
+        cleaned = cleaned[-64:]
+    return cleaned
+
+
 def get_webhook_secret_path(default: str = "") -> str:
     """Return the secret path used in webhook URL construction."""
-    return os.getenv("TELEGRAM_BOT_TOKEN", default).strip()
+    # Explicit override (optional)
+    explicit = os.getenv("WEBHOOK_SECRET_PATH", "").strip()
+    if explicit:
+        return derive_webhook_secret_path(explicit)
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN", default)
+    return derive_webhook_secret_path(token)
 
 
 def get_webhook_secret_token() -> str:
