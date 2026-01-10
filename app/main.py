@@ -29,14 +29,14 @@ _application: Optional[object] = None
 def ensure_data_directory(data_dir: str) -> bool:
     """
     Гарантирует создание data директории и проверяет права записи.
-    
+
     Returns:
         True если директория доступна для записи, False иначе
     """
     try:
         data_path = Path(data_dir)
         data_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Проверяем права записи
         test_file = data_path / ".write_test"
         try:
@@ -54,20 +54,20 @@ def ensure_data_directory(data_dir: str) -> bool:
 
 def load_settings():
     """Загружает и валидирует настройки из ENV"""
-    from app.config import get_settings, Settings
+    from app.config import get_settings
     from app.utils.startup_validation import startup_validation
-    
+
     logger.info("=" * 60)
     logger.info("BOT STARTING")
     logger.info("=" * 60)
-    
+
     try:
         # Валидируем обязательные ENV переменные
         startup_validation()
-        
+
         # Валидируем настройки при загрузке
         settings = get_settings(validate=True)
-        
+
         # Startup banner
         logger.info("=" * 60)
         logger.info("STARTUP BANNER")
@@ -81,30 +81,31 @@ def load_settings():
         logger.info(f"DATABASE_URL: {'[SET]' if settings.database_url else '[NOT SET]'}")
         logger.info(f"Data directory: {settings.data_dir}")
         logger.info("=" * 60)
-        
+
         # Проверяем data directory
         if not ensure_data_directory(settings.data_dir):
             logger.error("[FAIL] Data directory not writable, exiting")
             sys.exit(1)
-        
+
         # Проверяем каталог моделей при старте
         try:
             # Импортируем функцию проверки напрямую
-            import sys
             from pathlib import Path
+
             verify_script = Path(__file__).parent.parent / "scripts" / "verify_catalog.py"
             if verify_script.exists():
                 # Добавляем scripts в путь для импорта
                 scripts_dir = str(verify_script.parent)
                 if scripts_dir not in sys.path:
                     sys.path.insert(0, scripts_dir)
-                
+
                 # Импортируем функцию verify_catalog
                 import importlib.util
+
                 spec = importlib.util.spec_from_file_location("verify_catalog", verify_script)
                 verify_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(verify_module)
-                
+
                 logger.info("=" * 60)
                 logger.info("CATALOG VERIFICATION")
                 logger.info("=" * 60)
@@ -118,12 +119,13 @@ def load_settings():
         except Exception as e:
             logger.warning(f"[WARN] Catalog verification error: {e}")
             # Не останавливаем бота, только предупреждаем
-        
+
         return settings
     except SystemExit:
         raise
     except Exception as e:
         from app.utils.logging_config import log_error_with_stacktrace
+
         log_error_with_stacktrace(logger, e, "Failed to load settings")
         sys.exit(1)
 
@@ -131,20 +133,21 @@ def load_settings():
 async def build_application(settings):
     """Создает и настраивает Telegram Application"""
     global _application
-    
+
     try:
         from bot_kie import create_bot_application
-        
+
         logger.info("[BUILD] Creating Telegram Application...")
         _application = await create_bot_application(settings)
         logger.info("[BUILD] Application created successfully")
-        
+
         return _application
     except (AttributeError, NameError):
         logger.warning("[BUILD] create_bot_application not found, using legacy initialization")
         return None
     except Exception as e:
         from app.utils.logging_config import log_error_with_stacktrace
+
         log_error_with_stacktrace(logger, e, "Failed to build application")
         raise
 
@@ -153,6 +156,7 @@ async def start_health_server(port: int, **kwargs) -> bool:
     """Запускает healthcheck сервер в том же event loop"""
     try:
         from app.utils.healthcheck import start_health_server
+
         return await start_health_server(port=port, **kwargs)
     except Exception as e:
         logger.warning(f"[HEALTH] Failed to start health server: {e}")
@@ -162,12 +166,15 @@ async def start_health_server(port: int, **kwargs) -> bool:
 async def run(settings, application):
     """Запускает бота (polling или webhook) или переходит в passive mode"""
     global _application
-    
+
     # Singleton lock должен быть получен ДО любых async операций
-    from app.locking.single_instance import acquire_single_instance_lock, release_single_instance_lock
-    
+    from app.locking.single_instance import (
+        acquire_single_instance_lock,
+        release_single_instance_lock,
+    )
+
     lock_acquired = acquire_single_instance_lock()
-    
+
     if not lock_acquired:
         # PASSIVE MODE: lock не получен, запускаем только healthcheck
         logger.warning("=" * 60)
@@ -175,12 +182,12 @@ async def run(settings, application):
         logger.warning("[PASSIVE MODE] Telegram runner disabled")
         logger.warning("[PASSIVE MODE] Healthcheck server only")
         logger.warning("=" * 60)
-        
+
         # Запускаем healthcheck сервер (если PORT задан)
         if settings.port:
             logger.info(f"[PASSIVE] Starting healthcheck server on port {settings.port}")
             await start_health_server(port=settings.port)
-            
+
             # Держим процесс живым для healthcheck
             logger.info("[PASSIVE] Healthcheck server running, keeping process alive...")
             try:
@@ -192,66 +199,75 @@ async def run(settings, application):
         else:
             logger.warning("[PASSIVE] PORT not set, cannot start healthcheck server")
             logger.warning("[PASSIVE] Exiting (no work to do)")
-        
+
         return
-    
+
     try:
         # Запускаем healthcheck сервер (если PORT задан)
         if settings.port:
             await start_health_server(
                 port=settings.port,
                 application=application if settings.bot_mode == "webhook" else None,
-                webhook_secret_path=settings.webhook_secret_path if settings.bot_mode == "webhook" else None,
-                webhook_secret_token=settings.webhook_secret_token if settings.bot_mode == "webhook" else None,
+                webhook_secret_path=settings.webhook_secret_path
+                if settings.bot_mode == "webhook"
+                else None,
+                webhook_secret_token=settings.webhook_secret_token
+                if settings.bot_mode == "webhook"
+                else None,
             )
-        
+
         if application is None:
             # Используем старый способ через bot_kie.main()
             logger.info("[RUN] Using legacy bot_kie.main() initialization")
             from bot_kie import main as bot_main
+
             await bot_main()
         else:
             # Используем новый способ
             logger.info("[RUN] Initializing application...")
             await application.initialize()
             await application.start()
-            
+
             logger.info("=" * 60)
             logger.info("BOT READY")
             logger.info("=" * 60)
             logger.info("Handlers registered and application started")
-            
+
             # Определяем режим работы бота
-            bot_mode = os.getenv('BOT_MODE', '').lower().strip()
-            
+            bot_mode = os.getenv("BOT_MODE", "").lower().strip()
+
             # AUTO режим: определяем автоматически если не задан
-            if not bot_mode or bot_mode == 'auto':
+            if not bot_mode or bot_mode == "auto":
                 # Логика AUTO:
                 # - Если RENDER=true и PORT задан -> поднимать healthcheck web
                 # - Telegram runner (polling/webhook) включать только если:
                 #   * TELEGRAM_BOT_TOKEN задан
                 #   * SINGLETON_LOCK получен
                 # - Если lock не получен -> passive mode
-                is_render = os.getenv('RENDER', '').lower() in ('1', 'true', 'yes')
+                is_render = os.getenv("RENDER", "").lower() in ("1", "true", "yes")
                 has_port = settings.port and settings.port > 0
                 has_token = bool(settings.telegram_bot_token)
-                
+
                 if has_token and lock_acquired:
                     # Есть токен и lock получен -> polling
-                    bot_mode = 'polling'
+                    bot_mode = "polling"
                     logger.info("[AUTO] BOT_MODE=auto -> polling (token present, lock acquired)")
                 elif is_render and has_port:
                     # Render с PORT -> passive mode (healthcheck only)
-                    bot_mode = 'passive'
-                    logger.info("[AUTO] BOT_MODE=auto -> passive (Render with PORT, no token or lock)")
+                    bot_mode = "passive"
+                    logger.info(
+                        "[AUTO] BOT_MODE=auto -> passive (Render with PORT, no token or lock)"
+                    )
                 else:
                     # По умолчанию passive
-                    bot_mode = 'passive'
-                    logger.info(f"[AUTO] BOT_MODE=auto -> passive (token={has_token}, lock={lock_acquired}, render={is_render}, port={has_port})")
+                    bot_mode = "passive"
+                    logger.info(
+                        f"[AUTO] BOT_MODE=auto -> passive (token={has_token}, lock={lock_acquired}, render={is_render}, port={has_port})"
+                    )
             else:
                 # Явно заданный режим
                 logger.info(f"[BOT_MODE] Using explicit mode: {bot_mode}")
-            
+
             # Запускаем polling или webhook
             if bot_mode == "webhook":
                 if not settings.webhook_url:
@@ -274,11 +290,11 @@ async def run(settings, application):
             else:
                 # Polling mode - безопасный запуск с обработкой конфликтов
                 logger.info("[RUN] Starting polling...")
-                
+
                 # КРИТИЧНО: Задержка перед запуском polling для предотвращения конфликтов
                 logger.info("[RUN] Waiting 15 seconds to avoid conflicts with previous instance...")
                 await asyncio.sleep(15)
-                
+
                 # КРИТИЧНО: Удаляем webhook ПЕРЕД запуском polling
                 try:
                     await application.bot.delete_webhook(drop_pending_updates=True)
@@ -295,23 +311,33 @@ async def run(settings, application):
                     logger.warning(f"[RUN] Error removing webhook: {e}")
                     # Проверяем на конфликт
                     from telegram.error import Conflict
+
                     if isinstance(e, Conflict) or "Conflict" in str(e) or "409" in str(e):
                         logger.error("[RUN] Conflict detected while removing webhook - exiting")
                         from app.bot_mode import handle_conflict_gracefully
-                        handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(str(e)), "polling")
+
+                        handle_conflict_gracefully(
+                            e if isinstance(e, Conflict) else Conflict(str(e)), "polling"
+                        )
                         return
-                
+
                 # КРИТИЧНО: Добавляем обработчик ошибок для updater через post_init
                 async def handle_updater_error(update, context):
                     """Обработчик ошибок для updater polling loop"""
                     error = context.error
                     error_msg = str(error) if error else ""
-                    
+
                     from telegram.error import Conflict
-                    if isinstance(error, Conflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "409" in error_msg:
+
+                    if (
+                        isinstance(error, Conflict)
+                        or "Conflict" in error_msg
+                        or "terminated by other getUpdates" in error_msg
+                        or "409" in error_msg
+                    ):
                         logger.error(f"[UPDATER] 409 CONFLICT in updater loop: {error_msg}")
                         logger.error("[UPDATER] Stopping updater and exiting...")
-                        
+
                         # Останавливаем updater немедленно
                         try:
                             if application.updater and application.updater.running:
@@ -319,40 +345,51 @@ async def run(settings, application):
                                 logger.info("[UPDATER] Updater stopped")
                         except Exception as e:
                             logger.warning(f"[UPDATER] Error stopping updater: {e}")
-                        
+
                         # Останавливаем application
                         try:
                             await application.stop()
                             await application.shutdown()
                         except:
                             pass
-                        
+
                         # Освобождаем lock и выходим
                         try:
                             from app.locking.single_instance import release_single_instance_lock
+
                             release_single_instance_lock()
                         except:
                             pass
-                        
+
                         from app.bot_mode import handle_conflict_gracefully
-                        handle_conflict_gracefully(error if isinstance(error, Conflict) else Conflict(error_msg), "polling")
-                        import os
+
+                        handle_conflict_gracefully(
+                            error if isinstance(error, Conflict) else Conflict(error_msg), "polling"
+                        )
                         os._exit(0)
-                
+
                 # Добавляем обработчик ошибок для updater
                 application.add_error_handler(handle_updater_error)
-                
+
                 # КРИТИЧНО: Проверяем конфликт ПЕРЕД запуском polling
                 logger.info("[RUN] Checking for conflicts before polling start...")
                 try:
                     # Пытаемся сделать тестовый getUpdates для проверки конфликта
-                    test_updates = await application.bot.get_updates(limit=1, timeout=1)
+                    await application.bot.get_updates(limit=1, timeout=1)
                     logger.info("[RUN] Pre-flight check passed: no conflicts detected")
                 except Exception as test_e:
                     from telegram.error import Conflict
+
                     error_msg = str(test_e)
-                    if isinstance(test_e, Conflict) or "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
-                        logger.error(f"[RUN] ❌❌❌ CONFLICT DETECTED in pre-flight check: {error_msg}")
+                    if (
+                        isinstance(test_e, Conflict)
+                        or "Conflict" in error_msg
+                        or "409" in error_msg
+                        or "terminated by other getUpdates" in error_msg
+                    ):
+                        logger.error(
+                            f"[RUN] ❌❌❌ CONFLICT DETECTED in pre-flight check: {error_msg}"
+                        )
                         logger.error("[RUN] Another bot instance is already polling - exiting")
                         try:
                             await application.stop()
@@ -360,11 +397,15 @@ async def run(settings, application):
                         except:
                             pass
                         from app.bot_mode import handle_conflict_gracefully
-                        handle_conflict_gracefully(test_e if isinstance(test_e, Conflict) else Conflict(error_msg), "polling")
+
+                        handle_conflict_gracefully(
+                            test_e if isinstance(test_e, Conflict) else Conflict(error_msg),
+                            "polling",
+                        )
                         return
                     else:
                         logger.warning(f"[RUN] Pre-flight check warning (non-conflict): {test_e}")
-                
+
                 # КРИТИЧНО: Запускаем polling с обработкой конфликтов
                 # start_polling не блокирует - он запускает polling в фоне
                 # Ошибки в updater loop обрабатываются через error handler
@@ -373,11 +414,19 @@ async def run(settings, application):
                     logger.info("[RUN] Polling started successfully")
                 except Exception as e:
                     from telegram.error import Conflict
+
                     error_msg = str(e)
-                    if isinstance(e, Conflict) or "Conflict" in error_msg or "409" in error_msg or "terminated by other getUpdates" in error_msg:
-                        logger.error(f"[RUN] ❌❌❌ CONFLICT DETECTED during polling start: {error_msg}")
+                    if (
+                        isinstance(e, Conflict)
+                        or "Conflict" in error_msg
+                        or "409" in error_msg
+                        or "terminated by other getUpdates" in error_msg
+                    ):
+                        logger.error(
+                            f"[RUN] ❌❌❌ CONFLICT DETECTED during polling start: {error_msg}"
+                        )
                         logger.error("[RUN] Stopping updater and exiting immediately...")
-                        
+
                         # Останавливаем updater немедленно
                         try:
                             if application.updater and application.updater.running:
@@ -385,32 +434,35 @@ async def run(settings, application):
                                 logger.info("[RUN] Updater stopped")
                         except Exception as stop_e:
                             logger.warning(f"[RUN] Error stopping updater: {stop_e}")
-                        
+
                         # Останавливаем application
                         try:
                             await application.stop()
                             await application.shutdown()
                         except:
                             pass
-                        
+
                         # Освобождаем lock
                         try:
                             from app.locking.single_instance import release_single_instance_lock
+
                             release_single_instance_lock()
                         except:
                             pass
-                        
+
                         from app.bot_mode import handle_conflict_gracefully
-                        handle_conflict_gracefully(e if isinstance(e, Conflict) else Conflict(error_msg), "polling")
-                        import os
+
+                        handle_conflict_gracefully(
+                            e if isinstance(e, Conflict) else Conflict(error_msg), "polling"
+                        )
                         os._exit(0)  # Немедленный выход
                     else:
                         raise  # Re-raise non-Conflict errors
-                
+
                 # КРИТИЧНО: НЕ мониторим updater через get_updates!
                 # Это вызывает конфликты, потому что updater уже делает get_updates в своем loop.
                 # Ошибки обрабатываются через error handler, который уже добавлен выше.
-            
+
             # Ждем остановки
             try:
                 await asyncio.Event().wait()  # Ждем бесконечно
@@ -426,12 +478,14 @@ async def run(settings, application):
         raise
     except Exception as e:
         from app.utils.logging_config import log_error_with_stacktrace
+
         log_error_with_stacktrace(logger, e, "Fatal error during bot run")
         logger.error("[FAIL] Bot failed to run. Check logs above for details.")
         sys.exit(1)
     finally:
         # Останавливаем healthcheck сервер
         from app.utils.healthcheck import stop_health_server
+
         await stop_health_server()
 
         # Закрываем пул БД при завершении
@@ -450,16 +504,17 @@ async def main():
     try:
         # 1. Загружаем настройки
         settings = load_settings()
-        
+
         # 2. Создаем application
         application = await build_application(settings)
-        
+
         # 3. Запускаем бота
         await run(settings, application)
     except SystemExit:
         raise
     except Exception as e:
         from app.utils.logging_config import log_error_with_stacktrace
+
         log_error_with_stacktrace(logger, e, "Fatal error in main")
         sys.exit(1)
 
@@ -475,5 +530,6 @@ if __name__ == "__main__":
         raise
     except Exception as e:
         from app.utils.logging_config import log_error_with_stacktrace
+
         log_error_with_stacktrace(logger, e, "Fatal error in asyncio.run")
         sys.exit(1)
