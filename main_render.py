@@ -8,26 +8,64 @@ Goals:
 
 This project historically had a PTB (python-telegram-bot) runner. Tests still cover
 that legacy in bot_kie.py, but this runtime is aiogram-based.
+
+Important: the repo contains a local ./aiogram folder with tiny test stubs.
+In production we must import the real aiogram package from site-packages.
 """
 
 from __future__ import annotations
 
+import contextlib
 import asyncio
-import hashlib
 import logging
 import os
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from aiohttp import web
 
-from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import Update
 
-from app.utils.logging_config import setup_logging
-from app.utils.runtime_state import runtime_state
+def _import_real_aiogram_symbols():
+    """Import aiogram symbols from site-packages even if ./aiogram stubs exist."""
+    project_root = Path(__file__).resolve().parent
+    has_local_stubs = (project_root / "aiogram" / "__init__.py").exists()
+    removed: list[str] = []
+
+    if has_local_stubs:
+        # Remove project root and '' so import machinery does not pick local stubs.
+        for entry in list(sys.path):
+            if entry in {"", str(project_root)}:
+                removed.append(entry)
+                try:
+                    sys.path.remove(entry)
+                except ValueError:
+                    pass
+
+    try:
+        # Import the package (this will populate sys.modules with the real aiogram).
+        import importlib
+
+        importlib.import_module("aiogram")
+    finally:
+        # Restore path for app imports.
+        for entry in reversed(removed):
+            sys.path.insert(0, entry)
+
+    # Now import symbols from whichever aiogram got loaded.
+    from aiogram import Bot, Dispatcher  # type: ignore
+    from aiogram.fsm.storage.memory import MemoryStorage  # type: ignore
+    from aiogram.types import Update  # type: ignore
+
+    return Bot, Dispatcher, MemoryStorage, Update
+
+
+Bot, Dispatcher, MemoryStorage, Update = _import_real_aiogram_symbols()
+
+from app.utils.logging_config import setup_logging  # noqa: E402
+from app.utils.runtime_state import runtime_state  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -96,6 +134,11 @@ def _load_runtime_config() -> RuntimeConfig:
         database_url=database_url,
         dry_run=dry_run,
     )
+
+
+@dataclass
+class ActiveState:
+    active: bool
 
 
 class SingletonLock:
@@ -191,10 +234,10 @@ def _build_webhook_url(cfg: RuntimeConfig) -> str:
     return f"{base}/webhook/{cfg.webhook_secret_path}" if base else ""
 
 
-def _health_payload(active: bool) -> dict[str, Any]:
+def _health_payload(active_state: ActiveState) -> dict[str, Any]:
     return {
         "ok": True,
-        "active": active,
+        "active": bool(active_state.active),
         "bot_mode": runtime_state.bot_mode,
         "storage_mode": runtime_state.storage_mode,
         "lock_acquired": runtime_state.lock_acquired,
@@ -208,15 +251,15 @@ def _make_web_app(
     dp: Dispatcher,
     bot: Bot,
     cfg: RuntimeConfig,
-    active: bool,
+    active_state: ActiveState,
 ) -> web.Application:
     app = web.Application()
 
     async def health(_request: web.Request) -> web.Response:
-        return web.json_response(_health_payload(active))
+        return web.json_response(_health_payload(active_state))
 
     async def root(_request: web.Request) -> web.Response:
-        return web.json_response(_health_payload(active))
+        return web.json_response(_health_payload(active_state))
 
     async def webhook(request: web.Request) -> web.Response:
         secret = request.match_info.get("secret")
@@ -230,8 +273,9 @@ def _make_web_app(
             if header != cfg.webhook_secret_token:
                 raise web.HTTPUnauthorized()
 
-        if not active:
-            # Force Telegram retry to land on the active instance.
+        if not active_state.active:
+            # During rolling deploy, we may start PASSIVE. Returning 503 forces Telegram
+            # to retry until this instance becomes ACTIVE (lock acquired).
             raise web.HTTPServiceUnavailable()
 
         try:
@@ -287,66 +331,49 @@ async def main() -> None:
 
     dp, bot = create_bot_application()
 
-    # Singleton lock (acquire early to avoid double init during rolling deploys)
     lock = SingletonLock(cfg.database_url)
     lock_acquired = await lock.acquire()
     runtime_state.lock_acquired = lock_acquired
 
-    active = bool(lock_acquired)
-    if not active:
-        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode")
+    active_state = ActiveState(active=bool(lock_acquired))
+    if not active_state.active:
+        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (will retry)")
     else:
         logger.info("[LOCK] Acquired - ACTIVE")
 
-    # Database service (optional, only in ACTIVE mode)
     db_service = None
     free_manager = None
-    if active and cfg.database_url:
-        try:
-            from app.database.services import DatabaseService
-            from app.free.manager import FreeModelManager
 
-            db_service = DatabaseService(cfg.database_url)
-            await db_service.initialize()
-            free_manager = FreeModelManager(db_service)
+    async def init_active_services() -> None:
+        nonlocal db_service, free_manager
 
-            from bot.handlers.balance import set_database_service as set_balance_db
-            from bot.handlers.history import set_database_service as set_history_db
-            from bot.handlers.marketing import (
-                set_database_service as set_marketing_db,
-                set_free_manager,
-            )
+        if cfg.database_url:
+            try:
+                from app.database.services import DatabaseService
+                from app.free.manager import FreeModelManager
 
-            set_balance_db(db_service)
-            set_history_db(db_service)
-            set_marketing_db(db_service)
-            set_free_manager(free_manager)
+                db_service = DatabaseService(cfg.database_url)
+                await db_service.initialize()
+                free_manager = FreeModelManager(db_service)
 
-            logger.info("[DB] DatabaseService initialized and injected into handlers")
-        except Exception as e:
-            logger.warning("[DB] Database init skipped/failed: %s", e)
-            db_service = None
+                from bot.handlers.balance import set_database_service as set_balance_db
+                from bot.handlers.history import set_database_service as set_history_db
+                from bot.handlers.marketing import (
+                    set_database_service as set_marketing_db,
+                    set_free_manager,
+                )
 
-    runner: Optional[web.AppRunner] = None
-    try:
-        if cfg.bot_mode == "polling":
-            # Polling mode does not need the web server, but we still support
-            # optional healthcheck if PORT is exposed.
-            if not active:
-                # Keep service alive for Render while old instance drains.
-                await asyncio.Event().wait()
-                return
+                set_balance_db(db_service)
+                set_history_db(db_service)
+                set_marketing_db(db_service)
+                set_free_manager(free_manager)
 
-            await preflight_webhook(bot)
-            await dp.start_polling(bot)
-            return
+                logger.info("[DB] DatabaseService initialized and injected into handlers")
+            except Exception as e:
+                logger.warning("[DB] Database init skipped/failed: %s", e)
+                db_service = None
 
-        # webhook
-        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active=active)
-        runner = await _start_web_server(app, cfg.port)
-        logger.info("[HEALTH] Server started on port %s", cfg.port)
-
-        if active and (not cfg.dry_run):
+        if not cfg.dry_run:
             webhook_url = _build_webhook_url(cfg)
             if not webhook_url:
                 raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
@@ -359,9 +386,57 @@ async def main() -> None:
                 secret_token=cfg.webhook_secret_token or None,
             )
 
-        # Keep running forever
+    runner: Optional[web.AppRunner] = None
+    lock_task: Optional[asyncio.Task] = None
+
+    async def lock_watcher() -> None:
+        """Retry lock acquisition after rolling deploy and flip ACTIVE without restart."""
+        while True:
+            if active_state.active:
+                return
+            await asyncio.sleep(5)
+            got = await lock.acquire()
+            if got:
+                active_state.active = True
+                runtime_state.lock_acquired = True
+                logger.info("[LOCK] Acquired after retry - switching to ACTIVE")
+                try:
+                    await init_active_services()
+                except Exception as e:
+                    logger.exception("[ACTIVE] init failed after lock acquisition: %s", e)
+                return
+
+    try:
+        if cfg.bot_mode == "polling":
+            if not active_state.active:
+                # In polling mode we cannot bind the port-less worker on Render reliably.
+                # Keep process alive (health-only is not used here).
+                await asyncio.Event().wait()
+                return
+
+            await preflight_webhook(bot)
+            await dp.start_polling(bot)
+            return
+
+        # webhook mode
+        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
+        runner = await _start_web_server(app, cfg.port)
+        logger.info("[HEALTH] Server started on port %s", cfg.port)
+
+        if active_state.active:
+            await init_active_services()
+        else:
+            lock_task = asyncio.create_task(lock_watcher())
+
         await asyncio.Event().wait()
     finally:
+        try:
+            if lock_task is not None:
+                lock_task.cancel()
+                with contextlib.suppress(Exception):
+                    await lock_task
+        except Exception:
+            pass
         try:
             if runner is not None:
                 await runner.cleanup()
@@ -383,4 +458,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+
     asyncio.run(main())
