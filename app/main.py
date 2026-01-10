@@ -174,13 +174,18 @@ async def run(settings, application):
         release_single_instance_lock,
     )
 
+    # NOTE:
+    # Advisory lock historically existed to prevent Telegram 409 conflicts in POLLING mode.
+    # In WEBHOOK mode, disabling webhook handling causes 404 storms during rolling deploy.
+    bot_mode = (getattr(settings, "bot_mode", None) or os.getenv("BOT_MODE", "polling")).lower()
+
     lock_acquired = acquire_single_instance_lock()
 
-    if not lock_acquired:
-        # PASSIVE MODE: lock не получен, запускаем только healthcheck
+    if not lock_acquired and bot_mode == "polling":
+        # PASSIVE MODE: lock не получен в polling режиме — запускаем только healthcheck
         logger.warning("=" * 60)
         logger.warning("[PASSIVE MODE] Singleton lock not acquired")
-        logger.warning("[PASSIVE MODE] Telegram runner disabled")
+        logger.warning("[PASSIVE MODE] Telegram runner disabled (polling)")
         logger.warning("[PASSIVE MODE] Healthcheck server only")
         logger.warning("=" * 60)
 
@@ -202,6 +207,12 @@ async def run(settings, application):
             logger.warning("[PASSIVE] Exiting (no work to do)")
 
         return
+
+    if not lock_acquired and bot_mode == "webhook":
+        logger.warning(
+            "[LOCK] PostgreSQL advisory lock not acquired, but continuing in WEBHOOK mode "
+            "to avoid 404 on Telegram updates (zero-downtime deploy handover)."
+        )
 
     try:
         # Запускаем healthcheck сервер (если PORT задан)
