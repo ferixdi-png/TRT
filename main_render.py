@@ -478,6 +478,10 @@ async def run(settings, application):
         except Exception:
             pass
 
+            close_connection_pool()
+        except Exception:
+            pass
+        
         # Освобождаем singleton lock
         release_single_instance_lock()
 

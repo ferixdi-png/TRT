@@ -96,3 +96,4 @@ __all__ = [
     "main",
     "start",
 ]
+__all__ = ["create_bot_application", "main"]

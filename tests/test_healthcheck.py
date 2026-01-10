@@ -68,6 +68,12 @@ class HealthCheckTestCase(AioHTTPTestCase):
         resp = await self.client.request("HEAD", "/")
         assert resp.status == 200
 
+    @unittest_run_loop
+    async def test_head_root_endpoint(self):
+        """Тест: HEAD / возвращает 200 (Render healthcheck)."""
+        resp = await self.client.request("HEAD", "/")
+        assert resp.status == 200
+
 
 # Простой тест без aiohttp test utils
 async def test_health_handler_direct():
@@ -89,3 +95,8 @@ async def test_health_handler_direct():
     assert "uptime" in data
     assert "storage" in data
     assert "kie_mode" in data
+    
+    assert data['status'] == 'ok'
+    assert 'uptime' in data
+    assert 'storage' in data
+    assert 'kie_mode' in data

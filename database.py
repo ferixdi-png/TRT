@@ -46,6 +46,8 @@ def get_connection_pool():
         retry_delays = [0.5, 1.0, 2.0]
         connect_timeout = int(os.getenv("DB_CONNECT_TIMEOUT", "5"))
         statement_timeout_ms = os.getenv("DB_STATEMENT_TIMEOUT_MS")
+        connect_timeout = int(os.getenv('DB_CONNECT_TIMEOUT', '5'))
+        statement_timeout_ms = os.getenv('DB_STATEMENT_TIMEOUT_MS')
         options = None
         if statement_timeout_ms:
             try:
@@ -53,6 +55,7 @@ def get_connection_pool():
             except ValueError:
                 logger.warning("Invalid DB_STATEMENT_TIMEOUT_MS=%s, ignoring", statement_timeout_ms)
 
+        
         for attempt in range(max_retries):
             try:
                 # Парсим DATABASE_URL для создания пула
