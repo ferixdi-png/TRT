@@ -16,7 +16,11 @@ T = TypeVar("T")
 
 def get_webhook_base_url() -> str:
     """Return webhook base URL, preferring WEBHOOK_URL as a legacy alias."""
-    return os.getenv("WEBHOOK_URL", "").strip() or os.getenv("WEBHOOK_BASE_URL", "").strip()
+    return (
+        os.getenv("WEBHOOK_URL", "").strip()
+        or os.getenv("WEBHOOK_BASE_URL", "").strip()
+        or os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    )
 
 
 def derive_webhook_secret_path(token: str) -> str:
