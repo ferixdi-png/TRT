@@ -5,6 +5,7 @@
 ## Обязательные переменные
 
 Все перечисленные ниже переменные **обязательны** для запуска бота. При отсутствии любой из них бот не запустится.
+`WEBHOOK_BASE_URL` требуется только при `BOT_MODE=webhook`.
 
 | Ключ | Назначение | Формат | Где используется |
 |------|-----------|--------|------------------|
@@ -21,6 +22,9 @@
 | `SUPPORT_TEXT` | Текст поддержки | Строка (например: `Напишите нам в поддержку`) | Отображение информации о поддержке |
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram бота | Строка (токен от @BotFather) | Подключение к Telegram API |
 | `WEBHOOK_BASE_URL` | Базовый URL для webhook | URL (например: `https://your-bot.onrender.com`) | Webhook режим работы бота |
+| `WEBHOOK_SECRET` | Секрет для webhook URL (опционально) | Строка (например: `my-secret`) | Формирует путь `/webhook/<secret>` |
+| `WEBHOOK_SECRET_TOKEN` | Секрет для заголовка (опционально) | Строка (например: `my-secret-token`) | Проверка `X-Telegram-Bot-Api-Secret-Token` |
+| `WEBHOOK_URL` | Legacy alias для webhook base URL (deprecated) | URL (например: `https://your-bot.onrender.com`) | Webhook режим работы бота |
 
 ## Валидация
 
@@ -28,6 +32,11 @@
 
 1. **Проверка наличия** - все ключи должны быть установлены
 2. **Проверка формата** - значения должны соответствовать ожидаемому формату
+
+Для webhook-режима путь `/webhook/<secret>` строится из `WEBHOOK_SECRET`.
+Если `WEBHOOK_SECRET` не задан, используется sha256-хэш `ADMIN_ID + TELEGRAM_BOT_TOKEN`,
+а проверка `X-Telegram-Bot-Api-Secret-Token` выполняется только при наличии
+`WEBHOOK_SECRET_TOKEN`.
 
 Валидация выполняется в `app/utils/startup_validation.py`.
 
@@ -47,6 +56,9 @@ SUPPORT_TELEGRAM=@support
 SUPPORT_TEXT=Напишите нам в поддержку
 TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 WEBHOOK_BASE_URL=https://your-bot.onrender.com
+WEBHOOK_SECRET=your-secret-value
+WEBHOOK_SECRET_TOKEN=your-secret-token
+# WEBHOOK_URL=https://your-bot.onrender.com  # optional legacy alias
 ```
 
 ## Render.com настройка
@@ -64,4 +76,3 @@ WEBHOOK_BASE_URL=https://your-bot.onrender.com
 - Все секретные значения маскируются в логах
 - Используйте Render Environment Variables для продакшена
 - Локально используйте `.env` файл (добавлен в `.gitignore`)
-

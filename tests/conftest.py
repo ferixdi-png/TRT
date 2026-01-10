@@ -7,6 +7,8 @@ import pytest
 import pytest_asyncio
 from tests.ptb_harness import PTBHarness
 
+pytest_plugins = ["pytest_asyncio"]
+
 
 @pytest.fixture(scope="function")
 def test_env():
@@ -69,4 +71,3 @@ async def harness(test_env):
     await h.setup()
     yield h
     await h.teardown()
-

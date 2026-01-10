@@ -5,8 +5,10 @@ Marketing-focused handlers - полный UX flow для маркетолого�
 НЕ заменяет существующие handlers - работает параллельно.
 """
 import logging
+import os
+import time
 from decimal import Decimal
-from typing import Optional
+from typing import Dict, List, Optional
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -25,6 +27,12 @@ from app.payments.pricing import calculate_user_price, calculate_kie_cost, forma
 logger = logging.getLogger(__name__)
 
 router = Router(name="marketing")
+
+_CALLBACK_DEBOUNCE_SECONDS = float(os.getenv("CALLBACK_DEBOUNCE_SECONDS", "2.0"))
+_ACTIVE_TASK_LIMIT = int(os.getenv("ACTIVE_TASKS_PER_USER", "1"))
+_ACTIVE_TASK_TTL_SECONDS = int(os.getenv("ACTIVE_TASK_TTL_SECONDS", "1800"))
+_last_callback_at: Dict[int, Dict[str, float]] = {}
+_active_generations: Dict[int, List[float]] = {}
 
 
 class MarketingStates(StatesGroup):
@@ -60,6 +68,46 @@ def _get_db_service():
 def _get_free_manager():
     """Get free manager or None."""
     return _free_manager
+
+
+def _is_debounced(user_id: int, callback_data: str) -> bool:
+    now = time.monotonic()
+    user_callbacks = _last_callback_at.setdefault(user_id, {})
+    last_seen = user_callbacks.get(callback_data)
+    user_callbacks[callback_data] = now
+    return last_seen is not None and (now - last_seen) < _CALLBACK_DEBOUNCE_SECONDS
+
+
+def _prune_active_generations(user_id: int) -> None:
+    now = time.monotonic()
+    active = _active_generations.get(user_id, [])
+    active = [started for started in active if (now - started) < _ACTIVE_TASK_TTL_SECONDS]
+    if active:
+        _active_generations[user_id] = active
+    else:
+        _active_generations.pop(user_id, None)
+
+
+def _can_start_generation(user_id: int) -> bool:
+    _prune_active_generations(user_id)
+    active = _active_generations.get(user_id, [])
+    return len(active) < _ACTIVE_TASK_LIMIT
+
+
+def _mark_generation_started(user_id: int) -> None:
+    _prune_active_generations(user_id)
+    _active_generations.setdefault(user_id, []).append(time.monotonic())
+
+
+def _mark_generation_finished(user_id: int) -> None:
+    _prune_active_generations(user_id)
+    active = _active_generations.get(user_id, [])
+    if active:
+        active.pop(0)
+    if active:
+        _active_generations[user_id] = active
+    else:
+        _active_generations.pop(user_id, None)
 
 
 @router.message(Command("marketing"))
@@ -639,6 +687,12 @@ async def process_prompt(message: Message, state: FSMContext):
 @router.callback_query(F.data == "mgen:confirm")
 async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
     """Confirm and start actual KIE generation with full database integration + free tier support."""
+    if _is_debounced(callback.from_user.id, callback.data):
+        await callback.answer("⏳ Уже обрабатывается", show_alert=True)
+        return
+    if not _can_start_generation(callback.from_user.id):
+        await callback.answer("⚠️ Дождитесь завершения текущей генерации", show_alert=True)
+        return
     await callback.answer()  # Always answer callback
     import uuid
     from datetime import datetime, timezone
@@ -731,6 +785,7 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
     await callback.answer("Генерация запущена!")
     
     # Generate in background with proper timeout and retry logic
+    _mark_generation_started(user_id)
     try:
         # Initialize KIE generator
         generator = KieGenerator()
@@ -783,7 +838,7 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
                     await wallet_service.refund(user_id, user_price, refund_ref, hold_ref=hold_ref)
             
             # Update job
-            await job_service.update_status(job_id, "succeeded")
+            await job_service.update_status(job_id, "done")
             await job_service.update_result(job_id, result)
             
             # Send result to user
@@ -910,6 +965,8 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
         ])
         
         await callback.message.answer(error_text, reply_markup=keyboard)
+    finally:
+        _mark_generation_finished(user_id)
 
 
 # Export router

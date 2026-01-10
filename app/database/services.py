@@ -21,6 +21,7 @@ except ImportError:
     HAS_ASYNCPG = False
 
 from app.database.schema import apply_schema, verify_schema
+from app.utils.correlation import correlation_tag
 
 logger = logging.getLogger(__name__)
 
@@ -181,13 +182,21 @@ class WalletService:
                 WHERE user_id = $1
             """, user_id, amount_rub)
             
-            logger.info(f"Topup {user_id}: +{amount_rub} RUB (ref: {ref})")
+            logger.info(f"{correlation_tag()} Topup {user_id}: +{amount_rub} RUB (ref: {ref})")
             return True
     
     async def hold(self, user_id: int, amount_rub: Decimal, 
                   ref: str, meta: Dict = None) -> bool:
         """Hold funds for pending operation."""
         async with self.db.transaction() as conn:
+            existing = await conn.fetchval(
+                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'hold' AND status = 'done'",
+                ref
+            )
+            if existing:
+                logger.info(f"Hold {ref} already processed")
+                return True
+
             # Check available balance
             wallet = await conn.fetchrow(
                 "SELECT balance_rub FROM wallets WHERE user_id = $1 FOR UPDATE",
@@ -211,13 +220,21 @@ class WalletService:
                 WHERE user_id = $1
             """, user_id, amount_rub)
             
-            logger.info(f"Hold {user_id}: {amount_rub} RUB (ref: {ref})")
+            logger.info(f"{correlation_tag()} Hold {user_id}: {amount_rub} RUB (ref: {ref})")
             return True
     
     async def charge(self, user_id: int, amount_rub: Decimal, 
                     ref: str, meta: Dict = None) -> bool:
         """Charge held funds."""
         async with self.db.transaction() as conn:
+            existing = await conn.fetchval(
+                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'charge' AND status = 'done'",
+                ref
+            )
+            if existing:
+                logger.info(f"Charge {ref} already processed")
+                return True
+
             # Check hold exists
             wallet = await conn.fetchrow(
                 "SELECT hold_rub FROM wallets WHERE user_id = $1 FOR UPDATE",
@@ -240,7 +257,7 @@ class WalletService:
                 WHERE user_id = $1
             """, user_id, amount_rub)
             
-            logger.info(f"Charge {user_id}: -{amount_rub} RUB (ref: {ref})")
+            logger.info(f"{correlation_tag()} Charge {user_id}: -{amount_rub} RUB (ref: {ref})")
             return True
     
     async def refund(self, user_id: int, amount_rub: Decimal, 
@@ -254,7 +271,7 @@ class WalletService:
             )
             if existing:
                 logger.warning(f"Refund {ref} already processed")
-                return False
+                return True
             
             # Insert ledger
             await conn.execute("""
@@ -271,7 +288,42 @@ class WalletService:
                 WHERE user_id = $1
             """, user_id, amount_rub)
             
-            logger.info(f"Refund {user_id}: +{amount_rub} RUB (ref: {ref})")
+            logger.info(f"{correlation_tag()} Refund {user_id}: +{amount_rub} RUB (ref: {ref})")
+            return True
+
+    async def release(self, user_id: int, amount_rub: Decimal,
+                      ref: str, meta: Dict = None) -> bool:
+        """Release held funds back to balance (idempotent)."""
+        async with self.db.transaction() as conn:
+            existing = await conn.fetchval(
+                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'release' AND status = 'done'",
+                ref
+            )
+            if existing:
+                logger.info(f"Release {ref} already processed")
+                return True
+
+            wallet = await conn.fetchrow(
+                "SELECT hold_rub FROM wallets WHERE user_id = $1 FOR UPDATE",
+                user_id
+            )
+            if not wallet or wallet['hold_rub'] < amount_rub:
+                return False
+
+            await conn.execute("""
+                INSERT INTO ledger (user_id, kind, amount_rub, status, ref, meta)
+                VALUES ($1, 'release', $2, 'done', $3, $4)
+            """, user_id, amount_rub, ref, meta or {})
+
+            await conn.execute("""
+                UPDATE wallets
+                SET hold_rub = hold_rub - $2,
+                    balance_rub = balance_rub + $2,
+                    updated_at = NOW()
+                WHERE user_id = $1
+            """, user_id, amount_rub)
+
+            logger.info(f"{correlation_tag()} Release {user_id}: +{amount_rub} RUB (ref: {ref})")
             return True
 
 
@@ -328,7 +380,7 @@ class JobService:
                     result_json = COALESCE($5, result_json),
                     error_text = COALESCE($6, error_text),
                     updated_at = NOW(),
-                    finished_at = CASE WHEN $2 IN ('succeeded', 'failed', 'refunded', 'cancelled') 
+                    finished_at = CASE WHEN $2 IN ('done', 'failed', 'canceled') 
                                       THEN NOW() ELSE finished_at END
                 WHERE id = $1
             """, job_id, status, kie_task_id, kie_status, result_json, error_text)

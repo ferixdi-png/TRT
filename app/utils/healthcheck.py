@@ -7,9 +7,11 @@ import time
 import logging
 import json
 from aiohttp import web
+from telegram import Update
 from typing import Optional
 
 from app.utils.logging_config import get_logger
+from app.utils.correlation import ensure_correlation_id, correlation_tag
 
 logger = get_logger(__name__)
 
@@ -62,7 +64,38 @@ async def health_handler(request):
     )
 
 
-async def start_health_server(port: int = 8000):
+async def webhook_handler(request, application, secret_path: str, secret_token: str):
+    """Обработчик webhook апдейтов от Telegram."""
+    if request.match_info.get("secret") != secret_path:
+        return web.Response(status=404, text="not found")
+
+    if secret_token:
+        header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if header_token != secret_token:
+            return web.Response(status=403, text="forbidden")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.Response(status=400, text="invalid json")
+
+    try:
+        ensure_correlation_id(str(payload.get("update_id", "")))
+        update = Update.de_json(payload, application.bot)
+        await application.process_update(update)
+    except Exception as exc:
+        logger.warning(f"[WEBHOOK] {correlation_tag()} Failed to process update: {exc}")
+        return web.Response(status=500, text="error")
+
+    return web.Response(status=200, text="ok")
+
+
+async def start_health_server(
+    port: int = 8000,
+    application=None,
+    webhook_secret_path: str | None = None,
+    webhook_secret_token: str | None = None,
+):
     """Запустить healthcheck сервер в том же event loop"""
     global _health_server, _health_runner
     
@@ -76,6 +109,16 @@ async def start_health_server(port: int = 8000):
         app = web.Application()
         app.router.add_get('/health', health_handler)
         app.router.add_get('/', health_handler)  # Для совместимости
+        if application and webhook_secret_path:
+            app.router.add_post(
+                '/webhook/{secret}',
+                lambda request: webhook_handler(
+                    request,
+                    application=application,
+                    secret_path=webhook_secret_path,
+                    secret_token=webhook_secret_token or "",
+                ),
+            )
         
         runner = web.AppRunner(app)
         await runner.setup()
@@ -88,6 +131,8 @@ async def start_health_server(port: int = 8000):
         
         logger.info(f"[HEALTH] Healthcheck server started on port {port}")
         logger.info(f"[HEALTH] Endpoints: /health, /")
+        if application and webhook_secret_path:
+            logger.info("[HEALTH] Webhook endpoint enabled")
         
         return True
     except Exception as e:
@@ -109,4 +154,3 @@ async def stop_health_server():
         finally:
             _health_server = None
             _health_runner = None
-

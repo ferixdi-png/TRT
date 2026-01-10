@@ -9,6 +9,8 @@ from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Keep imports after logger setup to avoid circular dependencies
+from app.utils.webhook import get_webhook_base_url, get_webhook_secret_path
 # Импортируем mask на уровне модуля для безопасности
 try:
     from app.utils.mask import mask
@@ -35,7 +37,6 @@ REQUIRED_ENV_KEYS = [
     'SUPPORT_TELEGRAM',
     'SUPPORT_TEXT',
     'TELEGRAM_BOT_TOKEN',
-    'WEBHOOK_BASE_URL',
 ]
 
 
@@ -100,6 +101,26 @@ def validate_env_key_format(key: str) -> bool:
     return True
 
 
+def validate_webhook_requirements() -> None:
+    """
+    Validate webhook-specific requirements.
+
+    Raises:
+        ValueError: if webhook mode is enabled but WEBHOOK_BASE_URL is missing.
+    """
+    mode = os.getenv("BOT_MODE", "").lower().strip()
+    if mode != "webhook":
+        return
+
+    webhook_base = get_webhook_base_url()
+    if not webhook_base:
+        raise ValueError("WEBHOOK_BASE_URL is required for webhook mode")
+
+    webhook_secret = get_webhook_secret_path()
+    if not webhook_secret:
+        raise ValueError("WEBHOOK_SECRET or ADMIN_ID+TELEGRAM_BOT_TOKEN is required for webhook mode")
+
+
 def startup_validation() -> bool:
     """
     Выполняет полную валидацию при старте приложения.
@@ -146,6 +167,17 @@ def startup_validation() -> bool:
         logger.error("See docs/env.md for details.")
         logger.error("=" * 60)
         sys.exit(1)
+
+    # Проверка webhook requirements
+    try:
+        validate_webhook_requirements()
+    except ValueError as e:
+        logger.error("=" * 60)
+        logger.error("INVALID WEBHOOK CONFIGURATION")
+        logger.error("=" * 60)
+        logger.error(str(e))
+        logger.error("=" * 60)
+        sys.exit(1)
     
     # Логируем успех (без значений)
     logger.info("✅ All required environment variables are set")
@@ -153,4 +185,3 @@ def startup_validation() -> bool:
     logger.info("=" * 60)
     
     return True
-

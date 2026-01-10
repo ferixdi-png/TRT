@@ -51,6 +51,11 @@ def log_env_snapshot():
     logger.info("=" * 60)
 
 
+async def preflight_webhook(bot) -> None:
+    """Delete any existing webhook before polling starts."""
+    await bot.delete_webhook(drop_pending_updates=False)
+
+
 def ensure_data_directory(data_dir: str) -> bool:
     """Гарантирует создание data директории и проверяет права записи"""
     try:
@@ -148,7 +153,7 @@ async def build_application(settings):
         raise
 
 
-async def start_health_server(port: int) -> bool:
+async def start_health_server(port: int, **kwargs) -> bool:
     """Запускает healthcheck сервер в том же event loop"""
     if port == 0:
         logger.info("[HEALTH] PORT not set, skipping healthcheck server (Worker mode)")
@@ -156,7 +161,7 @@ async def start_health_server(port: int) -> bool:
     
     try:
         from app.utils.healthcheck import start_health_server
-        return await start_health_server(port=port)
+        return await start_health_server(port=port, **kwargs)
     except Exception as e:
         logger.warning(f"[HEALTH] Failed to start health server: {e}")
         return False
@@ -202,7 +207,12 @@ async def run(settings, application):
         # Запускаем healthcheck сервер (если PORT задан - Web Service режим)
         if settings.port > 0:
             logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (Web Service mode)")
-            await start_health_server(port=settings.port)
+            await start_health_server(
+                port=settings.port,
+                application=application if settings.bot_mode == "webhook" else None,
+                webhook_secret_path=settings.webhook_secret_path if settings.bot_mode == "webhook" else None,
+                webhook_secret_token=settings.webhook_secret_token if settings.bot_mode == "webhook" else None,
+            )
         else:
             logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
         
@@ -225,9 +235,12 @@ async def run(settings, application):
             # Запускаем polling или webhook
             if settings.bot_mode == "webhook":
                 if not settings.webhook_url:
-                    logger.error("[FAIL] WEBHOOK_URL not set for webhook mode")
+                    logger.error("[FAIL] WEBHOOK_BASE_URL not set for webhook mode")
                     sys.exit(1)
-                await application.bot.set_webhook(settings.webhook_url)
+                await application.bot.set_webhook(
+                    settings.webhook_url,
+                    secret_token=settings.webhook_secret_token or None,
+                )
                 logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
@@ -419,4 +432,3 @@ if __name__ == "__main__":
         from app.utils.logging_config import log_error_with_stacktrace
         log_error_with_stacktrace(logger, e, "Fatal error in asyncio.run")
         sys.exit(1)
-

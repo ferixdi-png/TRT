@@ -50,7 +50,7 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
         text += "💡 Попробуйте создать что-то в разделе ⚡ Быстрые действия!"
     else:
         # Count by status
-        succeeded = sum(1 for j in jobs if j.get("status") == "succeeded")
+        succeeded = sum(1 for j in jobs if j.get("status") == "done")
         failed = sum(1 for j in jobs if j.get("status") == "failed")
         running = sum(1 for j in jobs if j.get("status") in ("running", "queued"))
         
@@ -66,7 +66,7 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
             
             # Status emoji
             status_emoji = {
-                "succeeded": "✅",
+                "done": "✅",
                 "failed": "❌",
                 "running": "🔄",
                 "queued": "⏱️",
@@ -83,7 +83,7 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
     # Build keyboard with gallery option
     keyboard_rows = []
     
-    if jobs and any(j.get("status") == "succeeded" for j in jobs):
+    if jobs and any(j.get("status") == "done" for j in jobs):
         keyboard_rows.append([
             InlineKeyboardButton(text="🖼️ Просмотр галереи", callback_data="history:gallery")
         ])
@@ -117,7 +117,7 @@ async def cb_history_gallery(callback: CallbackQuery, state: FSMContext):
     jobs = await job_service.list_user_jobs(callback.from_user.id, limit=20)
     
     # Filter only succeeded jobs
-    succeeded_jobs = [j for j in jobs if j.get("status") == "succeeded"]
+    succeeded_jobs = [j for j in jobs if j.get("status") == "done"]
     
     if not succeeded_jobs:
         await callback.message.edit_text(
