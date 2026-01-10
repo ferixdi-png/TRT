@@ -22,8 +22,8 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy all application files (using .dockerignore to exclude unnecessary files)
 COPY . /app
 
-# Safety net: if a local "aiogram" stub package slips into the image, it will
-# shadow the real aiogram installed via pip and break runtime imports.
+# Safety: remove a vendored/local "aiogram" package if it exists in the repo.
+# It can shadow the real PyPI dependency and break imports at runtime.
 RUN rm -rf /app/aiogram || true
 
 # Create directories with empty __init__.py files if they don't exist
