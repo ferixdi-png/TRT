@@ -8,64 +8,25 @@ Goals:
 
 This project historically had a PTB (python-telegram-bot) runner. Tests still cover
 that legacy in bot_kie.py, but this runtime is aiogram-based.
-
-Important: the repo contains a local ./aiogram folder with tiny test stubs.
-In production we must import the real aiogram package from site-packages.
 """
 
 from __future__ import annotations
 
-import contextlib
 import asyncio
 import logging
 import os
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional
 
 from aiohttp import web
 
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Update
 
-def _import_real_aiogram_symbols():
-    """Import aiogram symbols from site-packages even if ./aiogram stubs exist."""
-    project_root = Path(__file__).resolve().parent
-    has_local_stubs = (project_root / "aiogram" / "__init__.py").exists()
-    removed: list[str] = []
-
-    if has_local_stubs:
-        # Remove project root and '' so import machinery does not pick local stubs.
-        for entry in list(sys.path):
-            if entry in {"", str(project_root)}:
-                removed.append(entry)
-                try:
-                    sys.path.remove(entry)
-                except ValueError:
-                    pass
-
-    try:
-        # Import the package (this will populate sys.modules with the real aiogram).
-        import importlib
-
-        importlib.import_module("aiogram")
-    finally:
-        # Restore path for app imports.
-        for entry in reversed(removed):
-            sys.path.insert(0, entry)
-
-    # Now import symbols from whichever aiogram got loaded.
-    from aiogram import Bot, Dispatcher  # type: ignore
-    from aiogram.fsm.storage.memory import MemoryStorage  # type: ignore
-    from aiogram.types import Update  # type: ignore
-
-    return Bot, Dispatcher, MemoryStorage, Update
-
-
-Bot, Dispatcher, MemoryStorage, Update = _import_real_aiogram_symbols()
-
-from app.utils.logging_config import setup_logging  # noqa: E402
-from app.utils.runtime_state import runtime_state  # noqa: E402
+from app.utils.logging_config import setup_logging
+from app.utils.runtime_state import runtime_state
 
 
 logger = logging.getLogger(__name__)
@@ -138,42 +99,10 @@ def _load_runtime_config() -> RuntimeConfig:
 
 @dataclass
 class ActiveState:
+    """Mutable runtime state used by aiohttp handlers."""
+
     active: bool
-
-
-class SingletonLock:
-    """Async wrapper for the sync advisory lock implementation."""
-
-    def __init__(self, database_url: str, *, key: Optional[int] = None):
-        self.database_url = database_url
-        self.key = key
-        self._acquired = False
-
-    async def acquire(self) -> bool:
-        if not self.database_url:
-            self._acquired = True
-            return True
-        try:
-            from app.locking.single_instance import acquire_single_instance_lock
-
-            self._acquired = acquire_single_instance_lock(self.database_url, lock_key=self.key)
-            return self._acquired
-        except Exception as e:
-            logger.exception("[LOCK] Failed to acquire singleton lock: %s", e)
-            self._acquired = False
-            return False
-
-    async def release(self) -> None:
-        if not self.database_url:
-            return
-        if not self._acquired:
-            return
-        try:
-            from app.locking.single_instance import release_single_instance_lock
-
-            release_single_instance_lock(self.database_url, lock_key=self.key)
-        except Exception as e:
-            logger.warning("[LOCK] Failed to release singleton lock: %s", e)
+    db_ready: bool = False
 
 
 # Exported name for tests (they monkeypatch this)
@@ -234,10 +163,10 @@ def _build_webhook_url(cfg: RuntimeConfig) -> str:
     return f"{base}/webhook/{cfg.webhook_secret_path}" if base else ""
 
 
-def _health_payload(active_state: ActiveState) -> dict[str, Any]:
+def _health_payload(active: bool) -> dict[str, Any]:
     return {
         "ok": True,
-        "active": bool(active_state.active),
+        "active": active,
         "bot_mode": runtime_state.bot_mode,
         "storage_mode": runtime_state.storage_mode,
         "lock_acquired": runtime_state.lock_acquired,
@@ -251,15 +180,15 @@ def _make_web_app(
     dp: Dispatcher,
     bot: Bot,
     cfg: RuntimeConfig,
-    active_state: ActiveState,
+    state: ActiveState,
 ) -> web.Application:
     app = web.Application()
 
     async def health(_request: web.Request) -> web.Response:
-        return web.json_response(_health_payload(active_state))
+        return web.json_response(_health_payload(state.active))
 
     async def root(_request: web.Request) -> web.Response:
-        return web.json_response(_health_payload(active_state))
+        return web.json_response(_health_payload(state.active))
 
     async def webhook(request: web.Request) -> web.Response:
         secret = request.match_info.get("secret")
@@ -273,9 +202,8 @@ def _make_web_app(
             if header != cfg.webhook_secret_token:
                 raise web.HTTPUnauthorized()
 
-        if not active_state.active:
-            # During rolling deploy, we may start PASSIVE. Returning 503 forces Telegram
-            # to retry until this instance becomes ACTIVE (lock acquired).
+        if not state.active:
+            # Force Telegram retry to land on the active instance.
             raise web.HTTPServiceUnavailable()
 
         try:
@@ -331,22 +259,33 @@ async def main() -> None:
 
     dp, bot = create_bot_application()
 
-    lock = SingletonLock(cfg.database_url)
-    lock_acquired = await lock.acquire()
-    runtime_state.lock_acquired = lock_acquired
+    from app.locking.single_instance import (
+        acquire_single_instance_lock,
+        is_lock_held,
+        release_single_instance_lock,
+    )
 
-    active_state = ActiveState(active=bool(lock_acquired))
-    if not active_state.active:
-        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (will retry)")
-    else:
+    async def _try_acquire_lock() -> bool:
+        # sync + psycopg2 inside -> run in a thread
+        return await asyncio.to_thread(acquire_single_instance_lock)
+
+    state = ActiveState(active=False)
+    state.active = await _try_acquire_lock()
+    runtime_state.lock_acquired = state.active
+    if state.active:
         logger.info("[LOCK] Acquired - ACTIVE")
+    else:
+        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode")
 
+    # Database service + handler injection (ONLY when ACTIVE)
     db_service = None
-    free_manager = None
 
-    async def init_active_services() -> None:
-        nonlocal db_service, free_manager
+    async def _init_active_services() -> None:
+        nonlocal db_service
+        if state.db_ready:
+            return
 
+        # DB is optional, but if DATABASE_URL is set we expect it to work.
         if cfg.database_url:
             try:
                 from app.database.services import DatabaseService
@@ -373,68 +312,77 @@ async def main() -> None:
                 logger.warning("[DB] Database init skipped/failed: %s", e)
                 db_service = None
 
-        if not cfg.dry_run:
-            webhook_url = _build_webhook_url(cfg)
-            if not webhook_url:
-                raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
-
-            from app.utils.webhook import ensure_webhook
-
-            await ensure_webhook(
-                bot,
-                webhook_url=webhook_url,
-                secret_token=cfg.webhook_secret_token or None,
-            )
+        state.db_ready = True
 
     runner: Optional[web.AppRunner] = None
-    lock_task: Optional[asyncio.Task] = None
+    lock_watcher_task: Optional[asyncio.Task[None]] = None
 
-    async def lock_watcher() -> None:
-        """Retry lock acquisition after rolling deploy and flip ACTIVE without restart."""
+    async def _ensure_webhook_if_needed() -> None:
+        if cfg.dry_run:
+            return
+        webhook_url = _build_webhook_url(cfg)
+        if not webhook_url:
+            raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
+        from app.utils.webhook import ensure_webhook
+
+        await ensure_webhook(
+            bot,
+            webhook_url=webhook_url,
+            secret_token=cfg.webhook_secret_token or None,
+        )
+
+    async def _lock_watcher() -> None:
+        """Upgrade PASSIVE instance to ACTIVE when rolling deploy releases the lock."""
+        # Small jitter to avoid stampede if multiple instances start simultaneously
+        await asyncio.sleep(2)
         while True:
-            if active_state.active:
+            if state.active:
                 return
-            await asyncio.sleep(5)
-            got = await lock.acquire()
-            if got:
-                active_state.active = True
+            acquired = await _try_acquire_lock()
+            if acquired:
+                state.active = True
                 runtime_state.lock_acquired = True
                 logger.info("[LOCK] Acquired after retry - switching to ACTIVE")
-                try:
-                    await init_active_services()
-                except Exception as e:
-                    logger.exception("[ACTIVE] init failed after lock acquisition: %s", e)
+                await _init_active_services()
+                if cfg.bot_mode == "webhook":
+                    await _ensure_webhook_if_needed()
                 return
+            await asyncio.sleep(3)
+
+    runner: Optional[web.AppRunner] = None
+    lock_watcher_task: Optional[asyncio.Task[None]] = None
 
     try:
         if cfg.bot_mode == "polling":
-            if not active_state.active:
-                # In polling mode we cannot bind the port-less worker on Render reliably.
-                # Keep process alive (health-only is not used here).
+            # Polling does not use the web server. If passive, we just keep
+            # the process alive for Render while the active instance runs.
+            if not state.active:
                 await asyncio.Event().wait()
                 return
-
+            await _init_active_services()
             await preflight_webhook(bot)
             await dp.start_polling(bot)
             return
 
-        # webhook mode
-        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
+        # webhook
+        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, state=state)
         runner = await _start_web_server(app, cfg.port)
         logger.info("[HEALTH] Server started on port %s", cfg.port)
 
-        if active_state.active:
-            await init_active_services()
+        if state.active:
+            await _init_active_services()
+            await _ensure_webhook_if_needed()
         else:
-            lock_task = asyncio.create_task(lock_watcher())
+            # During rolling deploy, the new instance starts PASSIVE while the
+            # old one drains. As soon as the old one stops, we auto-promote.
+            lock_watcher_task = asyncio.create_task(_lock_watcher())
 
+        # Keep running forever
         await asyncio.Event().wait()
     finally:
         try:
-            if lock_task is not None:
-                lock_task.cancel()
-                with contextlib.suppress(Exception):
-                    await lock_task
+            if lock_watcher_task is not None:
+                lock_watcher_task.cancel()
         except Exception:
             pass
         try:
@@ -452,11 +400,11 @@ async def main() -> None:
         except Exception:
             pass
         try:
-            await lock.release()
+            if is_lock_held():
+                await asyncio.to_thread(release_single_instance_lock)
         except Exception:
             pass
 
 
 if __name__ == "__main__":
-
     asyncio.run(main())

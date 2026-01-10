@@ -92,3 +92,8 @@ admin_limits.json
 .dockerignore
 Dockerfile
 .dockerignore
+
+# IMPORTANT: a local "aiogram" stub package exists in the repo for offline tests.
+# In production we must use the real aiogram from site-packages, otherwise
+# imports like "from aiogram import Bot" will fail.
+aiogram/

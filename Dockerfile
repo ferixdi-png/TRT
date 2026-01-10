@@ -22,6 +22,10 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy all application files (using .dockerignore to exclude unnecessary files)
 COPY . /app
 
+# Safety net: if a local "aiogram" stub package slips into the image, it will
+# shadow the real aiogram installed via pip and break runtime imports.
+RUN rm -rf /app/aiogram || true
+
 # Create directories with empty __init__.py files if they don't exist
 # Code has try/except for imports, so it will work without these modules
 RUN mkdir -p ./bot_kie_services ./bot_kie_utils && \
