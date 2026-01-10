@@ -46,6 +46,14 @@ def get_connection_pool():
         # Retry логика с экспоненциальной паузой
         max_retries = 3
         retry_delays = [0.5, 1.0, 2.0]
+        connect_timeout = int(os.getenv('DB_CONNECT_TIMEOUT', '5'))
+        statement_timeout_ms = os.getenv('DB_STATEMENT_TIMEOUT_MS')
+        options = None
+        if statement_timeout_ms:
+            try:
+                options = f"-c statement_timeout={int(statement_timeout_ms)}"
+            except ValueError:
+                logger.warning("Invalid DB_STATEMENT_TIMEOUT_MS=%s, ignoring", statement_timeout_ms)
         
         for attempt in range(max_retries):
             try:
@@ -54,7 +62,9 @@ def get_connection_pool():
                 _connection_pool = SimpleConnectionPool(
                     minconn=1,
                     maxconn=maxconn,
-                    dsn=database_url
+                    dsn=database_url,
+                    connect_timeout=connect_timeout,
+                    options=options,
                 )
                 logger.info(f"✅ Пул соединений с БД создан успешно (maxconn={maxconn})")
                 return _connection_pool
@@ -97,6 +107,20 @@ def get_db_connection():
         raise
     finally:
         pool.putconn(conn)
+
+
+def close_connection_pool() -> None:
+    """Закрывает пул соединений с БД."""
+    global _connection_pool
+    if _connection_pool is None:
+        return
+    try:
+        _connection_pool.closeall()
+        logger.info("✅ Пул соединений с БД закрыт")
+    except Exception as e:
+        logger.warning("⚠️ Ошибка закрытия пула соединений: %s", e)
+    finally:
+        _connection_pool = None
 
 
 def init_database():
@@ -451,4 +475,3 @@ def release_advisory_lock(lock_key: int) -> None:
     except Exception as e:
         # Best-effort: не бросаем исключение, только логируем
         logger.warning(f"⚠️ Ошибка при освобождении advisory lock (игнорируется): {e}")
-
