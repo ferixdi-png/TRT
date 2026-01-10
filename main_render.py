@@ -66,6 +66,7 @@ Bot, Dispatcher, MemoryStorage, Update = _import_real_aiogram_symbols()
 
 from app.utils.logging_config import setup_logging  # noqa: E402
 from app.utils.runtime_state import runtime_state  # noqa: E402
+from app.utils.webhook import get_webhook_base_url  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +109,7 @@ class RuntimeConfig:
 def _load_runtime_config() -> RuntimeConfig:
     bot_mode = os.getenv("BOT_MODE", "webhook").strip().lower()
     port = int(os.getenv("PORT", "10000"))
-    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip().rstrip("/")
+    webhook_base_url = get_webhook_base_url().strip().rstrip("/")
     telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
