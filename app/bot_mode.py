@@ -13,7 +13,7 @@ from telegram.error import Conflict
 
 logger = logging.getLogger(__name__)
 
-from app.utils.webhook import get_webhook_base_url
+from app.utils.webhook import get_webhook_base_url, get_webhook_secret_token
 
 BotMode = Literal["polling", "webhook"]
 
@@ -136,7 +136,6 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
 
 
 
