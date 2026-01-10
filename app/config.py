@@ -55,7 +55,11 @@ class Settings:
         
         self.database_url = os.getenv('DATABASE_URL', '').strip()
         self.kie_api_key = os.getenv('KIE_API_KEY', '').strip()
-        self.kie_api_url = os.getenv('KIE_API_URL', 'https://api.kie.ai').strip()
+        self.kie_api_url = (
+            os.getenv('KIE_API_URL', '').strip()
+            or os.getenv('KIE_BASE_URL', '').strip()
+            or 'https://api.kie.ai'
+        )
         
         # Runtime configuration
         self.test_mode = os.getenv('TEST_MODE', '0') == '1'
