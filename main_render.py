@@ -86,11 +86,10 @@ def _derive_secret_path_from_token(token: str) -> str:
     We keep that behavior as the default to avoid silent 404s after redeploys.
     """
 
-    cleaned = token.strip().replace(":", "")
-    # Keep it reasonably short but stable.
-    if len(cleaned) > 64:
-        cleaned = cleaned[-64:]
-    return cleaned
+    # Keep logic in sync with app.utils.webhook.derive_webhook_secret_path
+    from app.utils.webhook import derive_webhook_secret_path
+
+    return derive_webhook_secret_path(token)
 
 
 @dataclass(frozen=True)
