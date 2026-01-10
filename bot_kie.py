@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
     from app.config import get_settings
     from app.utils.webhook import build_webhook_url, get_webhook_base_url, get_webhook_secret_path
 
