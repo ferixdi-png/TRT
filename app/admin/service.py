@@ -65,20 +65,20 @@ class AdminService:
             total_uses = await conn.fetchval(
                 """
                 SELECT COUNT(*) FROM jobs
-                WHERE model_id = $1 AND status IN ('succeeded', 'running')
+                WHERE model_id = $1 AND status IN ('done', 'running')
                 """,
                 model_id
             )
             
             success_count = await conn.fetchval(
-                "SELECT COUNT(*) FROM jobs WHERE model_id = $1 AND status = 'succeeded'",
+                "SELECT COUNT(*) FROM jobs WHERE model_id = $1 AND status = 'done'",
                 model_id
             )
             
             total_revenue = await conn.fetchval(
                 """
                 SELECT COALESCE(SUM(price_rub), 0) FROM jobs
-                WHERE model_id = $1 AND status = 'succeeded'
+                WHERE model_id = $1 AND status = 'done'
                 """,
                 model_id
             ) or Decimal("0.00")
@@ -239,7 +239,7 @@ class AdminService:
             ) or 0
             
             success_count = await conn.fetchval(
-                "SELECT COUNT(*) FROM jobs WHERE user_id = $1 AND status = 'succeeded'",
+                "SELECT COUNT(*) FROM jobs WHERE user_id = $1 AND status = 'done'",
                 user_id
             ) or 0
             
@@ -501,7 +501,7 @@ class AdminService:
                     job_id, user_id, model_id, status, error_info, 
                     created_at, updated_at, meta_info
                 FROM jobs
-                WHERE status IN ('failed', 'timeout', 'error')
+                WHERE status = 'failed'
             """
             params = []
             

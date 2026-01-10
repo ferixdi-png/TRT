@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS generation_jobs (
     model_name TEXT NOT NULL,
     params JSONB,
     price NUMERIC(12, 2) NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
+    status TEXT NOT NULL DEFAULT 'queued',
     external_task_id TEXT,  -- task_id от KIE API
     result_urls JSONB,
     error_message TEXT,
@@ -130,4 +130,3 @@ CREATE TRIGGER update_generation_jobs_updated_at BEFORE UPDATE ON generation_job
 DROP TRIGGER IF EXISTS update_payments_updated_at ON payments;
 CREATE TRIGGER update_payments_updated_at BEFORE UPDATE ON payments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-

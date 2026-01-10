@@ -89,10 +89,18 @@ async def ensure_webhook_mode(bot: Bot, webhook_url: str) -> bool:
     
     try:
         # Устанавливаем webhook
-        result = await bot.set_webhook(
-            url=webhook_url,
-            drop_pending_updates=True
-        )
+        secret_token = get_webhook_secret_token()
+        if secret_token:
+            result = await bot.set_webhook(
+                url=webhook_url,
+                drop_pending_updates=True,
+                secret_token=secret_token,
+            )
+        else:
+            result = await bot.set_webhook(
+                url=webhook_url,
+                drop_pending_updates=True,
+            )
         logger.info(f"✅ Webhook set: {result}")
         
         # Проверяем что webhook установлен

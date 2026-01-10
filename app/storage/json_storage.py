@@ -14,6 +14,7 @@ import uuid
 import aiofiles
 
 from app.storage.base import BaseStorage
+from app.storage.status import is_terminal_status, normalize_job_status
 
 # Опциональный импорт filelock (мягкая деградация)
 try:
@@ -263,11 +264,12 @@ class JsonStorage(BaseStorage):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "queued"
     ) -> str:
         """Добавить задачу генерации"""
         job_id = task_id or str(uuid.uuid4())
         data = await self._load_json(self.jobs_file)
+        normalized_status = normalize_job_status(status)
         
         job = {
             'job_id': job_id,
@@ -276,11 +278,12 @@ class JsonStorage(BaseStorage):
             'model_name': model_name,
             'params': params,
             'price': price,
-            'status': status,
+            'status': normalized_status,
             'task_id': task_id,  # external_task_id от KIE
             'external_task_id': task_id,  # alias для совместимости
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat(),
+            'finished_at': None,
             'result_urls': [],
             'error_message': None
         }
@@ -302,8 +305,11 @@ class JsonStorage(BaseStorage):
             raise ValueError(f"Job {job_id} not found")
         
         job = data[job_id]
-        job['status'] = status
+        normalized_status = normalize_job_status(status)
+        job['status'] = normalized_status
         job['updated_at'] = datetime.now().isoformat()
+        if is_terminal_status(normalized_status) and not job.get('finished_at'):
+            job['finished_at'] = datetime.now().isoformat()
         
         if result_urls is not None:
             job['result_urls'] = result_urls

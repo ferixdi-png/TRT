@@ -112,7 +112,7 @@ class BaseStorage(ABC):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "queued"
     ) -> str:
         """
         Добавить задачу генерации

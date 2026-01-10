@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,6 +25,12 @@ from app.utils.validation import validate_url, validate_file_url, validate_text_
 
 logger = logging.getLogger(__name__)
 router = Router(name="flow")
+
+_CALLBACK_DEBOUNCE_SECONDS = float(os.getenv("CALLBACK_DEBOUNCE_SECONDS", "2.0"))
+_ACTIVE_TASK_LIMIT = int(os.getenv("ACTIVE_TASKS_PER_USER", "1"))
+_ACTIVE_TASK_TTL_SECONDS = int(os.getenv("ACTIVE_TASK_TTL_SECONDS", "1800"))
+_last_callback_at: Dict[int, Dict[str, float]] = {}
+_active_generations: Dict[int, List[float]] = {}
 
 
 class FlowStates(StatesGroup):
@@ -78,6 +85,46 @@ CATEGORY_LABELS = {
 }
 
 WELCOME_BALANCE_RUB = float(os.getenv("WELCOME_BALANCE_RUB", "200"))
+
+
+def _is_debounced(user_id: int, callback_data: str) -> bool:
+    now = time.monotonic()
+    user_callbacks = _last_callback_at.setdefault(user_id, {})
+    last_seen = user_callbacks.get(callback_data)
+    user_callbacks[callback_data] = now
+    return last_seen is not None and (now - last_seen) < _CALLBACK_DEBOUNCE_SECONDS
+
+
+def _prune_active_generations(user_id: int) -> None:
+    now = time.monotonic()
+    active = _active_generations.get(user_id, [])
+    active = [started for started in active if (now - started) < _ACTIVE_TASK_TTL_SECONDS]
+    if active:
+        _active_generations[user_id] = active
+    else:
+        _active_generations.pop(user_id, None)
+
+
+def _can_start_generation(user_id: int) -> bool:
+    _prune_active_generations(user_id)
+    active = _active_generations.get(user_id, [])
+    return len(active) < _ACTIVE_TASK_LIMIT
+
+
+def _mark_generation_started(user_id: int) -> None:
+    _prune_active_generations(user_id)
+    _active_generations.setdefault(user_id, []).append(time.monotonic())
+
+
+def _mark_generation_finished(user_id: int) -> None:
+    _prune_active_generations(user_id)
+    active = _active_generations.get(user_id, [])
+    if active:
+        active.pop(0)
+    if active:
+        _active_generations[user_id] = active
+    else:
+        _active_generations.pop(user_id, None)
 
 
 def _source_of_truth() -> Dict[str, Any]:
@@ -1437,6 +1484,9 @@ async def model_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("gen:"))
 async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
+    if _is_debounced(callback.from_user.id, callback.data):
+        await callback.answer("⏳ Уже обрабатывается", show_alert=True)
+        return
     await callback.answer()
     model_id = callback.data.split(":", 1)[1]
     model = next((m for m in _get_models_list() if m.get("model_id") == model_id), None)
@@ -1810,6 +1860,12 @@ async def cancel_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "confirm", InputFlow.confirm)
 async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
+    if _is_debounced(callback.from_user.id, callback.data):
+        await callback.answer("⏳ Уже обрабатывается", show_alert=True)
+        return
+    if not _can_start_generation(callback.from_user.id):
+        await callback.answer("⚠️ Дождитесь завершения текущей генерации", show_alert=True)
+        return
     await callback.answer()
     data = await state.get_data()
     flow_ctx = InputContext(**data.get("flow_ctx"))
@@ -1887,15 +1943,19 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         asyncio.create_task(progress_msg.edit_text(text, parse_mode="HTML"))
 
     charge_task_id = f"charge_{callback.from_user.id}_{callback.message.message_id}"
-    result = await generate_with_payment(
-        model_id=flow_ctx.model_id,
-        user_inputs=flow_ctx.collected,
-        user_id=callback.from_user.id,
-        amount=amount,
-        progress_callback=heartbeat,
-        task_id=charge_task_id,
-        reserve_balance=True,
-    )
+    _mark_generation_started(callback.from_user.id)
+    try:
+        result = await generate_with_payment(
+            model_id=flow_ctx.model_id,
+            user_inputs=flow_ctx.collected,
+            user_id=callback.from_user.id,
+            amount=amount,
+            progress_callback=heartbeat,
+            task_id=charge_task_id,
+            reserve_balance=True,
+        )
+    finally:
+        _mark_generation_finished(callback.from_user.id)
 
     await state.clear()
 

@@ -31,6 +31,11 @@
 1. **Проверка наличия** - все ключи должны быть установлены
 2. **Проверка формата** - значения должны соответствовать ожидаемому формату
 
+Для webhook-режима путь `/webhook/<secret>` строится из `WEBHOOK_SECRET`.
+Если `WEBHOOK_SECRET` не задан, используется sha256-хэш `ADMIN_ID + TELEGRAM_BOT_TOKEN`,
+а проверка `X-Telegram-Bot-Api-Secret-Token` выполняется только при наличии
+`WEBHOOK_SECRET_TOKEN`.
+
 Валидация выполняется в `app/utils/startup_validation.py`.
 
 ## Пример .env файла

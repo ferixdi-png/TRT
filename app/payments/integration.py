@@ -12,6 +12,7 @@ from app.payments.charges import ChargeManager, get_charge_manager
 from app.kie.generator import KieGenerator
 from app.utils.metrics import track_generation
 from app.pricing.free_models import is_free_model
+from app.utils.correlation import ensure_correlation_id, correlation_tag
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,10 @@ async def generate_with_payment(
     Returns:
         Result dict with generation and payment info
     """
+    ensure_correlation_id(task_id or f"{user_id}:{model_id}")
     # Check if model is FREE (TOP-5 cheapest)
     if is_free_model(model_id):
-        logger.info(f"🆓 Model {model_id} is FREE - skipping payment")
+        logger.info(f"{correlation_tag()} 🆓 Model {model_id} is FREE - skipping payment")
         generator = KieGenerator()
         gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
         return {
@@ -59,8 +61,10 @@ async def generate_with_payment(
     charge_manager = charge_manager or get_charge_manager()
     generator = KieGenerator()
     charge_task_id = task_id or f"charge_{user_id}_{model_id}_{uuid4().hex[:8]}"
+    ensure_correlation_id(charge_task_id)
     
     # Create pending charge
+    logger.info(f"{correlation_tag()} Creating pending charge for {charge_task_id}")
     charge_result = await charge_manager.create_pending_charge(
         task_id=charge_task_id,
         user_id=user_id,
@@ -94,6 +98,7 @@ async def generate_with_payment(
     
     # Generate
     start_time = time.time()
+    logger.info(f"{correlation_tag()} Starting generation for model={model_id}")
     gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
     duration = time.time() - start_time
     
@@ -110,6 +115,7 @@ async def generate_with_payment(
     # Commit or release charge based on generation result
     if gen_result.get('success'):
         # SUCCESS: Commit charge
+        logger.info(f"{correlation_tag()} Committing charge for {charge_task_id}")
         commit_result = await charge_manager.commit_charge(charge_task_id)
         # Add to history
         result_urls = gen_result.get('result_urls', [])
@@ -123,6 +129,7 @@ async def generate_with_payment(
         }
     else:
         # FAIL/TIMEOUT: Release charge (auto-refund)
+        logger.info(f"{correlation_tag()} Releasing charge for {charge_task_id}")
         release_result = await charge_manager.release_charge(
             charge_task_id,
             reason=gen_result.get('error_code', 'generation_failed')

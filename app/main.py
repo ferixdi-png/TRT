@@ -149,11 +149,11 @@ async def build_application(settings):
         raise
 
 
-async def start_health_server(port: int) -> bool:
+async def start_health_server(port: int, **kwargs) -> bool:
     """Запускает healthcheck сервер в том же event loop"""
     try:
         from app.utils.healthcheck import start_health_server
-        return await start_health_server(port=port)
+        return await start_health_server(port=port, **kwargs)
     except Exception as e:
         logger.warning(f"[HEALTH] Failed to start health server: {e}")
         return False
@@ -198,7 +198,12 @@ async def run(settings, application):
     try:
         # Запускаем healthcheck сервер (если PORT задан)
         if settings.port:
-            await start_health_server(port=settings.port)
+            await start_health_server(
+                port=settings.port,
+                application=application if settings.bot_mode == "webhook" else None,
+                webhook_secret_path=settings.webhook_secret_path if settings.bot_mode == "webhook" else None,
+                webhook_secret_token=settings.webhook_secret_token if settings.bot_mode == "webhook" else None,
+            )
         
         if application is None:
             # Используем старый способ через bot_kie.main()
@@ -252,7 +257,10 @@ async def run(settings, application):
                 if not settings.webhook_url:
                     logger.error("[FAIL] WEBHOOK_BASE_URL not set for webhook mode")
                     sys.exit(1)
-                await application.bot.set_webhook(settings.webhook_url)
+                await application.bot.set_webhook(
+                    settings.webhook_url,
+                    secret_token=settings.webhook_secret_token or None,
+                )
                 logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
