@@ -45,8 +45,8 @@ test-callbacks:
 	pytest -v tests/test_callbacks_smoke.py
 
 lint:
-	ruff check app/utils/healthcheck.py app/utils/webhook.py app/main.py main_render.py database.py scripts/smoke_server.py scripts/integrity_check.py scripts/e2e_smoke.py tests/test_healthcheck.py
-	ruff format --check app/utils/healthcheck.py app/utils/webhook.py app/main.py main_render.py database.py scripts/smoke_server.py scripts/integrity_check.py scripts/e2e_smoke.py tests/test_healthcheck.py
+	ruff check .
+	ruff format --check .
 
 smoke:
 	@bash -euo pipefail -c '\
@@ -64,9 +64,8 @@ smoke:
 		curl -I -fsS http://127.0.0.1:8080/; \
 		curl -fsS -X POST http://127.0.0.1:8080/webhook/test \
 			-H "Content-Type: application/json" \
-			-H "X-Telegram-Bot-Api-Secret-Token: smoke-secret" \
 			-d "{\"update_id\":1,\"message\":{\"message_id\":1,\"date\":0,\"chat\":{\"id\":1,\"type\":\"private\"},\"text\":\"ping\"}}"; \
-	'
+		'
 
 integrity:
 	TEST_MODE=1 DRY_RUN=1 BOT_MODE=webhook PORT=8080 \
