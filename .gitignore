@@ -124,6 +124,7 @@ artifacts/verify_last_pass.json
 !DEPLOY_CHECKLIST.md
 !RENDER_ENV_VARIABLES.md
 !RENDER_ENV_SETUP.md
+!TRT_REPORT.md
 
 # Дубликаты и старые версии
 *_new.py

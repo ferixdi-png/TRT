@@ -257,11 +257,19 @@ async def run(settings, application):
                 if not settings.webhook_url:
                     logger.error("[FAIL] WEBHOOK_BASE_URL not set for webhook mode")
                     sys.exit(1)
-                await application.bot.set_webhook(
-                    settings.webhook_url,
-                    secret_token=settings.webhook_secret_token or None,
-                )
-                logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
+                if settings.test_mode or settings.dry_run:
+                    from app.utils.webhook import mask_webhook_url
+                    logger.info(
+                        "[RUN] TEST_MODE/DRY_RUN enabled; skipping webhook set for %s",
+                        mask_webhook_url(settings.webhook_url, settings.webhook_secret_path),
+                    )
+                else:
+                    from app.utils.webhook import ensure_webhook
+                    await ensure_webhook(
+                        application.bot,
+                        settings.webhook_url,
+                        secret_token=settings.webhook_secret_token,
+                    )
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
                 # Polling mode - безопасный запуск с обработкой конфликтов
@@ -276,7 +284,11 @@ async def run(settings, application):
                     await application.bot.delete_webhook(drop_pending_updates=True)
                     webhook_info = await application.bot.get_webhook_info()
                     if webhook_info.url:
-                        logger.warning(f"[RUN] Webhook still present: {webhook_info.url}")
+                        from app.utils.webhook import mask_webhook_url
+                        logger.warning(
+                            "[RUN] Webhook still present: %s",
+                            mask_webhook_url(webhook_info.url, settings.webhook_secret_path),
+                        )
                     else:
                         logger.info("[RUN] Webhook removed successfully")
                 except Exception as e:
@@ -421,6 +433,13 @@ async def run(settings, application):
         # Останавливаем healthcheck сервер
         from app.utils.healthcheck import stop_health_server
         await stop_health_server()
+
+        # Закрываем пул БД при завершении
+        try:
+            from database import close_connection_pool
+            close_connection_pool()
+        except Exception:
+            pass
         
         # Освобождаем singleton lock
         release_single_instance_lock()

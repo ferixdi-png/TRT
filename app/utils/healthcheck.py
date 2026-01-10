@@ -77,15 +77,16 @@ async def webhook_handler(request, application, secret_path: str, secret_token: 
     try:
         payload = await request.json()
     except Exception:
-        return web.Response(status=400, text="invalid json")
+        logger.warning("[WEBHOOK] %s Invalid JSON payload", correlation_tag())
+        return web.Response(status=200, text="ok")
 
     try:
         ensure_correlation_id(str(payload.get("update_id", "")))
         update = Update.de_json(payload, application.bot)
         await application.process_update(update)
     except Exception as exc:
-        logger.warning(f"[WEBHOOK] {correlation_tag()} Failed to process update: {exc}")
-        return web.Response(status=500, text="error")
+        logger.exception("[WEBHOOK] %s Failed to process update: %s", correlation_tag(), exc)
+        return web.Response(status=200, text="ok")
 
     return web.Response(status=200, text="ok")
 
@@ -108,7 +109,9 @@ async def start_health_server(
         
         app = web.Application()
         app.router.add_get('/health', health_handler)
+        app.router.add_head('/health', health_handler)
         app.router.add_get('/', health_handler)  # Для совместимости
+        app.router.add_head('/', health_handler)
         if application and webhook_secret_path:
             app.router.add_post(
                 '/webhook/{secret}',
