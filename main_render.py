@@ -196,13 +196,37 @@ async def preflight_webhook(bot: Bot) -> None:
         logger.warning("[PRE-FLIGHT] Failed to delete webhook: %s", e)
 
 
+def _create_aiogram_bot(token: str) -> Bot:
+    """Create aiogram Bot with HTML parse mode across aiogram versions.
+
+    aiogram 3.7.0 removed `parse_mode`/`disable_web_page_preview`/`protect_content`
+    from the Bot initializer.
+    """
+
+    # Preferred: aiogram>=3.7.0
+    try:
+        from aiogram.client.default import DefaultBotProperties  # type: ignore
+        from aiogram.enums import ParseMode  # type: ignore
+
+        return Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    except Exception:
+        pass
+
+    # Back-compat: aiogram<3.7.0
+    try:
+        return Bot(token=token, parse_mode="HTML")
+    except TypeError:
+        # Last resort: no defaults.
+        return Bot(token=token)
+
+
 def create_bot_application() -> tuple[Dispatcher, Bot]:
     """Create aiogram Dispatcher + Bot (sync factory for tests)."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
 
-    bot = Bot(token=token, parse_mode="HTML")
+    bot = _create_aiogram_bot(token)
     dp = Dispatcher(storage=MemoryStorage())
 
     # Routers
