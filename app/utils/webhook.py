@@ -15,6 +15,11 @@ def get_webhook_secret_path(default: str = "") -> str:
     return os.getenv("TELEGRAM_BOT_TOKEN", default).strip()
 
 
+def get_webhook_secret_token() -> str:
+    """Return the secret token used to validate webhook requests."""
+    return os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
+
+
 def build_webhook_url(base_url: str, secret_path: str) -> str:
     """Build full webhook URL from base and secret path."""
     if not base_url or not secret_path:
