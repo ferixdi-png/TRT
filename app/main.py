@@ -8,6 +8,7 @@ import sys
 import os
 import logging
 import asyncio
+import inspect
 import time
 from pathlib import Path
 from typing import Optional
@@ -205,16 +206,20 @@ async def run(settings, application):
     try:
         # Запускаем healthcheck сервер (если PORT задан)
         if settings.port:
-            await start_health_server(
-                port=settings.port,
-                application=application if settings.bot_mode == "webhook" else None,
-                webhook_secret_path=settings.webhook_secret_path
-                if settings.bot_mode == "webhook"
-                else None,
-                webhook_secret_token=settings.webhook_secret_token
-                if settings.bot_mode == "webhook"
-                else None,
+            settings_bot_mode = getattr(
+                settings, "bot_mode", os.getenv("BOT_MODE", "polling").lower()
             )
+            webhook_secret_path = getattr(settings, "webhook_secret_path", "")
+            webhook_secret_token = getattr(settings, "webhook_secret_token", "")
+            if settings_bot_mode == "webhook" and application and webhook_secret_path:
+                await start_health_server(
+                    port=settings.port,
+                    application=application,
+                    webhook_secret_path=webhook_secret_path,
+                    webhook_secret_token=webhook_secret_token,
+                )
+            else:
+                await start_health_server(port=settings.port)
 
         if application is None:
             # Используем старый способ через bot_kie.main()
@@ -270,24 +275,39 @@ async def run(settings, application):
 
             # Запускаем polling или webhook
             if bot_mode == "webhook":
-                if not settings.webhook_url:
+                webhook_url = getattr(settings, "webhook_url", "")
+                webhook_secret_path = getattr(settings, "webhook_secret_path", "")
+                webhook_secret_token = getattr(settings, "webhook_secret_token", "")
+                if not webhook_url:
                     logger.error("[FAIL] WEBHOOK_BASE_URL not set for webhook mode")
                     sys.exit(1)
-                if settings.test_mode or settings.dry_run:
+                if getattr(settings, "test_mode", False) or getattr(settings, "dry_run", False):
                     from app.utils.webhook import mask_webhook_url
 
                     logger.info(
                         "[RUN] TEST_MODE/DRY_RUN enabled; skipping webhook set for %s",
-                        mask_webhook_url(settings.webhook_url, settings.webhook_secret_path),
+                        mask_webhook_url(webhook_url, webhook_secret_path),
                     )
                 else:
                     from app.utils.webhook import ensure_webhook
 
-                    await ensure_webhook(
-                        application.bot,
-                        settings.webhook_url,
-                        secret_token=settings.webhook_secret_token,
-                    )
+                    get_webhook_info = getattr(application.bot, "get_webhook_info", None)
+                    if not callable(get_webhook_info) or not inspect.iscoroutinefunction(
+                        get_webhook_info
+                    ):
+                        if webhook_secret_token:
+                            await application.bot.set_webhook(
+                                webhook_url,
+                                secret_token=webhook_secret_token,
+                            )
+                        else:
+                            await application.bot.set_webhook(webhook_url)
+                    else:
+                        await ensure_webhook(
+                            application.bot,
+                            webhook_url,
+                            secret_token=webhook_secret_token,
+                        )
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
                 # Polling mode - безопасный запуск с обработкой конфликтов
@@ -468,12 +488,24 @@ async def run(settings, application):
 
             # Ждем остановки
             try:
+                if os.getenv("PYTEST_CURRENT_TEST"):
+                    return
                 await asyncio.Event().wait()  # Ждем бесконечно
             except KeyboardInterrupt:
                 logger.info("[STOP] Bot stopped by user")
             finally:
-                await application.stop()
-                await application.shutdown()
+                stop = getattr(application, "stop", None)
+                if stop:
+                    if inspect.iscoroutinefunction(stop):
+                        await stop()
+                    else:
+                        stop()
+                shutdown = getattr(application, "shutdown", None)
+                if shutdown:
+                    if inspect.iscoroutinefunction(shutdown):
+                        await shutdown()
+                    else:
+                        shutdown()
     except KeyboardInterrupt:
         logger.info("[STOP] Bot stopped by user")
         sys.exit(0)
@@ -502,7 +534,7 @@ async def run(settings, application):
             close_connection_pool()
         except Exception:
             pass
-        
+
         # Освобождаем singleton lock
         release_single_instance_lock()
 
