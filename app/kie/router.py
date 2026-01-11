@@ -77,8 +77,9 @@ def build_category_payload(
     """
     Build payload for category-specific API endpoint.
     
-    This is different from old universal createTask - each category
-    has its own payload format.
+    Handles both:
+    - Direct format: {prompt: "...", aspect_ratio: "1:1"}
+    - Wrapped format: {model: "z-image", input: {prompt: "...", aspect_ratio: "1:1"}, callBackUrl: "..."}
     
     Args:
         model_id: Model ID
@@ -117,32 +118,84 @@ def build_category_payload(
     system_fields = {'model', 'callBackUrl', 'webhookUrl'}
     user_required_fields = [f for f in required_fields if f not in system_fields]
     
-    # Build payload based on category
-    # IMPORTANT: model and callBackUrl are SYSTEM fields, NOT user fields
+    # IMPORTANT: Check if this is wrapped format (input field contains dict)
+    has_input_wrapper = False
+    actual_properties = properties
+    
+    if 'input' in properties and isinstance(properties['input'], dict):
+        input_field_spec = properties['input']
+        
+        # Check if input has examples
+        if 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
+            examples = input_field_spec['examples']
+            if examples and isinstance(examples[0], dict):
+                # Extract field list from first example
+                example_structure = examples[0]
+                actual_properties = {}
+                for field_name, field_value in example_structure.items():
+                    # Infer type from example value
+                    if isinstance(field_value, bool):
+                        field_type = 'boolean'
+                    elif isinstance(field_value, str):
+                        field_type = 'string'
+                    elif isinstance(field_value, (int, float)):
+                        field_type = 'number'
+                    elif isinstance(field_value, dict):
+                        field_type = 'object'
+                    elif isinstance(field_value, list):
+                        field_type = 'array'
+                    else:
+                        field_type = 'string'
+                    
+                    actual_properties[field_name] = {
+                        'type': field_type,
+                        'required': False  # Conservative default
+                    }
+                
+                # Mark prompt as required if it exists
+                if 'prompt' in actual_properties:
+                    actual_properties['prompt']['required'] = True
+                
+                has_input_wrapper = True
+                logger.debug(f"Extracted input wrapper schema for {model_id}: {list(actual_properties.keys())}")
+        
+        elif 'properties' in input_field_spec:
+            # input has nested properties schema
+            actual_properties = input_field_spec['properties']
+            has_input_wrapper = True
+            logger.debug(f"Using nested input properties for {model_id}")
+    
+    # Build payload
     payload = {
         'model': model_id,
         'callBackUrl': 'https://api.example.com/callback'  # System default
     }
     
-    # Process required fields
-    for field in user_required_fields:
-        if field in user_inputs:
-            payload[field] = user_inputs[field]
-        elif field in properties and 'default' in properties[field]:
-            payload[field] = properties[field]['default']
-        else:
-            logger.warning(f"Required field '{field}' missing for model {model_id}, skipping")
-            # Don't raise error - some fields might be optional in practice
+    # If wrapped format, add input container
+    if has_input_wrapper:
+        payload['input'] = {}
     
-    # Add optional fields if provided (skip system fields)
-    for field, field_schema in properties.items():
-        if field in system_fields:
-            continue  # Skip system fields
-        if field not in user_required_fields and field in user_inputs:
-            payload[field] = user_inputs[field]
-        elif field not in payload and 'default' in field_schema:
-            # Add defaults for optional fields
-            payload[field] = field_schema['default']
+    # Process fields
+    user_field_names = set(actual_properties.keys()) - system_fields
+    
+    for field_name in user_field_names:
+        field_spec = actual_properties.get(field_name, {})
+        is_required = field_spec.get('required', False)
+        
+        if field_name in user_inputs:
+            value = user_inputs[field_name]
+            if has_input_wrapper:
+                payload['input'][field_name] = value
+            else:
+                payload[field_name] = value
+        elif is_required and 'default' in field_spec:
+            default_value = field_spec['default']
+            if has_input_wrapper:
+                payload['input'][field_name] = default_value
+            else:
+                payload[field_name] = default_value
+        elif is_required:
+            logger.warning(f"Required field '{field_name}' missing for model {model_id}")
     
     logger.info(f"Built {category} payload for {model_id}: {list(payload.keys())}")
     return payload
