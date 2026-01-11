@@ -1,6 +1,7 @@
 # Makefile для запуска тестов
 
-.PHONY: install-deps lint test test-verbose test-menu test-callbacks smoke integrity e2e verify
+# .PHONY: install-deps lint test test-verbose test-menu test-callbacks smoke integrity e2e verify
+.PHONY: install-deps lint test test-verbose test-menu test-callbacks smoke integrity e2e verify verify-runtime
 
 # Установка зависимостей для тестов
 install-deps:
@@ -85,4 +86,8 @@ e2e:
 	WEBHOOK_SECRET_PATH=test WEBHOOK_SECRET_TOKEN=smoke-secret \
 	python scripts/e2e_smoke.py
 
-verify: lint test smoke integrity e2e
+verify-runtime:
+	@echo "Verifying runtime environment..."
+	@python3 scripts/verify_runtime.py
+
+verify: verify-runtime lint test smoke integrity e2e
