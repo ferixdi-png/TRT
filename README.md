@@ -13,6 +13,26 @@ Production-grade Telegram bot for AI model generation via Kie.ai API.
 
 ## 🚀 БЫСТРЫЙ СТАРТ
 
+### Codespaces Quickstart
+
+Запуск в GitHub Codespaces занимает 1-2 минуты:
+
+```bash
+# 1) Открой репозиторий в Codespaces (Use this template → Create Codespace)
+# 2) Проверь Python и окружение
+python3 --version
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 3) Базовая проверка проекта
+make verify
+
+# 4) Локальный запуск (webhook/polling по необходимости)
+source .env.test && python main_render.py
+```
+
+Devcontainer (.devcontainer/devcontainer.json) настроен: venv + зависимости устанавливаются автоматически; при необходимости запусти команды выше вручную.
+
 ### Локальная разработка:
 
 ```bash
@@ -48,6 +68,17 @@ pip install -r requirements.txt
 ```bash
 python main_render.py
 ```
+
+### Render Deploy Checklist
+
+- ENV (обязательные):
+   - `TELEGRAM_BOT_TOKEN`, `KIE_API_KEY`, `DATABASE_URL`, `ADMIN_ID`, `BOT_MODE=webhook`, `PORT`
+- ENV (рекомендуемые):
+   - `WEBHOOK_BASE_URL`, `WEBHOOK_SECRET_PATH`, `WEBHOOK_SECRET_TOKEN`, `DB_MAXCONN`
+- Build: `pip install -r requirements.txt`
+- Start: `python main_render.py`
+- Health URL: `/health` (GET) — ожидается 200
+- Webhook URL: `${WEBHOOK_BASE_URL}/webhook/${TELEGRAM_BOT_TOKEN}` — секрет-токен проверяется, если задан
 
 ### Автоматический деплой через GitHub Actions:
 
