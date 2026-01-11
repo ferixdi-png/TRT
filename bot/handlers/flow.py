@@ -2393,7 +2393,8 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     
     # Run generation in background task to avoid 30sec webhook timeout
     async def run_generation():
-        logger.info(f"🚀 [BG] Starting background generation for user {callback.from_user.id} | Model: {flow_ctx.model_id}")
+        correlation_id = f"gen_{callback.from_user.id}_{flow_ctx.model_id}"
+        logger.info(f"🚀 [BG] [{correlation_id}] Starting background generation for user {callback.from_user.id} | Model: {flow_ctx.model_id}")
         try:
             result = await generate_with_payment(
                 model_id=flow_ctx.model_id,
@@ -2404,51 +2405,65 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
                 task_id=charge_task_id,
                 reserve_balance=True,
             )
-            logger.info(f"✅ [BG] Generation completed for user {callback.from_user.id} | Success: {result.get('success')}")
+            logger.info(f"✅ [BG] [{correlation_id}] Generation completed for user {callback.from_user.id} | Success: {result.get('success')}")
         except Exception as e:
-            logger.error(f"❌ [BG] Generation exception: {e}", exc_info=True)
+            logger.error(f"❌ [BG] [{correlation_id}] Generation exception: {e}", exc_info=True)
+            # CRITICAL: Ensure user gets notification even on exception
             result = {
                 "success": False,
-                "message": f"❌ Ошибка генерации: {str(e)}"
+                "message": f"❌ Ошибка генерации: {str(e)}\n\nПожалуйста, попробуйте позже или обратитесь в поддержку."
             }
         finally:
             _mark_generation_finished(callback.from_user.id)
 
         await state.clear()
 
-        if result.get("success"):
-            urls = result.get("result_urls") or []
-            if urls:
-                await callback.message.answer("\n".join(urls))
+        # CRITICAL: Wrap message sending in try-except to prevent silent failures
+        try:
+            if result.get("success"):
+                urls = result.get("result_urls") or []
+                if urls:
+                    await callback.message.answer("\n".join(urls))
+                else:
+                    await callback.message.answer("✅ Готово!")
+                await callback.message.answer(
+                    "Что дальше?",
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
+                            [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
+                        ]
+                    ),
+                )
             else:
-                await callback.message.answer("✅ Готово!")
-            await callback.message.answer(
-                "Что дальше?",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
-                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
-                    ]
-                ),
-            )
-        else:
-            # MASTER PROMPT: "10. Возможный refund при ошибке"
-            # Show error + refund notification
-            error_msg = result.get("message", "❌ Ошибка генерации")
-            await callback.message.answer(error_msg)
-            await callback.message.answer(
-                "Попробовать снова?",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔁 Попробовать снова", callback_data=f"gen:{flow_ctx.model_id}")],
-                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
-                    ]
-                ),
-            )
+                # MASTER PROMPT: "10. Возможный refund при ошибке"
+                # Show error + refund notification
+                error_msg = result.get("message", "❌ Ошибка генерации")
+                await callback.message.answer(error_msg)
+                await callback.message.answer(
+                    "Попробовать снова?",
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [InlineKeyboardButton(text="🔁 Попробовать снова", callback_data=f"gen:{flow_ctx.model_id}")],
+                            [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
+                        ]
+                    ),
+                )
+        except Exception as msg_error:
+            logger.error(f"❌ [BG] [{correlation_id}] Failed to send result message: {msg_error}", exc_info=True)
     
-    # Start background task
+    # Start background task with exception tracking
     logger.info(f"📬 [BG] Creating background task for user {callback.from_user.id}")
-    asyncio.create_task(run_generation())
+    task = asyncio.create_task(run_generation())
+    
+    # CRITICAL: Add done callback to catch unhandled exceptions
+    def task_done_callback(future):
+        try:
+            future.result()  # This will raise if task had exception
+        except Exception as e:
+            logger.error(f"❌ [BG TASK] Unhandled exception in background task: {e}", exc_info=True)
+    
+    task.add_done_callback(task_done_callback)
     logger.info(f"✅ [BG] Background task created and running asynchronously")
 
 

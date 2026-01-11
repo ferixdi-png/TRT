@@ -46,11 +46,12 @@ async def generate_with_payment(
     """
     ensure_correlation_id(task_id or f"{user_id}:{model_id}")
     
-    # CRITICAL LOGGING: Log inputs at entry
-    logger.info(f"generate_with_payment called with:")
-    logger.info(f"  - model_id: {model_id}")
-    logger.info(f"  - user_inputs: {user_inputs}")
-    logger.info(f"  - user_inputs keys: {list(user_inputs.keys())}")
+    # CRITICAL LOGGING: Log inputs at entry with correlation
+    logger.info(f"{correlation_tag()} [PAYMENT] generate_with_payment called:")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - user_id: {user_id}")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - model_id: {model_id}")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - user_inputs keys: {list(user_inputs.keys())}")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - amount: {amount}")
     
     # Check if model is FREE (TOP-5 cheapest)
     if is_free_model(model_id):

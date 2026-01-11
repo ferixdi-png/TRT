@@ -150,6 +150,11 @@ class KieGenerator:
             - error_code: Optional[str]
             - error_message: Optional[str]
         """
+        from app.utils.correlation import correlation_tag
+        
+        logger.info(f"{correlation_tag()} [GENERATOR] Starting generate for model={model_id}")
+        logger.info(f"{correlation_tag()} [GENERATOR]   - user_inputs keys: {list(user_inputs.keys())}")
+        
         try:
             # Load source of truth if needed
             if not self.source_of_truth:
