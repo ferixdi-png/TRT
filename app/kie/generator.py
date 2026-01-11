@@ -202,22 +202,20 @@ class KieGenerator:
                 
                 # Special handling for 402 (insufficient credits)
                 if error_code == 402:
-                    from config_runtime import is_dry_run, is_test_mode
-
-                    is_nonprod = is_dry_run() or is_test_mode()
                     logger.warning(
-                        "⚠️ API 402 (insufficient credits): %s | mode=%s",
-                        error_msg,
-                        "nonprod" if is_nonprod else "prod",
+                        "⚠️ API 402 (insufficient credits): %s",
+                        error_msg
                     )
                     user_message = (
                         "Недостаточно кредитов Kie.ai (код 402). "
                         "Пополните Kie.ai / проверьте ключ. Генерация не запущена."
                     )
+                    # CRITICAL: NEVER return mocked success in PROD
+                    # 402 is ALWAYS failure, regardless of DRY_RUN/test mode
                     return {
                         'success': False,
-                        'status': 'mocked' if is_nonprod else 'failed',
-                        'mocked': bool(is_nonprod),
+                        'status': 'failed',
+                        'mocked': False,
                         'message': user_message,
                         'result_urls': [],
                         'result_object': None,
