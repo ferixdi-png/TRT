@@ -1531,6 +1531,9 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
     input_schema = model.get("input_schema", {})
     
+    # SYSTEM FIELDS that should NOT be shown to user
+    SYSTEM_FIELDS = {'model', 'callBackUrl', 'webhookUrl'}
+    
     # Support BOTH flat and nested formats (like builder.py)
     if 'properties' in input_schema:
         # Nested format
@@ -1543,6 +1546,10 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
         optional_fields = [k for k in properties.keys() if k not in required_fields]
     
+    # CRITICAL: Filter out system fields from display to user
+    required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
+    optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
+    
     ctx = InputContext(
         model_id=model_id,
         required_fields=required_fields,
@@ -1552,7 +1559,6 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
         collecting_optional=False
     )
     await state.update_data(flow_ctx=ctx.__dict__)
-
     if not required_fields:
         await _show_confirmation(callback.message, state, model)
         return

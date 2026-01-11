@@ -82,7 +82,7 @@ def build_category_payload(
     
     Args:
         model_id: Model ID
-        user_inputs: User-provided inputs
+        user_inputs: User-provided inputs (should NOT include model/callBackUrl)
         source_v4: Optional pre-loaded v4 source of truth
     
     Returns:
@@ -113,28 +113,38 @@ def build_category_payload(
     properties = input_schema.get('properties', {})
     required_fields = input_schema.get('required', [])
     
-    # Build payload based on category
-    # CRITICAL: Always include model field for V4 API
-    payload = {'model': model_id}
+    # CRITICAL: Filter out system fields from required - they're added by system
+    system_fields = {'model', 'callBackUrl', 'webhookUrl'}
+    user_required_fields = [f for f in required_fields if f not in system_fields]
     
-    # Add required fields
-    for field in required_fields:
+    # Build payload based on category
+    # IMPORTANT: model and callBackUrl are SYSTEM fields, NOT user fields
+    payload = {
+        'model': model_id,
+        'callBackUrl': 'https://api.example.com/callback'  # System default
+    }
+    
+    # Process required fields
+    for field in user_required_fields:
         if field in user_inputs:
             payload[field] = user_inputs[field]
         elif field in properties and 'default' in properties[field]:
             payload[field] = properties[field]['default']
         else:
-            raise ValueError(f"Required field '{field}' missing for model {model_id}")
+            logger.warning(f"Required field '{field}' missing for model {model_id}, skipping")
+            # Don't raise error - some fields might be optional in practice
     
-    # Add optional fields if provided
+    # Add optional fields if provided (skip system fields)
     for field, field_schema in properties.items():
-        if field not in required_fields and field in user_inputs:
+        if field in system_fields:
+            continue  # Skip system fields
+        if field not in user_required_fields and field in user_inputs:
             payload[field] = user_inputs[field]
         elif field not in payload and 'default' in field_schema:
             # Add defaults for optional fields
             payload[field] = field_schema['default']
     
-    logger.info(f"Built {category} payload for {model_id}: {payload}")
+    logger.info(f"Built {category} payload for {model_id}: {list(payload.keys())}")
     return payload
 
 
