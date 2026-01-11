@@ -87,8 +87,8 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
             # ВАЖНО: НЕ возвращаем соединение в пул!
             return conn
         else:
-            # Lock уже занят другим инстансом
-            logger.warning(f"⚠️ PostgreSQL advisory lock already held: key={lock_key}")
+            # Lock уже занят другим инстансом (это нормально, просто другой инстанс)
+            logger.debug(f"PostgreSQL advisory lock already held: key={lock_key}")
             # Возвращаем соединение в пул
             pool.putconn(conn)
             return None

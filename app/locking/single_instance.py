@@ -82,7 +82,7 @@ def _acquire_postgres_lock() -> Optional[object]:
                 logger.info(f"[LOCK] PostgreSQL advisory lock acquired (key={lock_key})")
                 return {'connection': conn, 'pool': pool, 'lock_key': lock_key}
             else:
-                logger.warning(f"[LOCK] PostgreSQL advisory lock NOT acquired (key={lock_key}) - another instance is running")
+                logger.debug(f"[LOCK] PostgreSQL advisory lock NOT acquired (key={lock_key}) - another instance is running")
                 return None
         except ImportError:
             logger.debug("[LOCK] render_singleton_lock not available")

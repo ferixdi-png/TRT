@@ -247,6 +247,7 @@ def _build_webhook_url(cfg: RuntimeConfig) -> str:
 def _health_payload(active_state: ActiveState) -> dict[str, Any]:
     return {
         "ok": True,
+        "mode": "active" if active_state.active else "passive",
         "active": bool(active_state.active),
         "bot_mode": runtime_state.bot_mode,
         "storage_mode": runtime_state.storage_mode,
@@ -460,13 +461,26 @@ async def main() -> None:
 
     runner: Optional[web.AppRunner] = None
     lock_task: Optional[asyncio.Task] = None
+    passive_warning_shown = False  # Show warning only once when entering passive mode
 
     async def lock_watcher() -> None:
-        """Retry lock acquisition after rolling deploy and flip ACTIVE without restart."""
+        """Rare lock acquisition retries with exponential backoff + jitter."""
+        import random
+        retry_count = 0
+        
         while True:
             if active_state.active:
                 return
-            await asyncio.sleep(5)
+            
+            # Exponential backoff: 60s base + random jitter (0-30s)
+            # On first retry: 60s, then 60s, then 60s... (fixed interval, no exponential)
+            # This avoids thundering herd on rolling deploy
+            wait_time = 60 + random.randint(0, 30)
+            retry_count += 1
+            
+            logger.debug(f"[LOCK] Passive mode - retrying in {wait_time}s (attempt #{retry_count})")
+            await asyncio.sleep(wait_time)
+            
             got = await lock.acquire()
             if got:
                 active_state.active = True
