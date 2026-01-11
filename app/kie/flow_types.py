@@ -68,7 +68,8 @@ def determine_flow_type(model_id: str, model_spec: Dict) -> str:
     - unknown: auto-detect from schema
     """
     category = model_spec.get("category", "").lower()
-    name = (model_spec.get("name") or "").lower()
+    name = (model_spec.get("name") or model_spec.get("display_name") or "").lower()
+    model_id_lower = model_id.lower()
     
     # Get input schema
     input_schema = model_spec.get("input_schema", {})
@@ -83,36 +84,60 @@ def determine_flow_type(model_id: str, model_spec: Dict) -> str:
                 break
     
     # Detect field presence
-    has_image_url = any(f in required_fields for f in ["image_url", "image_urls", "input_image", "reference_image_urls"])
-    has_prompt = "prompt" in required_fields
+    has_image_url = any(f in required_fields for f in ["image_url", "image_urls", "input_image", "reference_image_urls", "image"])
+    has_prompt = any(f in required_fields for f in ["prompt", "text"])
     has_video = any(f in required_fields for f in ["video_url", "video_urls"])
     has_audio = any(f in required_fields for f in ["audio_url", "audio_urls", "audio_file"])
     
     # Classification logic (order matters!)
-    # CRITICAL: Check edit BEFORE generic image2image
-    if "edit" in name or "image-edit" in model_id or "edit" in model_id:
+    
+    # 1. CRITICAL: Check edit/background_removal BEFORE generic image2image
+    if any(keyword in model_id_lower for keyword in ["edit", "image-edit", "reframe"]):
         return FLOW_IMAGE_EDIT
-    elif "upscal" in name or "upscal" in model_id:
+    elif any(keyword in model_id_lower for keyword in ["remove-background", "background", "removal"]):
+        return FLOW_IMAGE_UPSCALE  # Treat BG removal as image enhancement
+    elif any(keyword in model_id_lower for keyword in ["watermark"]):
+        return FLOW_VIDEO_EDIT if has_video else FLOW_IMAGE_EDIT
+    elif "upscal" in name or "upscal" in model_id_lower:
         return FLOW_IMAGE_UPSCALE
+    
+    # 2. Multi-input combinations
     elif has_image_url and has_video:
         return FLOW_IMAGE2VIDEO
     elif has_image_url and has_prompt:
         return FLOW_IMAGE2IMAGE
     elif has_video and has_prompt:
         return FLOW_VIDEO_EDIT
+    elif has_image_url:
+        # Image-only input
+        return FLOW_IMAGE_UPSCALE
+    
+    # 3. Audio flows
     elif has_audio:
         if has_prompt:
             return FLOW_TEXT2AUDIO
         else:
             return FLOW_AUDIO_PROCESSING
-    elif has_prompt and "video" in category:
+    
+    # 4. Text-only flows (with category hints)
+    elif has_prompt:
+        if "video" in category or "v2-5-turbo-text-to-video" in model_id_lower or "veo3" in model_id_lower:
+            return FLOW_TEXT2VIDEO
+        elif "audio" in category or "music" in category:
+            return FLOW_TEXT2AUDIO
+        else:
+            # Default text prompt = text2image
+            return FLOW_TEXT2IMAGE
+    
+    # 5. Category-based fallbacks
+    elif "video" in category:
         return FLOW_TEXT2VIDEO
-    elif has_prompt and "image" in category:
-        return FLOW_TEXT2IMAGE
     elif "music" in category or "audio" in category:
         return FLOW_TEXT2AUDIO
+    elif "image" in category:
+        return FLOW_TEXT2IMAGE
     else:
-        logger.warning(f"Could not determine flow type for {model_id}, using UNKNOWN")
+        logger.warning(f"Could not determine flow type for {model_id} (category={category}), using UNKNOWN")
         return FLOW_UNKNOWN
 
 
@@ -170,3 +195,26 @@ def get_prompt_field_label(flow_type: str, field_name: str) -> str:
         return "Описание того, что создать"
     else:
         return field_name
+
+
+def get_primary_required_fields(flow_type: str) -> List[str]:
+    """
+    Get list of EXACT field names that MUST be marked as required for this flow_type.
+    
+    This determines which fields from the model's schema are mandatory based on the
+    flow type contract. Used to enforce that:
+    - image_edit: image_url is required (collects photo first)
+    - image2image: image_url is required (collects photo first)
+    - image2video: image_url is required (collects photo first)
+    - image_upscale: image_url is required (only input)
+    - text2*: prompt is required
+    - video_edit: video_url is required
+    - audio: audio_url/audio_file is required
+    
+    Returns: list of field names to mark as required in properties
+    """
+    primary_required = FLOW_INPUT_ORDER.get(flow_type, [])
+    return [f for f in primary_required if f in ["image_url", "image_urls", "input_image", 
+                                                    "video_url", "video_urls",
+                                                    "audio_url", "audio_urls", "audio_file",
+                                                    "prompt", "text"]]

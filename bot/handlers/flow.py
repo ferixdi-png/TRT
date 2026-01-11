@@ -30,6 +30,7 @@ from app.kie.flow_types import (
     get_flow_description,
     get_expected_input_order,
     get_prompt_field_label,
+    get_primary_required_fields,
     should_collect_image_first,
     should_collect_video_first,
     should_collect_audio_first,
@@ -1787,9 +1788,32 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
                         actual_properties[field_name]['enum'] = field_options
                         logger.debug(f"Added enum options for {model_id}.{field_name}: {field_options}")
                 
-                # Mark prompt as required if it exists
-                if 'prompt' in actual_properties:
-                    actual_properties['prompt']['required'] = True
+                # CRITICAL FIX: Do NOT just mark prompt as required.
+                # Instead, determine flow_type FIRST, then mark appropriate fields as required.
+                # First, get the flow type based on model metadata
+                flow_type = get_flow_type(model_id, model)
+                
+                # Get primary required fields for this flow_type
+                primary_required = get_primary_required_fields(flow_type)
+
+                
+                # Mark fields that match flow_type's primary required fields
+                for field_name in actual_properties:
+                    # Check direct match
+                    if field_name in primary_required:
+                        actual_properties[field_name]['required'] = True
+                    # Check field variations (image_url vs input_image, etc.)
+                    elif field_name in ["image_url", "image_urls", "input_image"] and \
+                         any(f in primary_required for f in ["image_url", "image_urls", "input_image"]):
+                        actual_properties[field_name]['required'] = True
+                    elif field_name in ["video_url", "video_urls"] and \
+                         any(f in primary_required for f in ["video_url", "video_urls"]):
+                        actual_properties[field_name]['required'] = True
+                    elif field_name in ["audio_url", "audio_urls", "audio_file"] and \
+                         any(f in primary_required for f in ["audio_url", "audio_urls", "audio_file"]):
+                        actual_properties[field_name]['required'] = True
+                
+                logger.info(f"Marked required fields for {flow_type}: {[k for k, v in actual_properties.items() if v.get('required')]}")
                 
                 # Replace properties with actual user fields
                 properties = actual_properties
