@@ -199,6 +199,39 @@ def _category_label(category: str) -> str:
     return CATEGORY_LABELS.get(category, category.replace("_", " ").title())
 
 
+async def _convert_file_id_to_url(message: Message, file_id: str) -> str:
+    """
+    Convert Telegram file_id to downloadable URL using bot.get_file().
+    
+    Args:
+        message: The message object (contains bot instance)
+        file_id: Telegram file_id (captured from photo, document, video, or audio)
+    
+    Returns:
+        File URL that can be used in API calls
+    
+    Raises:
+        Exception if file cannot be accessed
+    """
+    try:
+        if not file_id:
+            raise ValueError("file_id is empty")
+        
+        # Get file info from Telegram
+        file_info = await message.bot.get_file(file_id)
+        if not file_info or not file_info.file_path:
+            raise ValueError(f"Could not get file path for file_id: {file_id}")
+        
+        # Build downloadable URL
+        url = f"https://api.telegram.org/file/bot{message.bot.token}/{file_info.file_path}"
+        logger.debug(f"Converted file_id to URL: {file_id[:10]}... → {url[:50]}...")
+        return url
+        
+    except Exception as e:
+        logger.error(f"Failed to convert file_id to URL: {e}")
+        raise
+
+
 def _categories_from_registry() -> List[Tuple[str, str]]:
     grouped = _models_by_category()
     categories = sorted(grouped.keys(), key=lambda value: _category_label(value).lower())
@@ -620,6 +653,20 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
     
     if enum:
         return f"Выберите значение для <b>{display_name}</b>:"
+    
+    # Image URL fields - требуют загрузку изображения
+    if field_name in {"image_url", "image_urls", "input_image", "reference_image_urls", "reference_mask_urls", "mask_url"}:
+        return (
+            f"🖼️ <b>Загрузите изображение</b>\n\n"
+            f"Отправьте фотографию прямо в чат (не как файл, а как фото).\n\n"
+            f"<i>Как загрузить:</i>\n"
+            f"1️⃣ Нажмите скрепку (📎)\n"
+            f"2️⃣ Выберите 📸 \"Фото\"\n"
+            f"3️⃣ Выберите изображение из галереи\n"
+            f"4️⃣ Нажмите ➡️ \"Отправить\"\n\n"
+            f"<i>Или вставьте URL:</i>\n"
+            f"https://example.com/image.jpg"
+        )
     
     if field_type in {"file", "file_id", "file_url"}:
         return (
@@ -1699,6 +1746,48 @@ async def input_message(message: Message, state: FSMContext) -> None:
     field_spec = flow_ctx.properties.get(field_name, {})
     field_type = field_spec.get("type", "string")
 
+    # Image URL fields - require photo/file or URL
+    if field_name in {"image_url", "image_urls", "input_image", "reference_image_urls", "reference_mask_urls", "mask_url"}:
+        file_id = None
+        if message.photo:
+            file_id = message.photo[-1].file_id
+        elif message.document:
+            file_id = message.document.file_id
+        
+        # Priority: uploaded photo/file > URL text
+        if file_id:
+            await _save_input_and_continue(message, state, file_id)
+            return
+        
+        # Check for URL in text
+        if message.text and message.text.startswith(("http://", "https://")):
+            # Validate URL before accepting
+            is_valid, error = validate_url(message.text)
+            if not is_valid:
+                await message.answer(f"⚠️ Некорректная ссылка: {error}\n\nПопробуйте снова.")
+                return
+            
+            # Additional validation for image URLs
+            is_valid, error = validate_file_url(message.text, file_type="image")
+            if not is_valid:
+                await message.answer(f"⚠️ {error}\n\nПопробуйте снова.")
+                return
+            
+            await _save_input_and_continue(message, state, message.text)
+            return
+        
+        # No file and no URL
+        await message.answer(
+            f"⚠️ <b>Не загружено изображение</b>\n\n"
+            f"Отправьте фото или вставьте ссылку.\n\n"
+            f"<i>Как отправить фото:</i>\n"
+            f"1️⃣ Нажмите скрепку (📎)\n"
+            f"2️⃣ Выберите 📸 \"Фото\"\n"
+            f"3️⃣ Выберите из галереи\n"
+            f"4️⃣ Отправьте"
+        )
+        return
+
     if field_type in {"file", "file_id", "file_url"}:
         file_id = None
         if message.photo:
@@ -1814,6 +1903,23 @@ async def _save_input_and_continue(message: Message, state: FSMContext, value: A
     
     field_name = current_fields[flow_ctx.index]
     field_spec = flow_ctx.properties.get(field_name, {})
+    
+    # CRITICAL FIX: Convert file_id to URL for image_url and file_id fields
+    # This is the missing link that was causing image uploads to fail!
+    if isinstance(value, str) and len(value) > 20:  # file_id is typically longer than 20 chars
+        # Check if this looks like a file_id (alphanumeric, often with / or -)
+        if (field_name in {"image_url", "image_urls", "input_image", "reference_image_urls", "reference_mask_urls", "mask_url", "file_url"} 
+            and not value.startswith("http")):
+            try:
+                # Convert file_id to downloadable URL
+                logger.info(f"Converting file_id to URL for field: {field_name}")
+                value = await _convert_file_id_to_url(message, value)
+                logger.info(f"Successfully converted file_id to URL: {value[:50]}...")
+            except Exception as e:
+                logger.error(f"Failed to convert file_id: {e}")
+                await message.answer(f"⚠️ Ошибка при загрузке файла: {e}\n\nПопробуйте загрузить файл снова.")
+                return
+    
     value = _coerce_value(value, field_spec)
 
     try:
@@ -1857,6 +1963,7 @@ async def _save_input_and_continue(message: Message, state: FSMContext, value: A
         _field_prompt(next_field, next_spec),
         reply_markup=_enum_keyboard(next_spec),
     )
+
 
 
 async def _show_confirmation(message: Message, state: FSMContext, model: Optional[Dict[str, Any]]) -> None:
