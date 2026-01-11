@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from app.kie.field_options import get_field_options
+
 logger = logging.getLogger(__name__)
 
 # Загрузка source of truth
@@ -194,6 +196,21 @@ def build_category_payload(
         
         if field_name in user_inputs:
             value = user_inputs[field_name]
+            
+            # Validate enum constraints if present
+            field_enum = field_spec.get('enum')
+            if not field_enum:
+                # Check if field has predefined options
+                field_enum = get_field_options(model_id, field_name)
+                if field_enum:
+                    field_spec['enum'] = field_enum
+            
+            if field_enum and value not in field_enum:
+                logger.warning(
+                    f"Field '{field_name}' value '{value}' not in allowed options {field_enum} "
+                    f"for model {model_id}"
+                )
+            
             if has_input_wrapper:
                 payload['input'][field_name] = value
             else:

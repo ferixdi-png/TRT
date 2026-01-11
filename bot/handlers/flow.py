@@ -18,6 +18,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from app.kie.builder import load_source_of_truth
 from app.kie.validator import validate_input_type, ModelContractError
+from app.kie.field_options import get_field_options, has_field_constraints
 from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
 from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
@@ -1579,6 +1580,12 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
                         'type': field_type,
                         'required': False
                     }
+                    
+                    # Check if field has predefined options
+                    field_options = get_field_options(model_id, field_name)
+                    if field_options:
+                        actual_properties[field_name]['enum'] = field_options
+                        logger.debug(f"Added enum options for {model_id}.{field_name}: {field_options}")
                 
                 # Mark prompt as required if it exists
                 if 'prompt' in actual_properties:
