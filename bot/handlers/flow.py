@@ -1826,7 +1826,7 @@ async def _show_confirmation(message: Message, state: FSMContext, model: Optiona
     else:
         params_str = "Параметры по умолчанию"
     
-    balance = get_charge_manager().get_user_balance(message.from_user.id)
+    balance = await get_charge_manager().get_user_balance(message.from_user.id)
     
     await state.set_state(InputFlow.confirm)
     await message.answer(
