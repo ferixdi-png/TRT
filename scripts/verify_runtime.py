@@ -43,6 +43,8 @@ def check_modules():
 
 check_modules()
 
+# Check if running in TEST_MODE
+TEST_MODE = os.getenv("TEST_MODE") == "1" or os.getenv("SMOKE_MODE") == "1"
 
 def mask_secret(value: str, visible_chars: int = 4) -> str:
     """Mask secret values, showing only last N characters."""
@@ -57,6 +59,11 @@ def check_env_vars() -> Tuple[Dict[str, str], list]:
     Returns:
         (dict of env vars, list of errors)
     """
+    # Skip ENV validation in TEST_MODE/SMOKE_MODE
+    if TEST_MODE:
+        print(f"\n{YELLOW}⊘ Skipping ENV validation (TEST_MODE/SMOKE_MODE enabled){RESET}\n")
+        return {}, []
+    
     required_vars = {
         'TELEGRAM_BOT_TOKEN': 'Telegram bot token',
         'KIE_API_KEY': 'KIE API key',

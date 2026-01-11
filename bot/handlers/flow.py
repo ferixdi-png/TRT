@@ -909,7 +909,7 @@ async def best_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
     )
 
 
-@router.callback_query(F.data == "menu:search")
+@router.callback_query(F.data == "menu:search_models")
 async def search_models_cb(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Start model search flow (MASTER PROMPT requirement).
