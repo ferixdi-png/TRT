@@ -90,7 +90,11 @@ verify-runtime:
 	@echo "Verifying runtime environment..."
 	@python3 scripts/verify_runtime.py
 
-verify: verify-runtime lint test smoke integrity e2e
+verify: verify-runtime lint test smoke integrity e2e smoke-lock
+
+smoke-lock:
+	@echo "Running lock contention smoke tests..."
+	@python3 scripts/smoke_lock.py
 
 smoke-prod:
 	@echo "Running production smoke tests..."

@@ -12,6 +12,7 @@ import os
 import sys
 import logging
 import hashlib
+import asyncio
 from pathlib import Path
 from typing import Optional, Literal
 
@@ -20,10 +21,24 @@ from app.config import get_settings
 
 logger = get_logger(__name__)
 
+# Lock configuration
+LOCK_MODE_WAIT_PASSIVE = "wait_then_passive"  # Safe: wait, then passive if no lock
+LOCK_MODE_WAIT_FORCE = "wait_then_force"      # Risky: force active even without lock
+LOCK_DEFAULT_MODE = LOCK_MODE_WAIT_PASSIVE
+
+# Retry configuration  
+LOCK_WAIT_SECONDS = int(os.getenv('LOCK_WAIT_SECONDS', '60'))
+LOCK_RETRY_BACKOFF_BASE = 0.5  # seconds
+LOCK_RETRY_BACKOFF_MAX = 5.0   # seconds
+LOCK_RETRY_INTERVAL_BG = 10    # seconds (background retry when in passive)
+
 # Глобальное состояние lock
 _lock_handle: Optional[object] = None
 _lock_type: Optional[Literal['postgres', 'file']] = None
 _lock_connection: Optional[object] = None  # PostgreSQL connection (для session-level lock)
+_lock_mode: str = os.getenv('LOCK_MODE', LOCK_DEFAULT_MODE)
+_is_active: bool = False  # True if lock acquired, False if passive
+_bg_retry_task: Optional[asyncio.Task] = None  # Background task for lock retry
 
 
 def _get_lock_key() -> int:
@@ -133,147 +148,95 @@ def _acquire_file_lock() -> Optional[object]:
         return None
 
 
-def _force_release_stale_lock() -> None:
-    """
-    На Render при деплое старый процесс может зависнуть с lock'ом.
-    Этот метод пытается forcefully освободить lock если текущий process_id другой.
-    
-    Это безопасно потому что:
-    - Мы проверяем что это другой процесс
-    - На Render старый контейнер уже умирает при деплое
-    - Lock автоматически освобождается при disconnect (session-level)
-    """
-    try:
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            return
-        
-        from database import get_connection_pool
-        pool = get_connection_pool()
-        if pool is None:
-            return
-        
-        import render_singleton_lock
-        lock_key = _get_lock_key()
-        
-        # Пробуем forcefully unlock (это не гарантирует что lock был у нас, но пробуем)
-        conn = pool.getconn()
-        try:
-            with conn.cursor() as cur:
-                # Просто пробуем unlock, если это был наш lock - хорошо, если нет - курсор просто ничего не сделает
-                cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
-                result = cur.fetchone()[0] if cur.fetchone() else False
-        except:
-            pass
-        finally:
-            try:
-                pool.putconn(conn)
-            except:
-                pass
-        
-        logger.debug("[LOCK] Stale lock release attempted")
-    except Exception as e:
-        logger.debug(f"[LOCK] Could not attempt stale lock release: {e}")
+# REMOVED: _force_release_stale_lock() was conceptually wrong
+# Advisory locks are session-scoped and cannot be released from a different session
+# On Render deploy overlap, we WAIT for old instance to release the lock naturally
 
 
 def acquire_single_instance_lock() -> bool:
     """
-    Попытаться получить single instance lock (PostgreSQL или filelock).
+    Попытаться получить single instance lock с retry и wait/passive логикой.
     
-    На Render: для одного инстанса эта функция ДОЛЖНА вернуть True.
-    Если lock не получен - это либо ошибка БД, либо остаток от старого деплоя.
+    Алгоритм:
+    1. Пытается получить lock в течение LOCK_WAIT_SECONDS с exponential backoff
+    2. Если lock получен -> ACTIVE mode (return True)
+    3. Если не получен:
+       - LOCK_MODE=wait_then_passive -> PASSIVE mode (return False)
+       - LOCK_MODE=wait_then_force -> FORCE ACTIVE (return True, risky!)
     
     Returns:
-        True если lock получен, False в экстренных случаях (passive mode)
-        
-    Side effect:
-        Сохраняет lock handle в глобальной переменной для последующего освобождения
+        True если ACTIVE mode (lock acquired or forced)
+        False если PASSIVE mode (webhook returns 200 but no side effects)
     """
-    global _lock_handle, _lock_type, _lock_connection
+    global _lock_handle, _lock_type, _lock_connection, _is_active
     
     database_url = os.getenv('DATABASE_URL')
-    strict_mode = os.getenv('SINGLETON_LOCK_STRICT', '0') == '1'
-    force_active = os.getenv('SINGLETON_LOCK_FORCE_ACTIVE', '1') == '1'  # Default: True для Render
+    lock_mode = os.getenv('LOCK_MODE', LOCK_DEFAULT_MODE)
     
-    # Пробуем PostgreSQL advisory lock сначала
-    lock_data = _acquire_postgres_lock()
-    if lock_data:
-        _lock_handle = lock_data
-        _lock_connection = lock_data['connection']
-        _lock_type = 'postgres'
-        logger.info("[LOCK] ✅ ACTIVE MODE: Acquired PostgreSQL advisory lock")
-        return True
-    
-    # Если DATABASE_URL установлен, но PostgreSQL lock не получен
+    # Пробуем PostgreSQL advisory lock с retry
     if database_url:
-        logger.warning("=" * 60)
-        logger.warning("[LOCK] PostgreSQL advisory lock NOT acquired on first attempt")
-        logger.warning("[LOCK] Attempting to release any stale lock from previous deployment...")
+        logger.info("[LOCK] Attempting to acquire PostgreSQL advisory lock...")
+        logger.info(f"[LOCK] Mode: {lock_mode}, Wait: {LOCK_WAIT_SECONDS}s")
         
-        # Попробуем освободить старый lock и повторить
-        _force_release_stale_lock()
+        import time
+        start_time = time.time()
+        attempt = 0
         
-        # Повторная попытка получить lock
-        logger.info("[LOCK] Retrying lock acquisition after stale release...")
-        lock_data = _acquire_postgres_lock()
-        if lock_data:
-            _lock_handle = lock_data
-            _lock_connection = lock_data['connection']
-            _lock_type = 'postgres'
-            logger.info("[LOCK] ✅ ACTIVE MODE: Acquired PostgreSQL advisory lock (after stale release)")
-            return True
-        
-        # Если все еще не получилось
-        logger.error("[LOCK] PostgreSQL advisory lock still NOT acquired after stale release")
-        
-        if force_active:
-            # FORCE ACTIVE MODE (для Render с одним инстансом)
-            # Если на Render один инстанс - lock должен быть
-            # Если lock не получен - это ошибка, но мы не можем быть в PASSIVE MODE
-            logger.error("[LOCK] FORCE ACTIVE MODE: Proceeding as ACTIVE despite lock failure")
-            logger.error("[LOCK] WARNING: This assumes you have only ONE Render Web Service instance!")
-            logger.error("[LOCK] If you have multiple instances, they may conflict. Use DATABASE_URL properly!")
-            logger.error("=" * 60)
+        while time.time() - start_time < LOCK_WAIT_SECONDS:
+            lock_data = _acquire_postgres_lock()
+            if lock_data:
+                _lock_handle = lock_data
+                _lock_connection = lock_data['connection']
+                _lock_type = 'postgres'
+                _is_active = True
+                logger.info(f"[LOCK] ✅ ACTIVE MODE: PostgreSQL advisory lock acquired (attempt {attempt + 1})")
+                return True
             
-            # Возвращаем True но отмечаем что это без реального lock'а
-            # Это опасно для multi-instance, но на Render обычно один инстанс
-            return True
-        elif strict_mode:
-            # STRICT MODE: exit
-            logger.error("[LOCK] STRICT MODE: Exiting gracefully (exit code 0)")
+            # Exponential backoff
+            attempt += 1
+            backoff = min(LOCK_RETRY_BACKOFF_BASE * (2 ** attempt), LOCK_RETRY_BACKOFF_MAX)
+            remaining = LOCK_WAIT_SECONDS - (time.time() - start_time)
+            
+            if remaining <= 0:
+                break
+                
+            wait_time = min(backoff, remaining)
+            logger.debug(f"[LOCK] Attempt {attempt} failed, retrying in {wait_time:.1f}s...")
+            time.sleep(wait_time)
+        
+        # Lock not acquired after wait period
+        logger.warning("=" * 60)
+        logger.warning(f"[LOCK] PostgreSQL advisory lock NOT acquired after {LOCK_WAIT_SECONDS}s")
+        logger.warning("[LOCK] This is normal during Render deploy overlap")
+        
+        if lock_mode == LOCK_MODE_WAIT_FORCE:
+            logger.error("[LOCK] ⚠️  FORCE ACTIVE MODE (risky!)")
+            logger.error("[LOCK] Proceeding as ACTIVE despite missing lock")
+            logger.error("[LOCK] WARNING: May cause conflicts if multiple instances running!")
             logger.error("=" * 60)
-            sys.exit(0)
+            _is_active = True
+            return True
         else:
-            # PASSIVE MODE: не завершаем процесс, переходим в safe mode
-            logger.warning("[LOCK] PASSIVE MODE: Telegram runner will be disabled")
-            logger.warning("[LOCK] Healthcheck server will continue running")
-            logger.warning("=" * 60)
+            logger.info("[LOCK] ⏸️  PASSIVE MODE: Webhook will return 200 but no processing")
+            logger.info("[LOCK] Background retry task will attempt to acquire lock periodically")
+            logger.info("=" * 60)
+            _is_active = False
             return False
     
-    # Fallback на filelock ТОЛЬКО если DATABASE_URL не установлен
+    # Fallback to filelock if no DATABASE_URL
     lock_handle = _acquire_file_lock()
     if lock_handle:
         _lock_handle = lock_handle
         _lock_connection = None
         _lock_type = 'file'
+        _is_active = True
+        logger.info("[LOCK] ✅ ACTIVE MODE: File lock acquired")
         return True
     
-    # Lock не получен - другой экземпляр запущен
-    logger.warning("=" * 60)
-    logger.warning("[LOCK] WARNING: Another bot instance is already running")
-    
-    if strict_mode:
-        # STRICT MODE: exit
-        logger.error("[LOCK] STRICT MODE: Exiting gracefully (exit code 0)")
-        logger.error("=" * 60)
-        import sys
-        sys.exit(0)
-    else:
-        # PASSIVE MODE: не завершаем процесс
-        logger.warning("[LOCK] PASSIVE MODE: Telegram runner will be disabled")
-        logger.warning("[LOCK] Healthcheck server will continue running")
-        logger.warning("=" * 60)
-        return False
+    # No lock mechanism available
+    logger.warning("[LOCK] ⚠️  No lock mechanism available, proceeding as ACTIVE")
+    _is_active = True
+    return True
 
 
 def release_single_instance_lock():
@@ -316,6 +279,74 @@ def release_single_instance_lock():
 def is_lock_held() -> bool:
     """Проверить, удерживается ли lock"""
     return _lock_handle is not None and _lock_type is not None
+
+
+def is_active_mode() -> bool:
+    """
+    Проверить, в ACTIVE ли режиме бот (lock получен или forced).
+    PASSIVE mode: webhook returns 200 but no side effects.
+    """
+    return _is_active
+
+
+async def start_background_lock_retry():
+    """
+    Запустить фоновую задачу для retry lock acquisition в PASSIVE режиме.
+    Когда lock становится доступным, переключаемся в ACTIVE mode автоматически.
+    """
+    global _bg_retry_task
+    
+    if _is_active:
+        logger.debug("[LOCK] Already in ACTIVE mode, no background retry needed")
+        return
+    
+    if _bg_retry_task is not None:
+        logger.debug("[LOCK] Background retry task already running")
+        return
+    
+    async def _retry_loop():
+        global _lock_handle, _lock_type, _lock_connection, _is_active
+        
+        logger.info("[LOCK] Starting background lock retry task...")
+        attempt = 0
+        while not _is_active:
+            await asyncio.sleep(LOCK_RETRY_INTERVAL_BG)
+            
+            if _is_active:
+                logger.info("[LOCK] Lock acquired by another path, stopping retry")
+                break
+            
+            attempt += 1
+            logger.info(f"[LOCK] Background retry attempt {attempt}...")
+            
+            # Try to acquire lock (synchronous call)
+            try:
+                lock_data = _acquire_postgres_lock()
+                if lock_data:
+                    _lock_handle = lock_data
+                    _lock_connection = lock_data['connection']
+                    _lock_type = 'postgres'
+                    _is_active = True
+                    logger.info("=" * 60)
+                    logger.info(f"[LOCK] ✅ PASSIVE → ACTIVE: Lock acquired on retry {attempt}!")
+                    logger.info("[LOCK] Bot now processing updates normally")
+                    logger.info("=" * 60)
+                    break
+            except Exception as e:
+                logger.warning(f"[LOCK] Background retry {attempt} failed: {e}")
+    
+    _bg_retry_task = asyncio.create_task(_retry_loop())
+    logger.info("[LOCK] Background lock retry task started")
+
+
+def stop_background_lock_retry():
+    """Остановить фоновую задачу retry lock acquisition"""
+    global _bg_retry_task
+    
+    if _bg_retry_task is not None:
+        _bg_retry_task.cancel()
+        _bg_retry_task = None
+        logger.info("[LOCK] Background lock retry task stopped")
 
 try:
     import psycopg

@@ -5,17 +5,21 @@ import json
 import os
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+from functools import lru_cache
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=1)
 def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[str, Any]:
     """
-    Load SOURCE OF TRUTH v1.2.0-FULL-MERGED.
+    Load SOURCE OF TRUTH v1.2.0-FULL-MERGED (cached for performance).
     
     Single source with 72 models, 100% coverage.
     NO FALLBACKS.
+    
+    Note: Cached with @lru_cache to avoid repeated file reads on hot path.
     """
     master_path = "models/KIE_SOURCE_OF_TRUTH.json"
     
@@ -23,7 +27,7 @@ def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[
         logger.error(f"CRITICAL: SOURCE_OF_TRUTH not found: {master_path}")
         return {}
     
-    logger.info(f"✅ Using SOURCE_OF_TRUTH v1.2.0 (72 models): {master_path}")
+    logger.info(f"✅ Loading SOURCE_OF_TRUTH v1.2.0 (cached): {master_path}")
     
     with open(master_path, 'r', encoding='utf-8') as f:
         return json.load(f)

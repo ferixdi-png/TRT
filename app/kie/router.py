@@ -6,32 +6,37 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
+from functools import lru_cache
 
 from app.kie.field_options import get_field_options
 from app.utils.webhook import build_kie_callback_url
 
 logger = logging.getLogger(__name__)
 
-# Загрузка source of truth
+# Загрузка source of truth с кэшированием
+@lru_cache(maxsize=1)
 def load_v4_source_of_truth() -> Dict[str, Any]:
     """
-    Load source of truth with new API architecture.
+    Load source of truth with new API architecture (cached for performance).
     
     Tries in order:
     1. models/kie_source_of_truth_v4.json (old name)
     2. models/KIE_SOURCE_OF_TRUTH.json (new canonical name)
     3. Fallback to stub
+    
+    Note: Cached with @lru_cache to avoid repeated file reads on hot path.
     """
     # Try old v4 path first (for backwards compatibility)
     v4_path_old = Path(__file__).parent.parent.parent / "models" / "kie_source_of_truth_v4.json"
     if v4_path_old.exists():
+        logger.info(f"✅ Loading SOURCE_OF_TRUTH (cached): {v4_path_old}")
         with open(v4_path_old, 'r', encoding='utf-8') as f:
             return json.load(f)
     
     # Try new canonical path
     sot_path = Path(__file__).parent.parent.parent / "models" / "KIE_SOURCE_OF_TRUTH.json"
     if sot_path.exists():
-        logger.info(f"✅ Using SOURCE_OF_TRUTH (v4 router): {sot_path}")
+        logger.info(f"✅ Loading SOURCE_OF_TRUTH (cached): {sot_path}")
         with open(sot_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     

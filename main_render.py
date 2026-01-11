@@ -335,10 +335,13 @@ def _make_web_app(
                 raise web.HTTPUnauthorized()
 
         if not active_state.active:
-            # During rolling deploy, return 503 to force Telegram retry
-            # until this instance becomes ACTIVE (acquires lock)
-            logger.info("[WEBHOOK] Instance not active (rolling deploy?), returning 503")
-            raise web.HTTPServiceUnavailable()
+            # PASSIVE MODE: During rolling deploy, webhook must return 200 (Telegram requirement)
+            # but we do NOT process updates to avoid side effects (payments, generation, etc.)
+            # Log once per minute to avoid spam
+            if not hasattr(webhook, '_last_passive_log') or time.time() - webhook._last_passive_log > 60:
+                logger.info("[WEBHOOK] ⏸️  PASSIVE MODE: Returning 200 but not processing (waiting for lock)")
+                webhook._last_passive_log = time.time()
+            return web.Response(status=200, text="ok")
 
         # Basic rate limiting per IP
         ip = _client_ip(request)
@@ -549,9 +552,18 @@ async def main() -> None:
 
     active_state = ActiveState(active=bool(lock_acquired))
     if not active_state.active:
-        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (will retry)")
+        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (webhook returns 200, no side effects)")
+        logger.info("[LOCK] Background retry task will attempt to acquire lock periodically")
     else:
-        logger.info("[LOCK] Acquired - ACTIVE")
+        logger.info("[LOCK] Acquired - ACTIVE mode enabled")
+
+    # Start background lock retry task if in passive mode
+    if not active_state.active:
+        try:
+            from app.locking import start_background_lock_retry
+            await start_background_lock_retry()
+        except Exception as e:
+            logger.warning(f"[LOCK] Could not start background retry task: {e}")
 
     db_service = None
     free_manager = None
