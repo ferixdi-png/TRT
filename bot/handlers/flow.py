@@ -19,6 +19,22 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from app.kie.builder import load_source_of_truth
 from app.kie.validator import validate_input_type, ModelContractError
 from app.kie.field_options import get_field_options, has_field_constraints
+from app.kie.flow_types import (
+    get_flow_type,
+    get_flow_description,
+    get_expected_input_order,
+    get_prompt_field_label,
+    should_collect_image_first,
+    should_collect_video_first,
+    should_collect_audio_first,
+    FLOW_IMAGE_EDIT,
+    FLOW_IMAGE_UPSCALE,
+    FLOW_IMAGE2IMAGE,
+    FLOW_IMAGE2VIDEO,
+    FLOW_TEXT2IMAGE,
+    FLOW_TEXT2VIDEO,
+    FLOW_TEXT2AUDIO,
+)
 from app.payments.charges import get_charge_manager
 from app.payments.integration import generate_with_payment
 from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
@@ -619,12 +635,17 @@ class InputContext:
     optional_fields: List[str]  # MASTER PROMPT: "Ввод ВСЕХ параметров (без автоподстановок)"
     properties: Dict[str, Any]
     collected: Dict[str, Any]
+    flow_type: str = "unknown"  # NEW: typed flow for correct input order
     index: int = 0
     collecting_optional: bool = False  # Track if collecting optional params
 
 
-def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
-    """Generate human-friendly prompt with examples."""
+def _field_prompt(field_name: str, field_spec: Dict[str, Any], flow_type: str = "unknown") -> str:
+    """
+    Generate human-friendly prompt with examples.
+    CRITICAL: Uses flow_type to provide context-aware prompts.
+    For image_edit: "prompt" becomes "edit instructions" not "creation prompt".
+    """
     field_type = field_spec.get("type", "string")
     enum = field_spec.get("enum")
     max_length = field_spec.get("max_length")
@@ -656,17 +677,42 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
     
     # Image URL fields - требуют загрузку изображения
     if field_name in {"image_url", "image_urls", "input_image", "reference_image_urls", "reference_mask_urls", "mask_url"}:
-        return (
-            f"🖼️ <b>Загрузите изображение</b>\n\n"
-            f"Отправьте фотографию прямо в чат (не как файл, а как фото).\n\n"
-            f"<i>Как загрузить:</i>\n"
-            f"1️⃣ Нажмите скрепку (📎)\n"
-            f"2️⃣ Выберите 📸 \"Фото\"\n"
-            f"3️⃣ Выберите изображение из галереи\n"
-            f"4️⃣ Нажмите ➡️ \"Отправить\"\n\n"
-            f"<i>Или вставьте URL:</i>\n"
-            f"https://example.com/image.jpg"
-        )
+        # CRITICAL: Different prompt for image_edit vs other flows
+        if flow_type == FLOW_IMAGE_EDIT:
+            return (
+                f"🖼️ <b>Шаг 1: Загрузите изображение для редактирования</b>\n\n"
+                f"Отправьте фото, которое нужно отредактировать.\n\n"
+                f"<i>Как отправить:</i>\n"
+                f"1️⃣ Нажмите скрепку (📎)\n"
+                f"2️⃣ Выберите 📸 \"Фото\" (НЕ документ!)\n"
+                f"3️⃣ Выберите изображение\n"
+                f"4️⃣ Отправьте\n\n"
+                f"<i>Или вставьте URL:</i>\n"
+                f"https://example.com/image.jpg\n\n"
+                f"❗️ После загрузки вы опишете какие изменения сделать"
+            )
+        elif flow_type == FLOW_IMAGE_UPSCALE:
+            return (
+                f"🖼️ <b>Загрузите изображение для улучшения</b>\n\n"
+                f"Отправьте фото, качество которого нужно улучшить.\n\n"
+                f"<i>Как отправить:</i>\n"
+                f"1️⃣ Нажмите скрепку (📎)\n"
+                f"2️⃣ Выберите 📸 \"Фото\"\n"
+                f"3️⃣ Выберите изображение\n"
+                f"4️⃣ Отправьте"
+            )
+        else:
+            return (
+                f"🖼️ <b>Загрузите изображение</b>\n\n"
+                f"Отправьте фотографию прямо в чат (не как файл, а как фото).\n\n"
+                f"<i>Как загрузить:</i>\n"
+                f"1️⃣ Нажмите скрепку (📎)\n"
+                f"2️⃣ Выберите 📸 \"Фото\"\n"
+                f"3️⃣ Выберите изображение из галереи\n"
+                f"4️⃣ Нажмите ➡️ \"Отправить\"\n\n"
+                f"<i>Или вставьте URL:</i>\n"
+                f"https://example.com/image.jpg"
+            )
     
     if field_type in {"file", "file_id", "file_url"}:
         return (
@@ -689,17 +735,43 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
             f"• https://site.com/video.mp4"
         )
     
-    # Text/prompt fields - make them human-friendly
+    # Text/prompt fields - CRITICAL: Context-aware based on flow_type
     if field_name in {"prompt", "text", "description", "input"}:
-        return (
-            f"✍️ <b>Опишите, что вы хотите создать</b>\n\n"
-            f"Чем детальнее описание, тем лучше результат!\n\n"
-            f"<i>Примеры:</i>\n"
-            f"• \"Кот в космосе, реалистичный стиль, 4K качество\"\n"
-            f"• \"Неоновый баннер для Instagram, киберпанк\"\n"
-            f"• \"Логотип для кофейни, минимализм, коричневые тона\"\n"
-            f"• \"Футуристический город на закате, детализация\""
-        )
+        # Use flow-aware label
+        prompt_label = get_prompt_field_label(flow_type, field_name)
+        
+        if flow_type == FLOW_IMAGE_EDIT:
+            return (
+                f"✍️ <b>Шаг 2: {prompt_label}</b>\n\n"
+                f"Опишите КАКИЕ ИЗМЕНЕНИЯ нужно сделать с загруженным изображением.\n\n"
+                f"<i>Примеры инструкций:</i>\n"
+                f"• \"Убери фон и сделай прозрачным\"\n"
+                f"• \"Замени одежду на деловой костюм\"\n"
+                f"• \"Сделай стиль аниме\"\n"
+                f"• \"Добавь солнечный свет и улучши цвета\"\n"
+                f"• \"Удали людей на заднем плане\"\n\n"
+                f"❗️ НЕ описывайте что создать, а ЧТО ИЗМЕНИТЬ"
+            )
+        elif flow_type in [FLOW_IMAGE2IMAGE, FLOW_IMAGE2VIDEO]:
+            return (
+                f"✍️ <b>{prompt_label}</b>\n\n"
+                f"Опишите как преобразовать загруженное изображение.\n\n"
+                f"<i>Примеры:</i>\n"
+                f"• \"Превратить в мультяшный стиль\"\n"
+                f"• \"Сделать эффект старой фотографии\"\n"
+                f"• \"Добавить движение волос\"\n"
+                f"• \"Сделать видео танца\""
+            )
+        else:
+            return (
+                f"✍️ <b>Опишите, что вы хотите создать</b>\n\n"
+                f"Чем детальнее описание, тем лучше результат!\n\n"
+                f"<i>Примеры:</i>\n"
+                f"• \"Кот в космосе, реалистичный стиль, 4K качество\"\n"
+                f"• \"Неоновый баннер для Instagram, киберпанк\"\n"
+                f"• \"Логотип для кофейни, минимализм, коричневые тона\"\n"
+                f"• \"Футуристический город на закате, детализация\""
+            )
     
     # Специальные подсказки для технических полей
     if field_name in {"model", "callBackUrl", "callback_url", "webhook"}:
@@ -1662,12 +1734,40 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
     required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
     optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
     
+    # CRITICAL: Determine flow type for correct input ordering
+    flow_type = get_flow_type(model_id, model)
+    logger.info(f"Model {model_id} has flow_type={flow_type}")
+    
+    # CRITICAL: For typed flows, reorder required fields according to flow expectations
+    # This ensures image_edit collects image BEFORE prompt
+    expected_order = get_expected_input_order(flow_type)
+    if expected_order:
+        # Reorder required fields to match expected order
+        ordered_required = []
+        for expected_field in expected_order:
+            # Find matching field (handle variations like image_url vs input_image)
+            for req_field in required_fields:
+                if expected_field in {"image_url", "image_urls", "input_image"} and req_field in {"image_url", "image_urls", "input_image"}:
+                    if req_field not in ordered_required:
+                        ordered_required.append(req_field)
+                elif expected_field == req_field:
+                    ordered_required.append(req_field)
+        
+        # Add remaining required fields not in expected order
+        for req_field in required_fields:
+            if req_field not in ordered_required:
+                ordered_required.append(req_field)
+        
+        required_fields = ordered_required
+        logger.info(f"Reordered required fields for {flow_type}: {required_fields}")
+    
     ctx = InputContext(
         model_id=model_id,
         required_fields=required_fields,
         optional_fields=optional_fields,
         properties=properties,
         collected={},
+        flow_type=flow_type,
         collecting_optional=False
     )
     await state.update_data(flow_ctx=ctx.__dict__)
@@ -1679,7 +1779,7 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
     field_spec = properties.get(field_name, {})
     await state.set_state(InputFlow.waiting_input)
     await callback.message.answer(
-        _field_prompt(field_name, field_spec),
+        _field_prompt(field_name, field_spec, flow_type),
         reply_markup=_enum_keyboard(field_spec),
     )
 
@@ -1726,7 +1826,7 @@ async def opt_start_cb(callback: CallbackQuery, state: FSMContext) -> None:
     field_spec = flow_ctx.properties.get(field_name, {})
     await state.set_state(InputFlow.waiting_input)
     await callback.message.answer(
-        _field_prompt(field_name, field_spec),
+        _field_prompt(field_name, field_spec, flow_ctx.flow_type),
         reply_markup=_enum_keyboard(field_spec),
     )
 
@@ -1960,7 +2060,7 @@ async def _save_input_and_continue(message: Message, state: FSMContext, value: A
     next_field = current_fields[flow_ctx.index]
     next_spec = flow_ctx.properties.get(next_field, {})
     await message.answer(
-        _field_prompt(next_field, next_spec),
+        _field_prompt(next_field, next_spec, flow_ctx.flow_type),
         reply_markup=_enum_keyboard(next_spec),
     )
 
