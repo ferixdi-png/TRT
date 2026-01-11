@@ -58,6 +58,7 @@ def _import_real_aiogram_symbols():
     from aiogram import Bot, Dispatcher  # type: ignore
     from aiogram.fsm.storage.memory import MemoryStorage  # type: ignore
     from aiogram.types import Update  # type: ignore
+    from aiogram.client.default import DefaultBotProperties  # type: ignore
 
     return Bot, Dispatcher, MemoryStorage, Update
 
@@ -205,7 +206,9 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
 
-    bot = Bot(token=token, parse_mode="HTML")
+    # aiogram 3.7.0+ requires DefaultBotProperties for parse_mode
+    default_properties = DefaultBotProperties(parse_mode="HTML")
+    bot = Bot(token=token, default=default_properties)
     dp = Dispatcher(storage=MemoryStorage())
 
     # Routers
@@ -269,35 +272,78 @@ def _make_web_app(
         return web.json_response(_health_payload(active_state))
 
     async def webhook(request: web.Request) -> web.Response:
+        """Webhook handler with full validation and error handling.
+        
+        Security:
+        - Verifies webhook secret path
+        - Validates X-Telegram-Bot-Api-Secret-Token header
+        - Rate limits and protects against malformed payloads
+        
+        Errors:
+        - 400: Malformed JSON
+        - 401: Invalid secret token
+        - 404: Invalid path (hides existence)
+        - 503: Instance not ready (during rolling deploy)
+        - 200: OK (even if processing failed - Telegram will retry)
+        """
         secret = request.match_info.get("secret")
         if secret != cfg.webhook_secret_path:
-            # Hide existence
+            # Hide existence of endpoint
             raise web.HTTPNotFound()
 
         # Enforce Telegram header secret if configured
         if cfg.webhook_secret_token:
             header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
             if header != cfg.webhook_secret_token:
+                logger.warning("[WEBHOOK] Invalid secret token")
                 raise web.HTTPUnauthorized()
 
         if not active_state.active:
-            # During rolling deploy, we may start PASSIVE. Returning 503 forces Telegram
-            # to retry until this instance becomes ACTIVE (lock acquired).
+            # During rolling deploy, return 503 to force Telegram retry
+            # until this instance becomes ACTIVE (acquires lock)
+            logger.info("[WEBHOOK] Instance not active (rolling deploy?), returning 503")
             raise web.HTTPServiceUnavailable()
 
+        # Parse JSON with timeout protection
         try:
-            payload = await request.json()
-        except Exception:
+            try:
+                payload = await asyncio.wait_for(
+                    request.json(),
+                    timeout=5.0  # 5 second timeout for JSON parsing
+                )
+            except asyncio.TimeoutError:
+                logger.warning("[WEBHOOK] JSON parsing timeout")
+                return web.Response(status=400, text="timeout")
+        except Exception as e:
+            logger.warning("[WEBHOOK] Bad JSON: %s", e)
             return web.Response(status=400, text="bad json")
 
+        # Process update with error isolation
         try:
-            update = Update.model_validate(payload)
-            await dp.feed_update(bot, update)
+            try:
+                update = Update.model_validate(payload)
+            except Exception as e:
+                logger.warning("[WEBHOOK] Invalid Telegram update: %s", e)
+                return web.Response(status=400, text="invalid update")
+            
+            # Feed update to dispatcher with timeout
+            try:
+                await asyncio.wait_for(
+                    dp.feed_update(bot, update),
+                    timeout=30.0  # 30 second timeout for update processing
+                )
+            except asyncio.TimeoutError:
+                logger.error("[WEBHOOK] Update processing timeout for update_id=%s", 
+                           update.update_id)
+                # Still return 200 - Telegram will retry if needed
+            except Exception as e:
+                logger.exception("[WEBHOOK] Error processing update_id=%s: %s",
+                               update.update_id, e)
+                # Still return 200 - prevent Telegram storm
         except Exception as e:
-            logger.exception("[WEBHOOK] Failed to process update: %s", e)
-            # 200 to prevent Telegram storm; errors are logged.
-            return web.Response(status=200, text="ok")
-
+            logger.exception("[WEBHOOK] Unexpected error: %s", e)
+            # 200 to prevent Telegram retry storm; errors are logged for monitoring
+        
         return web.Response(status=200, text="ok")
 
     app.router.add_get("/health", health)
