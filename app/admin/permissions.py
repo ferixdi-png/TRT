@@ -13,7 +13,10 @@ def get_admin_ids() -> List[int]:
     """Get admin user IDs from ENV."""
     admin_ids_str = os.getenv("ADMIN_IDS", "")
     if not admin_ids_str:
-        return []
+        admin_id = os.getenv("ADMIN_ID", "").strip()
+        if not admin_id:
+            return []
+        admin_ids_str = admin_id
     
     try:
         return [int(x.strip()) for x in admin_ids_str.split(",") if x.strip()]
