@@ -265,6 +265,23 @@ def _make_web_app(
     active_state: ActiveState,
 ) -> web.Application:
     app = web.Application()
+    # In-memory resilience structures (single instance assumption)
+    recent_update_ids: set[int] = set()
+    rate_map: dict[str, list[float]] = {}
+
+    def _client_ip(request: web.Request) -> str:
+        ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        return ip or (request.remote or "unknown")
+
+    def _rate_limited(ip: str, now: float, limit: int = 5, window_s: float = 1.0) -> bool:
+        hits = rate_map.get(ip, [])
+        hits = [t for t in hits if now - t <= window_s]
+        if len(hits) >= limit:
+            rate_map[ip] = hits
+            return True
+        hits.append(now)
+        rate_map[ip] = hits
+        return False
 
     async def health(_request: web.Request) -> web.Response:
         return web.json_response(_health_payload(active_state))
@@ -305,6 +322,13 @@ def _make_web_app(
             logger.info("[WEBHOOK] Instance not active (rolling deploy?), returning 503")
             raise web.HTTPServiceUnavailable()
 
+        # Basic rate limiting per IP
+        ip = _client_ip(request)
+        now = time.time()
+        if _rate_limited(ip, now):
+            logger.warning("[WEBHOOK] Rate limit exceeded for ip=%s", ip)
+            return web.Response(status=200, text="ok")
+
         # Parse JSON with timeout protection
         try:
             try:
@@ -319,7 +343,7 @@ def _make_web_app(
             logger.warning("[WEBHOOK] Bad JSON: %s", e)
             return web.Response(status=400, text="bad json")
 
-        # Process update with error isolation
+        # Process update with error isolation and duplicate suppression
         try:
             try:
                 update = Update.model_validate(payload)
@@ -327,6 +351,14 @@ def _make_web_app(
                 logger.warning("[WEBHOOK] Invalid Telegram update: %s", e)
                 return web.Response(status=400, text="invalid update")
             
+            try:
+                update_id = int(getattr(update, "update_id", 0))
+            except Exception:
+                update_id = 0
+            if update_id and update_id in recent_update_ids:
+                logger.info("[WEBHOOK] Duplicate update_id=%s ignored", update_id)
+                return web.Response(status=200, text="ok")
+
             # Feed update to dispatcher with timeout
             try:
                 await asyncio.wait_for(
@@ -341,6 +373,9 @@ def _make_web_app(
                 logger.exception("[WEBHOOK] Error processing update_id=%s: %s",
                                update.update_id, e)
                 # Still return 200 - prevent Telegram storm
+            else:
+                if update_id:
+                    recent_update_ids.add(update_id)
         except Exception as e:
             logger.exception("[WEBHOOK] Unexpected error: %s", e)
             # 200 to prevent Telegram retry storm; errors are logged for monitoring

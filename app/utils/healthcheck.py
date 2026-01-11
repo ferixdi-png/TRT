@@ -5,7 +5,7 @@ Healthcheck endpoint для Render
 
 import json
 import time
-from typing import Optional
+from typing import Optional, Dict, List
 
 from aiohttp import web
 from telegram import Update
@@ -18,6 +18,28 @@ logger = get_logger(__name__)
 _health_server: Optional[web.Application] = None
 _health_runner: Optional[web.AppRunner] = None
 _start_time: Optional[float] = None
+
+# Webhook resilience state (in-memory; single instance on Render)
+_recent_update_ids: set[int] = set()
+_rate_map: Dict[str, List[float]] = {}
+
+
+def _get_client_ip(request: web.Request) -> str:
+    # Prefer X-Forwarded-For, fallback to request.remote
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    return ip or (request.remote or "unknown")
+
+
+def _rate_limited(ip: str, now: float, limit: int = 5, window_s: float = 1.0) -> bool:
+    hits = _rate_map.get(ip, [])
+    # Drop old hits
+    hits = [t for t in hits if now - t <= window_s]
+    if len(hits) >= limit:
+        _rate_map[ip] = hits
+        return True
+    hits.append(now)
+    _rate_map[ip] = hits
+    return False
 
 
 def set_start_time():
@@ -71,6 +93,14 @@ async def webhook_handler(request, application, secret_path: str, secret_token: 
         if header_token != secret_token:
             return web.Response(status=403, text="forbidden")
 
+    # Basic rate limiting per IP
+    ip = _get_client_ip(request)
+    now = time.time()
+    if _rate_limited(ip, now):
+        logger.warning("[WEBHOOK] %s Rate limit exceeded for ip=%s", correlation_tag(), ip)
+        # Return 200 to avoid Telegram retry storms, but skip processing
+        return web.Response(status=200, text="ok")
+
     try:
         payload = await request.json()
     except Exception:
@@ -78,9 +108,20 @@ async def webhook_handler(request, application, secret_path: str, secret_token: 
         return web.Response(status=200, text="ok")
 
     try:
-        ensure_correlation_id(str(payload.get("update_id", "")))
+        update_id = (
+            int(payload.get("update_id", 0))
+            if isinstance(payload.get("update_id", 0), (int, str))
+            else 0
+        )
+        if update_id and update_id in _recent_update_ids:
+            logger.info("[WEBHOOK] %s Duplicate update_id=%s ignored", correlation_tag(), update_id)
+            return web.Response(status=200, text="ok")
+
+        ensure_correlation_id(str(update_id))
         update = Update.de_json(payload, application.bot)
         await application.process_update(update)
+        if update_id:
+            _recent_update_ids.add(update_id)
     except Exception as exc:
         logger.exception("[WEBHOOK] %s Failed to process update: %s", correlation_tag(), exc)
         return web.Response(status=200, text="ok")
