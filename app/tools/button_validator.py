@@ -6,31 +6,34 @@ from typing import Set, Tuple, List, Dict
 
 
 def extract_button_callbacks(app_dir: Path = None) -> Dict[str, List[str]]:
-    """
-    Extract callback patterns from buttons/menus.
-    
-    Returns:
-        Dict mapping button name to list of callback_data patterns
+    """Extract callback patterns from buttons/menus.
+
+    Возвращает словарь: имя файла -> список callback_data. Теперь сканируем
+    как `app/helpers`, так и `bot/handlers`, потому что часть кнопок (например
+    help-меню) объявлена прямо в хэндлерах.
     """
     if app_dir is None:
         app_dir = Path(__file__).parent.parent
-    
-    callbacks = {}
-    
-    # Search for InlineKeyboardButton in helpers and buttons
-    for py_file in (app_dir / "helpers").glob("*.py"):
-        with open(py_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Find all InlineKeyboardButton definitions
-        pattern = r'InlineKeyboardButton\([^,]+,\s*callback_data=["\']([^"\']+)["\']'
-        matches = re.findall(pattern, content)
-        
-        if matches:
-            if py_file.stem not in callbacks:
-                callbacks[py_file.stem] = []
-            callbacks[py_file.stem].extend(matches)
-    
+
+    callbacks: Dict[str, List[str]] = {}
+
+    # Директории, где могут объявляться InlineKeyboardButton
+    search_roots = [app_dir / "helpers", app_dir.parent / "bot" / "handlers"]
+
+    for root in search_roots:
+        if not root.exists():
+            continue
+
+        for py_file in root.glob("*.py"):
+            with open(py_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            pattern = r'InlineKeyboardButton\([^,]+,\s*callback_data=["\']([^"\']+)["\']'
+            matches = re.findall(pattern, content)
+
+            if matches:
+                callbacks.setdefault(py_file.stem, []).extend(matches)
+
     return callbacks
 
 
