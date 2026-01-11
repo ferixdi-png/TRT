@@ -1379,7 +1379,12 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
         )
         return
     
-    await callback.message.edit_text("⏳ Повторная генерация запущена...")
+    await callback.message.edit_text(
+        f"🚀 <b>Повторная генерация</b>\n\n"
+        f"📋 <b>Модель:</b> {escape_html(model_name)}\n\n"
+        f"⏳ Инициализация...\n"
+        f"▰▱▱▱▱▱▱▱▱▱ 10%"
+    )
     
     def heartbeat(text: str) -> None:
         asyncio.create_task(callback.message.answer(text))
@@ -1960,17 +1965,27 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         inputs_preview = f"Промпт: {prompt_text_safe}\n"
 
     progress_msg = await callback.message.edit_text(
-        f"⏳ <b>Генерация запущена</b>\n\n"
-        f"Модель: {escape_html(model_display)}\n"
-        f"{inputs_preview}"
-        f"Инициализация...",
+        f"🚀 <b>Генерация запущена</b>\n\n"
+        f"📋 <b>Модель:</b> {escape_html(model_display)}\n"
+        f"{inputs_preview}\n"
+        f"⏳ Инициализация...\n"
+        f"▰▱▱▱▱▱▱▱▱▱ 10%",
         parse_mode="HTML"
     )
 
     # MASTER PROMPT: "7. Прогресс / ETA"
     # Update SAME message instead of creating new ones
+    progress_stage = {"current": 0}  # Track progress
+    
     def heartbeat(text: str) -> None:
-        asyncio.create_task(progress_msg.edit_text(text, parse_mode="HTML"))
+        # Добавляем прогресс-бар к сообщению
+        progress_stage["current"] = min(progress_stage["current"] + 10, 90)
+        filled = int(progress_stage["current"] / 10)
+        empty = 10 - filled
+        bar = "▰" * filled + "▱" * empty
+        
+        enhanced_text = f"{text}\n{bar} {progress_stage['current']}%"
+        asyncio.create_task(progress_msg.edit_text(enhanced_text, parse_mode="HTML"))
 
     charge_task_id = f"charge_{callback.from_user.id}_{callback.message.message_id}"
     _mark_generation_started(callback.from_user.id)

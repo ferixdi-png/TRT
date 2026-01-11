@@ -450,13 +450,22 @@ def build_payload(
             else:
                 payload['input'][field_name] = value
     
-    # КРИТИЧНО: Для ПРЯМОГО формата добавляем model field
+    # КРИТИЧНО: Для ПРЯМОГО формата добавляем системные поля
     if is_direct_format:
         if 'model' not in payload:
             payload['model'] = model_id
-            logger.debug(f"Added model field for direct format: {model_id}")
+            logger.debug(f"✓ Auto-added 'model': {model_id}")
+        
+        # callBackUrl - опциональное поле, добавляем пустое значение если требуется
+        if 'callBackUrl' not in payload:
+            # Проверяем, требуется ли оно в schema
+            if 'callBackUrl' in input_schema and input_schema['callBackUrl'].get('required'):
+                # Добавляем пустую строку, т.к. это только для синхронного режима
+                payload['callBackUrl'] = ""
+                logger.debug(f"✓ Auto-added empty 'callBackUrl' (sync mode)")
     
     validate_payload_before_create_task(model_id, payload, model_schema)
+    logger.info(f"🎯 FINAL PAYLOAD | Model: {model_id} | Keys: {list(payload.keys())}")
     return payload
 
 
