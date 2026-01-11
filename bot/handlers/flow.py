@@ -327,6 +327,9 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="💰 Баланс", callback_data="menu:balance"),
         InlineKeyboardButton(text="📜 История", callback_data="menu:history"),
     ])
+    buttons.append([
+        InlineKeyboardButton(text="🤝 Партнёрская программа", callback_data="menu:referral"),
+    ])
     buttons.append([InlineKeyboardButton(text="❓ Помощь", callback_data="menu:help")])
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -1435,18 +1438,61 @@ async def support_cb(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.in_({"balance", "menu:balance"}))
 async def balance_cb(callback: CallbackQuery) -> None:
+    """
+    Redirect to real balance handler.
+    CRITICAL: Balance/topup must NEVER disappear - always show menu.
+    """
+    # Trigger balance:main handler from balance.py
+    from bot.handlers.balance import cb_balance_main
+    await cb_balance_main(callback, None)
+
+
+
+@router.callback_query(F.data == "menu:referral")
+async def referral_cb(callback: CallbackQuery) -> None:
+    """
+    Referral/affiliate program.
+    CRITICAL: Must NEVER disappear - show explanation if disabled.
+    """
     await callback.answer()
-    balance = await get_charge_manager().get_user_balance(callback.from_user.id)
-    await callback.message.edit_text(
-        f"💰 Баланс: {format_price_rub(balance)}\n\n"
-        "Пополнение временно доступно через поддержку.",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="ℹ️ Поддержка", callback_data="menu:support")],
-                [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")],
-            ]
-        ),
-    )
+    
+    # Check if referral system is available
+    referral_enabled = os.getenv("REFERRAL_ENABLED", "false").lower() == "true"
+    
+    if referral_enabled:
+        # TODO: Implement full referral system
+        text = (
+            "🤝 <b>Партнёрская программа</b>\n\n"
+            "Приглашайте друзей и получайте бонусы!\n\n"
+            "📋 <b>Как это работает:</b>\n"
+            "1. Поделитесь своей ссылкой\n"
+            "2. Ваш друг регистрируется и делает первую генерацию\n"
+            "3. Вы оба получаете бонус 50₽\n\n"
+            "💰 <b>Ваша статистика:</b>\n"
+            "• Приглашено: 0 человек\n"
+            "• Заработано: 0₽\n\n"
+            "Ваша реферальная ссылка:\n"
+            f"https://t.me/{callback.bot.username}?start=ref{callback.from_user.id}"
+        )
+    else:
+        text = (
+            "🤝 <b>Партнёрская программа</b>\n\n"
+            "⚠️ <b>Временно недоступна</b>\n\n"
+            "Мы работаем над запуском партнёрской программы.\n"
+            "Она будет доступна в ближайшее время!\n\n"
+            "📋 <b>Что будет доступно:</b>\n"
+            "• Реферальные ссылки\n"
+            "• Бонусы за приглашения\n"
+            "• Статистика заработка\n"
+            "• Вывод средств\n\n"
+            "Следите за обновлениями!"
+        )
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")],
+    ])
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "menu:history")
