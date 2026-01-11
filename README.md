@@ -80,6 +80,41 @@ python main_render.py
 - Health URL: `/health` (GET) — ожидается 200
 - Webhook URL: `${WEBHOOK_BASE_URL}/webhook/${TELEGRAM_BOT_TOKEN}` — секрет-токен проверяется, если задан
 
+**FINAL RENDER REQUIREMENTS (источник правды):**
+
+| Переменная | Обязательно | Описание |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | ✅ | Токен от @BotFather |
+| `KIE_API_KEY` | ✅ | API ключ от kie.ai |
+| `DATABASE_URL` | ✅ | PostgreSQL DSN (Internal URL из Render) |
+| `ADMIN_ID` | ✅ | Ваш Telegram ID (целое число) |
+| `BOT_MODE` | ✅ | Должен быть `webhook` для Render |
+| `PORT` | ✅ | По умолчанию 8000 (Render устанавливает автоматически) |
+| `WEBHOOK_BASE_URL` | ✅ для webhook | Полный URL вашего сервиса (https://yourservice.onrender.com) |
+| `WEBHOOK_SECRET_PATH` | ⭐ рекомендуется | Скрытая часть пути webhook (для безопасности, например `secret123`) |
+| `WEBHOOK_SECRET_TOKEN` | ⭐ рекомендуется | Дополнительный токен валидации для Telegram webhook (генерируй с `openssl rand -hex 32`) |
+| `KIE_CALLBACK_PATH` | ⭐ рекомендуется | Путь для KIE callback (по умолчанию `callbacks/kie`) |
+| `KIE_CALLBACK_TOKEN` | ⭐ рекомендуется | Токен валидации для KIE callback (генерируй с `openssl rand -hex 32`) |
+| `DB_MAXCONN` | Опционально | Макс. connections к БД (по умолчанию 5) |
+| `PAYMENT_BANK`, `PAYMENT_CARD_HOLDER`, `PAYMENT_PHONE` | Опционально | Для платежных систем (если используются) |
+| `SUPPORT_TELEGRAM`, `SUPPORT_TEXT` | Опционально | Контакты поддержки для пользователей |
+
+**Webhook URLs (как их найти):**
+
+1. **Telegram webhook** → Render URL будет: `https://yourservice.onrender.com/webhook/{WEBHOOK_SECRET_PATH}`
+   - Telegram отправляет POST с header `X-Telegram-Bot-Api-Secret-Token: {WEBHOOK_SECRET_TOKEN}`
+   
+2. **KIE callback** → URL будет: `https://yourservice.onrender.com/{KIE_CALLBACK_PATH}`
+   - KIE отправляет POST с header `X-KIE-Callback-Token: {KIE_CALLBACK_TOKEN}`
+
+**Health check:** `curl https://yourservice.onrender.com/health`  
+→ Ожидается: `{"status": "ok", "storage": "postgres", "kie_mode": "real"}`
+
+**⚠️ РИСК: Кредиты KIE.ai** — В PRODUCTION 402 ошибка вернёт **честный FAIL** (не мок). Убедись, что:
+- Ключ `KIE_API_KEY` актуален  
+- На аккаунте Kie.ai достаточно кредитов  
+- Режим тестирования отключен (`DRY_RUN` и `TEST_MODE` = 0 или не установлены)
+
 ### Автоматический деплой через GitHub Actions:
 
 1. **Добавь GitHub Secrets** (один раз):

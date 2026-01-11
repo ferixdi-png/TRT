@@ -40,6 +40,13 @@ REQUIRED_ENV_KEYS = [
     'WEBHOOK_BASE_URL',
 ]
 
+# Webhook security (при BOT_MODE=webhook) - настоятельно рекомендуется
+WEBHOOK_RECOMMENDED_KEYS = [
+    'WEBHOOK_SECRET_PATH',
+    'WEBHOOK_SECRET_TOKEN',
+    'KIE_CALLBACK_PATH',
+    'KIE_CALLBACK_TOKEN',
+]
 
 def validate_env_keys() -> Tuple[bool, List[str]]:
     """
