@@ -91,3 +91,12 @@ verify-runtime:
 	@python3 scripts/verify_runtime.py
 
 verify: verify-runtime lint test smoke integrity e2e
+smoke-prod:
+	@echo "Running production smoke tests..."
+	SMOKE_MODE=1 TEST_MODE=1 DRY_RUN=1 BOT_MODE=webhook PORT=8000 \
+	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
+	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
+	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
+	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
+	WEBHOOK_SECRET_PATH=test WEBHOOK_SECRET_TOKEN=smoke-secret \
+	python -m app.tools.smoke --report-file SMOKE_REPORT.md && cat SMOKE_REPORT.md
