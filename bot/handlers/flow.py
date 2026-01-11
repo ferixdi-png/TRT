@@ -1546,6 +1546,55 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
         optional_fields = [k for k in properties.keys() if k not in required_fields]
     
+    # IMPORTANT: Handle wrapped input schema (e.g., z-image with input: {type: dict, examples: [...]})
+    # Extract real user fields from examples
+    if 'input' in properties and isinstance(properties['input'], dict):
+        input_field_spec = properties['input']
+        
+        # Check if input has examples
+        if 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
+            examples = input_field_spec['examples']
+            if examples and isinstance(examples[0], dict):
+                # Extract field list from first example
+                example_structure = examples[0]
+                actual_properties = {}
+                for field_name, field_value in example_structure.items():
+                    # Infer type from example value
+                    if isinstance(field_value, bool):
+                        field_type = 'boolean'
+                    elif isinstance(field_value, str):
+                        field_type = 'string'
+                    elif isinstance(field_value, (int, float)):
+                        field_type = 'number'
+                    elif isinstance(field_value, dict):
+                        field_type = 'object'
+                    elif isinstance(field_value, list):
+                        field_type = 'array'
+                    else:
+                        field_type = 'string'
+                    
+                    actual_properties[field_name] = {
+                        'type': field_type,
+                        'required': False
+                    }
+                
+                # Mark prompt as required if it exists
+                if 'prompt' in actual_properties:
+                    actual_properties['prompt']['required'] = True
+                
+                # Replace properties with actual user fields
+                properties = actual_properties
+                required_fields = [k for k, v in properties.items() if v.get('required', False)]
+                optional_fields = [k for k in properties.keys() if k not in required_fields]
+                logger.info(f"Extracted {len(properties)} user fields from input wrapper examples for {model_id}")
+        
+        elif 'properties' in input_field_spec:
+            # input has nested properties schema
+            properties = input_field_spec['properties']
+            required_fields = input_field_spec.get("required", [])
+            optional_fields = [k for k in properties.keys() if k not in required_fields]
+            logger.info(f"Using nested input properties for {model_id}")
+    
     # CRITICAL: Filter out system fields from display to user
     required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
     optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
@@ -1995,6 +2044,13 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
     charge_task_id = f"charge_{callback.from_user.id}_{callback.message.message_id}"
     _mark_generation_started(callback.from_user.id)
+    
+    # CRITICAL LOGGING: Log collected inputs before generation
+    logger.info(f"Starting generation for user {callback.from_user.id}")
+    logger.info(f"  - Model: {flow_ctx.model_id}")
+    logger.info(f"  - Collected inputs: {flow_ctx.collected}")
+    logger.info(f"  - Collected keys: {list(flow_ctx.collected.keys())}")
+    
     try:
         result = await generate_with_payment(
             model_id=flow_ctx.model_id,

@@ -198,6 +198,16 @@ def build_category_payload(
             logger.warning(f"Required field '{field_name}' missing for model {model_id}")
     
     logger.info(f"Built {category} payload for {model_id}: {list(payload.keys())}")
+    
+    # DETAILED LOGGING FOR DEBUGGING
+    logger.debug(f"  - has_input_wrapper: {has_input_wrapper}")
+    logger.debug(f"  - user_inputs keys: {list(user_inputs.keys())}")
+    if has_input_wrapper:
+        logger.debug(f"  - payload['input'] keys: {list(payload.get('input', {}).keys())}")
+        logger.debug(f"  - payload['input'] content: {payload.get('input', {})}")
+    else:
+        logger.debug(f"  - payload top-level keys: {[k for k in payload.keys() if k not in ['model', 'callBackUrl']]}")
+    
     return payload
 
 

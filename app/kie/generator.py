@@ -161,7 +161,10 @@ class KieGenerator:
             # Build payload using appropriate builder
             if is_v4:
                 logger.info(f"Using V4 API for model {model_id}")
+                logger.info(f"  - user_inputs to build_category_payload: {user_inputs}")
+                logger.info(f"  - user_inputs keys: {list(user_inputs.keys())}")
                 payload = build_category_payload(model_id, user_inputs)
+                logger.info(f"  - payload built: {payload}")
             else:
                 logger.info(f"Using V3 API for model {model_id}")
                 payload = build_payload(model_id, user_inputs, self.source_of_truth)
