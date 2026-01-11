@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "source": "docs/*_INTEGRATION.md",
-  "build_timestamp": "2026-01-11T19:24:05.278016+00:00",
+  "build_timestamp": "2026-01-11T19:56:47.534488+00:00",
   "models_count": 75,
   "models": {
     "flux-2/pro-text-to-image": {
@@ -4154,5 +4154,5 @@
       "description": "Документация по интеграции модели wan/2-2-a14b-speech-to-video-turbo согласно официальной документации KIE AI API."
     }
   },
-  "checksum": "bf0a51dec25a723618954271165a09d774688c70d8d57512e8262d5bd9c18cad"
+  "checksum": "829991807155437b6135f2dc6f2f6b96cf4cabfe2a5bae8f0895c898ee9c19b1"
 }

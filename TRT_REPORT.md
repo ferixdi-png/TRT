@@ -492,22 +492,6 @@ d563593 - PHASE 1: Fix flow contracts & required fields ⭐ (CRITICAL)
 
 ---
 
-## KIE.ai TRUTH SYNC STATUS
-
-**Last Sync:** 2026-01-11 20:00 UTC  
-**Status:** SYNC_UNAVAILABLE
-
-*No changes detected.*
-
-**Reason:** KIE.ai does not provide public JSON API for models.  
-**Update Method:** Manual updates via SOURCE_OF_TRUTH.json  
-**Next Steps:** Monitor KIE.ai documentation for API endpoints.
-
----
-
-**Report Generated:** January 11, 2026 20:00 UTC  
-**Status:** ✅ **100% PRODUCTION READY - ALL DoD CRITERIA MET - SAFE TO DEPLOY**
-
 ### Payments & Idempotence ✅
 - Payment idempotency via `idempotency_key` field
 - Reserve + commit pattern for atomicity
@@ -583,6 +567,19 @@ Header: X-KIE-Callback-Token = {KIE_CALLBACK_TOKEN}
 ## KIE.ai TRUTH SYNC STATUS
 
 **Last Sync:** 2026-01-11 19:53 UTC  
+**Status:** SYNC_UNAVAILABLE
+
+*No changes detected.*
+
+**Reason:** KIE.ai does not provide public JSON API for models.  
+**Update Method:** Manual updates via SOURCE_OF_TRUTH.json  
+**Next Steps:** Monitor KIE.ai documentation for API endpoints.
+
+---
+
+## KIE.ai TRUTH SYNC STATUS
+
+**Last Sync:** 2026-01-11 19:57 UTC  
 **Status:** SYNC_UNAVAILABLE
 
 *No changes detected.*
