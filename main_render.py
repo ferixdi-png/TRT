@@ -60,10 +60,10 @@ def _import_real_aiogram_symbols():
     from aiogram.types import Update  # type: ignore
     from aiogram.client.default import DefaultBotProperties  # type: ignore
 
-    return Bot, Dispatcher, MemoryStorage, Update
+    return Bot, Dispatcher, MemoryStorage, Update, DefaultBotProperties
 
 
-Bot, Dispatcher, MemoryStorage, Update = _import_real_aiogram_symbols()
+Bot, Dispatcher, MemoryStorage, Update, DefaultBotProperties = _import_real_aiogram_symbols()
 
 from app.utils.logging_config import setup_logging  # noqa: E402
 from app.utils.runtime_state import runtime_state  # noqa: E402
