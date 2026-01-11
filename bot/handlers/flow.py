@@ -1438,14 +1438,14 @@ async def support_cb(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.in_({"balance", "menu:balance"}))
-async def balance_cb(callback: CallbackQuery) -> None:
+async def balance_cb(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Redirect to real balance handler.
     CRITICAL: Balance/topup must NEVER disappear - always show menu.
     """
     # Trigger balance:main handler from balance.py
     from bot.handlers.balance import cb_balance_main
-    await cb_balance_main(callback, None)
+    await cb_balance_main(callback, state)
 
 
 

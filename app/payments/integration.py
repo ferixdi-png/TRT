@@ -57,6 +57,24 @@ async def generate_with_payment(
         logger.info(f"{correlation_tag()} 🆓 Model {model_id} is FREE - skipping payment")
         generator = KieGenerator()
         gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        
+        # CRITICAL: If KIE returns 402 for "free" model, it's a config mismatch
+        if not gen_result.get('success') and gen_result.get('error_code') == 'INSUFFICIENT_CREDITS':
+            logger.error(
+                f"⚠️ Model {model_id} marked FREE but KIE returned 402! "
+                f"This is a SOURCE_OF_TRUTH mismatch. Model requires credits."
+            )
+            # Return honest error to user
+            return {
+                **gen_result,
+                'charge_task_id': None,
+                'payment_status': 'free_tier_mismatch',
+                'message': (
+                    f"❌ Модель {model_id} помечена как бесплатная, но требует кредиты KIE.ai. "
+                    f"Пожалуйста, пополните баланс KIE.ai или выберите другую модель."
+                ),
+            }
+        
         return {
             **gen_result,
             'charge_task_id': None,

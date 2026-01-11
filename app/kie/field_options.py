@@ -4,28 +4,33 @@ Maps model_id.field_name to allowed options.
 """
 
 FIELD_OPTIONS = {
-    # z-image constraints
+    # z-image constraints (VERIFIED from validate_z_image.py)
     "z-image.aspect_ratio": [
         "1:1",
-        "16:9",
-        "9:16",
         "4:3",
         "3:4",
+        "16:9",
+        "9:16",
     ],
     
-    # Common aspect ratios for image models
+    # qwen models - FIXED with correct KIE enum values
+    # Source: validate_qwen_text_to_image.py and KIE documentation
     "qwen/text-to-image.image_size": [
-        "256x256",
-        "512x512",
-        "768x768",
-        "1024x1024",
+        "square",           # 1024x1024
+        "square_hd",        # 2048x2048 (default)
+        "portrait_4_3",     # 896x1152
+        "portrait_16_9",    # 768x1344
+        "landscape_4_3",    # 1152x896
+        "landscape_16_9",   # 1344x768
     ],
     
     "qwen/image-edit.image_size": [
-        "256x256",
-        "512x512",
-        "768x768",
-        "1024x1024",
+        "square",
+        "square_hd",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9",
     ],
     
     "qwen/image-to-image.output_format": [
@@ -34,7 +39,17 @@ FIELD_OPTIONS = {
         "webp",
     ],
     
-    # Video aspect ratios
+    # bytedance/seedream (verified from KIE docs)
+    "bytedance/seedream.image_size": [
+        "square_hd",        # 2048x2048 (default)
+        "square",           # 1024x1024
+        "portrait_4_3",     # 896x1152
+        "portrait_16_9",    # 768x1344
+        "landscape_4_3",    # 1152x896
+        "landscape_16_9",   # 1344x768
+    ],
+    
+    # Video aspect ratios (verified from validate_wan_*.py)
     "bytedance/v1-lite-text-to-video.aspect_ratio": [
         "9:16",
         "16:9",
@@ -47,7 +62,102 @@ FIELD_OPTIONS = {
         "1:1",
     ],
     
-    # Common model-specific constraints can be added as discovered
+    "wan/2-5-text-to-video.aspect_ratio": [
+        "16:9",
+        "9:16",
+        "1:1",
+    ],
+    
+    "wan/2-2-a14b-text-to-video-turbo.aspect_ratio": [
+        "16:9",
+        "9:16",
+        "1:1",
+    ],
+    
+    "wan/2-2-a14b-image-to-video-turbo.aspect_ratio": [
+        "auto",
+        "16:9",
+        "9:16",
+        "1:1",
+    ],
+    
+    # Google Imagen models (verified from validate_imagen4*.py)
+    "google/imagen4.aspect_ratio": [
+        "1:1",
+        "16:9",
+        "9:16",
+        "3:4",
+        "4:3",
+    ],
+    
+    "google/imagen4-fast.aspect_ratio": [
+        "1:1",
+        "16:9",
+        "9:16",
+        "3:4",
+        "4:3",
+    ],
+    
+    "google/imagen4-ultra.aspect_ratio": [
+        "1:1",
+        "16:9",
+        "9:16",
+        "3:4",
+        "4:3",
+    ],
+    
+    # Flux models (verified from validate_flux_2*.py)
+    "flux-2/pro-image-to-image.aspect_ratio": [
+        "1:1",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+        "3:2",
+        "2:3",
+        "auto",
+    ],
+    
+    "flux-2/pro-image-to-image.resolution": [
+        "1K",
+        "2K",
+    ],
+    
+    "flux-2/pro-text-to-image.aspect_ratio": [
+        "1:1",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+        "3:2",
+        "2:3",
+    ],
+    
+    "flux-2/pro-text-to-image.resolution": [
+        "1K",
+        "2K",
+    ],
+    
+    "flux-2/flex-image-to-image.aspect_ratio": [
+        "1:1",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+        "3:2",
+        "2:3",
+        "auto",
+    ],
+    
+    "flux-2/flex-text-to-image.aspect_ratio": [
+        "1:1",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+        "3:2",
+        "2:3",
+    ],
 }
 
 # Required fields per model
