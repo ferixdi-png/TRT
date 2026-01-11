@@ -212,17 +212,22 @@ def build_payload(
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
     # NESTED format (old): {"required": [...], "properties": {...}}
     
-    # ВАЖНО: Системные поля добавляются автоматически, НЕ требуются от user
+    # ВАЖНО: Системные поля ВСЕГДА фильтруются из пользовательского ввода
+    # Они добавляются автоматически при создании задачи
     SYSTEM_FIELDS = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
     
-    # КРИТИЧНО: Для ПРЯМОГО формата (veo3_fast, V4) поля НЕ фильтруются
-    # т.к. они УЖЕ на верхнем уровне и являются обязательными
+    # Для ЛЮБОГО формата фильтруем системные поля из required/optional
     if is_direct_format:
-        # Для прямого формата берём ВСЕ поля из schema (включая системные)
-        properties = input_schema
+        # Для прямого формата берём ВСЕ поля из schema, НО фильтруем системные
+        properties = {k: v for k, v in input_schema.items() if k not in SYSTEM_FIELDS}
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
         optional_fields = [k for k in properties.keys() if k not in required_fields]
-        logger.debug(f"Direct format: {len(required_fields)} required, {len(optional_fields)} optional")
+        logger.info(
+            f"📋 SCHEMA | Model: {model_id} | Format: DIRECT | "
+            f"Required: {len(required_fields)} | Optional: {len(optional_fields)} | "
+            f"Fields: {list(properties.keys())[:10]}"
+        )
+        logger.debug(f"Direct format fields: required={required_fields}, optional={optional_fields}")
     elif 'properties' in input_schema:
         # Nested format
         required_fields = input_schema.get('required', [])
@@ -234,6 +239,10 @@ def build_payload(
         required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
         optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
         properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
+        logger.info(
+            f"📋 SCHEMA | Model: {model_id} | Format: NESTED | "
+            f"Required: {len(required_fields)} | Optional: {len(optional_fields)}"
+        )
     else:
         # Flat format - convert to nested
         properties = input_schema
@@ -244,6 +253,10 @@ def build_payload(
         required_fields = [f for f in required_fields if f not in SYSTEM_FIELDS]
         optional_fields = [f for f in optional_fields if f not in SYSTEM_FIELDS]
         properties = {k: v for k, v in properties.items() if k not in SYSTEM_FIELDS}
+        logger.info(
+            f"📋 SCHEMA | Model: {model_id} | Format: FLAT | "
+            f"Required: {len(required_fields)} | Optional: {len(optional_fields)}"
+        )
     
     # If no properties, use FALLBACK logic
     if not properties:
@@ -320,9 +333,9 @@ def build_payload(
         
         # Validate and set value
         if value is None:
-            # Для ПРЯМОГО формата: разрешаем skip системных полей (они добавятся позже)
-            if is_direct_format and field_name in {'model', 'callBackUrl'}:
-                continue  # Skip, будет добавлено автоматически
+            # Системные поля НИКОГДА не запрашиваем - они добавятся автоматически
+            if field_name in SYSTEM_FIELDS:
+                continue  # Skip, будет добавлено автоматически при создании задачи
             
             # КРИТИЧНО: Smart defaults для veo3_fast и V4
             # Эти модели имеют много required полей, но большинство имеют разумные defaults
@@ -339,8 +352,9 @@ def build_payload(
                 }
                 if field_name in defaults:
                     value = defaults[field_name]
-                    logger.debug(f"Using default for veo3_fast.{field_name}: {value}")
+                    logger.debug(f"✓ Using default for veo3_fast.{field_name}: {value}")
                 elif field_name in required_fields:
+                    logger.error(f"❌ Required field '{field_name}' is missing for veo3_fast")
                     raise ValueError(f"Required field '{field_name}' is missing")
             
             elif is_direct_format and model_id == 'V4':

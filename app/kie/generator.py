@@ -219,7 +219,12 @@ class KieGenerator:
                 error_code = create_response.get('code')
                 error_msg = create_response.get('msg', 'Unknown error')
                 
-                logger.error(f"No taskId in response. Full response: {create_response}")
+                logger.error(
+                    f"❌ NO TASK ID | Model: {model_id} | "
+                    f"Response code: {error_code} | "
+                    f"Error: {error_msg} | "
+                    f"Full response: {create_response}"
+                )
                 return {
                     'success': False,
                     'message': f'❌ Ошибка API: {error_msg}',
@@ -229,6 +234,8 @@ class KieGenerator:
                     'error_message': f'{error_msg}. Response: {create_response}',
                     'task_id': None
                 }
+            
+            logger.info(f"⏳ POLLING | TaskID: {task_id} | Timeout: {timeout}s | Interval: {poll_interval}s")
             
             # Wait for completion with heartbeat
             start_time = datetime.now()
