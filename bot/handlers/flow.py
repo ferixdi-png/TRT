@@ -2080,6 +2080,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     
     # Run generation in background task to avoid 30sec webhook timeout
     async def run_generation():
+        logger.info(f"🚀 [BG] Starting background generation for user {callback.from_user.id} | Model: {flow_ctx.model_id}")
         try:
             result = await generate_with_payment(
                 model_id=flow_ctx.model_id,
@@ -2090,8 +2091,9 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
                 task_id=charge_task_id,
                 reserve_balance=True,
             )
+            logger.info(f"✅ [BG] Generation completed for user {callback.from_user.id} | Success: {result.get('success')}")
         except Exception as e:
-            logger.error(f"Generation exception: {e}")
+            logger.error(f"❌ [BG] Generation exception: {e}", exc_info=True)
             result = {
                 "success": False,
                 "message": f"❌ Ошибка генерации: {str(e)}"
@@ -2132,7 +2134,9 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
             )
     
     # Start background task
+    logger.info(f"📬 [BG] Creating background task for user {callback.from_user.id}")
     asyncio.create_task(run_generation())
+    logger.info(f"✅ [BG] Background task created and running asynchronously")
 
 
 @router.callback_query()
