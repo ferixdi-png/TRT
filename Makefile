@@ -105,3 +105,13 @@ smoke-prod:
 deployment-checklist:
 	@echo "Generating deployment checklist..."
 	python -m app.tools.report_generator
+
+# Comprehensive product smoke test (DoD point 4)
+smoke-product:
+	@echo "Running comprehensive product smoke test..."
+	python scripts/smoke_product.py
+
+# Sync KIE.ai truth (DoD point 11)
+sync-kie:
+	@echo "Syncing KIE.ai source of truth..."
+	python scripts/sync_kie_truth.py

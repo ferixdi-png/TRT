@@ -261,7 +261,47 @@ python -m pytest tests/ -v
 
 ### Проверка проекта:
 ```bash
+# Все гейты (lint, test, smoke, integrity, e2e)
+make verify
+
+# Только проверка проекта
 python scripts/verify_project.py
+```
+
+### Comprehensive Smoke Test (DoD point 4):
+```bash
+# Запустить полный smoke test продукта
+make smoke-product
+# или
+python scripts/smoke_product.py
+
+# Проверяет:
+# - Health endpoint (200 OK)
+# - Webhook/callback configuration
+# - Button audit (нет мертвых callbacks)
+# - Flow type validation (70/72 models)
+# - image_edit input order (image FIRST)
+# - Payment idempotency
+# - Partnership section presence
+# - No mock success in production
+```
+
+### Sync KIE.ai Truth (DoD point 11):
+```bash
+# Попытаться синхронизировать модели с KIE.ai API
+make sync-kie
+# или
+python scripts/sync_kie_truth.py
+
+# Процесс:
+# 1. Пытается получить JSON от KIE.ai (модели/цены)
+# 2. Валидирует структуру данных
+# 3. Обновляет models/KIE_SOURCE_OF_TRUTH.json
+# 4. Пишет отчет об изменениях в TRT_REPORT.md
+# 5. Если API недоступен: возвращает SYNC_UNAVAILABLE (не ошибка)
+#
+# Примечание: KIE.ai не предоставляет публичный JSON API для моделей.
+# Обновления производятся вручную через SOURCE_OF_TRUTH.json
 ```
 
 ### Поведенческое тестирование:
