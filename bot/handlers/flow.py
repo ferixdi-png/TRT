@@ -595,8 +595,23 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
     enum = field_spec.get("enum")
     max_length = field_spec.get("max_length")
     
+    # Словарь с человекопонятными названиями для технических полей
+    friendly_names = {
+        "model": "название модели",
+        "callBackUrl": "URL для уведомлений",
+        "callback_url": "URL для уведомлений",
+        "webhook": "webhook URL",
+        "api_key": "API ключ",
+        "token": "токен доступа",
+        "user_id": "ID пользователя",
+        "session_id": "ID сессии",
+    }
+    
+    # Используем дружелюбное название, если есть
+    display_name = friendly_names.get(field_name, field_name)
+    
     if enum:
-        return f"Выберите значение для <b>{field_name}</b>:"
+        return f"Выберите значение для <b>{display_name}</b>:"
     
     if field_type in {"file", "file_id", "file_url"}:
         return (
@@ -631,14 +646,18 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
             f"• \"Футуристический город на закате, детализация\""
         )
     
+    # Специальные подсказки для технических полей
+    if field_name in {"model", "callBackUrl", "callback_url", "webhook"}:
+        return f"<i>Оставьте пустым или введите {display_name}</i>\n\n✏️ Нажмите /skip чтобы пропустить"
+    
     if max_length:
         return (
-            f"✍️ <b>Введите {field_name}</b>\n\n"
+            f"✍️ <b>Введите {display_name}</b>\n\n"
             f"Максимум {max_length} символов\n\n"
             f"<i>Пример: краткое описание или название</i>"
         )
     
-    return f"✍️ <b>Введите {field_name}</b>\n\n<i>Введите текст или значение</i>"
+    return f"✍️ <b>Введите {display_name}</b>\n\n<i>Введите текст или значение</i>"
 
 
 def _enum_keyboard(field_spec: Dict[str, Any]) -> Optional[InlineKeyboardMarkup]:
