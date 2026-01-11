@@ -1,10 +1,13 @@
 # Production Dockerfile for Render
 FROM python:3.11-slim
 
+# Suppress debconf warnings in non-interactive builds
+ENV DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /app
 
 # Install system dependencies (essential + OCR support)
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     tesseract-ocr \
