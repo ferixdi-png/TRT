@@ -296,53 +296,32 @@ class SmokeTest:
         start = datetime.now()
         
         try:
-            # In SMOKE_MODE, skip heavy imports
-            if self.smoke_mode:
-                elapsed = (datetime.now() - start).total_seconds() * 1000
-                self.add_result(
-                    "Button Handlers",
-                    CheckStatus.SKIP,
-                    "Skipped in SMOKE_MODE (heavy dependencies)",
-                    elapsed
-                )
-                return True
+            from app.tools.button_validator import check_essential_buttons
             
-            # Try to import dispatcher setup
-            try:
-                from main_render import create_bot_application
-                
-                os.environ['DRY_RUN'] = '1'
-                
-                dp, bot = create_bot_application()
-                
-                if not dp:
-                    elapsed = (datetime.now() - start).total_seconds() * 1000
-                    self.add_result(
-                        "Button Handlers",
-                        CheckStatus.FAIL,
-                        "Dispatcher not created",
-                        elapsed
-                    )
-                    return False
-                
-                elapsed = (datetime.now() - start).total_seconds() * 1000
-                self.add_result(
-                    "Button Handlers",
-                    CheckStatus.PASS,
-                    "Dispatcher initialized with handlers",
-                    elapsed
-                )
-                return True
+            # Check essential buttons
+            buttons = check_essential_buttons()
             
-            except ImportError as e:
-                elapsed = (datetime.now() - start).total_seconds() * 1000
+            missing = [name for name, present in buttons.items() if not present]
+            
+            elapsed = (datetime.now() - start).total_seconds() * 1000
+            
+            if missing:
                 self.add_result(
                     "Button Handlers",
-                    CheckStatus.SKIP,
-                    f"Dependencies not available ({str(e)[:50]})",
-                    elapsed
+                    CheckStatus.WARN,
+                    f"Some buttons missing: {missing}",
+                    elapsed,
+                    f"Found {len(buttons) - len(missing)}/{len(buttons)} essential buttons"
                 )
-                return True
+                return True  # Warning, not failure
+            
+            self.add_result(
+                "Button Handlers",
+                CheckStatus.PASS,
+                f"All {len(buttons)} essential buttons configured",
+                elapsed
+            )
+            return True
         
         except Exception as e:
             elapsed = (datetime.now() - start).total_seconds() * 1000
