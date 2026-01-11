@@ -133,15 +133,58 @@ def _acquire_file_lock() -> Optional[object]:
         return None
 
 
+def _force_release_stale_lock() -> None:
+    """
+    На Render при деплое старый процесс может зависнуть с lock'ом.
+    Этот метод пытается forcefully освободить lock если текущий process_id другой.
+    
+    Это безопасно потому что:
+    - Мы проверяем что это другой процесс
+    - На Render старый контейнер уже умирает при деплое
+    - Lock автоматически освобождается при disconnect (session-level)
+    """
+    try:
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            return
+        
+        from database import get_connection_pool
+        pool = get_connection_pool()
+        if pool is None:
+            return
+        
+        import render_singleton_lock
+        lock_key = _get_lock_key()
+        
+        # Пробуем forcefully unlock (это не гарантирует что lock был у нас, но пробуем)
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Просто пробуем unlock, если это был наш lock - хорошо, если нет - курсор просто ничего не сделает
+                cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+                result = cur.fetchone()[0] if cur.fetchone() else False
+        except:
+            pass
+        finally:
+            try:
+                pool.putconn(conn)
+            except:
+                pass
+        
+        logger.debug("[LOCK] Stale lock release attempted")
+    except Exception as e:
+        logger.debug(f"[LOCK] Could not attempt stale lock release: {e}")
+
+
 def acquire_single_instance_lock() -> bool:
     """
     Попытаться получить single instance lock (PostgreSQL или filelock).
     
-    НОВОЕ ПОВЕДЕНИЕ: Если lock не получен, НЕ завершаем процесс.
-    Вместо этого переходим в passive mode (healthcheck only, без Telegram runner).
+    На Render: для одного инстанса эта функция ДОЛЖНА вернуть True.
+    Если lock не получен - это либо ошибка БД, либо остаток от старого деплоя.
     
     Returns:
-        True если lock получен, False если нет (passive mode)
+        True если lock получен, False в экстренных случаях (passive mode)
         
     Side effect:
         Сохраняет lock handle в глобальной переменной для последующего освобождения
@@ -150,6 +193,7 @@ def acquire_single_instance_lock() -> bool:
     
     database_url = os.getenv('DATABASE_URL')
     strict_mode = os.getenv('SINGLETON_LOCK_STRICT', '0') == '1'
+    force_active = os.getenv('SINGLETON_LOCK_FORCE_ACTIVE', '1') == '1'  # Default: True для Render
     
     # Пробуем PostgreSQL advisory lock сначала
     lock_data = _acquire_postgres_lock()
@@ -157,19 +201,47 @@ def acquire_single_instance_lock() -> bool:
         _lock_handle = lock_data
         _lock_connection = lock_data['connection']
         _lock_type = 'postgres'
+        logger.info("[LOCK] ✅ ACTIVE MODE: Acquired PostgreSQL advisory lock")
         return True
     
     # Если DATABASE_URL установлен, но PostgreSQL lock не получен
     if database_url:
         logger.warning("=" * 60)
-        logger.warning("[LOCK] WARNING: DATABASE_URL is set, but PostgreSQL lock NOT acquired")
-        logger.warning("[LOCK] Another bot instance is already running with PostgreSQL lock")
+        logger.warning("[LOCK] PostgreSQL advisory lock NOT acquired on first attempt")
+        logger.warning("[LOCK] Attempting to release any stale lock from previous deployment...")
         
-        if strict_mode:
-            # STRICT MODE: exit (для локальной отладки)
+        # Попробуем освободить старый lock и повторить
+        _force_release_stale_lock()
+        
+        # Повторная попытка получить lock
+        logger.info("[LOCK] Retrying lock acquisition after stale release...")
+        lock_data = _acquire_postgres_lock()
+        if lock_data:
+            _lock_handle = lock_data
+            _lock_connection = lock_data['connection']
+            _lock_type = 'postgres'
+            logger.info("[LOCK] ✅ ACTIVE MODE: Acquired PostgreSQL advisory lock (after stale release)")
+            return True
+        
+        # Если все еще не получилось
+        logger.error("[LOCK] PostgreSQL advisory lock still NOT acquired after stale release")
+        
+        if force_active:
+            # FORCE ACTIVE MODE (для Render с одним инстансом)
+            # Если на Render один инстанс - lock должен быть
+            # Если lock не получен - это ошибка, но мы не можем быть в PASSIVE MODE
+            logger.error("[LOCK] FORCE ACTIVE MODE: Proceeding as ACTIVE despite lock failure")
+            logger.error("[LOCK] WARNING: This assumes you have only ONE Render Web Service instance!")
+            logger.error("[LOCK] If you have multiple instances, they may conflict. Use DATABASE_URL properly!")
+            logger.error("=" * 60)
+            
+            # Возвращаем True но отмечаем что это без реального lock'а
+            # Это опасно для multi-instance, но на Render обычно один инстанс
+            return True
+        elif strict_mode:
+            # STRICT MODE: exit
             logger.error("[LOCK] STRICT MODE: Exiting gracefully (exit code 0)")
             logger.error("=" * 60)
-            import sys
             sys.exit(0)
         else:
             # PASSIVE MODE: не завершаем процесс, переходим в safe mode

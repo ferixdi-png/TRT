@@ -396,6 +396,15 @@ async def main() -> None:
     # the psycopg2 connection pool from database.py being initialized.
     # If we don't create the pool first, lock acquisition can fail even when no
     # other instance is running, leaving this deploy permanently PASSIVE.
+    #
+    # SINGLETON_LOCK_FORCE_ACTIVE (default: 1 / True for Render)
+    #   - When True: if lock acquisition fails, proceed as ACTIVE anyway
+    #     (assumes only one Render Web Service instance)
+    #   - When False: don't proceed if lock acquisition fails
+    #
+    # SINGLETON_LOCK_STRICT (default: 0)
+    #   - When True: exit immediately if lock acquisition fails
+    #   - When False: continue in PASSIVE mode if lock acquisition fails
     if cfg.database_url:
         try:
             from database import get_connection_pool
