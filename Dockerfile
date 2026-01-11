@@ -46,7 +46,7 @@ EXPOSE 10000
 
 # Health check for Render.com (using Python instead of Node.js)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:10000/health').read()" || exit 1
+  CMD python3 -c "import os, urllib.request; port = os.environ.get('PORT', '10000'); urllib.request.urlopen(f'http://localhost:{port}/health').read()" || exit 1
 
 # Verify critical files exist
 RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml not found!" && exit 1) && \
