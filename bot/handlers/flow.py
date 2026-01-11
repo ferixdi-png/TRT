@@ -1262,7 +1262,7 @@ async def support_cb(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.in_({"balance", "menu:balance"}))
 async def balance_cb(callback: CallbackQuery) -> None:
     await callback.answer()
-    balance = get_charge_manager().get_user_balance(callback.from_user.id)
+    balance = await get_charge_manager().get_user_balance(callback.from_user.id)
     await callback.message.edit_text(
         f"💰 Баланс: {format_price_rub(balance)}\n\n"
         "Пополнение временно доступно через поддержку.",
@@ -1345,7 +1345,7 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
         amount = 0.0
     
     charge_manager = get_charge_manager()
-    balance = charge_manager.get_user_balance(callback.from_user.id)
+    balance = await charge_manager.get_user_balance(callback.from_user.id)
     if amount > 0 and balance < amount:
         await callback.message.edit_text(
             "❌ Недостаточно средств для повтора.\n\n"
@@ -1900,7 +1900,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         amount = 0.0
 
     charge_manager = get_charge_manager()
-    balance = charge_manager.get_user_balance(callback.from_user.id)
+    balance = await charge_manager.get_user_balance(callback.from_user.id)
     if amount > 0 and balance < amount:
         await callback.message.edit_text(
             "❌ Недостаточно средств для запуска.\n\n"
