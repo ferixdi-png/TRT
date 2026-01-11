@@ -238,6 +238,9 @@ class KieGenerator:
                     'task_id': None
                 }
             
+            # Set polling interval
+            poll_interval = 2  # Check every 2 seconds
+            
             logger.info(f"⏳ POLLING | TaskID: {task_id} | Timeout: {timeout}s | Interval: {poll_interval}s")
             
             # Wait for completion with heartbeat
@@ -332,7 +335,7 @@ class KieGenerator:
                         last_heartbeat = datetime.now()
                     
                     # Wait before next check
-                    await asyncio.sleep(2)  # Check every 2 seconds
+                    await asyncio.sleep(poll_interval)
                     continue
                 
                 else:

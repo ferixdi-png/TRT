@@ -2060,6 +2060,14 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
     logger.info(f"  - Collected inputs: {flow_ctx.collected}")
     logger.info(f"  - Collected keys: {list(flow_ctx.collected.keys())}")
     
+    # Validate required fields before generation
+    from app.kie.field_options import validate_required_fields
+    is_valid, error_msg = validate_required_fields(flow_ctx.model_id, flow_ctx.collected)
+    if not is_valid:
+        await callback.message.answer(f"❌ {error_msg}\n\nПожалуйста, заполните все обязательные поля.")
+        await state.clear()
+        return
+    
     try:
         result = await generate_with_payment(
             model_id=flow_ctx.model_id,
