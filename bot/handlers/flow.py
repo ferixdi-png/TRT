@@ -596,6 +596,9 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
     enum = field_spec.get("enum")
     max_length = field_spec.get("max_length")
     
+    # Import Russian field names
+    from app.kie.field_options import get_russian_field_name
+    
     # Словарь с человекопонятными названиями для технических полей
     friendly_names = {
         "model": "название модели",
@@ -608,8 +611,12 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any]) -> str:
         "session_id": "ID сессии",
     }
     
-    # Используем дружелюбное название, если есть
-    display_name = friendly_names.get(field_name, field_name)
+    # Используем русское название из field_options, если нет - fallback на friendly_names
+    russian_name = get_russian_field_name(field_name)
+    if russian_name != field_name:
+        display_name = russian_name
+    else:
+        display_name = friendly_names.get(field_name, field_name)
     
     if enum:
         return f"Выберите значение для <b>{display_name}</b>:"
@@ -2068,59 +2075,64 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         await state.clear()
         return
     
-    try:
-        result = await generate_with_payment(
-            model_id=flow_ctx.model_id,
-            user_inputs=flow_ctx.collected,
-            user_id=callback.from_user.id,
-            amount=amount,
-            progress_callback=heartbeat,
-            task_id=charge_task_id,
-            reserve_balance=True,
-        )
-    finally:
-        _mark_generation_finished(callback.from_user.id)
+    # Answer callback immediately to avoid webhook timeout
+    await callback.answer()
+    
+    # Run generation in background task to avoid 30sec webhook timeout
+    async def run_generation():
+        try:
+            result = await generate_with_payment(
+                model_id=flow_ctx.model_id,
+                user_inputs=flow_ctx.collected,
+                user_id=callback.from_user.id,
+                amount=amount,
+                progress_callback=heartbeat,
+                task_id=charge_task_id,
+                reserve_balance=True,
+            )
+        except Exception as e:
+            logger.error(f"Generation exception: {e}")
+            result = {
+                "success": False,
+                "message": f"❌ Ошибка генерации: {str(e)}"
+            }
+        finally:
+            _mark_generation_finished(callback.from_user.id)
 
-    await state.clear()
+        await state.clear()
 
-    if result.get("success"):
-        urls = result.get("result_urls") or []
-        if urls:
-            await callback.message.answer("\n".join(urls))
+        if result.get("success"):
+            urls = result.get("result_urls") or []
+            if urls:
+                await callback.message.answer("\n".join(urls))
+            else:
+                await callback.message.answer("✅ Готово!")
+            await callback.message.answer(
+                "Что дальше?",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
+                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
+                    ]
+                ),
+            )
         else:
-            await callback.message.answer("✅ Готово!")
-        await callback.message.answer(
-            "Что дальше?",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
-                    [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
-                ]
-            ),
-        )
-    else:
-        # MASTER PROMPT: "10. Возможный refund при ошибке"
-        # Show error + refund notification
-        error_msg = result.get("message", "❌ Ошибка")
-        payment_status = result.get("payment_status", "")
-        
-        # Check if refund happened
-        if payment_status == "released" or "refund" in payment_status.lower():
-            refund_notice = "\n\n💰 <b>Средства возвращены на ваш баланс</b>"
-        else:
-            refund_notice = ""
-        
-        await callback.message.answer(f"{error_msg}{refund_notice}")
-        await callback.message.answer(
-            "Попробовать ещё раз?",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="🔁 Повторить", callback_data=f"gen:{flow_ctx.model_id}")],
-                    [InlineKeyboardButton(text="💳 Баланс", callback_data="balance:main")],
-                    [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
-                ]
-            ),
-        )
+            # MASTER PROMPT: "10. Возможный refund при ошибке"
+            # Show error + refund notification
+            error_msg = result.get("message", "❌ Ошибка генерации")
+            await callback.message.answer(error_msg)
+            await callback.message.answer(
+                "Попробовать снова?",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔁 Попробовать снова", callback_data=f"gen:{flow_ctx.model_id}")],
+                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")],
+                    ]
+                ),
+            )
+    
+    # Start background task
+    asyncio.create_task(run_generation())
 
 
 @router.callback_query()

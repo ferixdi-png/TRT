@@ -57,6 +57,32 @@ REQUIRED_FIELDS = {
     "qwen/image-edit": ["image_url", "image_size"],
 }
 
+# Russian field names mapping (API field -> Russian display name)
+FIELD_NAMES_RU = {
+    "prompt": "Запрос",
+    "aspect_ratio": "Соотношение сторон",
+    "image_size": "Размер изображения",
+    "image_url": "URL изображения",
+    "negative_prompt": "Негативный запрос",
+    "num_inference_steps": "Количество шагов",
+    "guidance_scale": "Степень следования запросу",
+    "seed": "Зерно генерации",
+    "width": "Ширина",
+    "height": "Высота",
+}
+
+def get_russian_field_name(field_name: str) -> str:
+    """
+    Get Russian display name for a field.
+    
+    Args:
+        field_name: API field name (e.g., 'aspect_ratio')
+    
+    Returns:
+        Russian display name (e.g., 'Соотношение сторон')
+    """
+    return FIELD_NAMES_RU.get(field_name, field_name)
+
 def get_field_options(model_id: str, field_name: str) -> list:
     """
     Get allowed options for a field.
@@ -105,6 +131,8 @@ def validate_required_fields(model_id: str, provided_fields: dict) -> tuple[bool
     
     missing = [f for f in required if f not in provided_fields or not provided_fields[f]]
     if missing:
-        return False, f"Missing required fields: {', '.join(missing)}"
+        # Use Russian field names in error message
+        missing_ru = [get_russian_field_name(f) for f in missing]
+        return False, f"Не заполнены обязательные поля: {', '.join(missing_ru)}"
     
     return True, ""
