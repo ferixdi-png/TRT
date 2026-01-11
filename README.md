@@ -100,7 +100,30 @@ python main_render.py
 
 ## ✅ Проверка перед деплоем
 
-**Обязательно выполни перед деплоем на Render:**
+### Локальная разработка (с .env.test):
+
+```bash
+# Активируй тестовое окружение
+source .env.test
+
+# Запусти полную верификацию (тесты + smoke + lint)
+make verify
+```
+
+`.env.test` содержит:
+- Valid Telegram bot token (формат: `1234567890:ABC...`)
+- Test Kie.ai credentials
+- Localhost PostgreSQL (или JSON storage fallback)
+- Webhook secrets для локального тестирования
+
+**Результаты проверки:**
+- ✅ Runtime validation (ENV vars, API connectivity)
+- ✅ Lint checks (ruff)
+- ✅ Unit tests (pytest, 211+ tests)
+- ✅ E2E smoke tests (webhook, callback, generation)
+- ✅ Health endpoint check (`/health`)
+
+### Перед деплоем на Render:
 
 ```bash
 # Проверить что все ENV переменные установлены и работают
