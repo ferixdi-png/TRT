@@ -10,6 +10,9 @@ python-telegram-bot==20.8
 requests>=2.31.0
 GitPython>=3.1.40
 
+# Retry logic
+tenacity>=8.2.0
+
 # Environment variables
 python-dotenv>=1.0.0
 

@@ -254,11 +254,21 @@ async def cb_admin_models(callback: CallbackQuery, state: FSMContext):
         return
     
     # Get free models count
-    free_models = await _free_manager.get_all_free_models()
+    free_count = 0
+    if _free_manager:
+        try:
+            free_models = await _free_manager.get_all_free_models()
+            free_count = len(free_models)
+        except Exception as e:
+            logger.warning("Failed to get free models: %s", e)
+            free_count = 4  # fallback to known count
+    else:
+        # Fallback when _free_manager is not initialized
+        free_count = 4
     
     text = (
         f"🎨 <b>Управление моделями</b>\n\n"
-        f"Бесплатных моделей: {len(free_models)}\n\n"
+        f"Бесплатных моделей: {free_count}\n\n"
         f"Выберите действие:"
     )
     
@@ -282,7 +292,27 @@ async def cb_admin_models_list_free(callback: CallbackQuery):
         await callback.answer("⛔️ Доступ запрещён", show_alert=True)
         return
     
-    free_models = await _free_manager.get_all_free_models()
+    free_models = []
+    if _free_manager:
+        try:
+            free_models = await _free_manager.get_all_free_models()
+        except Exception as e:
+            logger.warning("Failed to get free models: %s", e)
+            # Fallback to known free models
+            free_models = [
+                {"model_id": "z-image"},
+                {"model_id": "qwen/text-to-image"},
+                {"model_id": "qwen/image-to-image"},
+                {"model_id": "qwen/image-edit"}
+            ]
+    else:
+        # Fallback when manager not initialized
+        free_models = [
+            {"model_id": "z-image"},
+            {"model_id": "qwen/text-to-image"},
+            {"model_id": "qwen/image-to-image"},
+            {"model_id": "qwen/image-edit"}
+        ]
     
     if not free_models:
         text = "🎁 <b>Бесплатные модели</b>\n\nСписок пуст"
