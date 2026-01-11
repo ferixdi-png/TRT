@@ -79,7 +79,7 @@ def test_model_payload(model_id: str, source_v4: dict) -> dict:
             elif field == 'aspect_ratio':
                 test_inputs['aspect_ratio'] = '1:1'
             elif field == 'url':
-                test_inputs['url'] = 'https://example.com/image.jpg'
+                test_inputs['url'] = 'https://placehold.co/1024x1024/png'
             elif field == 'image':
                 test_inputs['image'] = 'base64image'
         

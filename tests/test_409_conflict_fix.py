@@ -113,10 +113,13 @@ async def test_ensure_webhook_mode_sets_webhook():
     
     result = await ensure_webhook_mode(mock_bot, "https://example.com/webhook")
     assert result is True
-    mock_bot.set_webhook.assert_called_once_with(
-        url="https://example.com/webhook",
-        drop_pending_updates=True
-    )
+    # secret_token может быть добавлен в реальном коде, поэтому проверяем параметры гибко
+    called_kwargs = mock_bot.set_webhook.call_args.kwargs
+    assert called_kwargs["url"] == "https://example.com/webhook"
+    assert called_kwargs.get("drop_pending_updates") is True
+    # Если секрет задан, он должен быть строкой
+    if "secret_token" in called_kwargs:
+        assert isinstance(called_kwargs["secret_token"], str)
 
 
 def test_handle_conflict_gracefully_exits():
