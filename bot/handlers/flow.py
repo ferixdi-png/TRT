@@ -19,6 +19,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from app.kie.builder import load_source_of_truth
 from app.kie.validator import validate_input_type, ModelContractError
 from app.kie.field_options import get_field_options, has_field_constraints
+from app.kie.parameter_labels import (
+    get_parameter_label,
+    get_parameter_options,
+    get_parameter_help,
+    should_use_buttons,
+)
 from app.kie.flow_types import (
     get_flow_type,
     get_flow_description,
@@ -787,11 +793,33 @@ def _field_prompt(field_name: str, field_spec: Dict[str, Any], flow_type: str = 
     return f"✍️ <b>Введите {display_name}</b>\n\n<i>Введите текст или значение</i>"
 
 
-def _enum_keyboard(field_spec: Dict[str, Any]) -> Optional[InlineKeyboardMarkup]:
+def _enum_keyboard(field_spec: Dict[str, Any], field_name: str = "") -> Optional[InlineKeyboardMarkup]:
+    """
+    Generate keyboard for enum values.
+    CRITICAL: Uses human-friendly labels for common parameters like aspect_ratio, resolution.
+    """
     enum = field_spec.get("enum")
     if not enum:
+        # Check if parameter should have predefined options even without enum
+        if field_name and should_use_buttons(field_name):
+            options = get_parameter_options(field_name)
+            if options:
+                rows = [[InlineKeyboardButton(text=label, callback_data=f"enum:{value}")] for value, label in options]
+                # Add help button
+                rows.append([InlineKeyboardButton(text="ℹ️ Что выбрать?", callback_data=f"help:param:{field_name}")])
+                return InlineKeyboardMarkup(inline_keyboard=rows)
         return None
-    rows = [[InlineKeyboardButton(text=str(val), callback_data=f"enum:{val}")] for val in enum]
+    
+    # Use human-friendly labels if available
+    rows = []
+    for val in enum:
+        label = get_parameter_label(field_name, val) if field_name else str(val)
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"enum:{val}")])
+    
+    # Add help button for supported parameters
+    if field_name and field_name in {"aspect_ratio", "image_size", "quality", "steps", "upscale_factor"}:
+        rows.append([InlineKeyboardButton(text="ℹ️ Что выбрать?", callback_data=f"help:param:{field_name}")])
+    
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1780,8 +1808,16 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(InputFlow.waiting_input)
     await callback.message.answer(
         _field_prompt(field_name, field_spec, flow_type),
-        reply_markup=_enum_keyboard(field_spec),
+        reply_markup=_enum_keyboard(field_spec, field_name),
     )
+
+
+@router.callback_query(F.data.startswith("help:param:"))
+async def param_help_cb(callback: CallbackQuery) -> None:
+    """Show help for parameter (when user clicks ℹ️ button)."""
+    param_name = callback.data.split(":", 2)[2]
+    help_text = get_parameter_help(param_name)
+    await callback.answer(help_text, show_alert=True, cache_time=60)
 
 
 @router.callback_query(F.data.startswith("enum:"), InputFlow.waiting_input)
@@ -1827,7 +1863,7 @@ async def opt_start_cb(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(InputFlow.waiting_input)
     await callback.message.answer(
         _field_prompt(field_name, field_spec, flow_ctx.flow_type),
-        reply_markup=_enum_keyboard(field_spec),
+        reply_markup=_enum_keyboard(field_spec, field_name),
     )
 
 
@@ -2061,7 +2097,7 @@ async def _save_input_and_continue(message: Message, state: FSMContext, value: A
     next_spec = flow_ctx.properties.get(next_field, {})
     await message.answer(
         _field_prompt(next_field, next_spec, flow_ctx.flow_type),
-        reply_markup=_enum_keyboard(next_spec),
+        reply_markup=_enum_keyboard(next_spec, next_field),
     )
 
 
