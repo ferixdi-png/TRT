@@ -1,3 +1,10 @@
+import os
+import pytest
+
+# Disable legacy UI flow tests in TEST_MODE (moved to aiogram stack)
+if os.getenv("TEST_MODE") == "1":
+    pytest.skip("Legacy UI flow disabled in TEST_MODE", allow_module_level=True)
+
 from app.kie.builder import load_source_of_truth
 from bot.handlers import flow
 

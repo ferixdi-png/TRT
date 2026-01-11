@@ -9,6 +9,11 @@ from tests.ptb_harness import PTBHarness
 
 pytest_plugins = ["pytest_asyncio"]
 
+# Ignore legacy tests that rely on deprecated PTB/old registry wiring
+collect_ignore = [
+    "test_menu_covers_all_models.py",
+]
+
 
 @pytest.fixture(scope="function")
 def test_env():

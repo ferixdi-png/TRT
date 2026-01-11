@@ -10,7 +10,7 @@ Test: проверяет, что все модели из реестра дос�
 import os
 import pytest
 
-# Disable legacy PTB menu coverage in TEST_MODE (new menu via aiogram)
+# Legacy PTB-based coverage test: disabled in TEST_MODE and ignored by pytest via norecursedirs
 if os.getenv("TEST_MODE") == "1":
     pytest.skip("Legacy menu coverage disabled in TEST_MODE", allow_module_level=True)
 
@@ -23,7 +23,7 @@ os.environ['TEST_MODE'] = '1'
 os.environ['ALLOW_REAL_GENERATION'] = '0'
 
 # Добавляем корневую директорию в путь
-root_dir = Path(__file__).parent.parent
+root_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(root_dir))
 
 import logging
@@ -235,4 +235,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

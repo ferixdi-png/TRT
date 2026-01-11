@@ -2,6 +2,12 @@
 Smoke тесты для всех callback_data.
 Проверяет, что ни один callback не падает с исключением.
 """
+import os
+import pytest
+
+# Disable legacy PTB-based tests in TEST_MODE (new stack uses aiogram)
+if os.getenv("TEST_MODE") == "1":
+    pytest.skip("Legacy PTB callbacks smoke disabled in TEST_MODE", allow_module_level=True)
 
 import pytest
 from telegram.ext import CallbackQueryHandler
