@@ -1534,19 +1534,21 @@ async def generate_cb(callback: CallbackQuery, state: FSMContext) -> None:
     # SYSTEM FIELDS that should NOT be shown to user
     SYSTEM_FIELDS = {'model', 'callBackUrl', 'webhookUrl'}
     
-    # Support BOTH flat and nested formats (like builder.py)
-    if 'properties' in input_schema:
-        # Nested format
+    # Support BOTH flat and nested formats
+    # CRITICAL: input_schema in SOURCE_OF_TRUTH is PROPERTIES DIRECTLY, not {properties: ...}
+    if 'properties' in input_schema and isinstance(input_schema['properties'], dict):
+        # Nested format: {properties: {...}, required: [...]}
         required_fields = input_schema.get("required", [])
         optional_fields = input_schema.get("optional", [])
         properties = input_schema.get("properties", {})
     else:
-        # Flat format (source_of_truth.json) - convert
+        # Flat format (SOURCE_OF_TRUTH) - input_schema IS properties dict directly
+        # Example: {'model': {...}, 'callBackUrl': {...}, 'input': {...}}
         properties = input_schema
         required_fields = [k for k, v in properties.items() if v.get('required', False)]
         optional_fields = [k for k in properties.keys() if k not in required_fields]
     
-    # IMPORTANT: Handle wrapped input schema (e.g., z-image with input: {type: dict, examples: [...]})
+    # IMPORTANT: Handle wrapped input schema (e.g., bytedance/seedream with input: {type: dict, examples: [...]})
     # Extract real user fields from examples
     if 'input' in properties and isinstance(properties['input'], dict):
         input_field_spec = properties['input']

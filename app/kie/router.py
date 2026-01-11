@@ -111,8 +111,18 @@ def build_category_payload(
     
     category = model_schema.get('category') or model_schema.get('api_category')
     input_schema = model_schema.get('input_schema', {})
-    properties = input_schema.get('properties', {})
-    required_fields = input_schema.get('required', [])
+    
+    # CRITICAL: input_schema in SOURCE_OF_TRUTH is PROPERTIES DIRECTLY, not {properties: ...}
+    # Check format
+    if 'properties' in input_schema and isinstance(input_schema['properties'], dict):
+        # Nested format: {properties: {...}, required: [...]}
+        properties = input_schema.get('properties', {})
+        required_fields = input_schema.get('required', [])
+    else:
+        # FLAT format (SOURCE_OF_TRUTH): input_schema IS properties dict directly
+        # Example: {'model': {...}, 'callBackUrl': {...}, 'input': {...}}
+        properties = input_schema
+        required_fields = [k for k, v in properties.items() if v.get('required', False)]
     
     # CRITICAL: Filter out system fields from required - they're added by system
     system_fields = {'model', 'callBackUrl', 'webhookUrl'}
