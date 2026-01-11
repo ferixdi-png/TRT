@@ -91,6 +91,7 @@ verify-runtime:
 	@python3 scripts/verify_runtime.py
 
 verify: verify-runtime lint test smoke integrity e2e
+
 smoke-prod:
 	@echo "Running production smoke tests..."
 	SMOKE_MODE=1 TEST_MODE=1 DRY_RUN=1 BOT_MODE=webhook PORT=8000 \
@@ -100,3 +101,7 @@ smoke-prod:
 	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
 	WEBHOOK_SECRET_PATH=test WEBHOOK_SECRET_TOKEN=smoke-secret \
 	python -m app.tools.smoke --report-file SMOKE_REPORT.md && cat SMOKE_REPORT.md
+
+deployment-checklist:
+	@echo "Generating deployment checklist..."
+	python -m app.tools.report_generator
