@@ -426,7 +426,17 @@ class PostgresStorage(BaseStorage):
             if row:
                 return dict(row)
             return None
-    
+
+    async def find_job_by_task_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Найти задачу по внешнему task_id."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM generation_jobs WHERE external_task_id = $1 OR job_id = $1",
+                task_id
+            )
+            return dict(row) if row else None
+
     async def list_jobs(
         self,
         user_id: Optional[int] = None,

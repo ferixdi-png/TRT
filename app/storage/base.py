@@ -137,17 +137,25 @@ class BaseStorage(ABC):
     async def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Получить задачу по ID"""
         pass
-    
+
+    @abstractmethod
+    async def find_job_by_task_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Найти задачу по внешнему task_id (callback).
+
+        Returns job dict or None when not found.
+        """
+        pass
+
     @abstractmethod
     async def list_jobs(
         self,
         user_id: Optional[int] = None,
         status: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Получить список задач (с фильтрацией)"""
+        """Получить список задач с фильтрацией и пагинацией"""
         pass
-    
+
     @abstractmethod
     async def add_generation_to_history(
         self,
@@ -157,7 +165,7 @@ class BaseStorage(ABC):
         params: Dict[str, Any],
         result_urls: List[str],
         price: float,
-        operation_id: Optional[str] = None
+        operation_id: Optional[str] = None,
     ) -> str:
         """Добавить генерацию в историю. Возвращает ID генерации"""
         pass

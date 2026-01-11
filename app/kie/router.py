@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from app.kie.field_options import get_field_options
+from app.utils.webhook import build_kie_callback_url
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,11 @@ def get_api_category_for_model(model_id: str, source_v4: Optional[Dict] = None) 
     
     logger.warning(f"Model {model_id} not found in source of truth")
     return None
+
+
+def _default_callback_url() -> str:
+    """Return a real callback URL built from webhook env settings."""
+    return build_kie_callback_url()
 
 
 def build_category_payload(
@@ -180,7 +186,7 @@ def build_category_payload(
     # Build payload
     payload = {
         'model': model_id,
-        'callBackUrl': 'https://api.example.com/callback'  # System default
+        'callBackUrl': _default_callback_url(),
     }
     
     # If wrapped format, add input container

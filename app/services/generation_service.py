@@ -12,6 +12,7 @@ from app.utils.logging_config import get_logger
 from app.integrations.kie_stub import get_kie_client_or_stub
 from app.storage import get_storage
 from app.storage.status import normalize_job_status
+from app.utils.webhook import build_kie_callback_url
 
 logger = get_logger(__name__)
 
@@ -38,8 +39,9 @@ class GenerationService:
         Returns:
             job_id: str - ID задачи
         """
-        # Создаем задачу в KIE
-        result = await self.kie_client.create_task(model_id, params)
+        # Создаем задачу в KIE (с реальным callback URL, если задан)
+        callback_url = build_kie_callback_url()
+        result = await self.kie_client.create_task(model_id, params, callback_url=callback_url or None)
         
         if not result.get('ok'):
             error = result.get('error', 'Unknown error')

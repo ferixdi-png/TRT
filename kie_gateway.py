@@ -77,8 +77,8 @@ class RealKieGateway(KieGateway):
         Создает задачу через реальный KIE API.
         POST https://api.kie.ai/api/v1/jobs/createTask
         """
-        # Используем существующий метод клиента
-        result = await self.client.create_task(api_model, input)
+        # Прокидываем callback_url до клиента, чтобы KIE уведомлял реальный вебхук
+        result = await self.client.create_task(api_model, input, callback_url)
         return result
     
     async def get_task(self, task_id: str) -> Dict[str, Any]:

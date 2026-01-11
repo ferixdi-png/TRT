@@ -59,6 +59,24 @@ def get_webhook_secret_token() -> str:
     return os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
 
 
+def get_kie_callback_path(default: str = "callbacks/kie") -> str:
+    """Return path segment for KIE callbacks (no leading slash)."""
+    path = os.getenv("KIE_CALLBACK_PATH", "").strip().strip("/")
+    return path or default
+
+
+def build_kie_callback_url(base_url: str | None = None, path: str | None = None) -> str:
+    """Build KIE callback URL from base and path.
+
+    Falls back to env WEBHOOK_BASE_URL/WEBHOOK_URL/RENDER_EXTERNAL_URL.
+    """
+    base = (base_url or get_webhook_base_url()).rstrip("/")
+    segment = (path or get_kie_callback_path()).strip("/")
+    if not base or not segment:
+        return ""
+    return f"{base}/{segment}"
+
+
 def build_webhook_url(base_url: str, secret_path: str) -> str:
     """Build full webhook URL from base and secret path."""
     if not base_url or not secret_path:

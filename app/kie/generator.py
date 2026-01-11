@@ -200,31 +200,32 @@ class KieGenerator:
                 error_msg = create_response.get('error', 'Unknown error')
                 error_code = create_response.get('code')
                 
-                # Special handling for 402 (insufficient credits) - use mock instead
+                # Special handling for 402 (insufficient credits)
                 if error_code == 402:
-                    logger.warning(f"⚠️ API 402 (insufficient credits): {error_msg} | Using mock response instead")
-                    import asyncio
-                    import json
-                    from datetime import datetime
-                    
-                    # Generate mock task ID
-                    task_id = f"mock_task_{datetime.now().timestamp()}_{hash(model_id) % 10000}"
-                    logger.info(f"📝 Mock task created: {task_id}")
-                    
-                    # Return mock success to skip to heartbeat polling
-                    # The mock response will be returned from get_record_info
+                    from config_runtime import is_dry_run, is_test_mode
+
+                    is_nonprod = is_dry_run() or is_test_mode()
+                    logger.warning(
+                        "⚠️ API 402 (insufficient credits): %s | mode=%s",
+                        error_msg,
+                        "nonprod" if is_nonprod else "prod",
+                    )
+                    user_message = (
+                        "Недостаточно кредитов Kie.ai (код 402). "
+                        "Пополните Kie.ai / проверьте ключ. Генерация не запущена."
+                    )
                     return {
-                        'success': True,
-                        'message': '✅ Генерация завершена (тестовый режим)',
-                        'result_urls': [
-                            f"https://example.com/test_image_{i}.png" for i in range(1, 2)
-                        ],
+                        'success': False,
+                        'status': 'mocked' if is_nonprod else 'failed',
+                        'mocked': bool(is_nonprod),
+                        'message': user_message,
+                        'result_urls': [],
                         'result_object': None,
-                        'error_code': None,
-                        'error_message': None,
-                        'task_id': task_id
+                        'error_code': 'INSUFFICIENT_CREDITS',
+                        'error_message': error_msg,
+                        'task_id': None
                     }
-                
+
                 logger.error(f"API error in create_task: {error_msg}")
                 return {
                     'success': False,

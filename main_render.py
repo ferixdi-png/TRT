@@ -25,9 +25,20 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import json
 
 from aiohttp import web
 
+from app.storage import get_storage
+from app.storage.status import normalize_job_status
+from app.utils.logging_config import setup_logging  # noqa: E402
+from app.utils.runtime_state import runtime_state  # noqa: E402
+from app.utils.webhook import (
+    build_kie_callback_url,
+    get_kie_callback_path,
+    get_webhook_base_url,
+    get_webhook_secret_token,
+)  # noqa: E402
 
 def _import_real_aiogram_symbols():
     """Import aiogram symbols from site-packages even if ./aiogram stubs exist."""
@@ -66,10 +77,6 @@ def _import_real_aiogram_symbols():
 
 Bot, Dispatcher, MemoryStorage, Update, DefaultBotProperties = _import_real_aiogram_symbols()
 
-from app.utils.logging_config import setup_logging  # noqa: E402
-from app.utils.runtime_state import runtime_state  # noqa: E402
-from app.utils.webhook import get_webhook_base_url  # noqa: E402
-
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +113,8 @@ class RuntimeConfig:
     telegram_bot_token: str
     database_url: str
     dry_run: bool
+    kie_callback_path: str
+    kie_callback_token: str
 
 
 def _load_runtime_config() -> RuntimeConfig:
@@ -123,10 +132,12 @@ def _load_runtime_config() -> RuntimeConfig:
         webhook_secret_path = _derive_secret_path_from_token(telegram_bot_token)
 
     # Secret token in header (Telegram supports X-Telegram-Bot-Api-Secret-Token)
-    webhook_secret_token = os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
+    webhook_secret_token = get_webhook_secret_token()
 
     database_url = os.getenv("DATABASE_URL", "").strip()
     dry_run = _bool_env("DRY_RUN", False) or _bool_env("TEST_MODE", False)
+    kie_callback_path = get_kie_callback_path()
+    kie_callback_token = os.getenv("KIE_CALLBACK_TOKEN", "").strip()
 
     return RuntimeConfig(
         bot_mode=bot_mode,
@@ -137,6 +148,8 @@ def _load_runtime_config() -> RuntimeConfig:
         telegram_bot_token=telegram_bot_token,
         database_url=database_url,
         dry_run=dry_run,
+        kie_callback_path=kie_callback_path,
+        kie_callback_token=kie_callback_token,
     )
 
 
@@ -243,6 +256,10 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
 def _build_webhook_url(cfg: RuntimeConfig) -> str:
     base = cfg.webhook_base_url.rstrip("/")
     return f"{base}/webhook/{cfg.webhook_secret_path}" if base else ""
+
+
+def _build_kie_callback_url(cfg: RuntimeConfig) -> str:
+    return build_kie_callback_url(cfg.webhook_base_url, cfg.kie_callback_path)
 
 
 def _health_payload(active_state: ActiveState) -> dict[str, Any]:
@@ -383,9 +400,84 @@ def _make_web_app(
         
         return web.Response(status=200, text="ok")
 
+    async def kie_callback(request: web.Request) -> web.Response:
+        if cfg.kie_callback_token:
+            header = request.headers.get("X-KIE-Callback-Token", "")
+            if header != cfg.kie_callback_token:
+                logger.warning("[KIE_CALLBACK] Invalid token")
+                raise web.HTTPUnauthorized()
+
+        try:
+            payload = await request.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[KIE_CALLBACK] Bad JSON: %s", exc)
+            return web.Response(status=400, text="bad json")
+
+        task_id = payload.get("taskId") or payload.get("task_id")
+        if not task_id:
+            logger.warning("[KIE_CALLBACK] Missing taskId")
+            return web.Response(status=400, text="missing taskId")
+
+        state = payload.get("state") or payload.get("status")
+        result_urls = payload.get("resultUrls") or payload.get("result_urls") or []
+        result_json = payload.get("resultJson") or payload.get("result_json")
+        if not result_urls and isinstance(result_json, str):
+            try:
+                parsed = json.loads(result_json)
+                result_urls = parsed.get("resultUrls") or parsed.get("urls") or []
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[KIE_CALLBACK] resultJson parse failed: %s", exc)
+        error_text = payload.get("failMsg") or payload.get("errorMessage") or payload.get("error")
+
+        normalized_status = normalize_job_status(state or ("done" if result_urls else "running"))
+
+        storage = get_storage()
+        job = None
+        try:
+            job = await storage.get_job(task_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[KIE_CALLBACK] get_job failed: %s", exc)
+
+        if not job and hasattr(storage, "find_job_by_task_id"):
+            try:
+                job = await storage.find_job_by_task_id(task_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[KIE_CALLBACK] find_job_by_task_id failed: %s", exc)
+
+        if job:
+            job_id = job.get("job_id") or job.get("id") or task_id
+            try:
+                await storage.update_job_status(
+                    job_id,
+                    normalized_status,
+                    result_urls=result_urls or None,
+                    error_message=error_text,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("[KIE_CALLBACK] Failed to update job %s: %s", job_id, exc)
+
+            user_id = job.get("user_id")
+            if user_id:
+                try:
+                    if normalized_status == "done" and result_urls:
+                        text = "✅ Генерация готова\n" + "\n".join(result_urls)
+                    elif normalized_status == "failed":
+                        text = f"❌ Генерация не завершилась: {error_text or 'Ошибка'}"
+                    else:
+                        text = f"ℹ️ Обновление статуса: {normalized_status}"
+                    await bot.send_message(user_id, text)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[KIE_CALLBACK] Failed to notify user %s: %s", user_id, exc)
+        else:
+            logger.warning("[KIE_CALLBACK] Job not found for task_id=%s status=%s", task_id, state)
+
+        return web.json_response({"ok": True})
+
+    callback_route = f"/{cfg.kie_callback_path.lstrip('/')}"
     app.router.add_get("/health", health)
     app.router.add_get("/", root)
     # aiohttp auto-registers HEAD for GET; explicit add_head causes duplicate route
+    app.router.add_post(callback_route, kie_callback)
     app.router.add_post("/webhook/{secret}", webhook)
 
     async def on_shutdown(_app: web.Application) -> None:
@@ -423,6 +515,8 @@ async def main() -> None:
     logger.info("WEBHOOK_BASE_URL=%s", cfg.webhook_base_url or "(not set)")
     logger.info("WEBHOOK_SECRET_PATH=%s", (cfg.webhook_secret_path[:6] + "..."))
     logger.info("WEBHOOK_SECRET_TOKEN=%s", "SET" if cfg.webhook_secret_token else "(not set)")
+    logger.info("KIE_CALLBACK_PATH=%s", cfg.kie_callback_path)
+    logger.info("KIE_CALLBACK_TOKEN=%s", "SET" if cfg.kie_callback_token else "(not set)")
     logger.info("DRY_RUN=%s", cfg.dry_run)
     logger.info("=" * 60)
 

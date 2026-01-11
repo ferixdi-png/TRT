@@ -328,6 +328,14 @@ class JsonStorage(BaseStorage):
         data = await self._load_json(self.jobs_file)
         return data.get(job_id)
 
+    async def find_job_by_task_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Найти задачу по внешнему task_id или совпадающему job_id."""
+        data = await self._load_json(self.jobs_file)
+        for job in data.values():
+            if job.get("task_id") == task_id or job.get("external_task_id") == task_id or job.get("job_id") == task_id:
+                return job
+        return None
+
     async def list_jobs(
         self, user_id: Optional[int] = None, status: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
