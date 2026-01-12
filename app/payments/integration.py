@@ -26,7 +26,8 @@ async def generate_with_payment(
     timeout: int = 300,
     task_id: Optional[str] = None,
     reserve_balance: bool = False,
-    charge_manager: Optional[ChargeManager] = None
+    charge_manager: Optional[ChargeManager] = None,
+    chat_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Generate with payment safety guarantees:
@@ -40,6 +41,7 @@ async def generate_with_payment(
         amount: Charge amount (ignored for FREE models)
         progress_callback: Progress callback
         timeout: Generation timeout
+        chat_id: Telegram chat ID for result delivery
         
     Returns:
         Result dict with generation and payment info
@@ -57,7 +59,10 @@ async def generate_with_payment(
     if is_free_model(model_id):
         logger.info(f"{correlation_tag()} 🆓 Model {model_id} is FREE - skipping payment")
         generator = KieGenerator()
-        gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        gen_result = await generator.generate(
+            model_id, user_inputs, progress_callback, timeout,
+            user_id=user_id, chat_id=chat_id or user_id, price=0.0
+        )
         
         # CRITICAL: If KIE returns 402 for "free" model, it's a config mismatch
         if not gen_result.get('success') and gen_result.get('error_code') == 'INSUFFICIENT_CREDITS':
@@ -101,7 +106,10 @@ async def generate_with_payment(
     
     if charge_result['status'] == 'already_committed':
         # Already paid, just generate
-        gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        gen_result = await generator.generate(
+            model_id, user_inputs, progress_callback, timeout,
+            user_id=user_id, chat_id=chat_id or user_id, price=amount
+        )
         return {
             **gen_result,
             'charge_task_id': charge_task_id,
@@ -125,7 +133,10 @@ async def generate_with_payment(
     # Generate
     start_time = time.time()
     logger.info(f"{correlation_tag()} Starting generation for model={model_id}")
-    gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+    gen_result = await generator.generate(
+        model_id, user_inputs, progress_callback, timeout,
+        user_id=user_id, chat_id=chat_id or user_id, price=amount
+    )
     duration = time.time() - start_time
     
     # Track metrics

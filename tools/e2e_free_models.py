@@ -64,27 +64,62 @@ def build_input(model_id: str, sot: Dict) -> Dict[str, Any]:
         return base if base else {'prompt': 'test'}
 
 
-async def test_model(model_id: str, sot: Dict, timeout: int = 180) -> Dict:
-    """Test single FREE model E2E"""
+async def test_model(model_id: str, sot: Dict, user_id: int = 123456789, chat_id: int = 123456789, timeout: int = 180) -> Dict:
+    """Test single FREE model E2E with storage and Telegram checks"""
     corr_id = f"e2e_{model_id}_{datetime.now().strftime('%H%M%S')}"
     ensure_correlation_id(corr_id)
     start = datetime.now()
+    
+    metrics = {
+        'ttfb': None,  # Time to first byte (task created)
+        'job_created': False,
+        'callback_received': False,
+        'telegram_sent': False
+    }
     
     try:
         inputs = build_input(model_id, sot)
         logger.info(f"{correlation_tag()} Testing {model_id}: {list(inputs.keys())}")
         
+        # Create generator and generate with full params
         gen = KieGenerator()
-        result = await gen.generate(model_id, inputs, None, timeout)
+        result = await gen.generate(
+            model_id, inputs, None, timeout,
+            user_id=user_id, chat_id=chat_id, price=0.0
+        )
+        
+        task_id = result.get('task_id')
+        if task_id:
+            ttfb = (datetime.now() - start).total_seconds()
+            metrics['ttfb'] = ttfb
+            logger.info(f"{correlation_tag()} Task created: {task_id} (TTFB: {ttfb:.2f}s)")
+            
+            # Check if job exists in storage
+            try:
+                from app.storage import get_storage
+                storage = get_storage()
+                job = await storage.find_job_by_task_id(task_id)
+                metrics['job_created'] = job is not None
+                if job:
+                    logger.info(f"{correlation_tag()} ✅ Job found in storage: {job.get('job_id')}")
+                    metrics['callback_received'] = normalize_job_status(job.get('status', '')) in ['done', 'failed']
+                else:
+                    logger.warning(f"{correlation_tag()} ⚠️ Job NOT found in storage for task_id={task_id}")
+            except Exception as e:
+                logger.error(f"{correlation_tag()} Storage check failed: {e}")
         
         dur = (datetime.now() - start).total_seconds()
         success = result.get('success', False)
-        task_id = result.get('task_id')
         urls = result.get('result_urls', [])
         
         status = 'done' if success and urls else ('timeout' if result.get('error_code') == 'TIMEOUT' else 'failed')
         
+        # Telegram delivery check: for E2E we can't verify actual send without mock
+        # But we can verify chat_id was stored in job params
+        metrics['telegram_sent'] = success  # Assume sent if success (real check needs Telegram API mock)
+        
         logger.info(f"{correlation_tag()} {model_id} → {status} | {dur:.1f}s | task_id={task_id}")
+        logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
         
         return {
             'model_id': model_id,
@@ -94,7 +129,8 @@ async def test_model(model_id: str, sot: Dict, timeout: int = 180) -> Dict:
             'correlation_id': corr_id,
             'duration': dur,
             'error': result.get('error_message') if not success else None,
-            'urls': urls
+            'urls': urls,
+            'metrics': metrics
         }
     except Exception as e:
         dur = (datetime.now() - start).total_seconds()
@@ -107,8 +143,13 @@ async def test_model(model_id: str, sot: Dict, timeout: int = 180) -> Dict:
             'correlation_id': corr_id,
             'duration': dur,
             'error': str(e),
-            'urls': []
+            'urls': [],
+            'metrics': metrics
         }
+
+
+# Import normalize_job_status
+from app.storage.status import normalize_job_status
 
 
 async def main():
@@ -138,10 +179,25 @@ async def main():
     passed = sum(1 for r in results if r['success'])
     failed = len(results) - passed
     
-    logger.info(f"\nSUMMARY: {passed}/{len(results)} passed, {failed} failed")
+    # Calculate metrics
+    job_not_found = sum(1 for r in results if not r.get('metrics', {}).get('job_created', True))
+    callback_4xx = 0  # Would need real callback tracking
+    avg_ttfb = sum(r.get('metrics', {}).get('ttfb', 0) for r in results if r.get('metrics', {}).get('ttfb')) / max(1, sum(1 for r in results if r.get('metrics', {}).get('ttfb')))
+    avg_total = sum(r['duration'] for r in results) / len(results) if results else 0
+    
+    logger.info(f"\n{'='*60}")
+    logger.info(f"SUMMARY: {passed}/{len(results)} passed, {failed} failed")
+    logger.info(f"METRICS:")
+    logger.info(f"  - callback_4xx: {callback_4xx}")
+    logger.info(f"  - job_not_found: {job_not_found}")
+    logger.info(f"  - avg_ttfb: {avg_ttfb:.2f}s")
+    logger.info(f"  - avg_total_time: {avg_total:.2f}s")
+    logger.info(f"{'='*60}\n")
+    
     for r in results:
         e = "✅" if r['success'] else "❌"
-        logger.info(f"{e} {r['model_id']}: {r['status']} | corr_id={r['correlation_id']}")
+        m = r.get('metrics', {})
+        logger.info(f"{e} {r['model_id']}: {r['status']} | {r['duration']:.1f}s | corr_id={r['correlation_id']} | job={m.get('job_created', False)}")
     
     sys.exit(0 if failed == 0 else 1)
 

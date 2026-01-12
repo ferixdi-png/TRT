@@ -1600,6 +1600,7 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
         progress_callback=heartbeat,
         task_id=charge_task_id,
         reserve_balance=True,
+        chat_id=callback.message.chat.id
     )
     
     if result.get("success"):
@@ -2404,6 +2405,7 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
                 progress_callback=heartbeat,
                 task_id=charge_task_id,
                 reserve_balance=True,
+                chat_id=callback.message.chat.id
             )
             logger.info(f"✅ [BG] [{correlation_id}] Generation completed for user {callback.from_user.id} | Success: {result.get('success')}")
         except Exception as e:

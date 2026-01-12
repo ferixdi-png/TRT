@@ -512,15 +512,33 @@ def _make_web_app(
                 logger.exception("[KIE_CALLBACK] Failed to update job %s: %s", job_id, exc)
 
             user_id = job.get("user_id")
-            if user_id:
+            # Get chat_id from job params (more reliable for delivery)
+            chat_id = user_id  # Default fallback
+            if job.get("params"):
+                job_params = job.get("params")
+                if isinstance(job_params, dict):
+                    chat_id = job_params.get("chat_id") or user_id
+                elif isinstance(job_params, str):
+                    try:
+                        params_dict = json.loads(job_params)
+                        chat_id = params_dict.get("chat_id") or user_id
+                    except Exception:  # noqa: BLE001
+                        pass
+            
+            if user_id and chat_id:
                 try:
                     if normalized_status == "done" and result_urls:
-                        text = "✅ Генерация готова\n" + "\n".join(result_urls)
+                        text = "✅ Генерация готова\\n" + "\\n".join(result_urls)
+                        # Send result URLs to chat
+                        await bot.send_message(chat_id, text)
+                        logger.info(f"[KIE_CALLBACK] ✅ Sent result to chat_id={chat_id} user_id={user_id}")
                     elif normalized_status == "failed":
                         text = f"❌ Генерация не завершилась: {error_text or 'Ошибка'}"
+                        await bot.send_message(chat_id, text)
+                        logger.info(f"[KIE_CALLBACK] ❌ Sent error to chat_id={chat_id} user_id={user_id}")
                     else:
-                        text = f"ℹ️ Обновление статуса: {normalized_status}"
-                    await bot.send_message(user_id, text)
+                        # Don't spam intermediate statuses
+                        logger.debug(f"[KIE_CALLBACK] Intermediate status {normalized_status} for task {effective_id}")
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("[KIE_CALLBACK] Failed to notify user %s: %s", user_id, exc)
         else:
@@ -599,6 +617,17 @@ async def main() -> None:
             get_connection_pool()
         except Exception as e:
             logger.warning("[DB] Could not initialize psycopg2 pool for lock: %s", e)
+        
+        # Auto-apply migrations BEFORE lock acquisition
+        try:
+            from app.storage.migrations import apply_migrations_safe
+            migrations_ok = await apply_migrations_safe(cfg.database_url)
+            if migrations_ok:
+                logger.info("[MIGRATIONS] ✅ Database schema ready")
+            else:
+                logger.warning("[MIGRATIONS] ⚠️ Could not verify migrations (continuing anyway)")
+        except Exception as e:
+            logger.warning(f"[MIGRATIONS] Auto-apply error: {e}")
 
     # Create lock object and state tracker
     lock = SingletonLock(cfg.database_url)
