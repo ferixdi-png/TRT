@@ -69,12 +69,16 @@ class SingletonLockController:
     
     async def _set_state(self, new_state: LockState) -> None:
         """Atomic state transition (thread-safe)"""
+        logger.info(f"[LOCK_CONTROLLER] 🔧 _set_state called: new_state={new_state.value}")
         async with self.state._mutex:
             old_state = self.state.state
+            logger.info(f"[LOCK_CONTROLLER] 🔍 State transition: {old_state.value} → {new_state.value}")
             self.state.state = new_state
             
             if new_state == LockState.ACTIVE:
+                logger.info("[LOCK_CONTROLLER] ✅ Setting ACTIVE state...")
                 self.state.lock_acquired_at = datetime.now()
+                logger.info(f"[LOCK_CONTROLLER] 🔍 Checking callback: old_state={old_state.value}, has_callback={self.on_active_callback is not None}")
                 if old_state == LockState.PASSIVE:
                     logger.info(
                         "[LOCK_CONTROLLER] %s → %s | instance=%s held_since=%s",
@@ -91,6 +95,10 @@ class SingletonLockController:
                             logger.info("[LOCK_CONTROLLER] ✅ on_active_callback completed")
                         except Exception as e:
                             logger.exception("[LOCK_CONTROLLER] ❌ on_active_callback failed: %s", e)
+                    else:
+                        logger.error("[LOCK_CONTROLLER] ❌ on_active_callback is None!")
+                else:
+                    logger.warning(f"[LOCK_CONTROLLER] ⚠️ NOT calling callback: old_state={old_state.value} (expected PASSIVE)")
             elif new_state == LockState.PASSIVE:
                 self.state.lock_acquired_at = None
                 if old_state == LockState.ACTIVE:
