@@ -267,7 +267,7 @@ class ChargeManager:
                 'message': 'Оплата была отменена'
             }
         
-        # Actually charge user (call payment API)
+        # Actually charge user via WalletService (if reserved funds exist)
         try:
             wallet_service = self._get_wallet_service()
             if wallet_service and charge_info.get('reserved') and charge_info.get('amount', 0) > 0:
@@ -284,43 +284,38 @@ class ChargeManager:
                         'task_id': task_id,
                         'message': 'Ошибка при списании средств'
                     }
-            # TODO: Replace with actual payment API call
-            charge_result = await self._execute_charge(charge_info)
-            
-            if charge_result.get('success'):
-                # Mark as committed
-                self._committed_charges.add(task_id)
-                charge_info['status'] = 'committed'
-                charge_info['committed_at'] = datetime.now().isoformat()
-                self._committed_info[task_id] = charge_info
-                
-                # Remove from pending
-                if task_id in self._pending_charges:
-                    del self._pending_charges[task_id]
-                
-                # Store in persistent storage
-                if self.storage:
-                    try:
-                        await self.storage.save_committed_charge(charge_info)
-                    except Exception as e:
-                        logger.error(f"Failed to save committed charge: {e}")
-                
-                logger.info(f"Committed charge for task {task_id}, amount: {charge_info['amount']}")
-                return {
-                    'status': 'committed',
-                    'task_id': task_id,
-                    'amount': charge_info['amount'],
-                    'message': 'Оплачено',
-                    'idempotent': False
-                }
+                # FIXED: wallet_service.charge() already deducted from hold
+                # Do NOT call _execute_charge() to avoid double charge
             else:
-                logger.error(f"Failed to execute charge for task {task_id}: {charge_result.get('error')}")
-                return {
-                    'status': 'failed',
-                    'task_id': task_id,
-                    'message': 'Ошибка при списании средств',
-                    'error': charge_result.get('error')
-                }
+                # No WalletService or no reserved funds - legacy path
+                # (should not happen in production with reserve_balance=True)
+                logger.warning(f"Committing charge without WalletService reserve for {task_id}")
+            
+            # Mark as committed (wallet_service.charge already succeeded above)
+            self._committed_charges.add(task_id)
+            charge_info['status'] = 'committed'
+            charge_info['committed_at'] = datetime.now().isoformat()
+            self._committed_info[task_id] = charge_info
+            
+            # Remove from pending
+            if task_id in self._pending_charges:
+                del self._pending_charges[task_id]
+            
+            # Store in persistent storage
+            if self.storage:
+                try:
+                    await self.storage.save_committed_charge(charge_info)
+                except Exception as e:
+                    logger.error(f"Failed to save committed charge: {e}")
+            
+            logger.info(f"Committed charge for task {task_id}, amount: {charge_info['amount']}")
+            return {
+                'status': 'committed',
+                'task_id': task_id,
+                'amount': charge_info['amount'],
+                'message': 'Оплачено',
+                'idempotent': False
+            }
         except Exception as e:
             logger.error(f"Exception during charge commit for task {task_id}: {e}", exc_info=True)
             return {
