@@ -2,9 +2,19 @@
 -- Унификация generation_jobs → jobs (из app/database/schema.py)
 -- Добавление недостающих полей и индексов для production-ready состояния
 
--- PHASE 1: Add missing columns to existing users table (if needed)
+-- PHASE 1: Fix users table schema incompatibility + add missing columns
 DO $$
 BEGIN
+    -- CRITICAL FIX: Add user_id as alias for id (001 migration uses 'id', not 'user_id')
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='user_id') THEN
+        -- Add user_id column as alias (copy from id)
+        ALTER TABLE users ADD COLUMN user_id BIGINT;
+        UPDATE users SET user_id = id;
+        ALTER TABLE users ALTER COLUMN user_id SET NOT NULL;
+        -- Create unique constraint
+        CREATE UNIQUE INDEX idx_users_user_id ON users(user_id);
+    END IF;
+    
     -- Add role column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
         ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
@@ -77,7 +87,7 @@ BEGIN
             finished_at TIMESTAMP
         );
         
-        -- Migrate data
+        -- Migrate data (FIXED: removed chat_id from INSERT as it doesn't exist in generation_jobs)
         INSERT INTO jobs (
             user_id, model_id, category, input_json, price_rub,
             status, kie_task_id, result_json, error_text,
@@ -112,7 +122,9 @@ BEGIN
             created_at,
             updated_at
         FROM generation_jobs
-        ON CONFLICT (idempotency_key) DO NOTHING;
+        WHERE NOT EXISTS (
+            SELECT 1 FROM jobs WHERE jobs.idempotency_key = CONCAT('migrated:', generation_jobs.job_id)
+        );
         
         -- Drop old table after successful migration
         DROP TABLE generation_jobs CASCADE;
