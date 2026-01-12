@@ -651,7 +651,6 @@ def _make_web_app(
                     logger.info(f"[KIE_CALLBACK] Created orphan job {orphan_job_id}")
                 except Exception as e:
                     logger.error(f"[KIE_CALLBACK] Failed to create orphan job: {e}")
-                         task_id, record_id, state)
 
         # ALWAYS return 200 to prevent KIE retry storms
         return web.json_response({"ok": True}, status=200)
