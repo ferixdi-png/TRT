@@ -874,6 +874,12 @@ async def main() -> None:
         
         if active_state.active:
             logger.info("[LOCK_CONTROLLER] ✅ ACTIVE MODE (lock acquired immediately)")
+            # CRITICAL FIX: Initialize services immediately if lock acquired on startup
+            try:
+                await init_active_services()
+                logger.info("[LOCK_CONTROLLER] ✅ Active services initialized (webhook set)")
+            except Exception as e:
+                logger.exception("[LOCK_CONTROLLER] ❌ Failed to initialize active services: %s", e)
         else:
             logger.info("[LOCK_CONTROLLER] ⏸️ PASSIVE MODE (background watcher started)")
 
