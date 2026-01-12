@@ -112,9 +112,14 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                     
                     logger.info(f"[LOCK] Holder: pid={pid}, state={state}, duration={duration_sec:.0f}s, idle={idle_sec:.0f}s")
                     
-                    # Если держатель lock idle >5 минут - считаем его мёртвым
-                    if idle_sec and idle_sec > 300:
-                        logger.warning(f"[LOCK] ⚠️ STALE LOCK DETECTED: idle for {idle_sec:.0f}s (>5min)")
+                    # КРИТИЧНО: "idle in transaction" убиваем через 30 секунд (открытая транзакция блокирует БД)
+                    # Обычный "idle" убиваем через 5 минут
+                    stale_threshold = 30 if state == "idle in transaction" else 300
+                    
+                    # Если держатель lock превысил порог - считаем его мёртвым
+                    if idle_sec and idle_sec > stale_threshold:
+                        threshold_label = f"{stale_threshold}s ({state})"
+                        logger.warning(f"[LOCK] ⚠️ STALE LOCK DETECTED: idle for {idle_sec:.0f}s (>{threshold_label})")
                         logger.warning(f"[LOCK] 🔥 Terminating stale process pid={pid}...")
                         
                         try:
