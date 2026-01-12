@@ -416,10 +416,22 @@ def _make_web_app(
             logger.warning("[KIE_CALLBACK] Bad JSON: %s", exc)
             return web.Response(status=400, text="bad json")
 
-        task_id = payload.get("taskId") or payload.get("task_id")
+        # Try to extract taskId from multiple possible locations (V4 compatibility)
+        task_id = (
+            payload.get("taskId") or
+            payload.get("task_id") or
+            payload.get("data", {}).get("taskId") or
+            payload.get("data", {}).get("task_id") or
+            payload.get("recordId") or
+            payload.get("record_id") or
+            payload.get("data", {}).get("recordId") or
+            payload.get("data", {}).get("record_id")
+        )
+        
         if not task_id:
-            logger.warning("[KIE_CALLBACK] Missing taskId")
-            return web.Response(status=400, text="missing taskId")
+            logger.warning("[KIE_CALLBACK] Missing taskId in payload: %s", payload)
+            # Return 200 OK to prevent KIE retries, but mark as ignored
+            return web.json_response({"ok": True, "ignored": True})
 
         state = payload.get("state") or payload.get("status")
         result_urls = payload.get("resultUrls") or payload.get("result_urls") or []
