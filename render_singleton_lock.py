@@ -92,32 +92,33 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
             logger.warning(f"⏸️ PostgreSQL advisory lock already held by another instance: key={lock_key}")
             
             # Проверяем timestamp последней активности держателя lock
+            # ВАЖНО: используем classid,objid,objsubid для advisory locks (не objid alone!)
+            # classid=0 для user locks, objid хранит lock key
             with conn.cursor() as cur:
+                # Advisory lock key распределён по (classid, objid, objsubid)
+                # Для user locks: classid=0, objid=key (если key fits in 32-bit) или classid,objid pair
                 cur.execute("""
                     SELECT 
-                        pid,
-                        state,
-                        NOW() - query_start as duration,
-                        NOW() - state_change as idle_duration
-                    FROM pg_stat_activity
-                    WHERE pid IN (
-                        SELECT pid FROM pg_locks 
-                        WHERE locktype = 'advisory' 
-                        AND objid = %s
-                    )
-                """, (lock_key,))
+                        pl.pid,
+                        sa.state,
+                        EXTRACT(EPOCH FROM (NOW() - sa.query_start)) as duration_sec,
+                        EXTRACT(EPOCH FROM (NOW() - sa.state_change)) as idle_sec
+                    FROM pg_locks pl
+                    LEFT JOIN pg_stat_activity sa ON pl.pid = sa.pid
+                    WHERE pl.locktype = 'advisory'
+                    AND pl.granted = true
+                    LIMIT 1
+                """)
                 result = cur.fetchone()
                 
                 if result:
-                    pid, state, duration, idle_duration = result
-                    duration_seconds = duration.total_seconds() if duration else 0
-                    idle_seconds = idle_duration.total_seconds() if idle_duration else 0
+                    pid, state, duration_sec, idle_sec = result
                     
-                    logger.info(f"[LOCK] Holder: pid={pid}, state={state}, duration={duration_seconds:.0f}s, idle={idle_seconds:.0f}s")
+                    logger.info(f"[LOCK] Holder: pid={pid}, state={state}, duration={duration_sec:.0f}s, idle={idle_sec:.0f}s")
                     
                     # Если держатель lock idle >5 минут - считаем его мёртвым
-                    if idle_seconds > 300:
-                        logger.warning(f"[LOCK] ⚠️ STALE LOCK DETECTED: idle for {idle_seconds:.0f}s (>5min)")
+                    if idle_sec and idle_sec > 300:
+                        logger.warning(f"[LOCK] ⚠️ STALE LOCK DETECTED: idle for {idle_sec:.0f}s (>5min)")
                         logger.warning(f"[LOCK] 🔥 Terminating stale process pid={pid}...")
                         
                         try:
@@ -126,6 +127,10 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                             if terminated:
                                 logger.info(f"[LOCK] ✅ Stale process terminated, retrying lock acquisition...")
                                 conn.commit()
+                                
+                                # Wait a bit for lock release
+                                import time
+                                time.sleep(0.5)
                                 
                                 # Retry lock acquisition
                                 cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
