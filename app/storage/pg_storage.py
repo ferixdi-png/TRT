@@ -474,6 +474,24 @@ class PostgresStorage(BaseStorage):
             )
             return dict(row) if row else None
 
+    async def get_undelivered_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get jobs that are done but not delivered to Telegram."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM generation_jobs
+                WHERE status = 'done'
+                  AND result_urls IS NOT NULL
+                  AND result_urls != ''
+                  AND result_urls != '[]'
+                ORDER BY created_at ASC
+                LIMIT $1
+                """,
+                limit
+            )
+            return [dict(row) for row in rows]
+
     async def list_jobs(
         self,
         user_id: Optional[int] = None,

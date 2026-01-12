@@ -167,6 +167,11 @@ class BaseStorage(ABC):
         pass
 
     @abstractmethod
+    async def get_undelivered_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get jobs that are done but not delivered to Telegram (for retry)."""
+        pass
+
+    @abstractmethod
     async def list_jobs(
         self,
         user_id: Optional[int] = None,

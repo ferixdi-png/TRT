@@ -664,6 +664,12 @@ def _make_web_app(
                         # 🎯 Smart sender: detect content type and send appropriately
                         await _send_generation_result(bot, chat_id, result_urls, effective_id)
                         logger.info(f"[KIE_CALLBACK] ✅ Sent result to chat_id={chat_id} user_id={user_id}")
+                        
+                        # Mark as delivered (prevents duplicates)
+                        try:
+                            await storage.update_job_status(job_id, 'done', delivered=True)
+                        except Exception:
+                            pass  # Best effort - job still delivered
                     elif normalized_status == "done" and not result_urls:
                         # Success but no URLs - this is suspicious
                         text = f"⚠️ Генерация завершилась, но результат пуст. ID: {effective_id}"

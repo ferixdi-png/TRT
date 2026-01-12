@@ -864,5 +864,26 @@
     "finished_at": null,
     "result_urls": [],
     "error_message": null
+  },
+  "test_task_12345": {
+    "job_id": "test_task_12345",
+    "user_id": 999999,
+    "model_id": "wan/2-5-standard-text-to-video",
+    "model_name": "wan/2-5-standard-text-to-video",
+    "params": {
+      "prompt": "test",
+      "chat_id": 999999
+    },
+    "price": 0.0,
+    "status": "done",
+    "task_id": "test_task_12345",
+    "external_task_id": "test_task_12345",
+    "created_at": "2026-01-12T14:43:01.129254",
+    "updated_at": "2026-01-12T14:43:01.131946",
+    "finished_at": "2026-01-12T14:43:01.131957",
+    "result_urls": [
+      "https://example.com/result.mp4"
+    ],
+    "error_message": null
   }
 }

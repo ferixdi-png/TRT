@@ -351,6 +351,19 @@ class JsonStorage(BaseStorage):
                 return job
         return None
 
+    async def get_undelivered_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get jobs that are done but not delivered (for retry)."""
+        data = await self._load_json(self.jobs_file)
+        undelivered = [
+            job for job in data.values()
+            if job.get('status') == 'done'
+            and job.get('result_urls')
+            and not job.get('delivered')
+        ]
+        # Sort by created_at
+        undelivered.sort(key=lambda j: j.get('created_at', ''))
+        return undelivered[:limit]
+
     async def list_jobs(
         self, user_id: Optional[int] = None, status: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
