@@ -26,33 +26,29 @@ logger = logging.getLogger(__name__)
 def make_lock_key(token: str, namespace: str = "telegram_polling") -> int:
     """
     Создает стабильный bigint ключ из токена и namespace.
+    ГАРАНТИЯ: результат ВСЕГДА в диапазоне signed int64 [0, 2^63-1]
     
     Args:
         token: TELEGRAM_BOT_TOKEN
         namespace: Имя namespace для lock (default: "telegram_polling")
     
     Returns:
-        int64 ключ для pg_advisory_lock
+        int64 ключ для pg_advisory_lock (0 <= key <= 9223372036854775807)
     """
     # Комбинируем namespace и token для уникальности
     combined = f"{namespace}:{token}".encode('utf-8')
     
-    # Используем SHA256 и берем первые 8 байт (64 бита) для bigint
+    # Используем SHA256 и берем первые 8 байт (64 бита)
     hash_bytes = hashlib.sha256(combined).digest()[:8]
     
-    # Конвертируем в unsigned int64, затем приводим к signed bigint
-    # PostgreSQL advisory lock использует signed bigint (-2^63 to 2^63-1)
+    # Конвертируем в unsigned int64
     unsigned_key = int.from_bytes(hash_bytes, byteorder='big', signed=False)
     
-    # Приводим к signed bigint: используем модуль для гарантии положительного значения
-    # MAX_BIGINT = 9223372036854775807 (2^63 - 1)
-    MAX_BIGINT = 9223372036854775807
-    lock_key = unsigned_key % (MAX_BIGINT + 1)
-    
-    # Убеждаемся что ключ в допустимом диапазоне (должно быть автоматически)
-    if lock_key > MAX_BIGINT or lock_key < 0:
-        # Fallback: используем только младшие 63 бита
-        lock_key = unsigned_key & 0x7FFFFFFFFFFFFFFF
+    # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Приводим к signed int64 через битовую маску
+    # Берем только младшие 63 бита (старший бит сбрасываем для знака)
+    # Результат: 0 <= lock_key <= 0x7FFFFFFFFFFFFFFF (9223372036854775807)
+    MAX_BIGINT = 0x7FFFFFFFFFFFFFFF  # 2^63 - 1 = 9223372036854775807
+    lock_key = unsigned_key & MAX_BIGINT
     
     # Маскируем токен для логов
     masked_token = token[:4] + "..." + token[-4:] if len(token) > 8 else "****"
