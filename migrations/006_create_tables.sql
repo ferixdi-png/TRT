@@ -90,9 +90,33 @@ BEGIN
             RAISE NOTICE 'Dropped generation_jobs table';
         END IF;
     END IF;
+    
+    -- CRITICAL: Ensure all columns exist in jobs table (for tables created by old migrations)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'jobs') THEN
+        -- Add missing columns if they don't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='chat_id') THEN
+            ALTER TABLE jobs ADD COLUMN chat_id BIGINT;
+            RAISE NOTICE 'Added chat_id column to existing jobs table';
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='delivered_at') THEN
+            ALTER TABLE jobs ADD COLUMN delivered_at TIMESTAMP;
+            RAISE NOTICE 'Added delivered_at column to existing jobs table';
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='kie_status') THEN
+            ALTER TABLE jobs ADD COLUMN kie_status TEXT;
+            RAISE NOTICE 'Added kie_status column to existing jobs table';
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='finished_at') THEN
+            ALTER TABLE jobs ADD COLUMN finished_at TIMESTAMP;
+            RAISE NOTICE 'Added finished_at column to existing jobs table';
+        END IF;
+    END IF;
 END $$;
 
--- PHASE 3: Create indexes on jobs
+-- PHASE 3: Create indexes on jobs (AFTER ensuring all columns exist)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
