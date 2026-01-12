@@ -64,6 +64,7 @@ def make_lock_key(token: str, namespace: str = "telegram_polling") -> int:
 def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
     """
     Пытается получить PostgreSQL advisory lock.
+    Если lock занят, проверяет не "мёртвый" ли он (>5 минут без активности).
     
     Args:
         pool: psycopg2.pool.SimpleConnectionPool
@@ -87,8 +88,59 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
             # ВАЖНО: НЕ возвращаем соединение в пул!
             return conn
         else:
-            # Lock уже занят другим инстансом
+            # Lock занят - проверяем не "мёртвый" ли процесс
             logger.warning(f"⏸️ PostgreSQL advisory lock already held by another instance: key={lock_key}")
+            
+            # Проверяем timestamp последней активности держателя lock
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        pid,
+                        state,
+                        NOW() - query_start as duration,
+                        NOW() - state_change as idle_duration
+                    FROM pg_stat_activity
+                    WHERE pid IN (
+                        SELECT pid FROM pg_locks 
+                        WHERE locktype = 'advisory' 
+                        AND objid = %s
+                    )
+                """, (lock_key,))
+                result = cur.fetchone()
+                
+                if result:
+                    pid, state, duration, idle_duration = result
+                    duration_seconds = duration.total_seconds() if duration else 0
+                    idle_seconds = idle_duration.total_seconds() if idle_duration else 0
+                    
+                    logger.info(f"[LOCK] Holder: pid={pid}, state={state}, duration={duration_seconds:.0f}s, idle={idle_seconds:.0f}s")
+                    
+                    # Если держатель lock idle >5 минут - считаем его мёртвым
+                    if idle_seconds > 300:
+                        logger.warning(f"[LOCK] ⚠️ STALE LOCK DETECTED: idle for {idle_seconds:.0f}s (>5min)")
+                        logger.warning(f"[LOCK] 🔥 Terminating stale process pid={pid}...")
+                        
+                        try:
+                            cur.execute("SELECT pg_terminate_backend(%s)", (pid,))
+                            terminated = cur.fetchone()[0]
+                            if terminated:
+                                logger.info(f"[LOCK] ✅ Stale process terminated, retrying lock acquisition...")
+                                conn.commit()
+                                
+                                # Retry lock acquisition
+                                cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
+                                lock_acquired_retry = cur.fetchone()[0]
+                                
+                                if lock_acquired_retry:
+                                    logger.info(f"[LOCK] ✅ Lock acquired after terminating stale process!")
+                                    return conn
+                                else:
+                                    logger.warning("[LOCK] ⚠️ Still cannot acquire lock after termination")
+                        except Exception as e:
+                            logger.error(f"[LOCK] ❌ Failed to terminate stale process: {e}")
+                else:
+                    logger.warning("[LOCK] ⚠️ Lock holder process not found in pg_stat_activity (already dead?)")
+            
             logger.warning("[LOCK] ⚠️ PASSIVE MODE - another instance is ACTIVE, this instance will wait")
             # Возвращаем соединение в пул
             pool.putconn(conn)
