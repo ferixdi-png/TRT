@@ -1,0 +1,203 @@
+2026-01-12 10:16:40,475 [WARNING] DRY RUN (set RUN_E2E=1 for real tests)
+2026-01-12 10:16:40,475 [WARNING] For REAL RUN: RUN_E2E=1 ADMIN_ID=<your_telegram_id> python -m tools.e2e_free_models
+2026-01-12 10:16:40,475 [INFO] Running 2x for each model (E2E_RUNS=2)
+2026-01-12 10:16:40,480 [INFO] Loaded 4 free models from models/KIE_SOURCE_OF_TRUTH.json
+2026-01-12 10:16:40,480 [INFO] FREE models: ['z-image', 'qwen/text-to-image', 'qwen/image-to-image', 'qwen/image-edit']
+2026-01-12 10:16:40,484 [INFO] 
+============================================================
+z-image - Running 2x
+============================================================
+2026-01-12 10:16:40,484 [INFO] 🔄 Run 1/2 for z-image
+2026-01-12 10:16:40,484 [INFO] [corr=45d7d2e3] Testing z-image: ['prompt', 'aspect_ratio']
+2026-01-12 10:16:40,484 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=z-image
+2026-01-12 10:16:40,484 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['prompt', 'aspect_ratio']
+2026-01-12 10:16:40,484 [INFO] ✅ Loading SOURCE_OF_TRUTH v1.2.0 (cached): models/KIE_SOURCE_OF_TRUTH.json
+2026-01-12 10:16:40,492 [INFO] [corr=45d7d2e3] [GENERATOR] ✅ Input validation passed for z-image
+2026-01-12 10:16:40,492 [INFO] ✅ Loading SOURCE_OF_TRUTH (cached): /workspaces/TRT/models/KIE_SOURCE_OF_TRUTH.json
+2026-01-12 10:16:40,495 [INFO] Using V4 API for model z-image
+2026-01-12 10:16:40,495 [INFO]   - user_inputs to build_category_payload: {'prompt': 'test котик', 'aspect_ratio': '1:1'}
+2026-01-12 10:16:40,495 [INFO]   - user_inputs keys: ['prompt', 'aspect_ratio']
+2026-01-12 10:16:40,495 [INFO] Built image payload for z-image: ['model', 'callBackUrl', 'input']
+2026-01-12 10:16:40,495 [INFO]   - payload built: {'model': 'z-image', 'callBackUrl': '', 'input': {'aspect_ratio': '1:1', 'prompt': 'test котик'}}
+2026-01-12 10:16:40,496 [INFO] [corr=45d7d2e3] z-image → failed | 0.0s | task_id=None
+2026-01-12 10:16:40,496 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:40,496 [INFO]   ❌ Run 1: exception (0.0s)
+2026-01-12 10:16:42,498 [INFO] 🔄 Run 2/2 for z-image
+2026-01-12 10:16:42,499 [INFO] [corr=45d7d2e3] Testing z-image: ['prompt', 'aspect_ratio']
+2026-01-12 10:16:42,499 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=z-image
+2026-01-12 10:16:42,499 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['prompt', 'aspect_ratio']
+2026-01-12 10:16:42,499 [INFO] [corr=45d7d2e3] [GENERATOR] ✅ Input validation passed for z-image
+2026-01-12 10:16:42,499 [INFO] Using V4 API for model z-image
+2026-01-12 10:16:42,499 [INFO]   - user_inputs to build_category_payload: {'prompt': 'test котик', 'aspect_ratio': '1:1'}
+2026-01-12 10:16:42,499 [INFO]   - user_inputs keys: ['prompt', 'aspect_ratio']
+2026-01-12 10:16:42,499 [INFO] Built image payload for z-image: ['model', 'callBackUrl', 'input']
+2026-01-12 10:16:42,499 [INFO]   - payload built: {'model': 'z-image', 'callBackUrl': '', 'input': {'aspect_ratio': '1:1', 'prompt': 'test котик'}}
+2026-01-12 10:16:42,499 [INFO] [corr=45d7d2e3] z-image → failed | 0.0s | task_id=None
+2026-01-12 10:16:42,499 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:42,499 [INFO]   ❌ Run 2: exception (0.0s)
+2026-01-12 10:16:42,500 [INFO] 
+🔴 FAILED z-image: 0/2 passed
+2026-01-12 10:16:42,500 [INFO] 
+============================================================
+qwen/text-to-image - Running 2x
+============================================================
+2026-01-12 10:16:42,500 [INFO] 🔄 Run 1/2 for qwen/text-to-image
+2026-01-12 10:16:42,500 [INFO] [corr=45d7d2e3] Testing qwen/text-to-image: ['prompt', 'guidance_scale', 'num_inference_steps', 'image_size']
+2026-01-12 10:16:42,500 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=qwen/text-to-image
+2026-01-12 10:16:42,500 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['prompt', 'guidance_scale', 'num_inference_steps', 'image_size']
+2026-01-12 10:16:42,500 [ERROR] [corr=45d7d2e3] [GENERATOR] Input validation failed for qwen/text-to-image:
+  • Missing required field: enable_safety_checker
+  • Missing required field: output_format
+  • Missing required field: negative_prompt
+  • Missing required field: acceleration
+2026-01-12 10:16:42,500 [INFO] [corr=45d7d2e3] qwen/text-to-image → failed | 0.0s | task_id=None
+2026-01-12 10:16:42,500 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:42,500 [INFO]   ❌ Run 1: exception (0.0s)
+2026-01-12 10:16:44,503 [INFO] 🔄 Run 2/2 for qwen/text-to-image
+2026-01-12 10:16:44,503 [INFO] [corr=45d7d2e3] Testing qwen/text-to-image: ['prompt', 'guidance_scale', 'num_inference_steps', 'image_size']
+2026-01-12 10:16:44,503 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=qwen/text-to-image
+2026-01-12 10:16:44,503 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['prompt', 'guidance_scale', 'num_inference_steps', 'image_size']
+2026-01-12 10:16:44,503 [ERROR] [corr=45d7d2e3] [GENERATOR] Input validation failed for qwen/text-to-image:
+  • Missing required field: enable_safety_checker
+  • Missing required field: output_format
+  • Missing required field: negative_prompt
+  • Missing required field: acceleration
+2026-01-12 10:16:44,503 [INFO] [corr=45d7d2e3] qwen/text-to-image → failed | 0.0s | task_id=None
+2026-01-12 10:16:44,503 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:44,504 [INFO]   ❌ Run 2: exception (0.0s)
+2026-01-12 10:16:44,504 [INFO] 
+🔴 FAILED qwen/text-to-image: 0/2 passed
+2026-01-12 10:16:44,504 [INFO] 
+============================================================
+qwen/image-to-image - Running 2x
+============================================================
+2026-01-12 10:16:44,504 [INFO] 🔄 Run 1/2 for qwen/image-to-image
+2026-01-12 10:16:44,504 [INFO] [corr=45d7d2e3] Testing qwen/image-to-image: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:44,504 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=qwen/image-to-image
+2026-01-12 10:16:44,504 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:44,504 [ERROR] [corr=45d7d2e3] [GENERATOR] Input validation failed for qwen/image-to-image:
+  • Missing required field: image_url
+  • Missing required field: output_format
+  • Missing required field: acceleration
+  • Missing required field: negative_prompt
+  • Missing required field: enable_safety_checker
+2026-01-12 10:16:44,504 [INFO] [corr=45d7d2e3] qwen/image-to-image → failed | 0.0s | task_id=None
+2026-01-12 10:16:44,504 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:44,505 [INFO]   ❌ Run 1: exception (0.0s)
+2026-01-12 10:16:46,507 [INFO] 🔄 Run 2/2 for qwen/image-to-image
+2026-01-12 10:16:46,507 [INFO] [corr=45d7d2e3] Testing qwen/image-to-image: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:46,507 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=qwen/image-to-image
+2026-01-12 10:16:46,507 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:46,507 [ERROR] [corr=45d7d2e3] [GENERATOR] Input validation failed for qwen/image-to-image:
+  • Missing required field: image_url
+  • Missing required field: output_format
+  • Missing required field: acceleration
+  • Missing required field: negative_prompt
+  • Missing required field: enable_safety_checker
+2026-01-12 10:16:46,507 [INFO] [corr=45d7d2e3] qwen/image-to-image → failed | 0.0s | task_id=None
+2026-01-12 10:16:46,507 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:46,508 [INFO]   ❌ Run 2: exception (0.0s)
+2026-01-12 10:16:46,508 [INFO] 
+🔴 FAILED qwen/image-to-image: 0/2 passed
+2026-01-12 10:16:46,508 [INFO] 
+============================================================
+qwen/image-edit - Running 2x
+============================================================
+2026-01-12 10:16:46,508 [INFO] 🔄 Run 1/2 for qwen/image-edit
+2026-01-12 10:16:46,508 [INFO] [corr=45d7d2e3] Testing qwen/image-edit: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:46,508 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=qwen/image-edit
+2026-01-12 10:16:46,508 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:46,508 [ERROR] [corr=45d7d2e3] [GENERATOR] Input validation failed for qwen/image-edit:
+  • Missing required field: image_url
+  • Missing required field: acceleration
+  • Missing required field: image_size
+  • Missing required field: sync_mode
+  • Missing required field: enable_safety_checker
+  • Missing required field: output_format
+  • Missing required field: negative_prompt
+2026-01-12 10:16:46,508 [INFO] [corr=45d7d2e3] qwen/image-edit → failed | 0.0s | task_id=None
+2026-01-12 10:16:46,509 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:46,509 [INFO]   ❌ Run 1: exception (0.0s)
+2026-01-12 10:16:48,511 [INFO] 🔄 Run 2/2 for qwen/image-edit
+2026-01-12 10:16:48,511 [INFO] [corr=45d7d2e3] Testing qwen/image-edit: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:48,512 [INFO] [corr=45d7d2e3] [GENERATOR] Starting generate for model=qwen/image-edit
+2026-01-12 10:16:48,512 [INFO] [corr=45d7d2e3] [GENERATOR]   - user_inputs keys: ['image', 'prompt', 'guidance_scale', 'num_inference_steps', 'strength']
+2026-01-12 10:16:48,512 [ERROR] [corr=45d7d2e3] [GENERATOR] Input validation failed for qwen/image-edit:
+  • Missing required field: image_url
+  • Missing required field: acceleration
+  • Missing required field: image_size
+  • Missing required field: sync_mode
+  • Missing required field: enable_safety_checker
+  • Missing required field: output_format
+  • Missing required field: negative_prompt
+2026-01-12 10:16:48,512 [INFO] [corr=45d7d2e3] qwen/image-edit → failed | 0.0s | task_id=None
+2026-01-12 10:16:48,512 [ERROR] [corr=45d7d2e3] Exception: unsupported format string passed to NoneType.__format__
+Traceback (most recent call last):
+  File "/workspaces/TRT/tools/e2e_free_models.py", line 122, in test_model
+    logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
+2026-01-12 10:16:48,512 [INFO]   ❌ Run 2: exception (0.0s)
+2026-01-12 10:16:48,512 [INFO] 
+🔴 FAILED qwen/image-edit: 0/2 passed
+2026-01-12 10:16:48,512 [INFO] 
+================================================================================
+2026-01-12 10:16:48,512 [INFO] 📊 E2E TEST METRICS (2x RUNS)
+2026-01-12 10:16:48,512 [INFO] ================================================================================
+2026-01-12 10:16:48,513 [INFO] OVERALL: 0/8 runs passed, 8 failed
+2026-01-12 10:16:48,513 [INFO] 
+STABILITY:
+2026-01-12 10:16:48,513 [INFO]   🟢 STABLE:   0/4 models (all runs passed)
+2026-01-12 10:16:48,513 [INFO]   🟡 UNSTABLE: 0/4 models (some runs failed)
+2026-01-12 10:16:48,513 [INFO]   🔴 FAILED:   4/4 models (all runs failed)
+2026-01-12 10:16:48,513 [INFO] 
+METRICS:
+2026-01-12 10:16:48,513 [INFO]   - callback_4xx: 0
+2026-01-12 10:16:48,513 [INFO]   - job_not_found: 8
+2026-01-12 10:16:48,513 [INFO]   - avg_ttfb: 0.00s
+2026-01-12 10:16:48,513 [INFO]   - avg_total_time: 0.00s
+2026-01-12 10:16:48,513 [INFO] ================================================================================
+
+2026-01-12 10:16:48,513 [INFO] 📦 PER-MODEL RESULTS:
+2026-01-12 10:16:48,513 [INFO]   🔴 FAILED z-image: 0/2 passed | avg 0.0s
+2026-01-12 10:16:48,513 [INFO]   🔴 FAILED qwen/text-to-image: 0/2 passed | avg 0.0s
+2026-01-12 10:16:48,513 [INFO]   🔴 FAILED qwen/image-to-image: 0/2 passed | avg 0.0s
+2026-01-12 10:16:48,513 [INFO]   🔴 FAILED qwen/image-edit: 0/2 passed | avg 0.0s
+2026-01-12 10:16:48,513 [INFO] ================================================================================
+
+2026-01-12 10:16:48,513 [WARNING] ⚠️ SOME MODELS UNSTABLE/FAILED - INVESTIGATION NEEDED

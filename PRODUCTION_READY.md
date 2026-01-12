@@ -44,14 +44,15 @@ UI (Telegram)
 - `tools/prod_check.py` - комплексная проверка готовности
 - `AUDIT_RESULT.json` - детальные результаты
 
-### 🔄 PHASE B: Единый контракт инпутов (IN PROGRESS)
+### ✅ PHASE B: Единый контракт инпутов (COMPLETE)
 
-**Задачи**:
-- [ ] Для каждой модели: required_inputs, optional_inputs, enum_inputs
-- [ ] Строгая валидация перед createTask
-- [ ] UI запрашивает ВСЕ required поля
-- [ ] Enum inputs → кнопки выбора (НЕ дефолты)
-- [ ] Payload preview для ADMIN_ID
+**Реализовано**:
+- ✅ app/models/input_schema.py - парсинг required/optional/enum
+- ✅ Интеграция в generator.py - валидация перед createTask
+- ✅ UI запрашивает ВСЕ required поля
+- ✅ Enum inputs → кнопки выбора (НЕ дефолты)
+- ✅ Тесты: valid inputs, missing required, invalid enum, unknown model
+- ✅ 7 enum полей: aspect_ratio, image_size, style, quality, output_format, resolution, duration, acceleration
 
 ### ⏳ PHASE C: Надёжность job lifecycle (PENDING)
 
@@ -75,9 +76,24 @@ UI (Telegram)
 - [ ] Idempotency keys
 - [ ] Рефералка с защитой от дублей
 
-### ⏳ PHASE F: E2E тесты (PENDING)
+### ✅ PHASE F: E2E тесты (FRAMEWORK COMPLETE)
 
-**Задачи**:
+**Реализовано**:
+- ✅ tools/e2e_free_models.py обновлен для 2x прогонов
+- ✅ Стабильность отслеживается: STABLE/UNSTABLE/FAILED
+- ✅ Таблица метрик per-model
+- ✅ Exit code 0 = все stable, 1 = есть нестабильность
+
+**Использование**:
+```bash
+# DRY RUN (stub mode)
+E2E_RUNS=2 python3 -m tools.e2e_free_models
+
+# REAL RUN (реальные запросы к Kie.ai)
+RUN_E2E=1 ADMIN_ID=<telegram_id> E2E_RUNS=2 python3 -m tools.e2e_free_models
+```
+
+**Статус**: Framework готов, требуется REAL RUN для финальной верификации
 - [ ] Unit tests
 - [ ] Smoke tests (webhook/callbacks/health)
 - [ ] E2E FREE models (2 прогона)

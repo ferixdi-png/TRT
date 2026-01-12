@@ -32,36 +32,34 @@ def load_sot() -> Dict:
 
 
 def build_input(model_id: str, sot: Dict) -> Dict[str, Any]:
-    """Build minimal input for model"""
+    """Build complete input for model using first example from SOURCE_OF_TRUTH"""
     models = sot.get('models', {})
     model_data = models.get(model_id, {})
     schema = model_data.get('input_schema', {}).get('input', {})
     examples = schema.get('examples', [])
     
-    base = examples[0].copy() if examples and isinstance(examples[0], dict) else {}
+    if not examples or not isinstance(examples[0], dict):
+        # Fallback: minimal input
+        return {'prompt': 'test котик'}
     
-    if 'image-edit' in model_id or 'image-to-image' in model_id:
-        return {
-            'image': load_test_image(),
-            'prompt': 'test котик',
-            'guidance_scale': base.get('guidance_scale', 7.5),
-            'num_inference_steps': base.get('num_inference_steps', 20),
-            'strength': base.get('strength', 0.75)
-        }
-    elif 'text-to-image' in model_id:
-        return {
-            'prompt': 'test котик',
-            'guidance_scale': base.get('guidance_scale', 7.5),
-            'num_inference_steps': base.get('num_inference_steps', 20),
-            'image_size': base.get('image_size', 'square')
-        }
-    elif model_id == 'z-image':
-        return {
-            'prompt': 'test котик',
-            'aspect_ratio': base.get('aspect_ratio', '1:1')
-        }
-    else:
-        return base if base else {'prompt': 'test'}
+    # Use first example as base (it should have all required fields)
+    example_input = examples[0].copy()
+    
+    # Override some fields for test consistency
+    if 'prompt' in example_input:
+        example_input['prompt'] = 'test котик'
+    if 'negative_prompt' in example_input and not example_input.get('negative_prompt'):
+        example_input['negative_prompt'] = ''  # Empty string instead of None
+    
+    # For image-based models, use test image if needed
+    if 'image' in example_input or 'image_url' in example_input:
+        test_image = load_test_image()
+        if 'image' in example_input:
+            example_input['image'] = test_image
+        if 'image_url' in example_input:
+            example_input['image_url'] = test_image
+    
+    return example_input
 
 
 async def test_model(model_id: str, sot: Dict, user_id: int = 123456789, chat_id: int = 123456789, timeout: int = 180) -> Dict:
@@ -119,7 +117,11 @@ async def test_model(model_id: str, sot: Dict, user_id: int = 123456789, chat_id
         metrics['telegram_sent'] = success  # Assume sent if success (real check needs Telegram API mock)
         
         logger.info(f"{correlation_tag()} {model_id} → {status} | {dur:.1f}s | task_id={task_id}")
-        logger.info(f"{correlation_tag()} Metrics: TTFB={metrics['ttfb']:.2f}s job_created={metrics['job_created']} callback={metrics['callback_received']}")
+        
+        # Safe formatting of metrics (handle None values)
+        ttfb_val = metrics.get('ttfb')
+        ttfb_str = f"{ttfb_val:.2f}s" if ttfb_val is not None else "N/A"
+        logger.info(f"{correlation_tag()} Metrics: TTFB={ttfb_str} job_created={metrics['job_created']} callback={metrics['callback_received']}")
         
         return {
             'model_id': model_id,
@@ -155,6 +157,8 @@ from app.storage.status import normalize_job_status
 async def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
     
+    # Support for 2x runs mode
+    runs_count = int(os.getenv('E2E_RUNS', '1'))  # Default 1, set E2E_RUNS=2 for stability test
     is_real = os.getenv('RUN_E2E', '0') == '1'
     admin_id = int(os.getenv('ADMIN_ID', '0')) if is_real else 0
     
@@ -167,6 +171,8 @@ async def main():
             logger.error("ADMIN_ID not set! Set ADMIN_ID=<your_telegram_id> for Telegram delivery")
             sys.exit(1)
     
+    logger.info(f"Running {runs_count}x for each model (E2E_RUNS={runs_count})")
+    
     free_ids = get_free_models()
     logger.info(f"FREE models: {free_ids}")
     
@@ -175,50 +181,109 @@ async def main():
         sys.exit(1)
     
     sot = load_sot()
-    results = []
+    all_results = []  # All runs for all models
+    model_stability = {}  # Track stability per model
     
     # Use ADMIN_ID as both user_id and chat_id for REAL RUN
     test_user_id = admin_id if is_real else 123456789
     test_chat_id = admin_id if is_real else 123456789
     
     for mid in free_ids:
-        logger.info(f"\n{'='*60}\n{mid}\n{'='*60}")
-        r = await test_model(mid, sot, test_user_id, test_chat_id, 180)
-        results.append(r)
-        emoji = "✅" if r['success'] else "❌"
-        logger.info(f"{emoji} {mid}: {r['status']} ({r['duration']:.1f}s)")
+        model_stability[mid] = {'passed': 0, 'failed': 0, 'runs': []}
+        
+        logger.info(f"\n{'='*60}\n{mid} - Running {runs_count}x\n{'='*60}")
+        
+        for run_num in range(1, runs_count + 1):
+            logger.info(f"🔄 Run {run_num}/{runs_count} for {mid}")
+            r = await test_model(mid, sot, test_user_id, test_chat_id, 180)
+            r['run_number'] = run_num
+            all_results.append(r)
+            model_stability[mid]['runs'].append(r)
+            
+            if r['success']:
+                model_stability[mid]['passed'] += 1
+            else:
+                model_stability[mid]['failed'] += 1
+            
+            emoji = "✅" if r['success'] else "❌"
+            logger.info(f"  {emoji} Run {run_num}: {r['status']} ({r['duration']:.1f}s)")
+            
+            # Small delay between runs of same model
+            if run_num < runs_count:
+                await asyncio.sleep(2)
+        
+        # Determine stability
+        total = model_stability[mid]['passed'] + model_stability[mid]['failed']
+        if model_stability[mid]['passed'] == total:
+            stability = "🟢 STABLE"
+        elif model_stability[mid]['passed'] > 0:
+            stability = "🟡 UNSTABLE"
+        else:
+            stability = "🔴 FAILED"
+        
+        logger.info(f"\n{stability} {mid}: {model_stability[mid]['passed']}/{total} passed")
         
         # In REAL RUN, pause between models to avoid rate limits
-        if is_real and r != results[-1]:
+        if is_real and mid != free_ids[-1]:
             logger.info("Waiting 5s before next model...")
             await asyncio.sleep(5)
     
-    passed = sum(1 for r in results if r['success'])
-    failed = len(results) - passed
+    # Summary statistics
+    total_passed = sum(1 for r in all_results if r['success'])
+    total_failed = len(all_results) - total_passed
     
     # Calculate metrics
-    job_not_found = sum(1 for r in results if not r.get('metrics', {}).get('job_created', True))
+    job_not_found = sum(1 for r in all_results if not r.get('metrics', {}).get('job_created', True))
     callback_4xx = 0  # Would need real callback tracking
-    avg_ttfb = sum(r.get('metrics', {}).get('ttfb', 0) for r in results if r.get('metrics', {}).get('ttfb')) / max(1, sum(1 for r in results if r.get('metrics', {}).get('ttfb')))
-    avg_total = sum(r['duration'] for r in results) / len(results) if results else 0
+    avg_ttfb = sum(r.get('metrics', {}).get('ttfb', 0) for r in all_results if r.get('metrics', {}).get('ttfb')) / max(1, sum(1 for r in all_results if r.get('metrics', {}).get('ttfb')))
+    avg_total = sum(r['duration'] for r in all_results) / len(all_results) if all_results else 0
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"SUMMARY: {passed}/{len(results)} passed, {failed} failed")
-    logger.info(f"METRICS:")
+    # Stability summary
+    stable_models = sum(1 for mid, stats in model_stability.items() if stats['failed'] == 0)
+    unstable_models = sum(1 for mid, stats in model_stability.items() if stats['failed'] > 0 and stats['passed'] > 0)
+    failed_models = sum(1 for mid, stats in model_stability.items() if stats['passed'] == 0)
+    
+    logger.info(f"\n{'='*80}")
+    logger.info(f"📊 E2E TEST METRICS ({runs_count}x RUNS)")
+    logger.info(f"{'='*80}")
+    logger.info(f"OVERALL: {total_passed}/{len(all_results)} runs passed, {total_failed} failed")
+    logger.info(f"\nSTABILITY:")
+    logger.info(f"  🟢 STABLE:   {stable_models}/{len(free_ids)} models (all runs passed)")
+    logger.info(f"  🟡 UNSTABLE: {unstable_models}/{len(free_ids)} models (some runs failed)")
+    logger.info(f"  🔴 FAILED:   {failed_models}/{len(free_ids)} models (all runs failed)")
+    logger.info(f"\nMETRICS:")
     logger.info(f"  - callback_4xx: {callback_4xx}")
     logger.info(f"  - job_not_found: {job_not_found}")
     logger.info(f"  - avg_ttfb: {avg_ttfb:.2f}s")
     logger.info(f"  - avg_total_time: {avg_total:.2f}s")
     if is_real:
-        logger.info(f"  - telegram_delivery: Check your Telegram (chat_id={admin_id}) for {len(results)} results")
-    logger.info(f"{'='*60}\n")
+        logger.info(f"  - telegram_delivery: Check your Telegram (chat_id={admin_id}) for {len(all_results)} results")
+    logger.info(f"{'='*80}\n")
     
-    for r in results:
-        e = "✅" if r['success'] else "❌"
-        m = r.get('metrics', {})
-        logger.info(f"{e} {r['model_id']}: {r['status']} | {r['duration']:.1f}s | corr_id={r['correlation_id']} | job={m.get('job_created', False)}")
+    # Per-model breakdown
+    logger.info("📦 PER-MODEL RESULTS:")
+    for mid, stats in model_stability.items():
+        total = stats['passed'] + stats['failed']
+        if stats['failed'] == 0:
+            stability = "🟢 STABLE"
+        elif stats['passed'] > 0:
+            stability = "🟡 UNSTABLE"
+        else:
+            stability = "🔴 FAILED"
+        
+        avg_duration = sum(r['duration'] for r in stats['runs']) / len(stats['runs'])
+        logger.info(f"  {stability} {mid}: {stats['passed']}/{total} passed | avg {avg_duration:.1f}s")
     
-    sys.exit(0 if failed == 0 else 1)
+    logger.info(f"{'='*80}\n")
+    
+    # Exit code: 0 if all models stable, 1 otherwise
+    all_stable = failed_models == 0 and unstable_models == 0
+    if all_stable:
+        logger.info("✅ ALL MODELS STABLE - PRODUCTION READY")
+        sys.exit(0)
+    else:
+        logger.warning("⚠️ SOME MODELS UNSTABLE/FAILED - INVESTIGATION NEEDED")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

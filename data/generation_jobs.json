@@ -840,5 +840,29 @@
     "finished_at": null,
     "result_urls": [],
     "error_message": null
+  },
+  "stub_task_z-image": {
+    "job_id": "stub_task_z-image",
+    "user_id": 1,
+    "model_id": "z-image",
+    "model_name": "z-image",
+    "params": {
+      "model_id": "z-image",
+      "inputs": {
+        "prompt": "A beautiful sunset over mountains",
+        "aspect_ratio": "16:9"
+      },
+      "chat_id": 1,
+      "task_id": "stub_task_z-image"
+    },
+    "price": 0.0,
+    "status": "queued",
+    "task_id": "stub_task_z-image",
+    "external_task_id": "stub_task_z-image",
+    "created_at": "2026-01-12T10:12:49.222244",
+    "updated_at": "2026-01-12T10:12:49.222253",
+    "finished_at": null,
+    "result_urls": [],
+    "error_message": null
   }
 }

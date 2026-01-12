@@ -12,6 +12,7 @@ from app.kie.builder import build_payload, load_source_of_truth
 from app.kie.validator import ModelContractError
 from app.kie.parser import parse_record_info, get_human_readable_error
 from app.kie.router import is_v4_model, build_category_payload
+from app.models.input_schema import validate_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,26 @@ class KieGenerator:
             # Load source of truth if needed
             if not self.source_of_truth:
                 self.source_of_truth = load_source_of_truth()
+            
+            # ✅ PHASE B: Validate inputs before creating payload
+            # NO MAGIC DEFAULTS - пользователь должен выбрать все required/enum поля через UI
+            is_valid, validation_errors = validate_inputs(model_id, user_inputs)
+            if not is_valid:
+                error_details = "\n".join([f"  • {err}" for err in validation_errors])
+                logger.error(
+                    f"{correlation_tag()} [GENERATOR] Input validation failed for {model_id}:\n{error_details}"
+                )
+                return {
+                    'success': False,
+                    'message': f'❌ Некорректные входные данные:\n{error_details}',
+                    'result_urls': [],
+                    'result_object': None,
+                    'error_code': 'VALIDATION_ERROR',
+                    'error_message': f'Input validation failed: {validation_errors}',
+                    'task_id': None
+                }
+            
+            logger.info(f"{correlation_tag()} [GENERATOR] ✅ Input validation passed for {model_id}")
             
             # Check if this is a V4 model (new architecture)
             is_v4 = USE_V4_API and is_v4_model(model_id)
