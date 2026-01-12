@@ -1,8 +1,18 @@
 -- Initial schema for unified storage
 -- Supports users, balances, generations, payments, referrals
 
+-- Удаляем старые таблицы если они существуют (идемпотентность)
+DROP TABLE IF EXISTS referrals CASCADE;
+DROP TABLE IF EXISTS payments CASCADE;
+DROP TABLE IF EXISTS operations CASCADE;
+DROP TABLE IF EXISTS generation_jobs CASCADE;
+DROP TABLE IF EXISTS admin_limits CASCADE;
+DROP TABLE IF EXISTS daily_free_generations CASCADE;
+DROP TABLE IF EXISTS user_settings CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
 -- Таблица пользователей
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id BIGINT PRIMARY KEY,
     balance NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -10,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Настройки пользователей
-CREATE TABLE IF NOT EXISTS user_settings (
+CREATE TABLE user_settings (
     user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     language TEXT NOT NULL DEFAULT 'ru',
     gift_claimed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -19,7 +29,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
 );
 
 -- Бесплатные генерации (по дням)
-CREATE TABLE IF NOT EXISTS daily_free_generations (
+CREATE TABLE daily_free_generations (
     user_id BIGINT NOT NULL,
     date DATE NOT NULL,
     count INTEGER NOT NULL DEFAULT 0,
@@ -29,7 +39,7 @@ CREATE TABLE IF NOT EXISTS daily_free_generations (
 );
 
 -- Лимиты админов
-CREATE TABLE IF NOT EXISTS admin_limits (
+CREATE TABLE admin_limits (
     user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     limit_amount NUMERIC(12, 2) NOT NULL DEFAULT 100.00,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -37,7 +47,7 @@ CREATE TABLE IF NOT EXISTS admin_limits (
 );
 
 -- Задачи генерации
-CREATE TABLE IF NOT EXISTS generation_jobs (
+CREATE TABLE generation_jobs (
     job_id TEXT PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     model_id TEXT NOT NULL,
@@ -52,12 +62,13 @@ CREATE TABLE IF NOT EXISTS generation_jobs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_user_id ON generation_jobs(user_id);
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_status ON generation_jobs(status);
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_created_at ON generation_jobs(created_at);
+CREATE INDEX idx_generation_jobs_user_id ON generation_jobs(user_id);
+CREATE INDEX idx_generation_jobs_status ON generation_jobs(status);
+CREATE INDEX idx_generation_jobs_created_at ON generation_jobs(created_at);
+CREATE INDEX idx_generation_jobs_external_task_id ON generation_jobs(external_task_id);
 
 -- Операции (история генераций и платежей)
-CREATE TABLE IF NOT EXISTS operations (
+CREATE TABLE operations (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     type TEXT NOT NULL,  -- 'payment', 'generation', 'refund'
@@ -68,12 +79,12 @@ CREATE TABLE IF NOT EXISTS operations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_operations_user_id ON operations(user_id);
-CREATE INDEX IF NOT EXISTS idx_operations_type ON operations(type);
-CREATE INDEX IF NOT EXISTS idx_operations_created_at ON operations(created_at);
+CREATE INDEX idx_operations_user_id ON operations(user_id);
+CREATE INDEX idx_operations_type ON operations(type);
+CREATE INDEX idx_operations_created_at ON operations(created_at);
 
 -- Платежи
-CREATE TABLE IF NOT EXISTS payments (
+CREATE TABLE payments (
     payment_id TEXT PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     amount NUMERIC(12, 2) NOT NULL,
@@ -86,18 +97,18 @@ CREATE TABLE IF NOT EXISTS payments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
-CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
-CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments(created_at);
+CREATE INDEX idx_payments_user_id ON payments(user_id);
+CREATE INDEX idx_payments_status ON payments(status);
+CREATE INDEX idx_payments_created_at ON payments(created_at);
 
 -- Рефералы
-CREATE TABLE IF NOT EXISTS referrals (
+CREATE TABLE referrals (
     user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     referrer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
+CREATE INDEX idx_referrals_referrer_id ON referrals(referrer_id);
 
 -- Функция для обновления updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
