@@ -335,12 +335,33 @@ def _make_web_app(
                 raise web.HTTPUnauthorized()
 
         if not active_state.active:
-            # PASSIVE MODE: During rolling deploy, webhook must return 200 (Telegram requirement)
-            # but we do NOT process updates to avoid side effects (payments, generation, etc.)
-            # Log once per minute to avoid spam
-            if not hasattr(webhook, '_last_passive_log') or time.time() - webhook._last_passive_log > 60:
-                logger.info("[WEBHOOK] ⏸️  PASSIVE MODE: Returning 200 but not processing (waiting for lock)")
-                webhook._last_passive_log = time.time()
+            # 🎯 PASSIVE MODE: Don't process side-effects, but RESPOND to user
+            # Parse update to extract chat_id and send "updating" message
+            try:
+                payload = await request.json()
+                update = Update.model_validate(payload)
+                
+                # Extract chat_id from message or callback_query
+                chat_id = None
+                if update.message:
+                    chat_id = update.message.chat.id
+                elif update.callback_query:
+                    chat_id = update.callback_query.message.chat.id if update.callback_query.message else None
+                
+                # Send "updating" message to user
+                if chat_id:
+                    try:
+                        await bot.send_message(
+                            chat_id,
+                            "🔄 Бот обновляется (20-60 сек)\n\n"
+                            "Попробуй ещё раз через минуту или нажми /start"
+                        )
+                        logger.info(f"[PASSIVE MODE] Sent 'updating' message to chat_id={chat_id}")
+                    except Exception as e:
+                        logger.warning(f"[PASSIVE MODE] Failed to send message to {chat_id}: {e}")
+            except Exception as e:
+                logger.debug(f"[PASSIVE MODE] Could not parse update: {e}")
+            
             return web.Response(status=200, text="ok")
 
         # Basic rate limiting per IP
@@ -724,24 +745,6 @@ async def main() -> None:
             get_connection_pool()
         except Exception as e:
             logger.warning("[DB] Could not initialize psycopg2 pool for lock: %s", e)
-        
-        # 🎯 CRITICAL STARTUP BARRIER: Apply migrations BEFORE accepting any callbacks
-        # This prevents "relation does not exist" when KIE callback arrives before schema is ready
-        logger.info("[STARTUP BARRIER] Applying database migrations...")
-        try:
-            from app.storage.migrations import apply_migrations_safe
-            migrations_ok = await apply_migrations_safe(cfg.database_url)
-            if migrations_ok:
-                logger.info("[MIGRATIONS] ✅ Database schema ready - callbacks can be accepted")
-                runtime_state.db_schema_ready = True
-            else:
-                logger.error("[MIGRATIONS] ❌ Schema NOT ready - callbacks will fail!")
-                runtime_state.db_schema_ready = False
-                # Continue anyway but log as CRITICAL
-        except Exception as e:
-            logger.exception(f"[MIGRATIONS] CRITICAL: Auto-apply failed: {e}")
-            runtime_state.db_schema_ready = False
-            # Continue anyway - callback will handle missing tables gracefully
     else:
         # No database URL - using JSON storage
         runtime_state.db_schema_ready = True  # JSON storage doesn't need migrations
@@ -750,32 +753,49 @@ async def main() -> None:
     lock = SingletonLock(cfg.database_url)
     active_state = ActiveState(active=False)  # Start as passive, will activate after lock
     
-    # Start lock acquisition in background (non-blocking)
-    async def acquire_lock_background():
-        """Acquire lock in background without blocking port startup."""
+    # 🔧 BACKGROUND TASKS: migrations + lock acquisition (NON-BLOCKING)
+    # This ensures HTTP server starts IMMEDIATELY without waiting
+    async def background_initialization():
+        """Initialize database schema and acquire lock in background."""
+        # Step 1: Apply migrations (non-blocking)
+        if cfg.database_url:
+            logger.info("[BACKGROUND] Applying database migrations...")
+            try:
+                from app.storage.migrations import apply_migrations_safe
+                migrations_ok = await apply_migrations_safe(cfg.database_url)
+                if migrations_ok:
+                    logger.info("[MIGRATIONS] ✅ Database schema ready")
+                    runtime_state.db_schema_ready = True
+                else:
+                    logger.error("[MIGRATIONS] ❌ Schema NOT ready")
+                    runtime_state.db_schema_ready = False
+            except Exception as e:
+                logger.exception(f"[MIGRATIONS] CRITICAL: Auto-apply failed: {e}")
+                runtime_state.db_schema_ready = False
+        else:
+            runtime_state.db_schema_ready = True
+        
+        # Step 2: Acquire lock (non-blocking, no wait)
         try:
-            lock_acquired = await lock.acquire()
+            # Try to acquire lock immediately (0.5s timeout to avoid blocking)
+            lock_acquired = await lock.acquire(timeout=0.5)
             active_state.active = bool(lock_acquired)
             runtime_state.lock_acquired = lock_acquired
             
             if active_state.active:
-                logger.info("[LOCK] Acquired - ACTIVE mode enabled")
+                logger.info("[LOCK] ✅ Acquired immediately - ACTIVE mode")
             else:
-                logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (webhook returns 200, no side effects)")
-                logger.info("[LOCK] Background retry task will attempt to acquire lock periodically")
+                logger.warning("[LOCK] ⏸️  Not acquired - PASSIVE mode (background retry will activate later)")
                 # Start retry task
                 try:
                     from app.locking import start_background_lock_retry
-                    await start_background_lock_retry()
+                    asyncio.create_task(start_background_lock_retry())
                 except Exception as e:
-                    logger.warning(f"[LOCK] Could not start background retry task: {e}")
+                    logger.warning(f"[LOCK] Could not start background retry: {e}")
         except Exception as e:
             logger.exception("[LOCK] Lock acquisition failed: %s", e)
             active_state.active = False
             runtime_state.lock_acquired = False
-    
-    # Start lock acquisition but don't await it (non-blocking)
-    lock_acquisition_task = asyncio.create_task(acquire_lock_background())
 
     db_service = None
     free_manager = None
@@ -855,25 +875,24 @@ async def main() -> None:
                     logger.exception("[ACTIVE] init failed after lock acquisition: %s", e)
                 return
 
+    # 🚀 START BACKGROUND INITIALIZATION (non-blocking)
+    asyncio.create_task(background_initialization())
+
     try:
         if effective_bot_mode == "polling":
-            # Create app and start HTTP server IMMEDIATELY (don't wait for lock)
+            # Create app and start HTTP server IMMEDIATELY
             app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
             if cfg.port:
                 runner = await _start_web_server(app, cfg.port)
-                logger.info("[HEALTH] Server started on port %s (healthcheck ready)", cfg.port)
+                logger.info("[HEALTH] ✅ Server started on port %s (migrations/lock in background)", cfg.port)
 
-            # Wait for lock acquisition to complete (non-blocking startup)
-            try:
-                await asyncio.wait_for(lock_acquisition_task, timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("[LOCK] Lock acquisition still in progress after 5s, continuing...")
-            except Exception as e:
-                logger.warning("[LOCK] Lock acquisition error: %s", e)
+            # Wait briefly for background init (but don't block)
+            await asyncio.sleep(0.5)
 
-            # If passive mode, just keep healthcheck running
+            # If passive mode, start background retry and keep healthcheck running
             if not active_state.active:
-                logger.info("[PASSIVE MODE] HTTP server running (healthcheck only), waiting indefinitely")
+                lock_task = asyncio.create_task(lock_watcher())
+                logger.info("[PASSIVE MODE] HTTP server running, background lock watcher active")
                 await asyncio.Event().wait()
                 return
 
@@ -883,20 +902,14 @@ async def main() -> None:
             await dp.start_polling(bot)
             return
 
-        # webhook mode
-        # Create app and start HTTP server IMMEDIATELY (don't wait for lock)
+        # webhook mode - START HTTP SERVER IMMEDIATELY
         app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
         if cfg.port:
             runner = await _start_web_server(app, cfg.port)
-            logger.info("[HEALTH] Server started on port %s (healthcheck ready)", cfg.port)
+            logger.info("[HEALTH] ✅ Server started on port %s (migrations/lock in background)", cfg.port)
 
-        # Wait for lock acquisition to complete (with timeout)
-        try:
-            await asyncio.wait_for(lock_acquisition_task, timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.warning("[LOCK] Lock acquisition still in progress after 5s, continuing...")
-        except Exception as e:
-            logger.warning("[LOCK] Lock acquisition error: %s", e)
+        # Wait briefly for background init (but don't block)
+        await asyncio.sleep(0.5)
 
         # Initialize active services if lock acquired
         if active_state.active:
