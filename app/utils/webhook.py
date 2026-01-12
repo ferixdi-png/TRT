@@ -133,12 +133,30 @@ async def ensure_webhook(
     timeout_s: float = 10.0,
     retries: int = 3,
     backoff_s: float = 1.0,
+    force_reset: bool = False,
 ) -> bool:
-    """Ensure the webhook is configured without flapping."""
+    """Ensure the webhook is configured without flapping.
+    
+    Args:
+        bot: Bot instance
+        webhook_url: Desired webhook URL
+        secret_token: Optional secret token for webhook security
+        timeout_s: Timeout for API calls
+        retries: Number of retries
+        backoff_s: Backoff between retries
+        force_reset: If True, always reset webhook even if URL matches
+    
+    Returns:
+        True if webhook configured successfully
+    """
     if not webhook_url:
+        logger.warning("[WEBHOOK] No webhook_url provided, skipping setup")
         return False
 
     desired_url = webhook_url.rstrip("/")
+    
+    # Get current webhook info
+    logger.info("[WEBHOOK] Checking current webhook...")
     webhook_info = await _call_with_retry(
         "get_webhook_info",
         bot.get_webhook_info,
@@ -146,10 +164,25 @@ async def ensure_webhook(
         retries=retries,
         backoff_s=backoff_s,
     )
+    
     current_url = (webhook_info.url or "").rstrip("/")
-    if current_url == desired_url:
-        logger.info("[WEBHOOK] Webhook already set to %s", mask_webhook_url(webhook_url))
+    logger.info(f"[WEBHOOK] Current: {mask_webhook_url(current_url or '(not set)')}")
+    logger.info(f"[WEBHOOK] Desired: {mask_webhook_url(desired_url)}")
+    
+    # Log webhook errors if any
+    if webhook_info.last_error_message:
+        logger.warning(f"[WEBHOOK] ⚠️ Previous error: {webhook_info.last_error_message}")
+    
+    # Check if reset needed
+    if current_url == desired_url and not force_reset:
+        logger.info("[WEBHOOK] ✅ Webhook already set to %s", mask_webhook_url(webhook_url))
         return True
+    
+    # Reset webhook
+    if force_reset:
+        logger.info("[WEBHOOK] 🔄 Force reset requested")
+    else:
+        logger.info("[WEBHOOK] 🔄 Webhook mismatch, updating...")
 
     async def _set_webhook() -> None:
         await bot.set_webhook(webhook_url, secret_token=secret_token or None)
@@ -161,5 +194,14 @@ async def ensure_webhook(
         retries=retries,
         backoff_s=backoff_s,
     )
-    logger.info("[WEBHOOK] Webhook set to %s", mask_webhook_url(webhook_url))
-    return True
+    logger.info("[WEBHOOK] ✅ Webhook set to %s", mask_webhook_url(webhook_url))
+    
+    # Verify webhook was set
+    verify_info = await bot.get_webhook_info()
+    verify_url = (verify_info.url or "").rstrip("/")
+    if verify_url == desired_url:
+        logger.info("[WEBHOOK] ✅ Webhook verified successfully")
+        return True
+    else:
+        logger.error(f"[WEBHOOK] ❌ Verification failed! Expected: {mask_webhook_url(desired_url)}, Got: {mask_webhook_url(verify_url)}")
+        return False

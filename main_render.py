@@ -921,12 +921,21 @@ async def main() -> None:
                 raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
 
             from app.utils.webhook import ensure_webhook
-
-            await ensure_webhook(
+            
+            # CRITICAL: Always force reset webhook on startup
+            # This ensures webhook is updated after BOT_TOKEN change on Render
+            logger.info("[WEBHOOK] Setting up webhook (force_reset=True for token change safety)...")
+            webhook_set = await ensure_webhook(
                 bot,
                 webhook_url=webhook_url,
                 secret_token=cfg.webhook_secret_token or None,
+                force_reset=True,  # Always reset to handle token changes
             )
+            
+            if not webhook_set:
+                logger.error("[WEBHOOK] ❌ Failed to set webhook! Bot will NOT receive updates.")
+            else:
+                logger.info("[WEBHOOK] ✅ Webhook configured successfully")
 
     runner: Optional[web.AppRunner] = None
     
