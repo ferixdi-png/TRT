@@ -425,6 +425,123 @@ class ProductionChecker:
         
         return suite
     
+    def check_single_lock_controller(self) -> CheckSuite:
+        """Проверка единственного lock controller (PHASE 6)"""
+        suite = CheckSuite("SINGLE LOCK CONTROLLER")
+        
+        # Check 1: Controller file exists
+        controller_file = PROJECT_ROOT / "app" / "locking" / "controller.py"
+        if not controller_file.exists():
+            suite.checks.append(CheckResult(
+                "PHASE 6: Controller file",
+                CheckStatus.FAIL,
+                "app/locking/controller.py not found"
+            ))
+            return suite
+        
+        suite.checks.append(CheckResult(
+            "PHASE 6: Controller file",
+            CheckStatus.PASS,
+            "app/locking/controller.py exists"
+        ))
+        
+        # Check 2: SingletonLockController class defined
+        controller_content = controller_file.read_text()
+        if "class SingletonLockController" in controller_content:
+            suite.checks.append(CheckResult(
+                "PHASE 6: Controller class",
+                CheckStatus.PASS,
+                "SingletonLockController class defined"
+            ))
+        else:
+            suite.checks.append(CheckResult(
+                "PHASE 6: Controller class",
+                CheckStatus.FAIL,
+                "SingletonLockController class not found"
+            ))
+            return suite
+        
+        # Check 3: No old lock_watcher function
+        main_render = PROJECT_ROOT / "main_render.py"
+        if main_render.exists():
+            content = main_render.read_text()
+            if "async def lock_watcher" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: No duplicate lock_watcher",
+                    CheckStatus.FAIL,
+                    "OLD lock_watcher() function still present (should be removed)"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: No duplicate lock_watcher",
+                    CheckStatus.PASS,
+                    "Old lock_watcher() removed"
+                ))
+            
+            # Check 4: No start_background_lock_retry
+            if "start_background_lock_retry" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: No background_lock_retry",
+                    CheckStatus.FAIL,
+                    "start_background_lock_retry import/call still present"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: No background_lock_retry",
+                    CheckStatus.PASS,
+                    "start_background_lock_retry removed"
+                ))
+            
+            # Check 5: Controller integration
+            if "SingletonLockController" in content and "lock_controller.start()" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: Controller integration",
+                    CheckStatus.PASS,
+                    "SingletonLockController integrated in main_render.py"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: Controller integration",
+                    CheckStatus.FAIL,
+                    "Controller not properly integrated"
+                ))
+            
+            # Check 6: state_sync_loop exists
+            if "async def state_sync_loop" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: State sync loop",
+                    CheckStatus.PASS,
+                    "state_sync_loop() defined for active_state synchronization"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: State sync loop",
+                    CheckStatus.WARN,
+                    "state_sync_loop() not found (active_state may desync)"
+                ))
+            
+            # Check 7: Throttled passive notices
+            if "send_passive_notice_if_needed" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: Throttled notices",
+                    CheckStatus.PASS,
+                    "Webhook uses controller.send_passive_notice_if_needed()"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 6: Throttled notices",
+                    CheckStatus.WARN,
+                    "Throttled notices not integrated (users may get spam)"
+                ))
+        else:
+            suite.checks.append(CheckResult(
+                "PHASE 6: main_render.py",
+                CheckStatus.FAIL,
+                "main_render.py not found"
+            ))
+        
+        return suite
+    
     async def run_all_checks(self):
         """Запуск всех проверок"""
         print("🔍 PRODUCTION READINESS CHECK")
@@ -438,6 +555,7 @@ class ProductionChecker:
         self.suites.append(self.check_critical_files())
         self.suites.append(self.check_python_syntax())
         self.suites.append(self.check_prod_fixes())  # PHASES 1-5 validation
+        self.suites.append(self.check_single_lock_controller())  # PHASE 6: Lock controller
         
         # Вывод результатов
         total_passed = 0
