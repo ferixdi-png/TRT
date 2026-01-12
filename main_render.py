@@ -874,12 +874,16 @@ async def main() -> None:
         
         if active_state.active:
             logger.info("[LOCK_CONTROLLER] ✅ ACTIVE MODE (lock acquired immediately)")
+            logger.info("[LOCK_CONTROLLER] 🔧 About to call init_active_services()...")
+            logger.info(f"[LOCK_CONTROLLER] BOT_MODE={effective_bot_mode}, DRY_RUN={cfg.dry_run}")
             # CRITICAL FIX: Initialize services immediately if lock acquired on startup
             try:
+                logger.info("[LOCK_CONTROLLER] 🚀 Calling init_active_services() NOW...")
                 await init_active_services()
                 logger.info("[LOCK_CONTROLLER] ✅ Active services initialized (webhook set)")
             except Exception as e:
                 logger.exception("[LOCK_CONTROLLER] ❌ Failed to initialize active services: %s", e)
+                logger.error(f"[LOCK_CONTROLLER] ❌ Exception type: {type(e).__name__}")
         else:
             logger.info("[LOCK_CONTROLLER] ⏸️ PASSIVE MODE (background watcher started)")
 
@@ -888,8 +892,12 @@ async def main() -> None:
 
     async def init_active_services() -> None:
         nonlocal db_service, free_manager
+        
+        logger.info("[INIT_SERVICES] init_active_services() CALLED")
+        logger.info(f"[INIT_SERVICES] BOT_MODE={effective_bot_mode}, DRY_RUN={cfg.dry_run}")
 
         if cfg.database_url:
+            logger.info("[INIT_SERVICES] Initializing DatabaseService...")
             try:
                 from app.database.services import DatabaseService
                 from app.free.manager import FreeModelManager
@@ -910,32 +918,46 @@ async def main() -> None:
                 set_marketing_db(db_service)
                 set_free_manager(free_manager)
 
-                logger.info("[DB] DatabaseService initialized and injected into handlers")
+                logger.info("[DB] ✅ DatabaseService initialized and injected into handlers")
             except Exception as e:
-                logger.warning("[DB] Database init skipped/failed: %s", e)
+                logger.exception("[DB] ❌ Database init failed: %s", e)
                 db_service = None
-
+        
+        logger.info(f"[ACTIVE_INIT] Webhook setup check: mode={effective_bot_mode}, dry_run={cfg.dry_run}")
         if effective_bot_mode == "webhook" and not cfg.dry_run:
+            logger.info("[ACTIVE_INIT] Building webhook URL...")
             webhook_url = _build_webhook_url(cfg)
             if not webhook_url:
+                logger.error("[ACTIVE_INIT] ❌ Cannot build webhook URL!")
                 raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
+            
+            logger.info(f"[ACTIVE_INIT] Webhook URL built: {webhook_url[:50]}...")
 
             from app.utils.webhook import ensure_webhook
             
+            logger.info("[WEBHOOK_SETUP] 🔧 Calling ensure_webhook (force_reset=True)...")
             # CRITICAL: Always force reset webhook on startup
             # This ensures webhook is updated after BOT_TOKEN change on Render
-            logger.info("[WEBHOOK] Setting up webhook (force_reset=True for token change safety)...")
-            webhook_set = await ensure_webhook(
-                bot,
-                webhook_url=webhook_url,
-                secret_token=cfg.webhook_secret_token or None,
-                force_reset=True,  # Always reset to handle token changes
-            )
-            
-            if not webhook_set:
-                logger.error("[WEBHOOK] ❌ Failed to set webhook! Bot will NOT receive updates.")
-            else:
-                logger.info("[WEBHOOK] ✅ Webhook configured successfully")
+            try:
+                logger.info("[WEBHOOK_SETUP] 🚀 Calling ensure_webhook() NOW...")
+                webhook_set = await ensure_webhook(
+                    bot,
+                    webhook_url=webhook_url,
+                    secret_token=cfg.webhook_secret_token or None,
+                    force_reset=True,  # Always reset to handle token changes
+                )
+                logger.info(f"[WEBHOOK_SETUP] ensure_webhook() returned: {webhook_set}")
+                
+                if not webhook_set:
+                    logger.error("[WEBHOOK_SETUP] ❌ Failed to set webhook! Bot will NOT receive updates.")
+                else:
+                    logger.info("[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY")
+                    logger.info("[WEBHOOK_SETUP] ✅ Bot will now receive /start and other commands")
+            except Exception as e:
+                logger.exception("[WEBHOOK_SETUP] ❌ EXCEPTION during ensure_webhook: %s", e)
+                raise
+        else:
+            logger.info(f"[ACTIVE_INIT] Skipping webhook (mode={effective_bot_mode}, dry_run={cfg.dry_run})")
 
     runner: Optional[web.AppRunner] = None
     
