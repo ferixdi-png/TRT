@@ -30,6 +30,7 @@ class ControllerState:
     instance_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     watcher_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     _mutex: asyncio.Lock = field(default_factory=asyncio.Lock)
+    first_activation: bool = True  # Track if this is first PASSIVE→ACTIVE
 
 
 class SingletonLockController:
@@ -78,8 +79,15 @@ class SingletonLockController:
             if new_state == LockState.ACTIVE:
                 logger.info("[LOCK_CONTROLLER] ✅ Setting ACTIVE state...")
                 self.state.lock_acquired_at = datetime.now()
-                logger.info(f"[LOCK_CONTROLLER] 🔍 Checking callback: old_state={old_state.value}, has_callback={self.on_active_callback is not None}")
-                if old_state == LockState.PASSIVE:
+                logger.info(f"[LOCK_CONTROLLER] 🔍 Checking callback: old_state={old_state.value}, has_callback={self.on_active_callback is not None}, first_activation={self.state.first_activation}")
+                
+                # Call callback on FIRST activation OR when transitioning from PASSIVE
+                should_call_callback = (
+                    (old_state == LockState.PASSIVE or self.state.first_activation)
+                    and self.on_active_callback is not None
+                )
+                
+                if should_call_callback:
                     logger.info(
                         "[LOCK_CONTROLLER] %s → %s | instance=%s held_since=%s",
                         old_state.value,
@@ -87,18 +95,19 @@ class SingletonLockController:
                         self.state.instance_id,
                         self.state.lock_acquired_at.isoformat()
                     )
-                    # CRITICAL FIX: Call on_active_callback when transitioning to ACTIVE
-                    if self.on_active_callback:
-                        try:
-                            logger.info("[LOCK_CONTROLLER] 🔥 Calling on_active_callback...")
-                            await self.on_active_callback()
-                            logger.info("[LOCK_CONTROLLER] ✅ on_active_callback completed")
-                        except Exception as e:
-                            logger.exception("[LOCK_CONTROLLER] ❌ on_active_callback failed: %s", e)
-                    else:
-                        logger.error("[LOCK_CONTROLLER] ❌ on_active_callback is None!")
+                    # CRITICAL: Call on_active_callback when transitioning to ACTIVE
+                    try:
+                        logger.info("[LOCK_CONTROLLER] 🔥 Calling on_active_callback...")
+                        await self.on_active_callback()
+                        logger.info("[LOCK_CONTROLLER] ✅ on_active_callback completed")
+                        self.state.first_activation = False  # Mark as activated
+                    except Exception as e:
+                        logger.exception("[LOCK_CONTROLLER] ❌ on_active_callback failed: %s", e)
                 else:
-                    logger.warning(f"[LOCK_CONTROLLER] ⚠️ NOT calling callback: old_state={old_state.value} (expected PASSIVE)")
+                    if self.on_active_callback is None:
+                        logger.warning("[LOCK_CONTROLLER] ⚠️ on_active_callback is None!")
+                    else:
+                        logger.info(f"[LOCK_CONTROLLER] ℹ️ Callback skipped: old_state={old_state.value}, first_activation={self.state.first_activation}")
             elif new_state == LockState.PASSIVE:
                 self.state.lock_acquired_at = None
                 if old_state == LockState.ACTIVE:
