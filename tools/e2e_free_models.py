@@ -156,8 +156,16 @@ async def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
     
     is_real = os.getenv('RUN_E2E', '0') == '1'
+    admin_id = int(os.getenv('ADMIN_ID', '0')) if is_real else 0
+    
     if not is_real:
         logger.warning("DRY RUN (set RUN_E2E=1 for real tests)")
+        logger.warning("For REAL RUN: RUN_E2E=1 ADMIN_ID=<your_telegram_id> python -m tools.e2e_free_models")
+    else:
+        logger.info(f"REAL RUN mode enabled - results will be sent to Telegram chat_id={admin_id}")
+        if admin_id == 0:
+            logger.error("ADMIN_ID not set! Set ADMIN_ID=<your_telegram_id> for Telegram delivery")
+            sys.exit(1)
     
     free_ids = get_free_models()
     logger.info(f"FREE models: {free_ids}")
@@ -169,12 +177,21 @@ async def main():
     sot = load_sot()
     results = []
     
+    # Use ADMIN_ID as both user_id and chat_id for REAL RUN
+    test_user_id = admin_id if is_real else 123456789
+    test_chat_id = admin_id if is_real else 123456789
+    
     for mid in free_ids:
         logger.info(f"\n{'='*60}\n{mid}\n{'='*60}")
-        r = await test_model(mid, sot, 180)
+        r = await test_model(mid, sot, test_user_id, test_chat_id, 180)
         results.append(r)
         emoji = "✅" if r['success'] else "❌"
         logger.info(f"{emoji} {mid}: {r['status']} ({r['duration']:.1f}s)")
+        
+        # In REAL RUN, pause between models to avoid rate limits
+        if is_real and r != results[-1]:
+            logger.info("Waiting 5s before next model...")
+            await asyncio.sleep(5)
     
     passed = sum(1 for r in results if r['success'])
     failed = len(results) - passed
@@ -192,6 +209,8 @@ async def main():
     logger.info(f"  - job_not_found: {job_not_found}")
     logger.info(f"  - avg_ttfb: {avg_ttfb:.2f}s")
     logger.info(f"  - avg_total_time: {avg_total:.2f}s")
+    if is_real:
+        logger.info(f"  - telegram_delivery: Check your Telegram (chat_id={admin_id}) for {len(results)} results")
     logger.info(f"{'='*60}\n")
     
     for r in results:

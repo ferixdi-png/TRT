@@ -403,6 +403,78 @@ def _make_web_app(
         
         return web.Response(status=200, text="ok")
 
+    async def _send_generation_result(bot: Bot, chat_id: int, result_urls: list[str], task_id: str) -> None:
+        """
+        Smart sender: detect content type and send appropriately.
+        
+        Handles:
+        - Single/multiple images → sendPhoto/sendMediaGroup
+        - Videos → sendVideo
+        - Audio → sendAudio
+        - Documents/files → sendDocument
+        - Text/unknown → sendMessage with URLs
+        """
+        if not result_urls:
+            return
+        
+        try:
+            # Detect content type from URLs
+            image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+            video_exts = {'.mp4', '.avi', '.mov', '.webm', '.mkv'}
+            audio_exts = {'.mp3', '.wav', '.ogg', '.m4a', '.flac'}
+            
+            classified = {'images': [], 'videos': [], 'audio': [], 'other': []}
+            
+            for url in result_urls:
+                url_lower = url.lower()
+                if any(url_lower.endswith(ext) for ext in image_exts):
+                    classified['images'].append(url)
+                elif any(url_lower.endswith(ext) for ext in video_exts):
+                    classified['videos'].append(url)
+                elif any(url_lower.endswith(ext) for ext in audio_exts):
+                    classified['audio'].append(url)
+                else:
+                    classified['other'].append(url)
+            
+            # Send based on classification
+            if classified['images']:
+                if len(classified['images']) == 1:
+                    # Single image
+                    await bot.send_photo(chat_id, classified['images'][0], 
+                                        caption=f"✅ Генерация готова\\nID: {task_id}")
+                else:
+                    # Multiple images - send as album (max 10 per Telegram limit)
+                    from aiogram.types import InputMediaPhoto
+                    media_group = [
+                        InputMediaPhoto(media=url, caption=f"✅ {i+1}/{len(classified['images'])}")
+                        for i, url in enumerate(classified['images'][:10])
+                    ]
+                    await bot.send_media_group(chat_id, media=media_group)
+                    
+                    # If more than 10, send rest as messages
+                    if len(classified['images']) > 10:
+                        remaining = "\\n".join(classified['images'][10:])
+                        await bot.send_message(chat_id, f"Ещё {len(classified['images'])-10} изображений:\\n{remaining}")
+            
+            if classified['videos']:
+                for video_url in classified['videos']:
+                    await bot.send_video(chat_id, video_url, caption=f"✅ Видео готово\\nID: {task_id}")
+            
+            if classified['audio']:
+                for audio_url in classified['audio']:
+                    await bot.send_audio(chat_id, audio_url, caption=f"✅ Аудио готово\\nID: {task_id}")
+            
+            if classified['other']:
+                # Unknown type - send as message with links
+                text = f"✅ Генерация готова\\nID: {task_id}\\n\\n" + "\\n".join(classified['other'])
+                await bot.send_message(chat_id, text)
+                
+        except Exception as e:
+            # Fallback: send as plain text message
+            logger.exception(f"[TELEGRAM_SENDER] Failed smart send, falling back to text: {e}")
+            text = f"✅ Генерация готова (ссылки)\\nID: {task_id}\\n\\n" + "\\n".join(result_urls)
+            await bot.send_message(chat_id, text)
+
     async def kie_callback(request: web.Request) -> web.Response:
         """
         KIE callback handler - ALWAYS returns 200 to prevent retry storms.
@@ -511,6 +583,7 @@ def _make_web_app(
             except Exception as exc:  # noqa: BLE001
                 logger.exception("[KIE_CALLBACK] Failed to update job %s: %s", job_id, exc)
 
+            # 🎯 TELEGRAM DELIVERY (guaranteed delivery)
             user_id = job.get("user_id")
             # Get chat_id from job params (more reliable for delivery)
             chat_id = user_id  # Default fallback
@@ -528,21 +601,56 @@ def _make_web_app(
             if user_id and chat_id:
                 try:
                     if normalized_status == "done" and result_urls:
-                        text = "✅ Генерация готова\\n" + "\\n".join(result_urls)
-                        # Send result URLs to chat
-                        await bot.send_message(chat_id, text)
+                        # 🎯 Smart sender: detect content type and send appropriately
+                        await _send_generation_result(bot, chat_id, result_urls, effective_id)
                         logger.info(f"[KIE_CALLBACK] ✅ Sent result to chat_id={chat_id} user_id={user_id}")
+                    elif normalized_status == "done" and not result_urls:
+                        # Success but no URLs - this is suspicious
+                        text = f"⚠️ Генерация завершилась, но результат пуст. ID: {effective_id}"
+                        await bot.send_message(chat_id, text)
+                        logger.warning(f"[KIE_CALLBACK] ⚠️ Empty result for task {effective_id}")
                     elif normalized_status == "failed":
-                        text = f"❌ Генерация не завершилась: {error_text or 'Ошибка'}"
+                        text = f"❌ Генерация не завершилась: {error_text or 'Ошибка'}\\nID: {effective_id}"
                         await bot.send_message(chat_id, text)
                         logger.info(f"[KIE_CALLBACK] ❌ Sent error to chat_id={chat_id} user_id={user_id}")
                     else:
                         # Don't spam intermediate statuses
                         logger.debug(f"[KIE_CALLBACK] Intermediate status {normalized_status} for task {effective_id}")
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("[KIE_CALLBACK] Failed to notify user %s: %s", user_id, exc)
+                    logger.exception("[KIE_CALLBACK] Failed to send to user %s: %s", user_id, exc)
+                    runtime_state.telegram_send_fail_count += 1
         else:
-            logger.warning("[KIE_CALLBACK] Job not found for task_id=%s record_id=%s status=%s",
+            # 🎯 ORPHAN JOB: Callback arrived but no job in DB (CRITICAL metric)
+            logger.error(
+                "[KIE_CALLBACK] ❌ ORPHAN JOB | task_id=%s record_id=%s status=%s | "
+                "This means createTask succeeded but job was not created in DB",
+                task_id, record_id, state
+            )
+            runtime_state.callback_job_not_found_count += 1
+            
+            # Try to create orphan job retroactively (best effort)
+            if runtime_state.db_schema_ready and hasattr(storage, "add_generation_job"):
+                try:
+                    orphan_job_id = effective_id
+                    await storage.add_generation_job(
+                        user_id=0,  # Unknown user
+                        model_id="unknown",
+                        model_name="orphan",
+                        params={"orphan": True, "payload": safe_truncate_payload(payload, 1000)},
+                        price=0.0,
+                        task_id=effective_id,
+                        status=normalized_status
+                    )
+                    # Update with result
+                    await storage.update_job_status(
+                        orphan_job_id,
+                        normalized_status,
+                        result_urls=result_urls or None,
+                        error_message=error_text or "Orphan job - no original request found"
+                    )
+                    logger.info(f"[KIE_CALLBACK] Created orphan job {orphan_job_id}")
+                except Exception as e:
+                    logger.error(f"[KIE_CALLBACK] Failed to create orphan job: {e}")
                          task_id, record_id, state)
 
         # ALWAYS return 200 to prevent KIE retry storms
@@ -618,16 +726,26 @@ async def main() -> None:
         except Exception as e:
             logger.warning("[DB] Could not initialize psycopg2 pool for lock: %s", e)
         
-        # Auto-apply migrations BEFORE lock acquisition
+        # 🎯 CRITICAL STARTUP BARRIER: Apply migrations BEFORE accepting any callbacks
+        # This prevents "relation does not exist" when KIE callback arrives before schema is ready
+        logger.info("[STARTUP BARRIER] Applying database migrations...")
         try:
             from app.storage.migrations import apply_migrations_safe
             migrations_ok = await apply_migrations_safe(cfg.database_url)
             if migrations_ok:
-                logger.info("[MIGRATIONS] ✅ Database schema ready")
+                logger.info("[MIGRATIONS] ✅ Database schema ready - callbacks can be accepted")
+                runtime_state.db_schema_ready = True
             else:
-                logger.warning("[MIGRATIONS] ⚠️ Could not verify migrations (continuing anyway)")
+                logger.error("[MIGRATIONS] ❌ Schema NOT ready - callbacks will fail!")
+                runtime_state.db_schema_ready = False
+                # Continue anyway but log as CRITICAL
         except Exception as e:
-            logger.warning(f"[MIGRATIONS] Auto-apply error: {e}")
+            logger.exception(f"[MIGRATIONS] CRITICAL: Auto-apply failed: {e}")
+            runtime_state.db_schema_ready = False
+            # Continue anyway - callback will handle missing tables gracefully
+    else:
+        # No database URL - using JSON storage
+        runtime_state.db_schema_ready = True  # JSON storage doesn't need migrations
 
     # Create lock object and state tracker
     lock = SingletonLock(cfg.database_url)
