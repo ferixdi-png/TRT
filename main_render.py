@@ -861,6 +861,29 @@ async def main() -> None:
             except Exception as exc:
                 logger.warning(f"[RECONCILER] ⚠️ Failed to start reconciler: {exc}")
         
+        # PHASE 6: CRITICAL - Setup webhook IMMEDIATELY (before lock acquisition)
+        # This ensures webhook is configured even if lock callback has race conditions
+        if effective_bot_mode == "webhook" and not cfg.dry_run:
+            logger.info("[WEBHOOK_EARLY] 🔧 Setting up webhook BEFORE lock acquisition...")
+            webhook_url = _build_webhook_url(cfg)
+            if webhook_url:
+                from app.utils.webhook import ensure_webhook
+                try:
+                    webhook_set = await ensure_webhook(
+                        bot,
+                        webhook_url=webhook_url,
+                        secret_token=cfg.webhook_secret_token or None,
+                        force_reset=True,
+                    )
+                    if webhook_set:
+                        logger.info("[WEBHOOK_EARLY] ✅ ✅ ✅ WEBHOOK CONFIGURED (early setup)")
+                    else:
+                        logger.error("[WEBHOOK_EARLY] ❌ Failed to set webhook!")
+                except Exception as e:
+                    logger.exception("[WEBHOOK_EARLY] ❌ Exception: %s", e)
+            else:
+                logger.error("[WEBHOOK_EARLY] ❌ Cannot build webhook URL!")
+        
         # Define init_active_services BEFORE lock_controller creation
         db_service = None
         free_manager = None
