@@ -231,7 +231,7 @@ class ProductionChecker:
         # PHASE 2: Check critical migrations exist
         critical_migrations = [
             "001_initial_schema.sql",
-            "002_referrals.sql",
+            "002_balance_reserves.sql",  # Fixed: actual migration name (was 002_referrals.sql)
             "003_users_username.sql",  # PHASE 2: Username column fix
             "004_orphan_callbacks.sql"  # PHASE 2: Orphan callback tracking
         ]
