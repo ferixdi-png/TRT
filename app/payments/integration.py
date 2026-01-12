@@ -2,6 +2,7 @@
 Integration of payments with generation flow.
 Ensures charges are only committed on success.
 Handles FREE tier models (no charge).
+Includes user rate limiting to prevent spam/abuse.
 """
 import logging
 import time
@@ -13,6 +14,7 @@ from app.kie.generator import KieGenerator
 from app.utils.metrics import track_generation
 from app.pricing.free_models import is_free_model
 from app.utils.correlation import ensure_correlation_id, correlation_tag
+from app.utils.user_rate_limiter import get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +57,26 @@ async def generate_with_payment(
     logger.info(f"{correlation_tag()} [PAYMENT]   - user_inputs keys: {list(user_inputs.keys())}")
     logger.info(f"{correlation_tag()} [PAYMENT]   - amount: {amount}")
     
+    # ✅ ITERATION 8: Check user rate limit BEFORE any payment/generation
+    is_free = is_free_model(model_id)
+    rate_limiter = get_rate_limiter()
+    rate_check = rate_limiter.check_rate_limit(user_id, is_paid=not is_free)
+    
+    if not rate_check["allowed"]:
+        logger.warning(
+            f"{correlation_tag()} [RATE_LIMIT] ⏱ User {user_id} limited: {rate_check['reason']} "
+            f"(wait {rate_check['wait_seconds']}s)"
+        )
+        return {
+            'success': False,
+            'message': f"⏱ Превышен лимит генераций. Подождите {rate_check['wait_seconds']}с\n"
+                       f"Причина: {rate_check['reason']}",
+            'error_code': 'RATE_LIMIT_EXCEEDED',
+            'rate_limit_info': rate_check
+        }
+    
     # Check if model is FREE (TOP-5 cheapest)
-    if is_free_model(model_id):
+    if is_free:
         logger.info(f"{correlation_tag()} 🆓 Model {model_id} is FREE - skipping payment")
         generator = KieGenerator()
         gen_result = await generator.generate(
@@ -151,9 +171,17 @@ async def generate_with_payment(
     # Determine task_id from generation (if available)
     # Commit or release charge based on generation result
     if gen_result.get('success'):
-        # SUCCESS: Commit charge
+        # SUCCESS: Commit charge + record generation for rate limit
         logger.info(f"{correlation_tag()} Committing charge for {charge_task_id}")
         commit_result = await charge_manager.commit_charge(charge_task_id)
+        
+        # ✅ ITERATION 8: Record successful generation for rate limiting
+        rate_limiter.record_generation(user_id, is_paid=not is_free)
+        logger.info(
+            f"{correlation_tag()} [RATE_LIMIT] ✅ Generation recorded: user={user_id}, "
+            f"paid={not is_free}, stats={rate_limiter.get_user_stats(user_id)}"
+        )
+        
         # Add to history
         result_urls = gen_result.get('result_urls', [])
         result_text = '\n'.join(result_urls) if result_urls else 'Success'
