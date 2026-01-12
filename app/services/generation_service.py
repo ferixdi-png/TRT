@@ -120,7 +120,30 @@ class GenerationService:
                             await on_error(timeout_message)
                         break
                     
-                    # Получаем статус от KIE
+                    # CRITICAL FIX: Check storage first (callback may have updated it)
+                    # This prevents infinite polling if KIE API is stuck but callback arrived
+                    current_job = await self.storage.get_job(job_id)
+                    if current_job:
+                        storage_status = current_job.get('status')
+                        if storage_status in ('done', 'failed'):
+                            # Callback already updated to terminal state
+                            logger.info(f"[GEN] Storage already has terminal status {storage_status} for job {job_id}")
+                            if storage_status == 'done':
+                                result_urls = current_job.get('result_urls', [])
+                                if on_progress:
+                                    await on_progress('done', 'Готово')
+                                if on_complete:
+                                    await on_complete(result_urls)
+                                break
+                            else:  # failed
+                                error_msg = current_job.get('error_message', 'Generation failed.')
+                                if on_progress:
+                                    await on_progress('failed', 'Ошибка')
+                                if on_error:
+                                    await on_error(error_msg)
+                                break
+                    
+                    # Получаем статус от KIE API (fallback if callback hasn't arrived yet)
                     status = await self.kie_client.get_task_status(task_id)
                     
                     if not status.get('ok'):
