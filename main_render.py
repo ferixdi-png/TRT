@@ -861,104 +861,97 @@ async def main() -> None:
             except Exception as exc:
                 logger.warning(f"[RECONCILER] ⚠️ Failed to start reconciler: {exc}")
         
-        # Step 2: Start unified lock controller (SINGLE watcher, no duplicates)
+        # Define init_active_services BEFORE lock_controller creation
+        db_service = None
+        free_manager = None
+
+        async def init_active_services() -> None:
+            """Initialize services when lock acquired (called by controller callback)"""
+            nonlocal db_service, free_manager
+            
+            logger.info("[INIT_SERVICES] 🚀 init_active_services() CALLED")
+            logger.info(f"[INIT_SERVICES] BOT_MODE={effective_bot_mode}, DRY_RUN={cfg.dry_run}")
+
+            # Update runtime state
+            active_state.active = True
+            runtime_state.lock_acquired = True
+
+            if cfg.database_url:
+                logger.info("[INIT_SERVICES] Initializing DatabaseService...")
+                try:
+                    from app.database.services import DatabaseService
+                    from app.free.manager import FreeModelManager
+
+                    db_service = DatabaseService(cfg.database_url)
+                    await db_service.initialize()
+                    free_manager = FreeModelManager(db_service)
+
+                    from bot.handlers.balance import set_database_service as set_balance_db
+                    from bot.handlers.history import set_database_service as set_history_db
+                    from bot.handlers.marketing import (
+                        set_database_service as set_marketing_db,
+                        set_free_manager,
+                    )
+
+                    set_balance_db(db_service)
+                    set_history_db(db_service)
+                    set_marketing_db(db_service)
+                    set_free_manager(free_manager)
+
+                    logger.info("[DB] ✅ DatabaseService initialized and injected into handlers")
+                except Exception as e:
+                    logger.exception("[DB] ❌ Database init failed: %s", e)
+                    db_service = None
+            
+            logger.info(f"[ACTIVE_INIT] Webhook setup check: mode={effective_bot_mode}, dry_run={cfg.dry_run}")
+            if effective_bot_mode == "webhook" and not cfg.dry_run:
+                logger.info("[ACTIVE_INIT] Building webhook URL...")
+                webhook_url = _build_webhook_url(cfg)
+                if not webhook_url:
+                    logger.error("[ACTIVE_INIT] ❌ Cannot build webhook URL!")
+                    raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
+                
+                logger.info(f"[ACTIVE_INIT] Webhook URL built: {webhook_url[:50]}...")
+
+                from app.utils.webhook import ensure_webhook
+                
+                logger.info("[WEBHOOK_SETUP] 🔧 Calling ensure_webhook (force_reset=True)...")
+                try:
+                    webhook_set = await ensure_webhook(
+                        bot,
+                        webhook_url=webhook_url,
+                        secret_token=cfg.webhook_secret_token or None,
+                        force_reset=True,
+                    )
+                    logger.info(f"[WEBHOOK_SETUP] ensure_webhook() returned: {webhook_set}")
+                    
+                    if not webhook_set:
+                        logger.error("[WEBHOOK_SETUP] ❌ Failed to set webhook! Bot will NOT receive updates.")
+                    else:
+                        logger.info("[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY")
+                        logger.info("[WEBHOOK_SETUP] ✅ Bot will now receive /start and other commands")
+                except Exception as e:
+                    logger.exception("[WEBHOOK_SETUP] ❌ EXCEPTION during ensure_webhook: %s", e)
+                    raise
+            else:
+                logger.info(f"[ACTIVE_INIT] Skipping webhook (mode={effective_bot_mode}, dry_run={cfg.dry_run})")
+        
+        # Step 2: Start unified lock controller with callback
         from app.locking.controller import SingletonLockController
         
-        lock_controller = SingletonLockController(lock, bot)
+        lock_controller = SingletonLockController(lock, bot, on_active_callback=init_active_services)
         active_state.lock_controller = lock_controller  # Store for webhook access
         
         await lock_controller.start()
         
-        # Sync active_state with controller
+        # Initial sync (if lock acquired immediately)
         active_state.active = lock_controller.should_process_updates()
         runtime_state.lock_acquired = active_state.active
         
         if active_state.active:
             logger.info("[LOCK_CONTROLLER] ✅ ACTIVE MODE (lock acquired immediately)")
-            logger.info("[LOCK_CONTROLLER] 🔧 About to call init_active_services()...")
-            logger.info(f"[LOCK_CONTROLLER] BOT_MODE={effective_bot_mode}, DRY_RUN={cfg.dry_run}")
-            # CRITICAL FIX: Initialize services immediately if lock acquired on startup
-            try:
-                logger.info("[LOCK_CONTROLLER] 🚀 Calling init_active_services() NOW...")
-                await init_active_services()
-                logger.info("[LOCK_CONTROLLER] ✅ Active services initialized (webhook set)")
-            except Exception as e:
-                logger.exception("[LOCK_CONTROLLER] ❌ Failed to initialize active services: %s", e)
-                logger.error(f"[LOCK_CONTROLLER] ❌ Exception type: {type(e).__name__}")
         else:
             logger.info("[LOCK_CONTROLLER] ⏸️ PASSIVE MODE (background watcher started)")
-
-    db_service = None
-    free_manager = None
-
-    async def init_active_services() -> None:
-        nonlocal db_service, free_manager
-        
-        logger.info("[INIT_SERVICES] init_active_services() CALLED")
-        logger.info(f"[INIT_SERVICES] BOT_MODE={effective_bot_mode}, DRY_RUN={cfg.dry_run}")
-
-        if cfg.database_url:
-            logger.info("[INIT_SERVICES] Initializing DatabaseService...")
-            try:
-                from app.database.services import DatabaseService
-                from app.free.manager import FreeModelManager
-
-                db_service = DatabaseService(cfg.database_url)
-                await db_service.initialize()
-                free_manager = FreeModelManager(db_service)
-
-                from bot.handlers.balance import set_database_service as set_balance_db
-                from bot.handlers.history import set_database_service as set_history_db
-                from bot.handlers.marketing import (
-                    set_database_service as set_marketing_db,
-                    set_free_manager,
-                )
-
-                set_balance_db(db_service)
-                set_history_db(db_service)
-                set_marketing_db(db_service)
-                set_free_manager(free_manager)
-
-                logger.info("[DB] ✅ DatabaseService initialized and injected into handlers")
-            except Exception as e:
-                logger.exception("[DB] ❌ Database init failed: %s", e)
-                db_service = None
-        
-        logger.info(f"[ACTIVE_INIT] Webhook setup check: mode={effective_bot_mode}, dry_run={cfg.dry_run}")
-        if effective_bot_mode == "webhook" and not cfg.dry_run:
-            logger.info("[ACTIVE_INIT] Building webhook URL...")
-            webhook_url = _build_webhook_url(cfg)
-            if not webhook_url:
-                logger.error("[ACTIVE_INIT] ❌ Cannot build webhook URL!")
-                raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
-            
-            logger.info(f"[ACTIVE_INIT] Webhook URL built: {webhook_url[:50]}...")
-
-            from app.utils.webhook import ensure_webhook
-            
-            logger.info("[WEBHOOK_SETUP] 🔧 Calling ensure_webhook (force_reset=True)...")
-            # CRITICAL: Always force reset webhook on startup
-            # This ensures webhook is updated after BOT_TOKEN change on Render
-            try:
-                logger.info("[WEBHOOK_SETUP] 🚀 Calling ensure_webhook() NOW...")
-                webhook_set = await ensure_webhook(
-                    bot,
-                    webhook_url=webhook_url,
-                    secret_token=cfg.webhook_secret_token or None,
-                    force_reset=True,  # Always reset to handle token changes
-                )
-                logger.info(f"[WEBHOOK_SETUP] ensure_webhook() returned: {webhook_set}")
-                
-                if not webhook_set:
-                    logger.error("[WEBHOOK_SETUP] ❌ Failed to set webhook! Bot will NOT receive updates.")
-                else:
-                    logger.info("[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY")
-                    logger.info("[WEBHOOK_SETUP] ✅ Bot will now receive /start and other commands")
-            except Exception as e:
-                logger.exception("[WEBHOOK_SETUP] ❌ EXCEPTION during ensure_webhook: %s", e)
-                raise
-        else:
-            logger.info(f"[ACTIVE_INIT] Skipping webhook (mode={effective_bot_mode}, dry_run={cfg.dry_run})")
 
     runner: Optional[web.AppRunner] = None
     

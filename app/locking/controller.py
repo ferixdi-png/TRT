@@ -41,16 +41,19 @@ class SingletonLockController:
     - Atomic PASSIVE → ACTIVE transitions
     - Throttled user notifications (max 1 per 60s)
     - Auto-stops retry loop after ACTIVE
+    - Callback on PASSIVE→ACTIVE transition
     """
     
-    def __init__(self, lock_wrapper, bot=None):
+    def __init__(self, lock_wrapper, bot=None, on_active_callback=None):
         """
         Args:
             lock_wrapper: SingletonLock instance with acquire()/release()
             bot: Telegram Bot instance for passive notifications
+            on_active_callback: async callable to run when transitioning to ACTIVE
         """
         self.lock = lock_wrapper
         self.bot = bot
+        self.on_active_callback = on_active_callback
         self.state = ControllerState()
         self._stop_event = asyncio.Event()
         
@@ -80,6 +83,14 @@ class SingletonLockController:
                         self.state.instance_id,
                         self.state.lock_acquired_at.isoformat()
                     )
+                    # CRITICAL FIX: Call on_active_callback when transitioning to ACTIVE
+                    if self.on_active_callback:
+                        try:
+                            logger.info("[LOCK_CONTROLLER] 🔥 Calling on_active_callback...")
+                            await self.on_active_callback()
+                            logger.info("[LOCK_CONTROLLER] ✅ on_active_callback completed")
+                        except Exception as e:
+                            logger.exception("[LOCK_CONTROLLER] ❌ on_active_callback failed: %s", e)
             elif new_state == LockState.PASSIVE:
                 self.state.lock_acquired_at = None
                 if old_state == LockState.ACTIVE:
