@@ -270,6 +270,37 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
     return dp, bot
 
 
+async def verify_bot_identity(bot: Bot) -> None:
+    """Verify bot identity and webhook configuration.
+    
+    Logs bot.getMe() and getWebhookInfo() to ensure correct bot/token/webhook.
+    Prevents issues like "wrong bot deployed" or "webhook pointing to old URL".
+    """
+    try:
+        me = await bot.get_me()
+        logger.info(
+            "[BOT_VERIFY] ✅ Bot identity: @%s (id=%s, name='%s')",
+            me.username, me.id, me.first_name
+        )
+    except Exception as exc:
+        logger.error("[BOT_VERIFY] ❌ Failed to get bot info: %s", exc)
+        raise
+
+    try:
+        webhook_info = await bot.get_webhook_info()
+        if webhook_info.url:
+            logger.info(
+                "[BOT_VERIFY] 📡 Webhook: %s (pending=%s, last_error=%s)",
+                webhook_info.url,
+                webhook_info.pending_update_count,
+                webhook_info.last_error_message or "none"
+            )
+        else:
+            logger.info("[BOT_VERIFY] 📡 No webhook configured (polling mode or not set yet)")
+    except Exception as exc:
+        logger.warning("[BOT_VERIFY] ⚠️ Failed to get webhook info: %s", exc)
+
+
 def _build_webhook_url(cfg: RuntimeConfig) -> str:
     base = cfg.webhook_base_url.rstrip("/")
     return f"{base}/webhook/{cfg.webhook_secret_path}" if base else ""
@@ -751,6 +782,9 @@ async def main() -> None:
     logger.info("=" * 60)
 
     dp, bot = create_bot_application()
+    
+    # Verify bot identity and webhook configuration BEFORE anything else
+    await verify_bot_identity(bot)
 
     # IMPORTANT: the advisory lock helper in app.locking.single_instance relies on
     # the psycopg2 connection pool from database.py being initialized.
