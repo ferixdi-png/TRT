@@ -35,8 +35,13 @@ def test_main_menu_buttons():
 
 def test_categories_cover_registry():
     source = load_source_of_truth()
+    # models is a dict keyed by model_id
+    models_dict = source.get("models", {})
+    if not isinstance(models_dict, dict):
+        pytest.fail(f"Expected models to be dict, got {type(models_dict)}")
+    
     # Only valid models (filtered)
-    models = [m for m in source.get("models", []) if flow._is_valid_model(m)]
+    models = [m for m in models_dict.values() if flow._is_valid_model(m)]
     model_categories = {
         (model.get("category", "other") or "other")
         for model in models

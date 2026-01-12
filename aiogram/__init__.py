@@ -64,11 +64,13 @@ def _bootstrap_real_aiogram() -> None:
     # Overlay the real package onto this module object so submodules resolve
     # from the real package path, not from the repository.
     if current is not None:
+        # Save sys reference before clearing __dict__
+        _sys = sys
         current.__dict__.clear()
         current.__dict__.update(real.__dict__)
         # Defensive: keep our name consistent.
         current.__name__ = __name__
-        sys.modules[__name__] = current
+        _sys.modules[__name__] = current
 
 
 _bootstrap_real_aiogram()
