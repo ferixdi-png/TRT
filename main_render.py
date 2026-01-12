@@ -167,11 +167,10 @@ class SingletonLock:
         self.key = key
         self._acquired = False
 
-    async def acquire(self, timeout: float = 5.0) -> bool:
+    async def acquire(self, timeout: float | None = None) -> bool:
         # NOTE: app.locking.single_instance.acquire_single_instance_lock() reads DATABASE_URL
         # from env and uses the psycopg2 pool from database.py. We keep this wrapper async
         # for uniformity.
-        # PHASE 1: Added timeout parameter (used for logging only, actual timeout handled by underlying lock)
         if not self.database_url:
             self._acquired = True
             return True
@@ -179,12 +178,27 @@ class SingletonLock:
         try:
             from app.locking.single_instance import acquire_single_instance_lock
 
-            # Signature has no args (it reads env). Passing args breaks and forces PASSIVE.
-            # timeout parameter accepted but not used (for API compatibility)
-            self._acquired = bool(acquire_single_instance_lock())
-            return self._acquired
+            # Signature has no args (it reads env). Run in thread with optional timeout
+            if timeout is not None:
+                try:
+                    # Fast non-blocking acquire with timeout
+                    self._acquired = bool(
+                        await asyncio.wait_for(
+                            asyncio.to_thread(acquire_single_instance_lock),
+                            timeout=timeout
+                        )
+                    )
+                    return self._acquired
+                except asyncio.TimeoutError:
+                    logger.debug("[LOCK] Acquire timed out after %.1fs", timeout)
+                    self._acquired = False
+                    return False
+            else:
+                # No timeout - blocking acquire
+                self._acquired = bool(await asyncio.to_thread(acquire_single_instance_lock))
+                return self._acquired
         except Exception as e:
-            logger.exception("[LOCK] Failed to acquire singleton lock (timeout=%s): %s", timeout, e)
+            logger.exception("[LOCK] Failed to acquire singleton lock: %s", e)
             self._acquired = False
             return False
 
