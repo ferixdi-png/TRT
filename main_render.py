@@ -966,10 +966,8 @@ async def main() -> None:
                     runtime_state.lock_acquired = new_active
                     if new_active:
                         logger.info("[STATE_SYNC] ✅ PASSIVE → ACTIVE (lock acquired)")
-                        try:
-                            await init_active_services()
-                        except Exception as e:
-                            logger.exception("[ACTIVE] init failed: %s", e)
+                        # Note: init_active_services already called by lock_controller callback
+                        logger.info("[STATE_SYNC] Services already initialized by controller callback")
 
     # 🚀 START BACKGROUND INITIALIZATION (non-blocking)
     asyncio.create_task(background_initialization())

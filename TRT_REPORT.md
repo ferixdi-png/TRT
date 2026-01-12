@@ -1,263 +1,423 @@
-# TRT E2E FREE Models Report
+# TRT Production Report (2026-01-12)
 
-**Дата**: 2026-01-12  
-**Задача**: End-to-end доставка результатов для всех FREE моделей  
-**Статус**: ✅ **ГОТОВО К ДЕПЛОЮ**
+## 🎯 Цель: Стабильный Production на Render (webhook mode)
 
----
-
-## 📊 Executive Summary
-
-### Проблемы (до fix):
-1. ❌ Таблица `generation_jobs` не создавалась → `relation does not exist`
-2. ❌ Job не создавался при `createTask` → callback не находил job
-3. ❌ Callback не извлекал `chat_id` из job params → результат не доходил до Telegram
-4. ❌ Polling не проверял storage перед KIE API → зависал даже когда callback уже обновил job
-
-### Решения (после fix):
-1. ✅ Auto-apply миграций при старте (`app/storage/migrations.py`)
-2. ✅ Job создается сразу после `createTask` с `user_id`, `chat_id`, `task_id`
-3. ✅ Callback извлекает `chat_id` из `job.params` и отправляет результат в Telegram
-4. ✅ Polling использует storage-first check (выходит рано если callback уже обновил job)
+Задача: довести бот до стабильного production на Render через существующие ENV из Secrets, без хардкода и новых ключей.
 
 ---
 
-## 🎯 FREE Модели (4 total)
+## ✅ Что изменено
 
-| Model ID | Required Inputs | Optional Inputs | Status | E2E Test |
-|----------|----------------|-----------------|--------|----------|
-| `z-image` | `prompt` | `aspect_ratio`, `guidance_scale`, `num_inference_steps` | ✅ Ready | `make e2e-free` |
-| `qwen/text-to-image` | `prompt` | `guidance_scale`, `num_inference_steps`, `image_size` | ✅ Ready | `make e2e-free` |
-| `qwen/image-to-image` | `image`, `prompt` | `guidance_scale`, `num_inference_steps`, `strength` | ✅ Ready | `make e2e-free` |
-| `qwen/image-edit` | `image`, `prompt` | `guidance_scale`, `num_inference_steps`, `strength` | ✅ Ready | `make e2e-free` |
+### 1. **Minimal Happy Path для z-image** (`minimal_happy_path.py`)
 
-**Источник**: `models/KIE_SOURCE_OF_TRUTH.json` (поле `pricing.is_free: true`)
+**Что делает:**
+- Валидирует обязательные ENV переменные (TELEGRAM_BOT_TOKEN, DATABASE_URL, WEBHOOK_BASE_URL, KIE_API_KEY, PORT, BOT_MODE)
+- Проверяет lock key в signed int64 range [0, 2^63-1]
+- Проверяет миграции БД (idempotent)
+- Настраивает webhook на WEBHOOK_BASE_URL
+- Тестирует полный цикл z-image: создание задачи → проверка статуса
 
----
+**Зачем:**
+- Автономная проверка production-readiness
+- Валидация всех критических компонентов
+- Гарантия корректной настройки webhook
 
-## 🔧 Изменения в коде
-
-### 1. Auto-Apply Миграций ([main_render.py](main_render.py#L603-L617))
-```python
-# Auto-apply migrations BEFORE lock acquisition
-try:
-    from app.storage.migrations import apply_migrations_safe
-    migrations_ok = await apply_migrations_safe(cfg.database_url)
-    if migrations_ok:
-        logger.info("[MIGRATIONS] ✅ Database schema ready")
-except Exception as e:
-    logger.warning(f"[MIGRATIONS] Auto-apply error: {e}")
-```
-
-**Файл**: [app/storage/migrations.py](app/storage/migrations.py) (новый)  
-**Функция**: Безопасно применяет все `migrations/*.sql` при старте
+**Файлы:**
+- `minimal_happy_path.py` - основной скрипт валидации
 
 ---
 
-### 2. Job Creation ([app/kie/generator.py](app/kie/generator.py#L273-L308))
-```python
-# 🎯 CREATE JOB IN STORAGE (CRITICAL FOR E2E DELIVERY)
-if user_id is not None:
-    job_params = {
-        'model_id': model_id,
-        'inputs': user_inputs,
-        'chat_id': chat_id,
-        'task_id': task_id
-    }
-    
-    await storage.add_generation_job(
-        user_id=user_id,
-        model_id=model_id,
-        model_name=model_id,
-        params=job_params,
-        price=price,
-        task_id=task_id,
-        status='queued'
-    )
-```
+### 2. **Idempotent Migrations** (`init_schema_idempotent.sql`)
 
-**Изменения в сигнатурах**:
-- [KieGenerator.generate()](app/kie/generator.py#L128) теперь принимает `user_id`, `chat_id`, `price`
-- [generate_with_payment()](app/payments/integration.py#L20) принимает `chat_id` и передает в generator
+**Что делает:**
+- Создает только необходимые таблицы: `users`, `generation_jobs`, `orphan_callbacks`
+- Безопасно для повторного выполнения (IF NOT EXISTS, IF EXISTS)
+- Добавляет helper-функцию `ensure_user()` для upsert
+- Создает триггеры для auto-update `updated_at`
+
+**Зачем:**
+- Убирает падения из-за "consolidate_schema" и других ломающихся миграций
+- Гарантирует идемпотентность (можно применять многократно)
+- Минимальная схема для happy path (z-image)
+
+**Файлы:**
+- `init_schema_idempotent.sql` - SQL schema для production
 
 ---
 
-### 3. Callback → Telegram ([main_render.py](main_render.py#L514-L540))
-```python
-# Get chat_id from job params (more reliable for delivery)
-chat_id = user_id  # Default fallback
-if job.get("params"):
-    job_params = job.get("params")
-    if isinstance(job_params, dict):
-        chat_id = job_params.get("chat_id") or user_id
+### 3. **Фикс дублирования init_active_services** (`main_render.py`)
 
-if user_id and chat_id:
-    if normalized_status == "done" and result_urls:
-        text = "✅ Генерация готова\\n" + "\\n".join(result_urls)
-        await bot.send_message(chat_id, text)
-        logger.info(f"[KIE_CALLBACK] ✅ Sent result to chat_id={chat_id}")
-```
+**Проблема:**
+- `state_sync_loop()` вызывал `init_active_services()` повторно при переходе PASSIVE→ACTIVE
+- Это дублировало вызов callback из `lock_controller`
+- Webhook мог настраиваться дважды
 
----
+**Решение:**
+- Убран вызов `await init_active_services()` из `state_sync_loop()`
+- Callback вызывается только из `SingletonLockController._set_state()`
+- Добавлен лог: "Services already initialized by controller callback"
 
-### 4. Storage-First Polling ([app/kie/generator.py](app/kie/generator.py#L328-L372))
-```python
-# 🎯 STORAGE-FIRST CHECK (callback может уже обновить job)
-current_job = await storage.find_job_by_task_id(task_id)
-
-if current_job:
-    job_status = normalize_job_status(current_job.get('status', ''))
-    
-    if job_status == 'done':
-        # Callback уже обновил job
-        return {'success': True, 'result_urls': result_urls}
-    elif job_status == 'failed':
-        return {'success': False, 'error_message': error_msg}
-
-# Fallback to API polling
-record_info = await api_client.get_record_info(task_id)
-```
-
-**Результат**: Polling завершается <10s вместо 15min зависания
+**Файлы:**
+- `main_render.py` (строки 957-970)
 
 ---
 
-## 📈 Production Metrics
+### 4. **Production Smoke Test** (`prod_check.py`)
 
-| Метрика | До Fix | После Fix | Improvement |
-|---------|--------|-----------|-------------|
-| **Callback 4xx Rate** | 30-40% | **0%** | ✅ -100% |
-| **Job Not Found** | ~80% | **0%** | ✅ -100% |
-| **Avg TTFB** | N/A | **<3s** | ✅ New metric |
-| **Avg Total Time** | 15min+ | **<60s** | ✅ -90% |
+**Что делает:**
+Полная e2e валидация production-readiness:
+1. ENV переменные (все обязательные)
+2. Порт открыт (PORT)
+3. Миграции БД (применяет `init_schema_idempotent.sql`)
+4. Lock key (int64 signed range)
+5. Webhook настроен на WEBHOOK_BASE_URL
+6. Health endpoint (/health) - опционально
+7. Полный цикл z-image (create task → check status)
+
+**Exit codes:**
+- 0: ✅ Все проверки прошли
+- 1: ❌ Критическая ошибка
+
+**Файлы:**
+- `prod_check.py` - e2e smoke test
 
 ---
 
-## 🧪 E2E Test Example
+## 🔧 Как проверить локально (Codespaces)
 
-### Запуск:
+### Вариант 1: Minimal Happy Path (рекомендуется)
+
 ```bash
-# DRY RUN (без API)
-python tools/e2e_free_models.py
+# 1. Установить зависимости (если еще не установлены)
+pip install -r requirements.txt
 
-# REAL RUN (с KIE API)
-RUN_E2E=1 python -m tools.e2e_free_models
+# 2. Убедиться, что ENV переменные установлены
+# В Codespaces используйте Secrets или .env файл
 
-# Или через Makefile
-make e2e-free
+# 3. Запустить валидацию
+python3 minimal_happy_path.py
 ```
 
-### Пример вывода:
+**Ожидаемый результат:**
 ```
-[INFO] FREE models: ['z-image', 'qwen/text-to-image', 'qwen/image-to-image', 'qwen/image-edit']
-
-============================================================
-z-image
-============================================================
-[INFO] Testing z-image: ['prompt', 'aspect_ratio']
-[INFO] Task created: e15c4100... (TTFB: 2.81s)
-[INFO] ✅ Job found in storage: e15c4100...
-[INFO] ✅ STORAGE-FIRST | Job done via callback
-[INFO] z-image → done | 31.2s
-[INFO] Metrics: TTFB=2.81s job_created=True callback=True
-✅ z-image: done (31.2s)
-
-============================================================
-SUMMARY: 4/4 passed, 0 failed
-METRICS:
-  - callback_4xx: 0
-  - job_not_found: 0
-  - avg_ttfb: 2.45s
-  - avg_total_time: 42.3s
-============================================================
+✅ All required ENV variables present
+✅ Lock key valid: 1234567890123456789
+✅ Required tables present: users, generation_jobs, orphan_callbacks
+✅ Webhook set: https://your-app.onrender.com/8524869517AAH...
+✅ Task created: task_12345
+✅ Task status: pending
 ```
 
 ---
 
-## 🔍 Correlation ID Tracing (z-image)
+### Вариант 2: Full Production Smoke Test
 
-### Полный путь от клика до результата:
+```bash
+python3 prod_check.py
 ```
-1. User клик "Подтвердить"
-   → bot/handlers/flow.py:2399
-   corr_id: gen_6913446846_z-image
-   
-2. generate_with_payment()
-   → app/payments/integration.py:59
-   user_id: 6913446846, chat_id: 6913446846
-   
-3. KieGenerator.generate()
-   → app/kie/generator.py:177
-   payload: {'model': 'z-image', 'input': {'prompt': 'котик', 'aspect_ratio': '1:1'}}
-   
-4. createTask SUCCESS
-   → app/kie/client_v4.py:105
-   task_id: e15c410023176a5cb5306f6d0ef53b87
-   
-5. JOB CREATED
-   → app/kie/generator.py:302
-   params: {'chat_id': 6913446846, 'task_id': 'e15c...'}
-   
-6. CALLBACK RECEIVED
-   → main_render.py:447
-   status: done, result_urls: ['https://...']
-   
-7. JOB UPDATED
-   → main_render.py:510
-   status: done
-   
-8. TELEGRAM MESSAGE SENT
-   → main_render.py:528
-   chat_id: 6913446846
-   text: "✅ Генерация готова\\nhttps://..."
-   
-9. POLLING EXITS EARLY
-   → app/kie/generator.py:346
-   STORAGE-FIRST found job.status=done
+
+**Ожидаемый результат:**
+```
+✅ ✅ ✅ ALL CRITICAL TESTS PASSED ✅ ✅ ✅
+Summary:
+  1. ENV variables: ✅
+  2. Port 10000: ✅
+  3. Migrations: ✅
+  4. Lock key: ✅
+  5. Webhook: ✅
+  6. Health endpoint: ✅
+  7. Z-image flow: ✅
+Production Ready! 🚀
 ```
 
 ---
 
-## ✅ Acceptance Criteria
+### Вариант 3: Запустить основной бот
 
-| Критерий | Статус |
-|----------|--------|
-| `/callbacks/kie` всегда 200 | ✅ |
-| `taskId` из макс форматов | ✅ |
-| Polling никогда не бесконечный | ✅ |
-| PASSIVE MODE не ломает callback | ✅ |
-| Все FREE модели E2E | ✅ |
-| Миграции применяются | ✅ |
-| Job создается при createTask | ✅ |
-| Callback → Telegram delivery | ✅ |
-| Метрики 4xx=0, job_not_found=0 | ✅ |
+```bash
+python3 main_render.py
+```
 
----
-
-## 🚀 Deployment Checklist
-
-- [x] Миграции в [migrations/001_initial_schema.sql](migrations/001_initial_schema.sql)
-- [x] Auto-apply в [main_render.py](main_render.py)
-- [x] Job creation в [app/kie/generator.py](app/kie/generator.py)
-- [x] Callback delivery в [main_render.py](main_render.py)
-- [x] Storage-first polling
-- [x] E2E test [tools/e2e_free_models.py](tools/e2e_free_models.py)
-- [x] Метрики в E2E output
-- [ ] **Деплой на Render** (автоматический при push)
-- [ ] **Real E2E run** с `RUN_E2E=1`
+**Что проверить в логах:**
+1. `[LOCK] ✅ ACTIVE MODE: PostgreSQL advisory lock acquired`
+2. `[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY`
+3. `[HEALTH] ✅ Server started on port 10000`
+4. Нет ошибок "OID out of range"
+5. Нет спама "updating" или "no open ports detected"
 
 ---
 
-## 📝 Не ломаем (гарантии):
+## 📊 Как проверить на Render (по логам)
 
-✅ Оплата/пополнение работают как раньше  
-✅ `amount`/`credits` не изменились  
-✅ `receipt` генерация не затронута  
-✅ Идемпотентность платежей сохранена  
-✅ FREE модели остаются бесплатными
+### Чеклист для Render Logs
+
+#### 1. **Старт контейнера**
+```
+[OK] Data directory writable: /tmp/data
+[BUILD] Application created successfully
+```
+
+#### 2. **Миграции (idempotent)**
+Если используете `init_schema_idempotent.sql` через psql:
+```
+CREATE TABLE
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+```
+
+Если используете main_render.py:
+```
+[DB] ✅ DatabaseService initialized
+```
+
+#### 3. **Lock acquisition**
+**АКТИВНЫЙ режим (норма):**
+```
+[LOCK] ✅ ACTIVE MODE: PostgreSQL advisory lock acquired
+```
+
+**PASSIVE режим (deploy overlap - норма):**
+```
+[LOCK] ⏸️ PASSIVE MODE: Webhook will return 200 but no processing
+[LOCK] Background retry task started
+```
+
+**PASSIVE→ACTIVE переход (норма через 10-60s):**
+```
+[LOCK] ✅ PASSIVE → ACTIVE: Lock acquired on retry 4!
+[LOCK_CONTROLLER] 🔥 Calling on_active_callback...
+[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY
+```
+
+#### 4. **Webhook настройка**
+```
+[WEBHOOK_SETUP] 🔧 Calling ensure_webhook (force_reset=True)...
+[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY
+[WEBHOOK_SETUP] ✅ Bot will now receive /start and other commands
+```
+
+#### 5. **HTTP сервер**
+```
+[HEALTH] ✅ Server started on port 10000
+```
+
+#### 6. **Health checks**
+```
+127.0.0.1 - - "GET /health HTTP/1.1" 200
+```
 
 ---
 
-**Финальный статус**: ✅ **PRODUCTION READY**
+### ❌ Проблемные логи (что НЕ должно быть)
 
-🎉 Все критерии выполнены, ready для `make e2e-free` на production!
+#### Плохо 1: OID out of range
+```
+psycopg2.errors.NumericValueOutOfRange: OID out of range
+```
+**Решение:** Уже исправлено в `render_singleton_lock.py` (commit 3ca2fec) - используется bitwise mask `& 0x7FFFFFFFFFFFFFFF`
+
+#### Плохо 2: Webhook не настроен
+```
+[WEBHOOK_SETUP] ❌ Failed to set webhook! Bot will NOT receive updates.
+```
+**Решение:** Проверить WEBHOOK_BASE_URL в Render Secrets, убедиться что callback вызывается
+
+#### Плохо 3: Миграции падают
+```
+psycopg2.errors.DuplicateTable: relation "users" already exists
+```
+**Решение:** Использовать `init_schema_idempotent.sql` (IF NOT EXISTS)
+
+#### Плохо 4: Нет lock, FORCE ACTIVE
+```
+[LOCK] ⚠️ FORCE ACTIVE MODE (risky!)
+```
+**Решение:** Нормально только при LOCK_MODE=wait_then_force (не рекомендуется для production)
+
+---
+
+## 🚀 Деплой на Render
+
+### Шаг 1: Убедиться что ENV установлены
+
+В Render Dashboard → Environment:
+- ✅ `TELEGRAM_BOT_TOKEN` - токен бота
+- ✅ `DATABASE_URL` - PostgreSQL URL
+- ✅ `WEBHOOK_BASE_URL` - https://your-app.onrender.com
+- ✅ `KIE_API_KEY` - kie.ai API ключ
+- ✅ `PORT` - 10000 (автоматически)
+- ✅ `BOT_MODE` - webhook
+- ✅ `ADMIN_ID`, `PAYMENT_*`, `SUPPORT_*` - опциональные
+
+### Шаг 2: Deploy
+
+**Автодеплой (рекомендуется):**
+```bash
+git add .
+git commit -m "fix: production stability (idempotent migrations + webhook callback)"
+git push origin main
+```
+
+Render автоматически:
+1. Запустит build
+2. Применит миграции (если настроены)
+3. Запустит main_render.py
+4. Старый инстанс получит SIGTERM и освободит lock
+5. Новый инстанс захватит lock и настроит webhook
+
+### Шаг 3: Проверить логи
+
+```bash
+# В Render Dashboard → Logs
+# Искать:
+[LOCK] ✅ ACTIVE MODE
+[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED
+[HEALTH] ✅ Server started on port 10000
+```
+
+### Шаг 4: Протестировать бот
+
+1. Отправить `/start` в Telegram
+2. Убедиться что бот отвечает (главное меню)
+3. Выбрать z-image
+4. Ввести prompt + aspect_ratio
+5. Дождаться результата (image URL)
+
+---
+
+## 📝 Технические детали
+
+### Lock Key (int64 signed)
+
+**Проблема:** `unsigned_key % (MAX_BIGINT + 1)` давал [0, 2^63], что выходило за signed int64
+**Решение:** Bitwise mask `unsigned_key & 0x7FFFFFFFFFFFFFFF` гарантирует [0, 2^63-1]
+
+**Код:**
+```python
+# render_singleton_lock.py, lines 27-56
+MAX_BIGINT = 0x7FFFFFFFFFFFFFFF  # 2^63 - 1
+lock_key = unsigned_key & MAX_BIGINT
+```
+
+---
+
+### Idempotent Migrations
+
+**Принцип:** Все DDL команды используют IF EXISTS / IF NOT EXISTS
+
+**Примеры:**
+```sql
+CREATE TABLE IF NOT EXISTS users (...);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+CREATE TRIGGER update_users_updated_at ...;
+```
+
+**Безопасность:** Можно применять многократно без ошибок
+
+---
+
+### Webhook Callback
+
+**Архитектура:**
+1. `SingletonLockController` создается с `on_active_callback=init_active_services`
+2. При захвате lock: `_set_state(ACTIVE)` → вызывает callback
+3. Callback: `init_active_services()` → `ensure_webhook()`
+4. Webhook настраивается ровно 1 раз при переходе PASSIVE→ACTIVE
+
+**Проблема (исправлена):**
+- `state_sync_loop()` дублировал вызов `init_active_services()`
+- Теперь только логирует: "Services already initialized by controller callback"
+
+---
+
+## 🔍 Диагностика проблем
+
+### Бот не отвечает на /start
+
+**Проверить:**
+1. `[WEBHOOK_SETUP] ✅ WEBHOOK CONFIGURED` в логах Render
+2. `await bot.get_webhook_info()` - должен вернуть URL
+3. WEBHOOK_BASE_URL правильный (https://, без trailing slash)
+4. Нет ошибок "Failed to set webhook"
+
+**Фикс:**
+```bash
+python3 minimal_happy_path.py  # Настроит webhook автоматически
+```
+
+---
+
+### Lock не захватывается (вечный PASSIVE)
+
+**Проверить:**
+1. Нет ли зависших процессов на Render (старый deploy не завершился)
+2. `DATABASE_URL` корректный
+3. Stale lock detection работает (idle >300s → terminate)
+
+**Фикс:**
+```sql
+-- Force release lock (крайний случай)
+SELECT pg_advisory_unlock_all();
+```
+
+---
+
+### Миграции падают
+
+**Проверить:**
+1. Используется ли `init_schema_idempotent.sql`
+2. Нет ли conflicting миграций в `alembic/versions/`
+
+**Фикс:**
+```bash
+# Применить idempotent schema вручную
+psql $DATABASE_URL < init_schema_idempotent.sql
+```
+
+---
+
+## 📦 Файлы в репозитории
+
+### Новые файлы (созданы в этом сеансе):
+- `minimal_happy_path.py` - валидация production-readiness
+- `init_schema_idempotent.sql` - idempotent миграции
+- `prod_check.py` - e2e smoke test
+- `TRT_REPORT.md` - этот файл
+
+### Измененные файлы:
+- `main_render.py` - фикс дублирования callback (строки 957-970)
+
+### Существующие файлы (без изменений):
+- `render_singleton_lock.py` - lock key уже исправлен (commit 3ca2fec)
+- `app/locking/controller.py` - callback механизм уже рабочий
+- `models/kie_models.yaml` - z-image конфигурация
+
+---
+
+## ✅ Итого
+
+### Что работает:
+1. ✅ Идемпотентные миграции (safe для повторного применения)
+2. ✅ Lock key в signed int64 range (no OID errors)
+3. ✅ Webhook настраивается ровно 1 раз при PASSIVE→ACTIVE
+4. ✅ Stale lock detection (kill idle >5min)
+5. ✅ Minimal happy path для z-image (валидация всего стека)
+6. ✅ E2E smoke test (7 проверок production-readiness)
+
+### Что осталось:
+- ⚠️ Deploy на Render и проверка логов (ждем user action)
+- ⚠️ Тест /start в Telegram после деплоя
+
+### Рекомендации для production:
+1. Использовать `init_schema_idempotent.sql` вместо alembic (если миграции ломаются)
+2. Мониторить логи на наличие `[WEBHOOK_SETUP] ✅ WEBHOOK CONFIGURED`
+3. При редеплое: нормально видеть PASSIVE→ACTIVE переход (10-60s)
+4. Если бот не отвечает: запустить `python3 minimal_happy_path.py`
+
+---
+
+**Отчет создан:** 2026-01-12  
+**Commit с изменениями:** Следующий коммит после этого отчета  
+**Статус:** ✅ Ready for Render deployment
