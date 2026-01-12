@@ -167,10 +167,11 @@ class SingletonLock:
         self.key = key
         self._acquired = False
 
-    async def acquire(self) -> bool:
+    async def acquire(self, timeout: float = 5.0) -> bool:
         # NOTE: app.locking.single_instance.acquire_single_instance_lock() reads DATABASE_URL
         # from env and uses the psycopg2 pool from database.py. We keep this wrapper async
         # for uniformity.
+        # PHASE 1: Added timeout parameter (used for logging only, actual timeout handled by underlying lock)
         if not self.database_url:
             self._acquired = True
             return True
@@ -179,10 +180,11 @@ class SingletonLock:
             from app.locking.single_instance import acquire_single_instance_lock
 
             # Signature has no args (it reads env). Passing args breaks and forces PASSIVE.
+            # timeout parameter accepted but not used (for API compatibility)
             self._acquired = bool(acquire_single_instance_lock())
             return self._acquired
         except Exception as e:
-            logger.exception("[LOCK] Failed to acquire singleton lock: %s", e)
+            logger.exception("[LOCK] Failed to acquire singleton lock (timeout=%s): %s", timeout, e)
             self._acquired = False
             return False
 
@@ -798,8 +800,12 @@ async def main() -> None:
         # PHASE 5: Start orphan callback reconciliation background task
         if runtime_state.db_schema_ready and cfg.database_url:
             try:
+                # Create storage instance for reconciler
+                from app.storage import get_storage
+                storage_instance = get_storage()
+                
                 reconciler = OrphanCallbackReconciler(
-                    storage=storage,
+                    storage=storage_instance,
                     bot=bot,
                     check_interval=10,
                     max_age_minutes=30
