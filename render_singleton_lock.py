@@ -129,10 +129,10 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                                 logger.info(f"[LOCK] ✅ Stale process terminated, retrying lock acquisition...")
                                 conn.commit()
                                 
-                                # Wait for lock release - measured ~500-600ms in production logs
-                                # Using 2s to ensure lock is fully released
+                                # Wait for lock release - measured ~500-2000ms in production logs
+                                # Using 3s to GUARANTEE lock is fully released (critical for webhook setup)
                                 import time
-                                time.sleep(2.0)
+                                time.sleep(3.0)
                                 
                                 # Retry lock acquisition
                                 cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))

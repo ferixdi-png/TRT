@@ -68,7 +68,8 @@ def _acquire_postgres_lock() -> Optional[object]:
     """
     Пытается получить PostgreSQL advisory lock через session-level connection.
     
-    КРИТИЧНО: Делает 2 попытки с паузой 1s для учёта времени на убийство stale процесса.
+    КРИТИЧНО: Использует render_singleton_lock который АВТОМАТИЧЕСКИ убивает stale процессы
+    и ждёт 3 секунды для освобождения lock. Retry НЕ НУЖЕН - lock получается в первой попытке.
     
     Returns:
         dict с 'connection' и 'lock_key' если lock получен, None если нет
@@ -92,27 +93,17 @@ def _acquire_postgres_lock() -> Optional[object]:
         # Используем render_singleton_lock для получения lock
         try:
             import render_singleton_lock
-            import time
             
             lock_key = _get_lock_key()
             
-            # Попытка 1: может убить stale процесс
+            # acquire_lock_session автоматически убивает stale процессы и ждёт 3s
+            # Retry НЕ НУЖЕН - если lock не получен, значит другой АКТИВНЫЙ инстанс
             conn = render_singleton_lock.acquire_lock_session(pool, lock_key)
             if conn:
                 logger.info(f"[LOCK] PostgreSQL advisory lock acquired (key={lock_key})")
                 return {'connection': conn, 'pool': pool, 'lock_key': lock_key}
             
-            # Попытка 2: после убийства stale процесса может понадобиться время
-            # Логи показывают: terminate в 19:18:45.837, lock acquired в 19:18:46.341 (504ms)
-            logger.debug("[LOCK] First attempt failed, retrying after 1s for stale process cleanup...")
-            time.sleep(1.0)
-            
-            conn = render_singleton_lock.acquire_lock_session(pool, lock_key)
-            if conn:
-                logger.info(f"[LOCK] PostgreSQL advisory lock acquired on retry (key={lock_key})")
-                return {'connection': conn, 'pool': pool, 'lock_key': lock_key}
-            
-            logger.debug(f"[LOCK] PostgreSQL advisory lock NOT acquired after 2 attempts (key={lock_key}) - another instance is running")
+            logger.debug(f"[LOCK] PostgreSQL advisory lock NOT acquired (key={lock_key}) - another active instance")
             return None
         except ImportError:
             logger.debug("[LOCK] render_singleton_lock not available")
