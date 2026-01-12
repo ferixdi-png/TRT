@@ -352,30 +352,21 @@ def _make_web_app(
                 raise web.HTTPUnauthorized()
 
         if not active_state.active:
-            # 🎯 PASSIVE MODE: Don't process side-effects, but RESPOND to user
-            # Parse update to extract chat_id and send "updating" message
+            # 🎯 PASSIVE MODE: Throttled user notifications via controller
             try:
                 payload = await request.json()
                 update = Update.model_validate(payload)
                 
-                # Extract chat_id from message or callback_query
+                # Extract chat_id
                 chat_id = None
                 if update.message:
                     chat_id = update.message.chat.id
                 elif update.callback_query:
                     chat_id = update.callback_query.message.chat.id if update.callback_query.message else None
                 
-                # Send "updating" message to user
-                if chat_id:
-                    try:
-                        await bot.send_message(
-                            chat_id,
-                            "🔄 Бот обновляется (20-60 сек)\n\n"
-                            "Попробуй ещё раз через минуту или нажми /start"
-                        )
-                        logger.info(f"[PASSIVE MODE] Sent 'updating' message to chat_id={chat_id}")
-                    except Exception as e:
-                        logger.warning(f"[PASSIVE MODE] Failed to send message to {chat_id}: {e}")
+                # Controller handles throttling (max 1 per 60s)
+                if chat_id and hasattr(active_state, 'lock_controller'):
+                    await active_state.lock_controller.send_passive_notice_if_needed(chat_id)
             except Exception as e:
                 logger.debug(f"[PASSIVE MODE] Could not parse update: {e}")
             
@@ -829,27 +820,22 @@ async def main() -> None:
             except Exception as exc:
                 logger.warning(f"[RECONCILER] ⚠️ Failed to start reconciler: {exc}")
         
-        # Step 2: Acquire lock (non-blocking, no wait)
-        try:
-            # Try to acquire lock immediately (0.5s timeout to avoid blocking)
-            lock_acquired = await lock.acquire(timeout=0.5)
-            active_state.active = bool(lock_acquired)
-            runtime_state.lock_acquired = lock_acquired
-            
-            if active_state.active:
-                logger.info("[LOCK] ✅ Acquired immediately - ACTIVE mode")
-            else:
-                logger.warning("[LOCK] ⏸️  Not acquired - PASSIVE mode (background retry will activate later)")
-                # Start retry task
-                try:
-                    from app.locking import start_background_lock_retry
-                    asyncio.create_task(start_background_lock_retry())
-                except Exception as e:
-                    logger.warning(f"[LOCK] Could not start background retry: {e}")
-        except Exception as e:
-            logger.exception("[LOCK] Lock acquisition failed: %s", e)
-            active_state.active = False
-            runtime_state.lock_acquired = False
+        # Step 2: Start unified lock controller (SINGLE watcher, no duplicates)
+        from app.locking.controller import SingletonLockController
+        
+        lock_controller = SingletonLockController(lock, bot)
+        active_state.lock_controller = lock_controller  # Store for webhook access
+        
+        await lock_controller.start()
+        
+        # Sync active_state with controller
+        active_state.active = lock_controller.should_process_updates()
+        runtime_state.lock_acquired = active_state.active
+        
+        if active_state.active:
+            logger.info("[LOCK_CONTROLLER] ✅ ACTIVE MODE (lock acquired immediately)")
+        else:
+            logger.info("[LOCK_CONTROLLER] ⏸️ PASSIVE MODE (background watcher started)")
 
     db_service = None
     free_manager = None
@@ -897,40 +883,26 @@ async def main() -> None:
             )
 
     runner: Optional[web.AppRunner] = None
-    lock_task: Optional[asyncio.Task] = None
-    passive_warning_shown = False  # Show warning only once when entering passive mode
-
-    async def lock_watcher() -> None:
-        """Rare lock acquisition retries with exponential backoff + jitter."""
-        import random
-        retry_count = 0
-        
+    
+    async def state_sync_loop() -> None:
+        """Periodically sync active_state with lock_controller (every 1s)"""
         while True:
-            if active_state.active:
-                return
-            
-            # Exponential backoff: 60s base + random jitter (0-30s)
-            # On first retry: 60s, then 60s, then 60s... (fixed interval, no exponential)
-            # This avoids thundering herd on rolling deploy
-            wait_time = 60 + random.randint(0, 30)
-            retry_count += 1
-            
-            logger.debug(f"[LOCK] Passive mode - retrying in {wait_time}s (attempt #{retry_count})")
-            await asyncio.sleep(wait_time)
-            
-            got = await lock.acquire()
-            if got:
-                active_state.active = True
-                runtime_state.lock_acquired = True
-                logger.info("[LOCK] Acquired after retry - switching to ACTIVE")
-                try:
-                    await init_active_services()
-                except Exception as e:
-                    logger.exception("[ACTIVE] init failed after lock acquisition: %s", e)
-                return
+            await asyncio.sleep(1)
+            if hasattr(active_state, 'lock_controller'):
+                new_active = active_state.lock_controller.should_process_updates()
+                if new_active != active_state.active:
+                    active_state.active = new_active
+                    runtime_state.lock_acquired = new_active
+                    if new_active:
+                        logger.info("[STATE_SYNC] ✅ PASSIVE → ACTIVE (lock acquired)")
+                        try:
+                            await init_active_services()
+                        except Exception as e:
+                            logger.exception("[ACTIVE] init failed: %s", e)
 
     # 🚀 START BACKGROUND INITIALIZATION (non-blocking)
     asyncio.create_task(background_initialization())
+    asyncio.create_task(state_sync_loop())  # Sync active_state with controller
 
     try:
         if effective_bot_mode == "polling":
@@ -943,15 +915,14 @@ async def main() -> None:
             # Wait briefly for background init (but don't block)
             await asyncio.sleep(0.5)
 
-            # If passive mode, start background retry and keep healthcheck running
+            # If passive mode, keep healthcheck running
             if not active_state.active:
-                lock_task = asyncio.create_task(lock_watcher())
-                logger.info("[PASSIVE MODE] HTTP server running, background lock watcher active")
+                logger.info("[PASSIVE MODE] HTTP server running, state_sync_loop monitors lock")
                 await asyncio.Event().wait()
                 return
 
             # Active mode: initialize services and start polling
-            await init_active_services()
+            # (init_active_services called by state_sync_loop on PASSIVE→ACTIVE)
             await preflight_webhook(bot)
             await dp.start_polling(bot)
             return
@@ -966,22 +937,12 @@ async def main() -> None:
         await asyncio.sleep(0.5)
 
         # Initialize active services if lock acquired
-        if active_state.active:
-            await init_active_services()
-        else:
-            # Start background lock watcher
-            lock_task = asyncio.create_task(lock_watcher())
-            logger.info("[PASSIVE MODE] HTTP server running, background lock watcher active")
+        # (init_active_services called by state_sync_loop on PASSIVE→ACTIVE)
+        if not active_state.active:
+            logger.info("[PASSIVE MODE] HTTP server running, state_sync_loop monitors lock")
 
         await asyncio.Event().wait()
     finally:
-        try:
-            if lock_task is not None:
-                lock_task.cancel()
-                with contextlib.suppress(Exception):
-                    await lock_task
-        except Exception:
-            pass
         try:
             if runner is not None:
                 await runner.cleanup()
