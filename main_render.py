@@ -763,7 +763,8 @@ async def _start_web_server(app: web.Application, port: int) -> web.AppRunner:
 
 
 async def main() -> None:
-    setup_logging()
+    LOG_LEVEL_ENV = os.getenv("LOG_LEVEL", "").upper()
+    setup_logging(level=(logging.DEBUG if LOG_LEVEL_ENV == "DEBUG" else logging.INFO))
 
     cfg = _load_runtime_config()
     effective_bot_mode = cfg.bot_mode

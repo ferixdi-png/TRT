@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Настраиваем унифицированное логирование ПЕРЕД импортом других модулей
 from app.utils.logging_config import setup_logging, get_logger
 
-setup_logging(level=logging.INFO)
+LOG_LEVEL_ENV = os.getenv("LOG_LEVEL", "").upper()
+setup_logging(level=(logging.DEBUG if LOG_LEVEL_ENV == "DEBUG" else logging.INFO))
 logger = get_logger(__name__)
 
 # Глобальные переменные для observability
