@@ -32,6 +32,7 @@ from aiohttp import web
 from app.storage import get_storage
 from app.storage.status import normalize_job_status
 from app.utils.logging_config import setup_logging  # noqa: E402
+from app.utils.orphan_reconciler import OrphanCallbackReconciler  # PHASE 5
 from app.utils.runtime_state import runtime_state  # noqa: E402
 from app.utils.webhook import (
     build_kie_callback_url,
@@ -641,13 +642,32 @@ def _make_web_app(
                     logger.exception("[KIE_CALLBACK] Failed to send to user %s: %s", user_id, exc)
                     runtime_state.telegram_send_fail_count += 1
         else:
-            # 🎯 ORPHAN JOB: Callback arrived but no job in DB (CRITICAL metric)
-            logger.error(
-                "[KIE_CALLBACK] ❌ ORPHAN JOB | task_id=%s record_id=%s status=%s | "
-                "This means createTask succeeded but job was not created in DB",
+            # 🎯 ORPHAN JOB: Callback arrived but no job in DB (PHASE 4 FIX)
+            logger.warning(
+                "[KIE_CALLBACK] ⚠️ ORPHAN CALLBACK | task_id=%s record_id=%s status=%s | "
+                "Callback arrived before job creation - saving for reconciliation",
                 task_id, record_id, state
             )
             runtime_state.callback_job_not_found_count += 1
+            
+            # PHASE 4: Save orphan callback for later reconciliation
+            # Instead of trying to create job with user_id=0 (which fails FK)
+            try:
+                orphan_payload = {
+                    'task_id': effective_id,
+                    'state': state,
+                    'result_urls': result_urls,
+                    'error_text': error_text,
+                    'normalized_status': normalized_status,
+                    'full_payload': payload,
+                    'received_at': datetime.now().isoformat()
+                }
+                
+                # Save to orphan_callbacks table
+                await storage._save_orphan_callback(effective_id, orphan_payload)
+                logger.info(f"[KIE_CALLBACK] Saved orphan callback for task_id={effective_id}")
+            except Exception as exc:
+                logger.exception("[KIE_CALLBACK] Failed to save orphan callback: %s", exc)
             
             # Try to create orphan job retroactively (best effort)
             if runtime_state.db_schema_ready and hasattr(storage, "add_generation_job"):
@@ -774,6 +794,20 @@ async def main() -> None:
                 runtime_state.db_schema_ready = False
         else:
             runtime_state.db_schema_ready = True
+        
+        # PHASE 5: Start orphan callback reconciliation background task
+        if runtime_state.db_schema_ready and cfg.database_url:
+            try:
+                reconciler = OrphanCallbackReconciler(
+                    storage=storage,
+                    bot=bot,
+                    check_interval=10,
+                    max_age_minutes=30
+                )
+                await reconciler.start()
+                logger.info("[RECONCILER] ✅ Background orphan reconciliation started (10s interval, 30min timeout)")
+            except Exception as exc:
+                logger.warning(f"[RECONCILER] ⚠️ Failed to start reconciler: {exc}")
         
         # Step 2: Acquire lock (non-blocking, no wait)
         try:

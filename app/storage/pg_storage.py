@@ -112,6 +112,43 @@ class PostgresStorage(BaseStorage):
     
     # ==================== USER OPERATIONS ====================
     
+    async def ensure_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> None:
+        """
+        Ensure user exists in database (idempotent, safe for concurrent calls)
+        CRITICAL: Prevents FK violations when creating jobs
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # INSERT or UPDATE user record
+            # Use COALESCE to avoid overwriting existing values with NULL
+            await conn.execute(
+                """
+                INSERT INTO users (id, username, first_name, last_name, balance, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, 0.00, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    username = CASE 
+                        WHEN EXCLUDED.username IS NOT NULL THEN EXCLUDED.username
+                        ELSE users.username
+                    END,
+                    first_name = CASE
+                        WHEN EXCLUDED.first_name IS NOT NULL THEN EXCLUDED.first_name
+                        ELSE users.first_name
+                    END,
+                    last_name = CASE
+                        WHEN EXCLUDED.last_name IS NOT NULL THEN EXCLUDED.last_name
+                        ELSE users.last_name
+                    END,
+                    updated_at = NOW()
+                """,
+                user_id, username, first_name, last_name
+            )
+    
     async def get_user(self, user_id: int, upsert: bool = True) -> Dict[str, Any]:
         """Получить данные пользователя"""
         pool = await self._get_pool()
@@ -444,6 +481,64 @@ class PostgresStorage(BaseStorage):
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """Получить список задач"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            query = "SELECT * FROM generation_jobs WHERE 1=1"
+            params = []
+    
+    # ==================== ORPHAN CALLBACKS (PHASE 4) ====================
+    
+    async def _save_orphan_callback(self, task_id: str, payload: Dict[str, Any]) -> None:
+        """Save orphan callback for later reconciliation"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO orphan_callbacks (task_id, payload, received_at, processed)
+                VALUES ($1, $2, NOW(), FALSE)
+                ON CONFLICT (task_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    received_at = EXCLUDED.received_at
+                """,
+                task_id, json.dumps(payload)
+            )
+    
+    async def _get_unprocessed_orphans(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get unprocessed orphan callbacks for reconciliation"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT task_id, payload, received_at
+                FROM orphan_callbacks
+                WHERE processed = FALSE
+                ORDER BY received_at ASC
+                LIMIT $1
+                """,
+                limit
+            )
+            return [dict(row) for row in rows]
+    
+    async def _mark_orphan_processed(self, task_id: str, error: Optional[str] = None) -> None:
+        """Mark orphan callback as processed"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE orphan_callbacks
+                SET processed = TRUE, processed_at = NOW(), error_message = $2
+                WHERE task_id = $1
+                """,
+                task_id, error
+            )
+    
+    async def list_jobs(
+        self,
+        user_id: Optional[int] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Получить список задач с фильтрацией и пагинацией"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             query = "SELECT * FROM generation_jobs WHERE 1=1"

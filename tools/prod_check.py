@@ -228,6 +228,29 @@ class ProductionChecker:
                 f"Found {len(sql_files)} migration files"
             ))
         
+        # PHASE 2: Check critical migrations exist
+        critical_migrations = [
+            "001_initial_schema.sql",
+            "002_referrals.sql",
+            "003_users_username.sql",  # PHASE 2: Username column fix
+            "004_orphan_callbacks.sql"  # PHASE 2: Orphan callback tracking
+        ]
+        
+        for migration in critical_migrations:
+            migration_file = migrations_dir / migration
+            if not migration_file.exists():
+                suite.checks.append(CheckResult(
+                    f"Migration: {migration}",
+                    CheckStatus.FAIL,
+                    f"Critical migration missing: {migration}"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    f"Migration: {migration}",
+                    CheckStatus.PASS,
+                    f"Migration exists: {migration}"
+                ))
+        
         return suite
     
     def check_critical_files(self) -> CheckSuite:
@@ -255,6 +278,27 @@ class ProductionChecker:
             else:
                 suite.checks.append(CheckResult(
                     f"File: {file_path}",
+                    CheckStatus.PASS,
+                    "OK"
+                ))
+        
+        # PHASE 3-5: Check production fix files
+        prod_fix_files = [
+            "app/utils/orphan_reconciler.py",  # PHASE 4: Orphan reconciliation
+            "app/models/input_schema.py",  # PHASE B: Input validation (correct path)
+        ]
+        
+        for file_path in prod_fix_files:
+            full_path = PROJECT_ROOT / file_path
+            if not full_path.exists():
+                suite.checks.append(CheckResult(
+                    f"ProdFix: {file_path}",
+                    CheckStatus.FAIL,
+                    "Production fix file missing"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    f"ProdFix: {file_path}",
                     CheckStatus.PASS,
                     "OK"
                 ))
@@ -295,6 +339,92 @@ class ProductionChecker:
         
         return suite
     
+    def check_prod_fixes(self) -> CheckSuite:
+        """Проверка production fixes (PHASES 1-5)"""
+        suite = CheckSuite("PRODUCTION FIXES")
+        
+        # PHASE 1: Check lock signature fix
+        lock_file = PROJECT_ROOT / "app" / "locking" / "single_instance.py"
+        if lock_file.exists():
+            content = lock_file.read_text()
+            if "async def acquire(self, timeout" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 1: Lock timeout fix",
+                    CheckStatus.PASS,
+                    "Lock.acquire() accepts timeout parameter"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 1: Lock timeout fix",
+                    CheckStatus.FAIL,
+                    "Lock.acquire() missing timeout parameter"
+                ))
+        else:
+            suite.checks.append(CheckResult(
+                "PHASE 1: Lock file",
+                CheckStatus.FAIL,
+                "single_instance.py not found"
+            ))
+        
+        # PHASE 3: Check ensure_user pattern
+        pg_storage = PROJECT_ROOT / "app" / "storage" / "pg_storage.py"
+        if pg_storage.exists():
+            content = pg_storage.read_text()
+            if "async def ensure_user" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 3: ensure_user pattern",
+                    CheckStatus.PASS,
+                    "PostgresStorage.ensure_user() implemented"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 3: ensure_user pattern",
+                    CheckStatus.FAIL,
+                    "ensure_user() method missing in PostgresStorage"
+                ))
+        
+        # PHASE 4: Check orphan reconciler
+        reconciler_file = PROJECT_ROOT / "app" / "utils" / "orphan_reconciler.py"
+        if reconciler_file.exists():
+            content = reconciler_file.read_text()
+            if "class OrphanCallbackReconciler" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 4: Orphan reconciler",
+                    CheckStatus.PASS,
+                    "OrphanCallbackReconciler class exists"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 4: Orphan reconciler",
+                    CheckStatus.FAIL,
+                    "OrphanCallbackReconciler class not found"
+                ))
+        else:
+            suite.checks.append(CheckResult(
+                "PHASE 4: Orphan reconciler file",
+                CheckStatus.FAIL,
+                "orphan_reconciler.py not found"
+            ))
+        
+        # PHASE 5: Check reconciler integration
+        main_render = PROJECT_ROOT / "main_render.py"
+        if main_render.exists():
+            content = main_render.read_text()
+            if "OrphanCallbackReconciler" in content and "reconciler.start()" in content:
+                suite.checks.append(CheckResult(
+                    "PHASE 5: Reconciler integration",
+                    CheckStatus.PASS,
+                    "OrphanCallbackReconciler integrated in main_render.py"
+                ))
+            else:
+                suite.checks.append(CheckResult(
+                    "PHASE 5: Reconciler integration",
+                    CheckStatus.FAIL,
+                    "Reconciler not integrated in main_render.py"
+                ))
+        
+        return suite
+    
     async def run_all_checks(self):
         """Запуск всех проверок"""
         print("🔍 PRODUCTION READINESS CHECK")
@@ -307,6 +437,7 @@ class ProductionChecker:
         self.suites.append(self.check_migrations())
         self.suites.append(self.check_critical_files())
         self.suites.append(self.check_python_syntax())
+        self.suites.append(self.check_prod_fixes())  # PHASES 1-5 validation
         
         # Вывод результатов
         total_passed = 0

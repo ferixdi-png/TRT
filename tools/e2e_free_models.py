@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Dict, List, Any
 from datetime import datetime
 
+# 🔧 E2E SETUP: Set minimum required env vars for testing
+if not os.getenv("WEBHOOK_BASE_URL"):
+    # Use placeholder URL - callbacks won't arrive but tasks will be created
+    os.environ["WEBHOOK_BASE_URL"] = "https://e2e-test.local"
+    print("⚠️ E2E MODE: WEBHOOK_BASE_URL not set, using placeholder (callbacks will be mocked)")
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.kie.generator import KieGenerator

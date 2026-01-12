@@ -121,6 +121,21 @@ class JsonStorage(BaseStorage):
             temp_file.replace(file_path)
 
     # ==================== USER OPERATIONS ====================
+    
+    async def ensure_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> None:
+        """
+        Ensure user exists (JSON storage doesn't enforce FK but keep API compatible)
+        In JSON mode this is a no-op since we create users on-demand
+        """
+        # JSON storage creates users automatically in get_user with upsert=True
+        # This method exists for API compatibility with PostgreSQL storage
+        pass
 
     async def get_user(self, user_id: int, upsert: bool = True) -> Dict[str, Any]:
         """Получить данные пользователя"""
@@ -351,6 +366,23 @@ class JsonStorage(BaseStorage):
         # Сортируем по created_at (новые первыми)
         jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return jobs[:limit]
+    
+    # ==================== ORPHAN CALLBACKS (PHASE 4 - JSON STUB) ====================
+    
+    async def _save_orphan_callback(self, task_id: str, payload: Dict[str, Any]) -> None:
+        """Save orphan callback (JSON storage stub - no-op for compatibility)"""
+        # In JSON mode we don't have proper orphan tracking
+        # This is a no-op for API compatibility
+        logger.debug(f"[JSON_STORAGE] Orphan callback saved (no-op): task_id={task_id}")
+        pass
+    
+    async def _get_unprocessed_orphans(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get unprocessed orphans (JSON storage stub)"""
+        return []
+    
+    async def _mark_orphan_processed(self, task_id: str, error: Optional[str] = None) -> None:
+        """Mark orphan processed (JSON storage stub)"""
+        pass
 
     async def add_generation_to_history(
         self,

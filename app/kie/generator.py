@@ -302,6 +302,15 @@ class KieGenerator:
                     from app.storage import get_storage
                     storage = get_storage()
                     
+                    # PHASE 3: ENSURE USER EXISTS BEFORE JOB INSERT (FK FIX)
+                    # Prevents: violates foreign key generation_jobs_user_id_fkey
+                    await storage.ensure_user(
+                        user_id=user_id,
+                        username=None,  # Will be filled by bot handler
+                        first_name=None,
+                        last_name=None
+                    )
+                    
                     # Create job with all metadata
                     job_params = {
                         'model_id': model_id,

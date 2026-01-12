@@ -463,6 +463,9 @@ class SingletonLock:
         """
         Acquire singleton lock with stale detection.
         
+        Args:
+            timeout: Timeout in seconds for connection AND lock acquisition attempt
+        
         Returns:
             True if lock acquired, False otherwise
         """
@@ -475,6 +478,7 @@ class SingletonLock:
             return False
         
         try:
+            # Use timeout for connection
             if HAS_ASYNCPG:
                 self._connection = await asyncio.wait_for(
                     asyncpg.connect(self.dsn),
@@ -494,7 +498,7 @@ class SingletonLock:
             # Cleanup stale locks
             await self._cleanup_stale_locks()
             
-            # Try to acquire advisory lock
+            # Try to acquire advisory lock (immediate, non-blocking)
             if HAS_ASYNCPG:
                 acquired = await self._connection.fetchval(
                     "SELECT pg_try_advisory_lock($1)",
@@ -519,7 +523,7 @@ class SingletonLock:
                 return False
         
         except asyncio.TimeoutError:
-            logger.error("Timeout acquiring singleton lock")
+            logger.error(f"Timeout ({timeout}s) acquiring singleton lock")
             return False
         except Exception as e:
             logger.error(f"Error acquiring singleton lock: {e}")

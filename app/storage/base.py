@@ -14,6 +14,26 @@ class BaseStorage(ABC):
     # ==================== USER OPERATIONS ====================
     
     @abstractmethod
+    async def ensure_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> None:
+        """
+        Ensure user exists in database (create if not exists, update if changed)
+        CRITICAL: Call this BEFORE creating jobs to avoid FK violations
+        
+        Args:
+            user_id: Telegram user ID
+            username: Telegram username (optional)
+            first_name: User first name (optional)
+            last_name: User last name (optional)
+        """
+        pass
+    
+    @abstractmethod
     async def get_user(self, user_id: int, upsert: bool = True) -> Dict[str, Any]:
         """
         Получить данные пользователя (создать если не существует)
