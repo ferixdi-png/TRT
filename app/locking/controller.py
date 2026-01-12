@@ -227,8 +227,10 @@ class SingletonLockController:
                 return
             
             # Try immediate acquire first (fast path)
+            logger.info("[LOCK_CONTROLLER] 🔍 Attempting immediate acquire (timeout=0.5s)...")
             try:
                 got_lock = await self.lock.acquire(timeout=0.5)
+                logger.info(f"[LOCK_CONTROLLER] Immediate acquire returned: {got_lock}")
                 if got_lock:
                     await self._set_state(LockState.ACTIVE)
                     logger.info(
@@ -236,6 +238,8 @@ class SingletonLockController:
                         self.state.instance_id
                     )
                     return  # No need for watcher
+                else:
+                    logger.warning("[LOCK_CONTROLLER] ⏸️ Immediate acquire FAILED - lock held by another instance")
             except Exception as e:
                 logger.debug(
                     "[LOCK_CONTROLLER] Immediate acquire failed: %s | instance=%s",
