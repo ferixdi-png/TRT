@@ -404,34 +404,73 @@ def _make_web_app(
         return web.Response(status=200, text="ok")
 
     async def kie_callback(request: web.Request) -> web.Response:
+        """
+        KIE callback handler - ALWAYS returns 200 to prevent retry storms.
+        Handles malformed payloads gracefully.
+        """
+        # Token validation
         if cfg.kie_callback_token:
             header = request.headers.get("X-KIE-Callback-Token", "")
             if header != cfg.kie_callback_token:
                 logger.warning("[KIE_CALLBACK] Invalid token")
-                raise web.HTTPUnauthorized()
+                # Still return 200 to prevent retries
+                return web.json_response({"ok": False, "error": "invalid_token"}, status=200)
 
-        try:
-            payload = await request.json()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[KIE_CALLBACK] Bad JSON: %s", exc)
-            return web.Response(status=400, text="bad json")
-
-        # Try to extract taskId from multiple possible locations (V4 compatibility)
-        task_id = (
-            payload.get("taskId") or
-            payload.get("task_id") or
-            payload.get("data", {}).get("taskId") or
-            payload.get("data", {}).get("task_id") or
-            payload.get("recordId") or
-            payload.get("record_id") or
-            payload.get("data", {}).get("recordId") or
-            payload.get("data", {}).get("record_id")
-        )
+        # Import robust parser
+        from app.utils.callback_parser import extract_task_id, safe_truncate_payload
         
-        if not task_id:
-            logger.warning("[KIE_CALLBACK] Missing taskId in payload: %s", payload)
-            # Return 200 OK to prevent KIE retries, but mark as ignored
-            return web.json_response({"ok": True, "ignored": True})
+        # Parse payload with maximum tolerance
+        raw_payload = None
+        try:
+            raw_payload = await request.json()
+        except Exception as exc:  # noqa: BLE001
+            # Try reading raw bytes
+            try:
+                raw_payload = await request.read()
+                logger.warning("[KIE_CALLBACK] JSON parse failed, got bytes: %d bytes, error: %s",
+                              len(raw_payload) if raw_payload else 0, exc)
+            except Exception as read_exc:  # noqa: BLE001
+                logger.warning("[KIE_CALLBACK] Could not read payload: %s", read_exc)
+                # Still return 200
+                return web.json_response({"ok": True, "ignored": True, "reason": "unreadable_payload"}, status=200)
+        
+        # Extract task ID using robust parser
+        query_params = dict(request.query) if request.query else None
+        headers = dict(request.headers) if request.headers else None
+        
+        task_id, record_id, debug_info = extract_task_id(raw_payload, query_params, headers)
+        
+        if not task_id and not record_id:
+            # Log warning with safe payload preview
+            payload_preview = safe_truncate_payload(raw_payload, max_length=300)
+            logger.warning(
+                "[KIE_CALLBACK] No taskId/recordId found. "
+                "Debug: %s | Payload preview: %s",
+                debug_info, payload_preview
+            )
+            # Still return 200 to prevent retry storm
+            return web.json_response({
+                "ok": True,
+                "ignored": True,
+                "reason": "no_task_id",
+                "debug": debug_info
+            }, status=200)
+        
+        # Use task_id or record_id (prefer task_id)
+        effective_id = task_id or record_id
+        logger.info("[KIE_CALLBACK] Received callback for task_id=%s (record_id=%s) via %s",
+                   task_id, record_id, debug_info.get("extraction_path", []))
+        
+        # Parse payload as dict for further processing
+        payload = raw_payload if isinstance(raw_payload, dict) else {}
+        if not payload and raw_payload:
+            try:
+                if isinstance(raw_payload, bytes):
+                    payload = json.loads(raw_payload.decode('utf-8'))
+                elif isinstance(raw_payload, str):
+                    payload = json.loads(raw_payload)
+            except Exception:  # noqa: BLE001
+                pass  # Continue with empty dict
 
         state = payload.get("state") or payload.get("status")
         result_urls = payload.get("resultUrls") or payload.get("result_urls") or []
@@ -449,18 +488,18 @@ def _make_web_app(
         storage = get_storage()
         job = None
         try:
-            job = await storage.get_job(task_id)
+            job = await storage.get_job(effective_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[KIE_CALLBACK] get_job failed: %s", exc)
 
         if not job and hasattr(storage, "find_job_by_task_id"):
             try:
-                job = await storage.find_job_by_task_id(task_id)
+                job = await storage.find_job_by_task_id(effective_id)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[KIE_CALLBACK] find_job_by_task_id failed: %s", exc)
 
         if job:
-            job_id = job.get("job_id") or job.get("id") or task_id
+            job_id = job.get("job_id") or job.get("id") or effective_id
             try:
                 await storage.update_job_status(
                     job_id,
@@ -468,6 +507,7 @@ def _make_web_app(
                     result_urls=result_urls or None,
                     error_message=error_text,
                 )
+                logger.info("[KIE_CALLBACK] Updated job %s to status=%s", job_id, normalized_status)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("[KIE_CALLBACK] Failed to update job %s: %s", job_id, exc)
 
@@ -484,9 +524,11 @@ def _make_web_app(
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("[KIE_CALLBACK] Failed to notify user %s: %s", user_id, exc)
         else:
-            logger.warning("[KIE_CALLBACK] Job not found for task_id=%s status=%s", task_id, state)
+            logger.warning("[KIE_CALLBACK] Job not found for task_id=%s record_id=%s status=%s",
+                         task_id, record_id, state)
 
-        return web.json_response({"ok": True})
+        # ALWAYS return 200 to prevent KIE retry storms
+        return web.json_response({"ok": True}, status=200)
 
     callback_route = f"/{cfg.kie_callback_path.lstrip('/')}"
     app.router.add_get("/health", health)
@@ -558,24 +600,36 @@ async def main() -> None:
         except Exception as e:
             logger.warning("[DB] Could not initialize psycopg2 pool for lock: %s", e)
 
+    # Create lock object and state tracker
     lock = SingletonLock(cfg.database_url)
-    lock_acquired = await lock.acquire()
-    runtime_state.lock_acquired = lock_acquired
-
-    active_state = ActiveState(active=bool(lock_acquired))
-    if not active_state.active:
-        logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (webhook returns 200, no side effects)")
-        logger.info("[LOCK] Background retry task will attempt to acquire lock periodically")
-    else:
-        logger.info("[LOCK] Acquired - ACTIVE mode enabled")
-
-    # Start background lock retry task if in passive mode
-    if not active_state.active:
+    active_state = ActiveState(active=False)  # Start as passive, will activate after lock
+    
+    # Start lock acquisition in background (non-blocking)
+    async def acquire_lock_background():
+        """Acquire lock in background without blocking port startup."""
         try:
-            from app.locking import start_background_lock_retry
-            await start_background_lock_retry()
+            lock_acquired = await lock.acquire()
+            active_state.active = bool(lock_acquired)
+            runtime_state.lock_acquired = lock_acquired
+            
+            if active_state.active:
+                logger.info("[LOCK] Acquired - ACTIVE mode enabled")
+            else:
+                logger.warning("[LOCK] Not acquired - starting in PASSIVE mode (webhook returns 200, no side effects)")
+                logger.info("[LOCK] Background retry task will attempt to acquire lock periodically")
+                # Start retry task
+                try:
+                    from app.locking import start_background_lock_retry
+                    await start_background_lock_retry()
+                except Exception as e:
+                    logger.warning(f"[LOCK] Could not start background retry task: {e}")
         except Exception as e:
-            logger.warning(f"[LOCK] Could not start background retry task: {e}")
+            logger.exception("[LOCK] Lock acquisition failed: %s", e)
+            active_state.active = False
+            runtime_state.lock_acquired = False
+    
+    # Start lock acquisition but don't await it (non-blocking)
+    lock_acquisition_task = asyncio.create_task(acquire_lock_background())
 
     db_service = None
     free_manager = None
@@ -657,29 +711,54 @@ async def main() -> None:
 
     try:
         if effective_bot_mode == "polling":
+            # Create app and start HTTP server IMMEDIATELY (don't wait for lock)
             app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
             if cfg.port:
                 runner = await _start_web_server(app, cfg.port)
-                logger.info("[HEALTH] Server started on port %s", cfg.port)
+                logger.info("[HEALTH] Server started on port %s (healthcheck ready)", cfg.port)
 
+            # Wait for lock acquisition to complete (non-blocking startup)
+            try:
+                await asyncio.wait_for(lock_acquisition_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("[LOCK] Lock acquisition still in progress after 5s, continuing...")
+            except Exception as e:
+                logger.warning("[LOCK] Lock acquisition error: %s", e)
+
+            # If passive mode, just keep healthcheck running
             if not active_state.active:
+                logger.info("[PASSIVE MODE] HTTP server running (healthcheck only), waiting indefinitely")
                 await asyncio.Event().wait()
                 return
 
+            # Active mode: initialize services and start polling
+            await init_active_services()
             await preflight_webhook(bot)
             await dp.start_polling(bot)
             return
 
         # webhook mode
+        # Create app and start HTTP server IMMEDIATELY (don't wait for lock)
         app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state)
         if cfg.port:
             runner = await _start_web_server(app, cfg.port)
-            logger.info("[HEALTH] Server started on port %s", cfg.port)
+            logger.info("[HEALTH] Server started on port %s (healthcheck ready)", cfg.port)
 
+        # Wait for lock acquisition to complete (with timeout)
+        try:
+            await asyncio.wait_for(lock_acquisition_task, timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("[LOCK] Lock acquisition still in progress after 5s, continuing...")
+        except Exception as e:
+            logger.warning("[LOCK] Lock acquisition error: %s", e)
+
+        # Initialize active services if lock acquired
         if active_state.active:
             await init_active_services()
         else:
+            # Start background lock watcher
             lock_task = asyncio.create_task(lock_watcher())
+            logger.info("[PASSIVE MODE] HTTP server running, background lock watcher active")
 
         await asyncio.Event().wait()
     finally:
