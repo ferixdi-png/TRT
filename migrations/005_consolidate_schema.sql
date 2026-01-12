@@ -1,22 +1,38 @@
--- Migration 005: Consolidate Schema
+-- Migration 005: Consolidate Schema (IDEMPOTENT VERSION)
 -- Унификация generation_jobs → jobs (из app/database/schema.py)
 -- Добавление недостающих полей и индексов для production-ready состояния
 
--- PHASE 1: Drop legacy tables if they exist
-DROP TABLE IF EXISTS generation_jobs CASCADE;
+-- PHASE 1: Add missing columns to existing users table (if needed)
+DO $$
+BEGIN
+    -- Add role column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
+        ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
+        ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'banned'));
+    END IF;
+    
+    -- Add locale column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='locale') THEN
+        ALTER TABLE users ADD COLUMN locale TEXT DEFAULT 'ru';
+    END IF;
+    
+    -- Add metadata column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='metadata') THEN
+        ALTER TABLE users ADD COLUMN metadata JSONB DEFAULT '{}'::jsonb;
+    END IF;
+    
+    -- Add username column if it doesn't exist (может быть уже из 003)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='username') THEN
+        ALTER TABLE users ADD COLUMN username TEXT;
+    END IF;
+    
+    -- Add first_name column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_name') THEN
+        ALTER TABLE users ADD COLUMN first_name TEXT;
+    END IF;
+END $$;
 
--- PHASE 2: Ensure users table exists (может быть создана через app/database/schema.py)
-CREATE TABLE IF NOT EXISTS users (
-    user_id BIGINT PRIMARY KEY,
-    username TEXT,
-    first_name TEXT,
-    role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin', 'banned')),
-    locale TEXT DEFAULT 'ru',
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb
-);
-
+-- Create indexes on users
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
@@ -32,62 +48,42 @@ CREATE TABLE IF NOT EXISTS wallets (
 
 CREATE INDEX IF NOT EXISTS idx_wallets_updated ON wallets(updated_at);
 
--- PHASE 4: Create unified jobs table
-CREATE TABLE IF NOT EXISTS jobs (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    model_id TEXT NOT NULL,
-    category TEXT NOT NULL,
-    input_json JSONB NOT NULL,
-    price_rub NUMERIC(12, 2) NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN (
-        'draft', 'await_confirm', 'queued', 'running',
-        'done', 'failed', 'canceled'
-    )),
-    kie_task_id TEXT,
-    kie_status TEXT,
-    result_json JSONB,
-    error_text TEXT,
-    idempotency_key TEXT NOT NULL,
-    chat_id BIGINT,  -- ← NEW: For Telegram delivery
-    delivered_at TIMESTAMP,  -- ← NEW: Confirmation of delivery
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    finished_at TIMESTAMP
-);
-
--- CRITICAL: Enforce idempotency
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key);
-
--- Performance indexes
-CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-CREATE INDEX IF NOT EXISTS idx_jobs_kie_task ON jobs(kie_task_id);
-CREATE INDEX IF NOT EXISTS idx_jobs_chat_id ON jobs(chat_id);  -- ← NEW: For delivery queries
-
--- PHASE 5: Migrate data from generation_jobs (if exists)
+-- PHASE 4: Migrate generation_jobs → jobs (if generation_jobs exists)
 DO $$
 BEGIN
-    IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'generation_jobs') THEN
-        -- Migrate existing jobs
+    -- Check if generation_jobs exists
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'generation_jobs') THEN
+        -- Create jobs table with data from generation_jobs
+        CREATE TABLE IF NOT EXISTS jobs (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            model_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            input_json JSONB NOT NULL,
+            price_rub NUMERIC(12, 2) NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN (
+                'draft', 'await_confirm', 'queued', 'running',
+                'done', 'failed', 'canceled'
+            )),
+            kie_task_id TEXT,
+            kie_status TEXT,
+            result_json JSONB,
+            error_text TEXT,
+            idempotency_key TEXT NOT NULL,
+            chat_id BIGINT,
+            delivered_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            finished_at TIMESTAMP
+        );
+        
+        -- Migrate data
         INSERT INTO jobs (
-            id,
-            user_id,
-            model_id,
-            category,
-            input_json,
-            price_rub,
-            status,
-            kie_task_id,
-            result_json,
-            error_text,
-            idempotency_key,
-            created_at,
-            updated_at
+            user_id, model_id, category, input_json, price_rub,
+            status, kie_task_id, result_json, error_text,
+            idempotency_key, created_at, updated_at
         )
         SELECT
-            -- Generate unique id
-            nextval('jobs_id_seq'),
             user_id,
             model_id,
             COALESCE(
@@ -101,7 +97,6 @@ BEGIN
             ) as category,
             params as input_json,
             price as price_rub,
-            -- Normalize status
             CASE status
                 WHEN 'queued' THEN 'queued'
                 WHEN 'running' THEN 'running'
@@ -113,16 +108,53 @@ BEGIN
             external_task_id as kie_task_id,
             result_urls::jsonb as result_json,
             error_message as error_text,
-            -- Generate idempotency_key from job_id
             CONCAT('migrated:', job_id) as idempotency_key,
             created_at,
             updated_at
         FROM generation_jobs
         ON CONFLICT (idempotency_key) DO NOTHING;
         
-        RAISE NOTICE 'Migrated % jobs from generation_jobs', (SELECT COUNT(*) FROM generation_jobs);
+        -- Drop old table after successful migration
+        DROP TABLE generation_jobs CASCADE;
+        
+        RAISE NOTICE 'Migrated generation_jobs to jobs';
+    ELSE
+        -- Just create jobs table if generation_jobs doesn't exist
+        CREATE TABLE IF NOT EXISTS jobs (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            model_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            input_json JSONB NOT NULL,
+            price_rub NUMERIC(12, 2) NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN (
+                'draft', 'await_confirm', 'queued', 'running',
+                'done', 'failed', 'canceled'
+            )),
+            kie_task_id TEXT,
+            kie_status TEXT,
+            result_json JSONB,
+            error_text TEXT,
+            idempotency_key TEXT NOT NULL,
+            chat_id BIGINT,
+            delivered_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            finished_at TIMESTAMP
+        );
     END IF;
 END $$;
+
+-- CRITICAL: Enforce idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_kie_task ON jobs(kie_task_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_chat_id ON jobs(chat_id);
+
+-- PHASE 5: (removed - migration handled in PHASE 4)
 
 -- PHASE 6: Ledger (if not exists)
 CREATE TABLE IF NOT EXISTS ledger (
