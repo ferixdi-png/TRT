@@ -343,8 +343,10 @@ class KieGenerator:
             # Wait for completion with heartbeat
             start_time = datetime.now()
             last_heartbeat = datetime.now()
+            poll_iteration = 0
             
             while True:
+                poll_iteration += 1
                 # Check timeout
                 elapsed = (datetime.now() - start_time).total_seconds()
                 if elapsed > timeout:
@@ -412,16 +414,59 @@ class KieGenerator:
                         logger.debug(f"Storage check failed (continuing with API): {e}")
                 
                 # Get record info from API (fallback)
+                from app.utils.correlation import correlation_tag
+                
                 record_info = await api_client.get_record_info(task_id)
+                logger.info(f"{correlation_tag()} [POLL_TICK] i={poll_iteration} task_id={task_id} http_ok={record_info is not None}")
+                
                 parsed = parse_record_info(record_info)
                 
                 state = parsed['state']
+                logger.info(f"{correlation_tag()} [POLL_STATE] i={poll_iteration} task_id={task_id} state={state}")
                 
                 if state == 'success':
+                    # 🎯 POLLING DELIVERY: If callback didn't deliver, polling must do it
+                    result_urls = parsed['result_urls']
+                    
+                    # Check if already delivered via callback
+                    delivered_via_callback = False
+                    if user_id is not None:
+                        try:
+                            from app.storage import get_storage
+                            storage = get_storage()
+                            current_job = await storage.find_job_by_task_id(task_id)
+                            if current_job and current_job.get('delivered_at'):
+                                delivered_via_callback = True
+                                logger.info(f"{correlation_tag()} [POLL_SUCCESS_SKIP] Already delivered via callback")
+                        except Exception:
+                            pass
+                    
+                    # Deliver if callback didn't
+                    if not delivered_via_callback and chat_id and result_urls:
+                        logger.info(f"{correlation_tag()} [POLL_DELIVER_START] task_id={task_id} chat_id={chat_id}")
+                        try:
+                            # Import bot and delivery function
+                            from main_render import bot, _deliver_result_to_telegram
+                            await _deliver_result_to_telegram(bot, chat_id, result_urls, task_id, correlation_tag())
+                            logger.info(f"{correlation_tag()} [POLL_DELIVER_OK] task_id={task_id}")
+                            
+                            # Mark as delivered
+                            if user_id is not None:
+                                try:
+                                    from app.storage import get_storage
+                                    storage = get_storage()
+                                    job_id = current_job.get('job_id') or current_job.get('id') or task_id
+                                    await storage.update_job_status(job_id, 'done', delivered=True)
+                                    logger.info(f"{correlation_tag()} [POLL_MARK_DELIVERED] job_id={job_id}")
+                                except Exception as e:
+                                    logger.error(f"{correlation_tag()} [POLL_MARK_FAIL] {e}")
+                        except Exception as e:
+                            logger.exception(f"{correlation_tag()} [POLL_DELIVER_FAIL] task_id={task_id}: {e}")
+                    
                     return {
                         'success': True,
                         'message': parsed['message'],
-                        'result_urls': parsed['result_urls'],
+                        'result_urls': result_urls,
                         'result_object': parsed['result_object'],
                         'error_code': None,
                         'error_message': None,

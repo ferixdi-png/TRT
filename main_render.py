@@ -15,7 +15,6 @@ In production we must import the real aiogram package from site-packages.
 
 from __future__ import annotations
 
-import contextlib
 import asyncio
 import logging
 import os
@@ -30,7 +29,6 @@ import json
 from aiohttp import web
 
 from app.storage import get_storage
-from app.storage.status import normalize_job_status
 from app.utils.logging_config import setup_logging  # noqa: E402
 from app.utils.orphan_reconciler import OrphanCallbackReconciler  # PHASE 5
 from app.utils.runtime_state import runtime_state  # noqa: E402
@@ -555,6 +553,73 @@ def _make_web_app(
         # ALWAYS return 200 OK instantly
         return web.Response(status=200, text="ok")
 
+    async def _deliver_result_to_telegram(
+        bot: Bot, 
+        chat_id: int, 
+        result_urls: list[str], 
+        task_id: str,
+        corr_id: str = ""
+    ) -> None:
+        """
+        Deliver generation result to Telegram with fallback.
+        
+        Strategy:
+        1. Try bot.send_photo(url) directly
+        2. If Telegram can't fetch URL, download bytes and send as InputFile
+        """
+        import aiohttp
+        from aiogram.types import BufferedInputFile
+        
+        prefix = f"[{corr_id}] " if corr_id else ""
+        
+        if not result_urls:
+            logger.warning(f"{prefix}[DELIVER] No URLs to deliver")
+            return
+        
+        # For z-image, expect single image URL
+        url = result_urls[0]
+        logger.info(f"{prefix}[DELIVER] Attempting send_photo url={url[:100]}...")
+        
+        try:
+            # Try direct URL first (fastest)
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=url,
+                caption=f"✅ Генерация готова!\nID: {task_id}"
+            )
+            logger.info(f"{prefix}[DELIVER] ✅ Direct URL success")
+            return
+        except Exception as e:
+            logger.warning(f"{prefix}[DELIVER] Direct URL failed: {e}")
+            logger.info(f"{prefix}[DELIVER] Trying bytes fallback...")
+        
+        # Fallback: download bytes
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        raise Exception(f"HTTP {resp.status}")
+                    
+                    image_bytes = await resp.read()
+                    logger.info(f"{prefix}[DELIVER] Downloaded {len(image_bytes)} bytes")
+            
+            # Send as InputFile
+            input_file = BufferedInputFile(image_bytes, filename="result.jpg")
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=input_file,
+                caption=f"✅ Генерация готова!\nID: {task_id}"
+            )
+            logger.info(f"{prefix}[DELIVER] ✅ Bytes fallback success")
+        except Exception as e:
+            logger.exception(f"{prefix}[DELIVER] ❌ Both delivery methods failed: {e}")
+            # Send URL as text as last resort
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ Генерация готова!\nID: {task_id}\n\n{url}"
+            )
+            logger.info(f"{prefix}[DELIVER] ⚠️ Sent as text fallback")
+
     async def _send_generation_result(bot: Bot, chat_id: int, result_urls: list[str], task_id: str) -> None:
         """
         Smart sender: detect content type and send appropriately.
@@ -629,213 +694,128 @@ def _make_web_app(
 
     async def kie_callback(request: web.Request) -> web.Response:
         """
-        KIE callback handler - ALWAYS returns 200 to prevent retry storms.
-        Handles malformed payloads gracefully.
+        KIE callback handler with unified parser and bulletproof delivery.
+        ALWAYS returns 200 to prevent retry storms.
         """
         # Token validation
         if cfg.kie_callback_token:
             header = request.headers.get("X-KIE-Callback-Token", "")
             if header != cfg.kie_callback_token:
                 logger.warning("[KIE_CALLBACK] Invalid token")
-                # Still return 200 to prevent retries
                 return web.json_response({"ok": False, "error": "invalid_token"}, status=200)
 
-        # Import robust parser
-        from app.utils.callback_parser import extract_task_id, safe_truncate_payload
-        
-        # Parse payload with maximum tolerance
-        raw_payload = None
+        # Parse payload
         try:
             raw_payload = await request.json()
-        except Exception as exc:  # noqa: BLE001
-            # Try reading raw bytes
-            try:
-                raw_payload = await request.read()
-                logger.warning("[KIE_CALLBACK] JSON parse failed, got bytes: %d bytes, error: %s",
-                              len(raw_payload) if raw_payload else 0, exc)
-            except Exception as read_exc:  # noqa: BLE001
-                logger.warning("[KIE_CALLBACK] Could not read payload: %s", read_exc)
-                # Still return 200
-                return web.json_response({"ok": True, "ignored": True, "reason": "unreadable_payload"}, status=200)
-        
-        # Extract task ID using robust parser
-        query_params = dict(request.query) if request.query else None
-        headers = dict(request.headers) if request.headers else None
-        
-        task_id, record_id, debug_info = extract_task_id(raw_payload, query_params, headers)
-        
-        if not task_id and not record_id:
-            # Log warning with safe payload preview
-            payload_preview = safe_truncate_payload(raw_payload, max_length=300)
-            logger.warning(
-                "[KIE_CALLBACK] No taskId/recordId found. "
-                "Debug: %s | Payload preview: %s",
-                debug_info, payload_preview
-            )
-            # Still return 200 to prevent retry storm
-            return web.json_response({
-                "ok": True,
-                "ignored": True,
-                "reason": "no_task_id",
-                "debug": debug_info
-            }, status=200)
-        
-        # Use task_id or record_id (prefer task_id)
-        effective_id = task_id or record_id
-        logger.info("[KIE_CALLBACK] Received callback for task_id=%s (record_id=%s) via %s",
-                   task_id, record_id, debug_info.get("extraction_path", []))
-        
-        # Parse payload as dict for further processing
-        payload = raw_payload if isinstance(raw_payload, dict) else {}
-        if not payload and raw_payload:
-            try:
-                if isinstance(raw_payload, bytes):
-                    payload = json.loads(raw_payload.decode('utf-8'))
-                elif isinstance(raw_payload, str):
-                    payload = json.loads(raw_payload)
-            except Exception:  # noqa: BLE001
-                pass  # Continue with empty dict
+        except Exception as exc:
+            logger.warning(f"[KIE_CALLBACK] JSON parse failed: {exc}")
+            return web.json_response({"ok": True, "ignored": True, "reason": "invalid_json"}, status=200)
 
-        state = payload.get("state") or payload.get("status")
-        result_urls = payload.get("resultUrls") or payload.get("result_urls") or []
-        result_json = payload.get("resultJson") or payload.get("result_json")
-        if not result_urls and isinstance(result_json, str):
-            try:
-                parsed = json.loads(result_json)
-                result_urls = parsed.get("resultUrls") or parsed.get("urls") or []
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("[KIE_CALLBACK] resultJson parse failed: %s", exc)
-        error_text = payload.get("failMsg") or payload.get("errorMessage") or payload.get("error")
-
-        normalized_status = normalize_job_status(state or ("done" if result_urls else "running"))
-
+        # Import unified parser
+        from app.kie.state_parser import parse_kie_state, extract_task_id
+        from app.utils.correlation import ensure_correlation_id
+        
+        task_id = extract_task_id(raw_payload)
+        if not task_id:
+            logger.warning(f"[KIE_CALLBACK] No taskId in payload: {str(raw_payload)[:200]}")
+            return web.json_response({"ok": True, "ignored": True, "reason": "no_task_id"}, status=200)
+        
+        corr_id = ensure_correlation_id(task_id)
+        logger.info(f"[{corr_id}] [CALLBACK_RECEIVED] task_id={task_id}")
+        
+        # Parse state using unified parser
+        state, result_urls, error_msg = parse_kie_state(raw_payload, corr_id)
+        logger.info(f"[{corr_id}] [CALLBACK_PARSED] task_id={task_id} state={state} urls={len(result_urls)} error={error_msg or 'none'}")
+        
+        # Get job from storage
         storage = get_storage()
         job = None
         try:
-            job = await storage.get_job(effective_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[KIE_CALLBACK] get_job failed: %s", exc)
+            job = await storage.find_job_by_task_id(task_id)
+        except Exception as exc:
+            logger.warning(f"[{corr_id}] find_job_by_task_id failed: {exc}")
 
-        if not job and hasattr(storage, "find_job_by_task_id"):
-            try:
-                job = await storage.find_job_by_task_id(effective_id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("[KIE_CALLBACK] find_job_by_task_id failed: %s", exc)
-
-        if job:
-            job_id = job.get("job_id") or job.get("id") or effective_id
-            try:
-                await storage.update_job_status(
-                    job_id,
-                    normalized_status,
-                    result_urls=result_urls or None,
-                    error_message=error_text,
-                )
-                logger.info("[KIE_CALLBACK] Updated job %s to status=%s", job_id, normalized_status)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("[KIE_CALLBACK] Failed to update job %s: %s", job_id, exc)
-
-            # 🎯 TELEGRAM DELIVERY (guaranteed delivery)
-            user_id = job.get("user_id")
-            # Get chat_id from job params (more reliable for delivery)
-            chat_id = user_id  # Default fallback
-            if job.get("params"):
-                job_params = job.get("params")
-                if isinstance(job_params, dict):
-                    chat_id = job_params.get("chat_id") or user_id
-                elif isinstance(job_params, str):
-                    try:
-                        params_dict = json.loads(job_params)
-                        chat_id = params_dict.get("chat_id") or user_id
-                    except Exception:  # noqa: BLE001
-                        pass
-            
-            if user_id and chat_id:
-                try:
-                    # 🎯 IDEMPOTENCY: Check if already delivered (prevents duplicates)
-                    already_delivered = job.get('delivered_at') is not None
-                    if already_delivered:
-                        logger.info(f"[KIE_CALLBACK] ⏩ SKIP: Already delivered | task_id={effective_id} chat_id={chat_id}")
-                    elif normalized_status == "done" and result_urls:
-                        # 🎯 Smart sender: detect content type and send appropriately
-                        logger.info(f"[KIE_CALLBACK] 📤 DELIVERING result | task_id={effective_id} chat_id={chat_id}")
-                        await _send_generation_result(bot, chat_id, result_urls, effective_id)
-                        logger.info(f"[KIE_CALLBACK] ✅ DELIVERED | task_id={effective_id} chat_id={chat_id} user_id={user_id}")
-                        
-                        # Mark as delivered (prevents duplicates)
-                        try:
-                            await storage.update_job_status(job_id, 'done', delivered=True)
-                            logger.info(f"[KIE_CALLBACK] 🔒 MARKED delivered_at | job_id={job_id}")
-                        except Exception as e:
-                            logger.warning(f"[KIE_CALLBACK] ⚠️ Failed to mark delivered (non-critical): {e}")
-                    elif normalized_status == "done" and not result_urls:
-                        # Success but no URLs - this is suspicious
-                        text = f"⚠️ Генерация завершилась, но результат пуст. ID: {effective_id}"
-                        await bot.send_message(chat_id, text)
-                        logger.warning(f"[KIE_CALLBACK] ⚠️ Empty result for task {effective_id}")
-                    elif normalized_status == "failed":
-                        text = f"❌ Генерация не завершилась: {error_text or 'Ошибка'}\\nID: {effective_id}"
-                        await bot.send_message(chat_id, text)
-                        logger.info(f"[KIE_CALLBACK] ❌ Sent error to chat_id={chat_id} user_id={user_id}")
-                    else:
-                        # Don't spam intermediate statuses
-                        logger.debug(f"[KIE_CALLBACK] Intermediate status {normalized_status} for task {effective_id}")
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception("[KIE_CALLBACK] Failed to send to user %s: %s", user_id, exc)
-                    runtime_state.telegram_send_fail_count += 1
-        else:
-            # 🎯 ORPHAN JOB: Callback arrived but no job in DB (PHASE 4 FIX)
-            logger.warning(
-                "[KIE_CALLBACK] ⚠️ ORPHAN CALLBACK | task_id=%s record_id=%s status=%s | "
-                "Callback arrived before job creation - saving for reconciliation",
-                task_id, record_id, state
-            )
+        if not job:
+            logger.warning(f"[{corr_id}] [CALLBACK_ORPHAN] task_id={task_id} - saving for reconciliation")
             runtime_state.callback_job_not_found_count += 1
             
-            # PHASE 4: Save orphan callback for later reconciliation
-            # Instead of trying to create job with user_id=0 (which fails FK)
+            # Save orphan callback
             try:
-                orphan_payload = {
-                    'task_id': effective_id,
+                await storage._save_orphan_callback(task_id, {
                     'state': state,
                     'result_urls': result_urls,
-                    'error_text': error_text,
-                    'normalized_status': normalized_status,
-                    'full_payload': payload,
-                    'received_at': datetime.now().isoformat()
-                }
-                
-                # Save to orphan_callbacks table
-                await storage._save_orphan_callback(effective_id, orphan_payload)
-                logger.info(f"[KIE_CALLBACK] Saved orphan callback for task_id={effective_id}")
-            except Exception as exc:
-                logger.exception("[KIE_CALLBACK] Failed to save orphan callback: %s", exc)
+                    'error': error_msg,
+                    'payload': raw_payload
+                })
+            except Exception as e:
+                logger.error(f"[{corr_id}] Failed to save orphan: {e}")
             
-            # Try to create orphan job retroactively (best effort)
-            if runtime_state.db_schema_ready and hasattr(storage, "add_generation_job"):
-                try:
-                    orphan_job_id = effective_id
-                    await storage.add_generation_job(
-                        user_id=0,  # Unknown user
-                        model_id="unknown",
-                        model_name="orphan",
-                        params={"orphan": True, "payload": safe_truncate_payload(payload, 1000)},
-                        price=0.0,
-                        task_id=effective_id,
-                        status=normalized_status
-                    )
-                    # Update with result
-                    await storage.update_job_status(
-                        orphan_job_id,
-                        normalized_status,
-                        result_urls=result_urls or None,
-                        error_message=error_text or "Orphan job - no original request found"
-                    )
-                    logger.info(f"[KIE_CALLBACK] Created orphan job {orphan_job_id}")
-                except Exception as e:
-                    logger.error(f"[KIE_CALLBACK] Failed to create orphan job: {e}")
-
-        # ALWAYS return 200 to prevent KIE retry storms
+            return web.json_response({"ok": True}, status=200)
+        
+        job_id = job.get("job_id") or job.get("id") or task_id
+        
+        # Update job status based on state
+        try:
+            if state in ('waiting', 'running'):
+                await storage.update_job_status(job_id, 'running')
+                logger.debug(f"[{corr_id}] [CALLBACK_PROGRESS] task_id={task_id} state={state}")
+            
+            elif state == 'fail':
+                await storage.update_job_status(job_id, 'failed', error_message=error_msg)
+                logger.info(f"[{corr_id}] [CALLBACK_FAIL] task_id={task_id} error={error_msg}")
+                
+                # Send error to user
+                user_id = job.get('user_id')
+                if user_id:
+                    try:
+                        await bot.send_message(user_id, f"❌ Генерация не завершилась: {error_msg}\nID: {task_id}")
+                    except Exception as e:
+                        logger.error(f"[{corr_id}] Failed to send error to user: {e}")
+            
+            elif state == 'success':
+                await storage.update_job_status(job_id, 'done', result_urls=result_urls)
+                logger.info(f"[{corr_id}] [CALLBACK_SUCCESS] task_id={task_id} urls={len(result_urls)}")
+                
+                # Idempotency check
+                if job.get('delivered_at'):
+                    logger.info(f"[{corr_id}] [CALLBACK_SKIP] Already delivered")
+                    return web.json_response({"ok": True}, status=200)
+                
+                # Get chat_id
+                user_id = job.get('user_id')
+                chat_id = user_id
+                if job.get('params'):
+                    params = job.get('params')
+                    if isinstance(params, dict):
+                        chat_id = params.get('chat_id') or user_id
+                    elif isinstance(params, str):
+                        try:
+                            params_dict = json.loads(params)
+                            chat_id = params_dict.get('chat_id') or user_id
+                        except Exception:
+                            pass
+                
+                if chat_id and result_urls:
+                    logger.info(f"[{corr_id}] [DELIVER_START] task_id={task_id} chat_id={chat_id} urls={len(result_urls)}")
+                    
+                    try:
+                        # Real delivery with fallback
+                        await _deliver_result_to_telegram(bot, chat_id, result_urls, task_id, corr_id)
+                        logger.info(f"[{corr_id}] [DELIVER_OK] task_id={task_id} chat_id={chat_id}")
+                        
+                        # Mark delivered
+                        await storage.update_job_status(job_id, 'done', delivered=True)
+                        logger.info(f"[{corr_id}] [MARK_DELIVERED] job_id={job_id}")
+                    except Exception as e:
+                        logger.exception(f"[{corr_id}] [DELIVER_FAIL] task_id={task_id}: {e}")
+                        try:
+                            await bot.send_message(chat_id, f"⚠️ Генерация готова, но не удалось отправить результат.\nID: {task_id}")
+                        except:
+                            pass
+        
+        except Exception as e:
+            logger.exception(f"[{corr_id}] [CALLBACK_ERROR] task_id={task_id}: {e}")
+        
         return web.json_response({"ok": True}, status=200)
 
     callback_route = f"/{cfg.kie_callback_path.lstrip('/')}"
@@ -1008,7 +988,7 @@ async def main() -> None:
                 logger.error("[WEBHOOK_EARLY] ❌ Cannot build webhook URL!")
         
         # Define init_active_services BEFORE lock_controller creation
-        db_service = None
+        # db_service declared at function level for finally block
         free_manager = None
 
         async def init_active_services() -> None:
@@ -1095,6 +1075,12 @@ async def main() -> None:
             logger.info("[LOCK_CONTROLLER] ⏸️ PASSIVE MODE (background watcher started)")
 
     runner: Optional[web.AppRunner] = None
+    # Import DatabaseService type for annotation
+    try:
+        from app.database.services import DatabaseService as _DatabaseService
+    except ImportError:
+        _DatabaseService = None  # type: ignore
+    db_service: Optional[_DatabaseService] = None  # type: ignore
     
     async def state_sync_loop() -> None:
         """
@@ -1196,8 +1182,12 @@ async def main() -> None:
         except Exception:
             pass
         try:
-            if db_service is not None:
-                await db_service.close()
+            # db_service may not be initialized if we exited early
+            try:
+                if db_service is not None:
+                    await db_service.close()
+            except NameError:
+                pass  # db_service was never created
         except Exception:
             pass
         try:

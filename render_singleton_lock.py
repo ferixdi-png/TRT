@@ -62,6 +62,9 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
     Пытается получить PostgreSQL advisory lock.
     Если lock занят, проверяет не "мёртвый" ли он (>5 минут без активности).
     
+    КРИТИЧНО: Соединение должно быть в autocommit режиме чтобы избежать
+    "idle in transaction" состояния при удержании lock.
+    
     Args:
         pool: psycopg2.pool.SimpleConnectionPool
         lock_key: int64 ключ для lock
@@ -73,6 +76,11 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
     try:
         # Получаем соединение из пула
         conn = pool.getconn()
+        
+        # КРИТИЧНО: Устанавливаем autocommit чтобы избежать "idle in transaction"
+        # Advisory lock держится на уровне сессии, не транзакции
+        conn.autocommit = True
+        logger.debug(f"[LOCK] Connection autocommit enabled to prevent 'idle in transaction'")
         
         # Пытаемся получить advisory lock (неблокирующий)
         with conn.cursor() as cur:
@@ -127,7 +135,7 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                             terminated = cur.fetchone()[0]
                             if terminated:
                                 logger.info(f"[LOCK] ✅ Stale process terminated, retrying lock acquisition...")
-                                conn.commit()
+                                # No need for conn.commit() - autocommit is enabled
                                 
                                 # Wait for lock release - measured ~500-2000ms in production logs
                                 # Using 3s to GUARANTEE lock is fully released (critical for webhook setup)
