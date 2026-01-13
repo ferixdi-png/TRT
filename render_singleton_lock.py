@@ -17,6 +17,7 @@ import os
 import logging
 import hashlib
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import psycopg2
@@ -31,6 +32,42 @@ LOCK_RELEASE_WAIT_SECONDS = float(os.getenv("LOCK_RELEASE_WAIT_SECONDS", "3.0"))
 
 _heartbeat_available: Optional[bool] = None
 _last_takeover_event: Optional[Dict[str, Any]] = None
+
+# Троттлинг логов для предотвращения спама
+_last_lock_held_log: float = 0
+_lock_acquisition_failures: int = 0
+_backoff_seconds: float = 0.5
+
+def _should_log_lock_held() -> bool:
+    """Rate-limit для логов lock held (не чаще 1 раза в 30s)."""
+    global _last_lock_held_log
+    now = time.time()
+    if now - _last_lock_held_log >= 30:
+        _last_lock_held_log = now
+        return True
+    return False
+
+def _get_backoff_delay() -> float:
+    """Экспоненциальный backoff: 0.5s → 1s → 2s → 5s → 5s..."""
+    global _lock_acquisition_failures, _backoff_seconds
+    _lock_acquisition_failures += 1
+    
+    if _lock_acquisition_failures == 1:
+        _backoff_seconds = 0.5
+    elif _lock_acquisition_failures == 2:
+        _backoff_seconds = 1.0
+    elif _lock_acquisition_failures == 3:
+        _backoff_seconds = 2.0
+    else:
+        _backoff_seconds = 5.0
+    
+    return _backoff_seconds
+
+def _reset_backoff():
+    """Сброс backoff после успешного получения lock."""
+    global _lock_acquisition_failures, _backoff_seconds
+    _lock_acquisition_failures = 0
+    _backoff_seconds = 0.5
 
 
 def split_bigint_to_pg_advisory_oids(lock_key: int) -> tuple[int, int]:
@@ -238,12 +275,17 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
             lock_acquired = cur.fetchone()[0]
         
         if lock_acquired:
+            _reset_backoff()  # Сброс backoff при успехе
             logger.info(f"✅ PostgreSQL advisory lock acquired: key={lock_key}")
             # ВАЖНО: НЕ возвращаем соединение в пул!
             return conn
         else:
-            # Lock занят - проверяем не "мёртвый" ли процесс
-            logger.warning(f"⏸️ PostgreSQL advisory lock already held by another instance: key={lock_key}")
+            # Lock занят - применяем троттлинг и backoff
+            if _should_log_lock_held():
+                logger.warning(f"⏸️ PostgreSQL advisory lock already held by another instance: key={lock_key}")
+            
+            backoff = _get_backoff_delay()
+            time.sleep(backoff)  # Backoff перед следующей попыткой
             
             # Проверяем timestamp последней активности держателя lock
             # Используем двухпараметровый поиск по classid/objid (оба int4)
