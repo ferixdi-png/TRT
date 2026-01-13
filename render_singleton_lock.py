@@ -25,8 +25,8 @@ from psycopg2.extensions import connection
 
 logger = logging.getLogger(__name__)
 
-STALE_IDLE_SECONDS = int(os.getenv("LOCK_STALE_IDLE_SECONDS", "45"))
-STALE_HEARTBEAT_SECONDS = int(os.getenv("LOCK_STALE_HEARTBEAT_SECONDS", "60"))
+STALE_IDLE_SECONDS = int(os.getenv("LOCK_STALE_IDLE_SECONDS", "30"))  # Reduced from 45s for faster failover
+STALE_HEARTBEAT_SECONDS = int(os.getenv("LOCK_STALE_HEARTBEAT_SECONDS", "45"))  # Reduced from 60s
 HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("LOCK_HEARTBEAT_INTERVAL", "15"))
 LOCK_RELEASE_WAIT_SECONDS = float(os.getenv("LOCK_RELEASE_WAIT_SECONDS", "3.0"))
 
