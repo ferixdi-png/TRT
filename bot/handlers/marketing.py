@@ -820,13 +820,6 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext, cid=
         # Call KIE API with timeout=300s and progress updates
         async def progress_update(msg: str):
             """Send progress updates to user."""
-    user_id = callback.from_user.id
-    chat_id = callback.message.chat.id
-
-    if cid:
-        log_callback_received(cid, callback.id, user_id, chat_id, "mgen:confirm", bot_state)
-        log_callback_routed(cid, user_id, chat_id, "cb_confirm_generation", "mgen:confirm", ButtonId.UNKNOWN)
-
             try:
                 await callback.message.edit_text(
                     f"🔄 <b>Генерация в процессе</b>\n\n"
