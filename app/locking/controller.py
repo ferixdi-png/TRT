@@ -45,23 +45,26 @@ class SingletonLockController:
     - Callback on PASSIVE→ACTIVE transition
     """
     
-    def __init__(self, lock_wrapper, bot=None, on_active_callback=None):
+    def __init__(self, lock_wrapper, bot=None, on_active_callback=None, active_state=None):
         """
         Args:
             lock_wrapper: SingletonLock instance with acquire()/release()
             bot: Telegram Bot instance for passive notifications
             on_active_callback: async callable to run when transitioning to ACTIVE
+            active_state: ActiveState instance for synchronization with workers
         """
         self.lock = lock_wrapper
         self.bot = bot
         self.on_active_callback = on_active_callback
+        self.active_state = active_state  # NEW: unified state sync
         self.state = ControllerState()
         self._stop_event = asyncio.Event()
         
         logger.info(
-            "[LOCK_CONTROLLER] Initialized | instance=%s watcher=%s",
+            "[LOCK_CONTROLLER] Initialized | instance=%s watcher=%s active_state=%s",
             self.state.instance_id,
-            self.state.watcher_id
+            self.state.watcher_id,
+            active_state
         )
     
     def should_process_updates(self) -> bool:
@@ -69,12 +72,19 @@ class SingletonLockController:
         return self.state.state == LockState.ACTIVE
     
     async def _set_state(self, new_state: LockState) -> None:
-        """Atomic state transition (thread-safe)"""
+        """Atomic state transition (thread-safe) + sync active_state"""
         logger.info(f"[LOCK_CONTROLLER] 🔧 _set_state called: new_state={new_state.value}")
         async with self.state._mutex:
             old_state = self.state.state
             logger.info(f"[LOCK_CONTROLLER] 🔍 State transition: {old_state.value} → {new_state.value}")
             self.state.state = new_state
+            
+            # CRITICAL: Sync active_state for workers
+            if self.active_state:
+                if new_state == LockState.ACTIVE:
+                    self.active_state.set(True, reason="lock_acquired")
+                elif new_state == LockState.PASSIVE:
+                    self.active_state.set(False, reason="lock_lost")
             
             if new_state == LockState.ACTIVE:
                 logger.info("[LOCK_CONTROLLER] ✅ Setting ACTIVE state...")

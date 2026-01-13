@@ -34,6 +34,7 @@ from app.storage.status import normalize_job_status
 from app.utils.logging_config import setup_logging  # noqa: E402
 from app.utils.orphan_reconciler import OrphanCallbackReconciler  # PHASE 5
 from app.utils.runtime_state import runtime_state  # noqa: E402
+from app.locking.active_state import ActiveState  # NEW: unified active state
 from app.utils.webhook import (
     build_kie_callback_url,
     get_kie_callback_path,
@@ -154,9 +155,7 @@ def _load_runtime_config() -> RuntimeConfig:
     )
 
 
-@dataclass
-class ActiveState:
-    active: bool
+# Remove old ActiveState dataclass - now using app.locking.active_state.ActiveState
 
 
 class SingletonLock:
@@ -1058,19 +1057,24 @@ async def main() -> None:
                     logger.exception("[DB] ❌ Database init failed: %s", e)
                     db_service = None
         
-        # Step 2: Start unified lock controller with callback
+        # Step 2: Start unified lock controller with callback + active_state sync
         from app.locking.controller import SingletonLockController
         
-        lock_controller = SingletonLockController(lock, bot, on_active_callback=init_active_services)
+        lock_controller = SingletonLockController(
+            lock, 
+            bot, 
+            on_active_callback=init_active_services,
+            active_state=active_state  # CRITICAL: pass same object for sync
+        )
         active_state.lock_controller = lock_controller  # Store for webhook access
         
         await lock_controller.start()
         
-        # Initial sync (if lock acquired immediately)
-        active_state.active = lock_controller.should_process_updates()
-        runtime_state.lock_acquired = active_state.active
+        # Initial sync (lock_controller will call active_state.set() in _set_state)
+        initial_should_process = lock_controller.should_process_updates()
+        runtime_state.lock_acquired = initial_should_process
         
-        if active_state.active:
+        if initial_should_process:
             logger.info("[LOCK_CONTROLLER] ✅ ACTIVE MODE (lock acquired immediately)")
         else:
             logger.info("[LOCK_CONTROLLER] ⏸️ PASSIVE MODE (background watcher started)")
@@ -1078,22 +1082,51 @@ async def main() -> None:
     runner: Optional[web.AppRunner] = None
     
     async def state_sync_loop() -> None:
-        """Periodically sync active_state with lock_controller (every 1s)"""
+        """
+        Monitor active_state sync with lock_controller + safety-net for stale PASSIVE.
+        If lock acquired but active_state still False after 3s → force ACTIVE.
+        """
         logger.info("[STATE_SYNC] 🔄 Started, initial active=%s", active_state.active)
+        lock_acquired_time = None  # Track when lock_controller first reports ACTIVE
+        
         while True:
             await asyncio.sleep(1)
             if hasattr(active_state, 'lock_controller'):
                 new_active = active_state.lock_controller.should_process_updates()
+                
+                # 🚨 SAFETY-NET: Detect stale PASSIVE state
+                if new_active and not active_state.active:
+                    # lock_controller says ACTIVE, but active_state is still False
+                    if lock_acquired_time is None:
+                        lock_acquired_time = time.time()
+                        logger.warning(
+                            "[STATE_SYNC] ⚠️ lock_controller ACTIVE but active_state False (start monitoring)"
+                        )
+                    elif time.time() - lock_acquired_time > 3.0:
+                        # Still not synced after 3 seconds → FORCE
+                        logger.error(
+                            "[STATE_SYNC] ⚠️⚠️ lock acquired but active_state still False for 3s → FORCING ACTIVE"
+                        )
+                        active_state.set(True, reason="safety_net_force")
+                        runtime_state.lock_acquired = True
+                        lock_acquired_time = None  # Reset
+                elif not new_active:
+                    # Reset safety-net timer if lock lost
+                    lock_acquired_time = None
+                
+                # Normal sync (this should now be redundant if lock_controller._set_state works)
                 if new_active != active_state.active:
                     old_active = active_state.active
-                    active_state.active = new_active
-                    runtime_state.lock_acquired = new_active
+                    logger.warning(
+                        "[STATE_SYNC] ⚠️ Manual sync needed: %s -> %s (lock_controller didn't call active_state.set?)",
+                        old_active, new_active
+                    )
                     if new_active:
-                        logger.info("[STATE_SYNC] ✅ PASSIVE → ACTIVE (active_state: %s -> %s)", old_active, new_active)
-                        # Note: init_active_services already called by lock_controller callback
-                        logger.info("[STATE_SYNC] Services already initialized by controller callback")
+                        active_state.set(True, reason="state_sync_fallback")
                     else:
-                        logger.info("[STATE_SYNC] ⏸️ ACTIVE → PASSIVE (active_state: %s -> %s)", old_active, new_active)
+                        active_state.set(False, reason="state_sync_fallback")
+                    runtime_state.lock_acquired = new_active
+                    lock_acquired_time = None  # Reset safety-net
 
     # 🚀 START BACKGROUND INITIALIZATION (non-blocking)
     asyncio.create_task(background_initialization())

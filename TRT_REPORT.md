@@ -1,20 +1,155 @@
-# TRT Fast-Ack Webhook + Z-Image REPORT
+# TRT Active State Sync Fix + Fast-Ack Webhook REPORT
+
+**Дата**: 2026-01-13  
+**Статус**: ✅ КРИТИЧЕСКИЙ ФИКС ГОТОВ
+
+---
+
+## 🚨 КРИТИЧЕСКИЙ ФИХ: Active State Sync (2026-01-13)
+
+### Проблема
+
+**Симптом:** Бот НЕ отвечал на `/start` несмотря на логи "✅ ACTIVE MODE: PostgreSQL advisory lock acquired". Updates ENQUEUED (queue_depth рос), но воркеры ВЕЧНО в PASSIVE_WAIT с active=False.
+
+**Root Cause:** `active_state` не синхронизирован между `lock_controller` и `update_queue`:
+- `main_render.py` создавал `ActiveState(active=False)` (простой @dataclass)
+- `lock_controller._set_state()` менял `self.state.state` (LockState enum), но **НЕ** менял `active_state.active`
+- `update_queue` воркеры читали `self._active_state.active` (всегда False)
+- **Результат:** lock acquired → controller ACTIVE, но воркеры видят PASSIVE → бесконечное зависание
+
+### Решение
+
+#### 1. Unified ActiveState with asyncio.Event
+
+**NEW FILE:** `app/locking/active_state.py`
+
+Thread-safe класс с:
+- `active` property (read-only)
+- `set(value, reason)` — атомарное изменение + логирование
+- `_event: asyncio.Event` — блокировка воркеров до ACTIVE
+- `wait_active()` — await до активации
+- Логи: `[STATE_SYNC] ✅ active_state: False -> True (reason=lock_acquired)`
+
+#### 2. Controller Integration
+
+**MODIFIED:** `app/locking/controller.py`
+
+```python
+def __init__(self, ..., active_state=None):
+    self.active_state = active_state  # Store reference
+
+async def _set_state(self, new_state: LockState):
+    # CRITICAL: Sync active_state for workers
+    if self.active_state:
+        if new_state == LockState.ACTIVE:
+            self.active_state.set(True, reason="lock_acquired")
+        elif new_state == LockState.PASSIVE:
+            self.active_state.set(False, reason="lock_lost")
+```
+
+При `_set_state(ACTIVE)` → автоматически `active_state.set(True)` → `_event.set()` → воркеры разблокируются.
+
+#### 3. Main Wiring
+
+**MODIFIED:** `main_render.py`
+
+```python
+from app.locking.active_state import ActiveState  # NEW
+
+active_state = ActiveState(active=False)  # Create ONCE
+
+# Pass to BOTH (single source of truth)
+queue_manager.configure(dp, bot, active_state)
+lock_controller = SingletonLockController(..., active_state=active_state)
+```
+
+Убран старый `@dataclass ActiveState`.
+
+#### 4. Worker Gate Simplification
+
+**MODIFIED:** `app/utils/update_queue.py`
+
+**БЫЛО (broken):**
+```python
+if not active_state.active:
+    log "PASSIVE_WAIT"
+    await asyncio.sleep(0.5)  # Busy-wait polling
+    continue
+```
+
+**СТАЛО (fixed):**
+```python
+if not active_state.active:
+    log "PASSIVE_WAIT" (every 5s)
+    await active_state.wait_active()  # BLOCKS until set(True)
+    continue
+
+# First ACTIVE entry
+if not active_enter_logged:
+    logger.info("[WORKER_X] ✅ ACTIVE_ENTER active=True")
+```
+
+Воркеры **блокируются** на `wait_active()` вместо polling. Lock acquired → `set(True)` → Event → воркеры просыпаются.
+
+#### 5. Safety-Net
+
+**MODIFIED:** `main_render.py` (state_sync_loop)
+
+Если `lock_controller.should_process_updates() == True`, но `active_state.active == False` больше 3 секунд → принудительно `active_state.set(True, reason="safety_net_force")`.
+
+Предохранитель на случай race condition.
+
+### Проверка (Log Chain)
+
+**Ожидаемые логи после деплоя:**
+
+1. **Lock Acquisition:**
+```
+[LOCK_CONTROLLER] ✅ ACTIVE MODE: PostgreSQL advisory lock acquired
+[LOCK_CONTROLLER] 🔧 _set_state called: new_state=ACTIVE
+[STATE_SYNC] ✅ active_state: False -> True (reason=lock_acquired)
+```
+
+2. **Worker Activation (через 1 сек):**
+```
+[WORKER_0] ✅ ACTIVE_ENTER active=True
+[WORKER_1] ✅ ACTIVE_ENTER active=True
+[WORKER_2] ✅ ACTIVE_ENTER active=True
+```
+
+3. **Update Processing:**
+```
+[WEBHOOK] ✅ ENQUEUED update_id=123456789
+[WORKER_0] 🎯 WORKER_PICK update_id=123456789
+[WORKER_0] ✅ DEDUP_OK
+[WORKER_0] 📨 DISPATCH_START
+[START] 🎬 Processing /start
+[START] ✅ MAIN_MENU sent
+[WORKER_0] ✅ DISPATCH_OK
+```
+
+**Индикаторы ошибки (если всё ещё broken):**
+
+❌ `PASSIVE_WAIT` ПОСЛЕ "ACTIVE MODE acquired"  
+❌ НЕТ `[STATE_SYNC] active_state: False -> True`  
+❌ НЕТ `[WORKER_X] ✅ ACTIVE_ENTER`  
+❌ queue_depth растёт, но нет DISPATCH_START
+
+### Файлы изменены
+
+1. ✅ `app/locking/active_state.py` — NEW unified state class
+2. ✅ `app/locking/controller.py` — Added `active_state` param + `set()` calls
+3. ✅ `app/utils/update_queue.py` — Gate uses `wait_active()` instead of polling
+4. ✅ `main_render.py` — Import new ActiveState, wire to lock+queue, safety-net
+
+---
+
+## 🎯 Предыдущие фиксы
+
+### 1. Fast-Ack Webhook
 
 **Дата**: 2026-01-13  
 **Статус**: ✅ ГОТОВ К ДЕПЛОЮ
-
-## 🎯 Цель
-
-Исправить критическую проблему webhook timeout и сфокусировать бота на одной рабочей модели (Kie.ai z-image).
-
-## 📊 Проблема (BEFORE)
-
-- **Webhook timeout**: `Read timeout expired` в логах Render
-- **Pending updates растут**: 125+ апдейтов копятся в очереди Telegram
-- **/start не работает**: бот кажется "мертвым" для пользователей
-- **Причина**: webhook handler делает `await dp.feed_update()` синхронно → Telegram не получает 200 OK за 30s → timeout
-
-## ✅ Решение (AFTER)
 
 ### 1. Fast-Ack Webhook (КРИТИЧНО)
 

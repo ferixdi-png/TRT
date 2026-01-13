@@ -145,40 +145,49 @@ class UpdateQueueManager:
     async def _worker_loop(self, worker_id: int):
         """Background worker that processes updates from queue."""
         import os
+        import time
         
         logger.info("[WORKER_%d] Started", worker_id)
         
         last_passive_log = 0.0  # Rate-limit PASSIVE_WAIT logging
+        active_enter_logged = False  # Track first ACTIVE enter
         
         while self._running:
             try:
-                # 🚨 PASSIVE GATE: Check BEFORE pulling from queue
-                # This prevents infinite requeue loops and attempt inflation
+                # 🚨 PASSIVE GATE: Wait for ACTIVE before pulling from queue
                 if self._active_state and not self._active_state.active:
                     # Check FORCE_ACTIVE override (degraded mode)
                     force_active = os.getenv("SINGLETON_LOCK_FORCE_ACTIVE", "0") in ("1", "true", "True")
                     
                     if force_active:
                         logger.warning(
-                            "[WORKER_%d] ⚠️ FORCE_ACTIVE enabled → processing in degraded mode despite PASSIVE",
+                            "[WORKER_%d] ⚠️ FORCE_ACTIVE enabled → degraded mode",
                             worker_id
                         )
                         # Continue to queue.get() below
                     else:
-                        # PASSIVE: Don't touch queue, just wait
+                        # PASSIVE: Log and wait for active_state.wait_active()
                         now = time.time()
                         if now - last_passive_log > 5.0:  # Log every 5s
-                            self._metrics.total_held += 1
                             logger.info(
-                                "[WORKER_%d] ⏸️ PASSIVE_WAIT active=False queue_depth=%d (waiting for ACTIVE)",
+                                "[WORKER_%d] ⏸️ PASSIVE_WAIT active=False queue_depth=%d",
                                 worker_id, self._queue.qsize()
                             )
                             last_passive_log = now
                         
-                        await asyncio.sleep(0.5)
-                        continue  # Don't pull from queue
+                        # Wait for ACTIVE (blocks until active_state.set(True))
+                        await asyncio.wait_for(
+                            self._active_state.wait_active(),
+                            timeout=1.0
+                        )
+                        continue  # Re-check active state at loop start
                 
-                # ACTIVE (or FORCE_ACTIVE): Pull update from queue
+                # ACTIVE: Log first entry
+                if not active_enter_logged:
+                    logger.info("[WORKER_%d] ✅ ACTIVE_ENTER active=True", worker_id)
+                    active_enter_logged = True
+                
+                # Pull update from queue (with timeout to check active state regularly)
                 item = await asyncio.wait_for(
                     self._queue.get(),
                     timeout=1.0
