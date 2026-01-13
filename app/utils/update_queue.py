@@ -169,76 +169,66 @@ class UpdateQueueManager:
                 self._metrics.queue_depth_current = self._queue.qsize()
                 
                 try:
-                    # Check if we should process (ACTIVE mode check)
+                    # 🔐 STEP 1: Check persistent dedup BEFORE processing
+                    if update_id:
+                        from app.storage.factory import get_storage
+                        storage = get_storage()
+                        
+                        try:
+                            # Check if already processed
+                            async with storage.pool.acquire() as conn:
+                                existing = await conn.fetchval(
+                                    "SELECT 1 FROM processed_updates WHERE update_id = $1",
+                                    update_id
+                                )
+                                
+                                if existing:
+                                    logger.warning(
+                                        "[WORKER_%d] ⏭️ DEDUP_SKIP update_id=%s (already processed)",
+                                        worker_id, update_id
+                                    )
+                                    self._metrics.total_dropped += 1
+                                    # Skip processing - task_done() in finally
+                                    continue
+                                
+                                # Mark as processing (insert with current timestamp)
+                                await conn.execute(
+                                    """
+                                    INSERT INTO processed_updates (update_id, worker_instance_id, update_type)
+                                    VALUES ($1, $2, $3)
+                                    ON CONFLICT (update_id) DO NOTHING
+                                    """,
+                                    update_id,
+                                    f"worker_{worker_id}",
+                                    "message" if getattr(update, "message", None) else "callback_query"
+                                )
+                        except Exception as e:
+                            # Dedup DB error - log but continue processing (better duplicate than miss)
+                            logger.warning("[WORKER_%d] Dedup check failed for update_id=%s: %s", worker_id, update_id, e)
+                    # 🚨 CRITICAL GATE: PASSIVE = NO PROCESSING (prevents duplicate messages)
+                    # Worker MUST wait for ACTIVE state before processing ANY updates
                     if self._active_state and not self._active_state.active:
-                        # PASSIVE MODE: Don't drop - but UI updates process immediately
+                        # PASSIVE MODE: Requeue until ACTIVE (or drop after timeout)
                         now = time.time()
                         held_time = now - first_seen
                         
-                        # 📡 DETECT UPDATE TYPE: UI updates never wait
-                        is_callback_query = getattr(update, "callback_query", None) is not None
-                        is_message = getattr(update, "message", None) is not None
-                        is_command = False
-                        
-                        if is_message:
-                            message = getattr(update, "message")
-                            text = getattr(message, "text", "") or ""
-                            is_command = text.startswith("/")
-                        
-                        # ✨ POLICY: UI updates (callback_query + commands) process IMMEDIATELY
-                        # Lock gating only for heavy background tasks, NOT UI interactions
-                        is_ui_update = is_callback_query or is_command
-                        
-                        if is_ui_update:
-                            # INSTANT processing for UI updates (no wait, no requeue)
-                            update_type = "callback_query" if is_callback_query else "command"
-                            logger.info(
-                                "[WORKER_%d] UI_UPDATE type=%s update_id=%s - processing in PASSIVE (no wait)",
-                                worker_id, update_type, update_id
-                            )
-                            self._metrics.total_processed_degraded += 1
-                            start_time = time.monotonic()
-                            logger.info("[WORKER_%d] 🎬 PROCESSING update_id=%s type=%s in PASSIVE", worker_id, update_id, update_type)
-                            await asyncio.wait_for(
-                                self._dp.feed_update(self._bot, update),
-                                timeout=30.0
-                            )
-                            elapsed = time.monotonic() - start_time
-                            logger.info(
-                                "[WORKER_%d] ✅ UI_UPDATE %s processed in %.2fs",
-                                worker_id, update_type, elapsed
-                            )
-                            # task_done() in finally block
-                        elif held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:
-                            # Held too long - process anyway in DEGRADED mode
+                        if held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:
+                            # Held too long - DROP with warning (ACTIVE instance will process)
                             logger.warning(
-                                "[WORKER_%d] DEGRADED processing update_id=%s (held %.1fs, attempt %d) - bot must respond!",
-                                worker_id, update_id, held_time, attempt
+                                "[WORKER_%d] ⏸️ PASSIVE_DROP update_id=%s (held %.1fs) - ACTIVE instance handles this",
+                                worker_id, update_id, held_time
                             )
-                            self._metrics.total_processed_degraded += 1
-                            
-                            # Process update even in PASSIVE (handlers should be defensive)
-                            start_time = time.monotonic()
-                            await asyncio.wait_for(
-                                self._dp.feed_update(self._bot, update),
-                                timeout=30.0
-                            )
-                            elapsed = time.monotonic() - start_time
-                            
-                            logger.info(
-                                "[WORKER_%d] DEGRADED processed update_id=%s in %.2fs",
-                                worker_id, update_id, elapsed
-                            )
-                            # task_done() will be called in finally block
+                            self._metrics.total_dropped += 1
+                            # task_done() in finally - this update is abandoned
                         else:
-                            # Still within hold window - requeue for later
+                            # Still within hold window - requeue for ACTIVE processing
                             logger.debug(
-                                "[WORKER_%d] PASSIVE hold update_id=%s (attempt %d, held %.1fs) - requeuing",
+                                "[WORKER_%d] ⏸️ PASSIVE_REQUEUE update_id=%s (attempt %d, held %.1fs)",
                                 worker_id, update_id, attempt, held_time
                             )
                             self._metrics.total_held += 1
                             
-                            # Wait a bit before requeue to avoid busy loop
+                            # Wait before requeue to avoid busy loop
                             await asyncio.sleep(REQUEUE_DELAY_SEC)
                             
                             # Requeue with incremented attempt
@@ -249,60 +239,31 @@ class UpdateQueueManager:
                                 self._metrics.total_requeued += 1
                                 requeued = True
                             except asyncio.QueueFull:
-                                # Queue full during requeue - process anyway
-                                logger.warning(
-                                    "[WORKER_%d] Queue full during requeue, processing update_id=%s anyway",
-                                    worker_id, update_id
-                                )
-                                self._metrics.total_processed_degraded += 1
-                                await asyncio.wait_for(
-                                    self._dp.feed_update(self._bot, update),
-                                    timeout=30.0
-                                )
+                                logger.error("[WORKER_%d] Failed to requeue update_id=%s (queue full)", worker_id, update_id)
                             
-                            # CRITICAL: Only task_done() if we didn't requeue
-                            # If requeued, the item goes back to queue and will be processed later
-                            if not requeued:
-                                self._queue.task_done()
-                            else:
-                                # Skip task_done() AND finally block - item still in queue
+                            # Skip task_done() if successfully requeued
+                            if requeued:
                                 self._metrics.workers_active -= 1
-                            continue
-                    
-                    # ACTIVE MODE: Process normally
-                    # Detect update type for logging
-                    update_type = "unknown"
-                    if getattr(update, "message", None):
-                        update_type = "message"
-                    elif getattr(update, "callback_query", None):
-                        update_type = "callback_query"
-                    elif getattr(update, "inline_query", None):
-                        update_type = "inline_query"
-                    
-                    logger.debug(
-                        "[WORKER_%d] Processing update_id=%s type=%s",
-                        worker_id, update_id, update_type
-                    )
-                    
-                    start_time = time.monotonic()
-                    
-                    await asyncio.wait_for(
-                        self._dp.feed_update(self._bot, update),
-                        timeout=30.0
-                    )
-                    
-                    elapsed = time.monotonic() - start_time
-                    self._metrics.total_processed += 1
-                    
-                    if elapsed > 5.0:
-                        logger.warning(
-                            "[WORKER_%d] Slow update_id=%s type=%s took %.2fs",
-                            worker_id, update_id, update_type, elapsed
-                        )
+                                continue  # Don't call task_done()
+                        # If dropped or failed requeue → task_done() in finally
                     else:
-                        logger.debug(
-                            "[WORKER_%d] Processed update_id=%s type=%s in %.2fs",
-                            worker_id, update_id, update_type, elapsed
+                        # ACTIVE MODE: Process update normally
+                        logger.info(
+                            "[WORKER_%d] 🎬 ACTIVE_PROCESS_START update_id=%s",
+                            worker_id, update_id
+                        )
+                        self._metrics.total_processed += 1
+                        
+                        start_time = time.monotonic()
+                        await asyncio.wait_for(
+                            self._dp.feed_update(self._bot, update),
+                            timeout=30.0
+                        )
+                        elapsed = time.monotonic() - start_time
+                        
+                        logger.info(
+                            "[WORKER_%d] ✅ Processed update_id=%s in %.2fs",
+                            worker_id, update_id, elapsed
                         )
                 
                 except asyncio.TimeoutError:
