@@ -1,18 +1,36 @@
-.PHONY: verify test clean install firebreak smoke-render deploy-check syntax
+.PHONY: verify test clean install firebreak smoke-render deploy-check syntax truth-gate test-lock verify-truth
+
+# TRUTH GATE: Полная валидация архитектурного контракта
+truth-gate:
+	@echo "🏛️ TRUTH GATE: Running architecture contract validation..."
+	@echo ""
+	@echo "1️⃣ verify_truth.py (architecture invariants)..."
+	python3 verify_truth.py
+	@echo ""
+	@echo "2️⃣ Unit tests (lock mechanism)..."
+	python3 -m pytest tests/test_render_singleton_lock.py -v
+	@echo ""
+	@echo "3️⃣ Syntax check..."
+	python3 -m py_compile main_render.py
+	python3 -m py_compile render_singleton_lock.py
+	@echo ""
+	@echo "✅ ALL TRUTH GATES PASSED"
+
+# verify_truth standalone
+verify-truth:
+	@echo "🔍 Running verify_truth.py..."
+	@python3 verify_truth.py
+
+# test-lock standalone
+test-lock:
+	@echo "🧪 Running lock mechanism tests..."
+	@python3 -m pytest tests/test_render_singleton_lock.py -v
 
 # FIREBREAK: Полная проверка перед деплоем (критично!)
-firebreak:
-	@echo "🔥 FIREBREAK: Запуск всех проверок..."
-	@echo ""
-	@echo "1️⃣ Unit tests..."
-	python3 -m pytest tests/test_render_singleton_lock.py -v
+firebreak: truth-gate
 	@echo ""
 	@echo "2️⃣ Smoke test (локально)..."
 	python3 smoke_test.py || true
-	@echo ""
-	@echo "3️⃣ Syntax check..."
-	python3 -m py_compile render_singleton_lock.py
-	python3 -m py_compile app/utils/update_queue.py
 	@echo ""
 	@echo "✅ FIREBREAK: Все проверки пройдены!"
 

@@ -40,19 +40,42 @@ def check_s0_health(base_url):
         
         data = resp.json()
         
-        # Проверяем наличие ключевых полей
-        if "active" not in data:
-            log("❌", "S0 FAILED: /health не содержит поле 'active'", RED)
+        # Проверяем наличие ключевых полей (SOURCE_OF_TRUTH.json contract)
+        required_fields = ["status", "uptime", "active", "lock_state", "queue"]
+        missing = [f for f in required_fields if f not in data]
+        
+        if missing:
+            log("❌", f"S0 FAILED: /health missing fields: {missing}", RED)
+            return False
+        
+        # Проверяем типы (JSON serializable — Decimal недопустим)
+        if not isinstance(data.get("uptime"), int):
+            log("❌", f"S0 FAILED: uptime must be int, got {type(data.get('uptime'))}", RED)
+            return False
+        
+        if data.get("lock_idle_duration") is not None:
+            if not isinstance(data["lock_idle_duration"], (int, float)):
+                log("❌", f"S0 FAILED: lock_idle_duration must be number, got {type(data['lock_idle_duration'])}", RED)
+                return False
+        
+        # Проверяем queue schema
+        queue = data.get("queue", {})
+        if not isinstance(queue.get("queue_depth"), int):
+            log("❌", f"S0 FAILED: queue.queue_depth must be int", RED)
             return False
         
         is_active = data.get("active")
         mode = "ACTIVE" if is_active else "PASSIVE"
         
         log("✅", f"S0 PASSED: /health 200 OK, mode={mode}", GREEN)
-        log("ℹ️", f"  queue_depth={data.get('queue_depth', 'N/A')}")
+        log("ℹ️", f"  queue_depth={data.get('queue_depth', 'N/A')}, uptime={data['uptime']}s")
+        log("ℹ️", f"  All required fields present, JSON schema valid")
         
         return True
         
+    except ValueError as e:
+        log("❌", f"S0 FAILED: Invalid JSON response: {e}", RED)
+        return False
     except Exception as e:
         log("❌", f"S0 FAILED: {e}", RED)
         return False

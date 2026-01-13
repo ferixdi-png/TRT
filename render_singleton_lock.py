@@ -159,7 +159,8 @@ def _get_heartbeat_age_seconds(conn: connection, lock_key: int) -> Optional[floa
                 (lock_key,),
             )
             row = cur.fetchone()
-            return row[0] if row and row[0] is not None else None
+            # Convert Decimal to float for JSON serialization
+            return float(row[0]) if (row and row[0] is not None) else None
     except Exception as exc:
         logger.debug("[LOCK] Failed to fetch heartbeat age: %s", exc)
         return None
@@ -236,7 +237,11 @@ def get_lock_holder_info(pool, lock_key: int) -> Dict[str, Any]:
             )
             row = cur.fetchone()
             if row:
-                info["holder_pid"], info["state"], info["idle_duration"] = row
+                pid, state, idle_sec = row
+                info["holder_pid"] = pid
+                info["state"] = state
+                # Convert Decimal to float for JSON serialization
+                info["idle_duration"] = float(idle_sec) if idle_sec is not None else None
             info["heartbeat_age"] = _get_heartbeat_age_seconds(conn, lock_key)
     except Exception as exc:
         logger.debug("[LOCK] Failed to fetch lock holder info: %s", exc)
