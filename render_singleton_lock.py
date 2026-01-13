@@ -371,7 +371,6 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                                 
                                 # Wait for lock release - measured ~500-2000ms in production logs
                                 # Using 3s to GUARANTEE lock is fully released (critical for webhook setup)
-                                import time
                                 time.sleep(LOCK_RELEASE_WAIT_SECONDS)
                                 
                                 # Retry lock acquisition

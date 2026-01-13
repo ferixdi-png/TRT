@@ -211,6 +211,10 @@ observability:
       max_occurrences_per_10min: 0
       description: "Unhandled exception in aiohttp handler"
       
+    - pattern: "UnboundLocalError.*cannot access local variable 'time'"
+      severity: "P0"
+      description: "Duplicate import time inside function shadows global import"
+      
   rate_limits:
     duplicate_error_same_type: "1/30s"  # Max 1 identical error per 30 seconds
     lock_held_spam: "1/30s"
