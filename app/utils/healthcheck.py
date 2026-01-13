@@ -51,6 +51,7 @@ def set_start_time():
 async def health_handler(request):
     """Обработчик healthcheck запросов"""
     import os
+    from app.locking.single_instance import get_lock_debug_info
 
     # Рассчитываем uptime
     uptime = 0
@@ -73,11 +74,16 @@ async def health_handler(request):
         kie_mode = "disabled"
 
     # Формируем JSON ответ
+    lock_debug = get_lock_debug_info()
     response_data = {
         "status": "ok",
         "uptime": uptime,
         "storage": storage_mode,
         "kie_mode": kie_mode,
+        "lock_state": lock_debug.get("state"),
+        "lock_holder_pid": lock_debug.get("holder_pid"),
+        "lock_idle_duration": lock_debug.get("idle_duration"),
+        "lock_takeover_event": lock_debug.get("takeover_event"),
     }
 
     return web.Response(text=json.dumps(response_data), content_type="application/json", status=200)

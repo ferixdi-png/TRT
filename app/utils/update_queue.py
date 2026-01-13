@@ -141,6 +141,28 @@ class UpdateQueueManager:
                 update_id, self._queue.qsize(), self.max_size
             )
             return False
+
+    @staticmethod
+    def _is_passive_allowed(update) -> bool:
+        message = getattr(update, "message", None)
+        if message:
+            text = getattr(message, "text", None)
+            if text and text.strip().lower().startswith("/start"):
+                return True
+
+        callback = getattr(update, "callback_query", None)
+        if callback:
+            data = getattr(callback, "data", None)
+            if not data:
+                return False
+            if data == "main_menu":
+                return True
+            if data.startswith("menu:"):
+                return True
+            if data == "quick:menu":
+                return True
+
+        return False
     
     async def _worker_loop(self, worker_id: int):
         """Background worker that processes updates from queue."""
@@ -154,39 +176,6 @@ class UpdateQueueManager:
         
         while self._running:
             try:
-                # 🚨 PASSIVE GATE: Wait for ACTIVE before pulling from queue
-                if self._active_state and not self._active_state.active:
-                    # Check FORCE_ACTIVE override (degraded mode)
-                    force_active = os.getenv("SINGLETON_LOCK_FORCE_ACTIVE", "0") in ("1", "true", "True")
-                    
-                    if force_active:
-                        logger.warning(
-                            "[WORKER_%d] ⚠️ FORCE_ACTIVE enabled → degraded mode",
-                            worker_id
-                        )
-                        # Continue to queue.get() below
-                    else:
-                        # PASSIVE: Log and wait for active_state.wait_active()
-                        now = time.time()
-                        if now - last_passive_log > 5.0:  # Log every 5s
-                            logger.info(
-                                "[WORKER_%d] ⏸️ PASSIVE_WAIT active=False queue_depth=%d",
-                                worker_id, self._queue.qsize()
-                            )
-                            last_passive_log = now
-                        
-                        # Wait for ACTIVE (blocks until active_state.set(True))
-                        await asyncio.wait_for(
-                            self._active_state.wait_active(),
-                            timeout=1.0
-                        )
-                        continue  # Re-check active state at loop start
-                
-                # ACTIVE: Log first entry
-                if not active_enter_logged:
-                    logger.info("[WORKER_%d] ✅ ACTIVE_ENTER active=True", worker_id)
-                    active_enter_logged = True
-                
                 # Pull update from queue (with timeout to check active state regularly)
                 item = await asyncio.wait_for(
                     self._queue.get(),
@@ -201,6 +190,36 @@ class UpdateQueueManager:
                 self._metrics.queue_depth_current = self._queue.qsize()
                 
                 try:
+                    force_active = os.getenv("SINGLETON_LOCK_FORCE_ACTIVE", "0") in ("1", "true", "True")
+                    is_passive = self._active_state and not self._active_state.active and not force_active
+                    if is_passive and not self._is_passive_allowed(update):
+                        now = time.time()
+                        if now - last_passive_log > 5.0:
+                            logger.info(
+                                "[WORKER_%d] ⏸️ PASSIVE_HOLD update_id=%s queue_depth=%d",
+                                worker_id, update_id, self._queue.qsize()
+                            )
+                            last_passive_log = now
+                        self._metrics.total_held += 1
+                        item["attempt"] += 1
+                        try:
+                            self._queue.put_nowait(item)
+                        except asyncio.QueueFull:
+                            self._metrics.total_dropped += 1
+                            logger.warning(
+                                "[WORKER_%d] ⚠️ PASSIVE_DROP update_id=%s (queue full)",
+                                worker_id, update_id
+                            )
+                        await asyncio.sleep(0.5)
+                        continue
+
+                    if is_passive:
+                        self._metrics.total_processed_degraded += 1
+                    # ACTIVE: Log first entry
+                    if not active_enter_logged and not is_passive:
+                        logger.info("[WORKER_%d] ✅ ACTIVE_ENTER active=True", worker_id)
+                        active_enter_logged = True
+
                     logger.info("[WORKER_%d] 🎯 WORKER_PICK update_id=%s", worker_id, update_id)
                     
                     # 🔐 STEP 1: Check persistent dedup BEFORE processing (FAIL-OPEN)
@@ -244,7 +263,7 @@ class UpdateQueueManager:
                     force_degraded = os.getenv("SINGLETON_LOCK_FORCE_ACTIVE", "0") in ("1", "true", "True")
                     if force_degraded and self._active_state and not self._active_state.active:
                         self._metrics.total_processed_degraded += 1
-                    else:
+                    elif not is_passive:
                         self._metrics.total_processed += 1
                     
                     start_time = time.monotonic()
