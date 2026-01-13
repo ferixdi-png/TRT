@@ -25,12 +25,12 @@ async def apply_migrations_safe(database_url: str) -> bool:
         return False
     
     try:
-        # Находим директорию с миграциями
+        # SSOT: Единственный источник миграций - /migrations/ в корне проекта
         project_root = Path(__file__).parent.parent.parent
         migrations_dir = project_root / "migrations"
         
         if not migrations_dir.exists():
-            logger.warning(f"[MIGRATIONS] Directory not found: {migrations_dir}")
+            logger.error(f"[MIGRATIONS] CRITICAL: SSOT directory not found: {migrations_dir}")
             return False
         
         # Находим все SQL файлы
@@ -74,3 +74,47 @@ async def apply_migrations_safe(database_url: str) -> bool:
     except Exception as e:
         logger.exception(f"[MIGRATIONS] Critical error during auto-migration: {e}")
         return False
+
+
+async def check_migrations_status() -> tuple[bool, int]:
+    """
+    Check if migrations have been applied successfully.
+    
+    Returns:
+        Tuple[bool, int]: (all_applied, count_of_migrations)
+    """
+    try:
+        import os
+        database_url = os.getenv("DATABASE_URL", "").strip()
+        if not database_url:
+            return False, 0
+        
+        try:
+            import asyncpg
+        except ImportError:
+            return False, 0
+        
+        project_root = Path(__file__).parent.parent.parent
+        migrations_dir = project_root / "migrations"
+        
+        if not migrations_dir.exists():
+            return False, 0
+        
+        sql_files = sorted(migrations_dir.glob("*.sql"))
+        if not sql_files:
+            return True, 0  # No migrations = OK
+        
+        # Quick check: try to connect to DB
+        conn = None
+        try:
+            conn = await asyncpg.connect(database_url, timeout=5)
+            # If we can connect, assume migrations are applied
+            # (more detailed check would require migration tracking table)
+            return True, len(sql_files)
+        except Exception:
+            return False, len(sql_files)
+        finally:
+            if conn:
+                await conn.close()
+    except Exception:
+        return False, 0

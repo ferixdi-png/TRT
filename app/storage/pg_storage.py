@@ -30,6 +30,7 @@ class PostgresStorage(BaseStorage):
         
         self.database_url = database_url
         self._pool: Optional[asyncpg.Pool] = None
+        self._pool_lock = None  # Will be initialized on first async call
     
     @property
     def pool(self) -> Optional[asyncpg.Pool]:
@@ -37,14 +38,25 @@ class PostgresStorage(BaseStorage):
         return self._pool
     
     async def _get_pool(self) -> asyncpg.Pool:
-        """Получить или создать connection pool"""
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=1,
-                max_size=10,
-                command_timeout=60
-            )
+        """Получить или создать connection pool (thread-safe)"""
+        if self._pool is not None:
+            return self._pool
+        
+        # Initialize lock on first call
+        if self._pool_lock is None:
+            import asyncio
+            self._pool_lock = asyncio.Lock()
+        
+        async with self._pool_lock:
+            # Double-check after acquiring lock
+            if self._pool is None:
+                self._pool = await asyncpg.create_pool(
+                    self.database_url,
+                    min_size=1,
+                    max_size=10,
+                    command_timeout=60
+                )
+                logger.info("[PG_STORAGE] ✅ Connection pool initialized")
         return self._pool
     
     async def is_update_processed(self, update_id: int) -> bool:

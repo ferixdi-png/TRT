@@ -12,15 +12,20 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
-def load_source_of_truth(file_path: str = "models/kie_api_models.json") -> Dict[str, Any]:
+def load_source_of_truth(file_path: str = "models/KIE_SOURCE_OF_TRUTH.json") -> Dict[str, Any]:
     """
-    Load SOURCE OF TRUTH v1.2.0-FULL-MERGED (cached for performance).
+    Load KIE model catalog from SSOT (Single Source of Truth) - cached for performance.
     
-    Single source with 72 models, 100% coverage.
-    NO FALLBACKS.
+    CRITICAL: Only models/KIE_SOURCE_OF_TRUTH.json is used in runtime.
+    All other JSON files in models/ are deprecated and moved to models/_deprecated/.
     
-    Note: Cached with @lru_cache to avoid repeated file reads on hot path.
+    Args:
+        file_path: SSOT path (default: models/KIE_SOURCE_OF_TRUTH.json)
+    
+    Returns:
+        Dict with models, pricing, schemas
     """
+    # SSOT enforcement: ignore file_path parameter, always use canonical path
     master_path = "models/KIE_SOURCE_OF_TRUTH.json"
     
     if not os.path.exists(master_path):

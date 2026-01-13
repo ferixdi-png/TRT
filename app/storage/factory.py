@@ -50,24 +50,11 @@ def create_storage(
             try:
                 # Пробуем создать PostgreSQL storage
                 pg_storage = PostgresStorage(database_url)
-                # ВАЖНО: test_connection() может вызвать ошибку если loop уже запущен
-                # В runtime используем async_test_connection(), но здесь мы в sync контексте
-                # Проверяем есть ли запущенный loop
-                import asyncio
-                try:
-                    loop = asyncio.get_running_loop()
-                    # Loop уже запущен - пропускаем sync test, будем проверять async позже
-                    logger.info("[OK] Using PostgreSQL storage (AUTO mode, async test will be done later)")
-                    _storage_instance = pg_storage
-                    return _storage_instance
-                except RuntimeError:
-                    # Нет запущенного loop - можно использовать sync test
-                    if pg_storage.test_connection():
-                        logger.info("[OK] Using PostgreSQL storage (AUTO mode)")
-                        _storage_instance = pg_storage
-                        return _storage_instance
-                    else:
-                        logger.warning("[WARN] PostgreSQL connection failed, falling back to JSON")
+                # CRITICAL: Never call sync test_connection() - always use async version
+                # Pool initialization will happen on first actual query
+                logger.info("[OK] PostgreSQL storage initialized (pool will initialize on first query)")
+                _storage_instance = pg_storage
+                return _storage_instance
             except Exception as e:
                 logger.warning(f"[WARN] PostgreSQL initialization failed: {e}, falling back to JSON")
         

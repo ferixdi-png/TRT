@@ -930,6 +930,12 @@ async def main() -> None:
     LOG_LEVEL_ENV = os.getenv("LOG_LEVEL", "").upper()
     setup_logging(level=(logging.DEBUG if LOG_LEVEL_ENV == "DEBUG" else logging.INFO))
 
+    # CRITICAL: Validate ENV contract BEFORE any DB/network operations
+    from app.utils.startup_validation import startup_validation
+    if not startup_validation():
+        logger.error("[STARTUP] ENV validation failed - exiting")
+        sys.exit(1)
+
     cfg = _load_runtime_config()
     effective_bot_mode = cfg.bot_mode
     if effective_bot_mode == "webhook" and not cfg.webhook_base_url:

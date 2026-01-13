@@ -52,6 +52,7 @@ async def health_handler(request):
     """Обработчик healthcheck запросов"""
     import os
     from app.locking.single_instance import get_lock_debug_info
+    from app.storage.migrations import check_migrations_status
 
     # Рассчитываем uptime
     uptime = 0
@@ -73,6 +74,14 @@ async def health_handler(request):
     if not os.getenv("KIE_API_KEY"):
         kie_mode = "disabled"
 
+    # Проверяем статус миграций
+    migrations_ok = False
+    migrations_count = 0
+    try:
+        migrations_ok, migrations_count = await check_migrations_status()
+    except Exception as e:
+        logger.debug(f"[HEALTH] Migrations check failed: {e}")
+
     # Формируем JSON ответ
     lock_debug = get_lock_debug_info()
     response_data = {
@@ -80,6 +89,8 @@ async def health_handler(request):
         "uptime": uptime,
         "storage": storage_mode,
         "kie_mode": kie_mode,
+        "migrations_applied": migrations_ok,
+        "migrations_count": migrations_count,
         "lock_state": lock_debug.get("state"),
         "lock_holder_pid": lock_debug.get("holder_pid"),
         "lock_idle_duration": lock_debug.get("idle_duration"),

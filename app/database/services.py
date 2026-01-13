@@ -225,14 +225,15 @@ class WalletService:
     
     async def charge(self, user_id: int, amount_rub: Decimal, 
                     ref: str, meta: Dict = None) -> bool:
-        """Charge held funds."""
+        """Charge held funds (idempotent, prevents double-charge)."""
         async with self.db.transaction() as conn:
+            # CRITICAL: SELECT FOR UPDATE to prevent race on same ref
             existing = await conn.fetchval(
-                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'charge' AND status = 'done'",
+                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'charge' FOR UPDATE",
                 ref
             )
             if existing:
-                logger.info(f"Charge {ref} already processed")
+                logger.info(f"{correlation_tag()} Charge {ref} already processed (idempotent)")
                 return True
 
             # Check hold exists
@@ -262,15 +263,15 @@ class WalletService:
     
     async def refund(self, user_id: int, amount_rub: Decimal, 
                     ref: str, meta: Dict = None) -> bool:
-        """Refund from hold to balance."""
+        """Refund from hold to balance (idempotent, prevents double-refund)."""
         async with self.db.transaction() as conn:
-            # Check idempotency
+            # CRITICAL: SELECT FOR UPDATE to prevent race on same ref
             existing = await conn.fetchval(
-                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'refund' AND status = 'done'",
+                "SELECT id FROM ledger WHERE ref = $1 AND kind = 'refund' FOR UPDATE",
                 ref
             )
             if existing:
-                logger.warning(f"Refund {ref} already processed")
+                logger.warning(f"{correlation_tag()} Refund {ref} already processed (idempotent)")
                 return True
             
             # Insert ledger
