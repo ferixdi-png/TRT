@@ -5,9 +5,49 @@ Auto-migration runner for PostgreSQL
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+async def get_applied_migrations(database_url: str) -> Optional[List[str]]:
+    """
+    Retrieve list of migrations that have been applied.
+    Uses migration_history table if available (migration 012+).
+    
+    Returns:
+        List of migration names if tracking table exists, None otherwise
+    """
+    try:
+        import asyncpg
+    except ImportError:
+        return None
+    
+    try:
+        conn = await asyncpg.connect(database_url, timeout=5)
+        
+        # Check if migration_history table exists
+        exists = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='migration_history')"
+        )
+        
+        if not exists:
+            # migration 012 not yet applied, no history available
+            await conn.close()
+            return None
+        
+        # Fetch applied migrations
+        applied = await conn.fetch(
+            "SELECT migration_name FROM migration_history WHERE status = 'success' ORDER BY applied_at"
+        )
+        
+        await conn.close()
+        return [row['migration_name'] for row in applied]
+    
+    except Exception as e:
+        logger.debug(f"[MIGRATIONS] Could not check migration history: {e}")
+        return None
+
 
 
 async def apply_migrations_safe(database_url: str) -> bool:
@@ -55,6 +95,17 @@ async def apply_migrations_safe(database_url: str) -> bool:
                     await conn.execute(sql_content)
                     logger.info(f"[MIGRATIONS] ✅ Applied {sql_file.name}")
                     
+                    # Track in migration_history if table exists (migration 012+)
+                    try:
+                        await conn.execute(
+                            "INSERT INTO migration_history (migration_name, status) VALUES ($1, 'success') "
+                            "ON CONFLICT (migration_name) DO UPDATE SET status = 'success', applied_at = NOW()",
+                            sql_file.name,
+                        )
+                    except Exception:
+                        # migration_history table may not exist yet, that's OK
+                        pass
+                    
                 except Exception as e:
                     # Если ошибка "already exists" - это OK (идемпотентность)
                     error_msg = str(e).lower()
@@ -79,6 +130,7 @@ async def apply_migrations_safe(database_url: str) -> bool:
 async def check_migrations_status() -> tuple[bool, int]:
     """
     Check if migrations have been applied successfully.
+    Uses migration_history table if available (migration 012+).
     
     Returns:
         Tuple[bool, int]: (all_applied, count_of_migrations)
@@ -104,17 +156,37 @@ async def check_migrations_status() -> tuple[bool, int]:
         if not sql_files:
             return True, 0  # No migrations = OK
         
-        # Quick check: try to connect to DB
+        # Quick check: try to connect to DB and check migration status
         conn = None
         try:
             conn = await asyncpg.connect(database_url, timeout=5)
-            # If we can connect, assume migrations are applied
-            # (more detailed check would require migration tracking table)
-            return True, len(sql_files)
-        except Exception:
+            
+            # Check if migration_history table exists (migration 012+)
+            history_exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='migration_history')"
+            )
+            
+            if history_exists:
+                # Use migration history for accurate tracking
+                applied_count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM migration_history WHERE status = 'success'"
+                )
+                expected_count = len(sql_files)
+                all_applied = applied_count >= expected_count
+                logger.debug(f"[MIGRATIONS] Migration history check: {applied_count}/{expected_count} applied")
+                return all_applied, expected_count
+            else:
+                # Fallback: assume migrations are applied if DB is accessible
+                # (migration 012 not yet applied, no tracking available)
+                logger.debug("[MIGRATIONS] Migration history not available (migration 012 not yet applied)")
+                return True, len(sql_files)
+                
+        except Exception as e:
+            logger.debug(f"[MIGRATIONS] Migration status check failed: {e}")
             return False, len(sql_files)
         finally:
             if conn:
                 await conn.close()
     except Exception:
         return False, 0
+
