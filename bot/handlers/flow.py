@@ -57,6 +57,30 @@ _last_callback_at: Dict[int, Dict[str, float]] = {}
 _active_generations: Dict[int, List[float]] = {}
 
 
+# 🔍 DEBUG: Catch-all callback handler for diagnostics
+@router.callback_query()
+async def _debug_callback_catchall(callback: CallbackQuery) -> None:
+    """Debug catch-all: proves callback_query reaches handlers."""
+    logger.info("[DEBUG_CALLBACK] Caught callback: data=%s from user=%s", 
+                callback.data[:80] if callback.data else "None", callback.from_user.id)
+    
+    # Answer to prevent loading spinner
+    try:
+        await callback.answer("✅ Callback received (debug)", show_alert=False)
+    except Exception:
+        pass
+    
+    # Send debug message
+    try:
+        await callback.message.answer(
+            f"🔍 DEBUG: Callback data = `{callback.data[:80] if callback.data else 'None'}`\n"
+            f"Type: {type(callback).__name__}",
+            parse_mode=None
+        )
+    except Exception as e:
+        logger.exception("[DEBUG_CALLBACK] Failed to send debug message: %s", e)
+
+
 class FlowStates(StatesGroup):
     """States for flow handlers."""
     search_query = State()  # Waiting for model search query

@@ -438,6 +438,24 @@ def _make_web_app(
             "lock_acquired": runtime_state.lock_acquired,
             "last_check": controller._last_check.isoformat() if hasattr(controller, "_last_check") and controller._last_check else None,
         })
+    
+    async def diag_webhookinfo(_request: web.Request) -> web.Response:
+        """Detailed webhook info including allowed_updates."""
+        try:
+            info = await bot.get_webhook_info()
+            return web.json_response({
+                "url": info.url,
+                "pending_update_count": info.pending_update_count,
+                "last_error_message": info.last_error_message or "",
+                "last_error_date": info.last_error_date,
+                "allowed_updates": info.allowed_updates,
+                "max_connections": info.max_connections,
+                "has_custom_certificate": info.has_custom_certificate,
+                "ip_address": info.ip_address if hasattr(info, "ip_address") else None,
+            })
+        except Exception as e:
+            logger.exception("[DIAG] Failed to get webhook info: %s", e)
+            return web.json_response({"error": str(e)}, status=500)
 
     async def webhook(request: web.Request) -> web.Response:
         """
@@ -491,6 +509,19 @@ def _make_web_app(
             update_id = int(getattr(update, "update_id", 0))
         except Exception:
             update_id = 0
+        
+        # Detect update type for logging
+        update_type = "unknown"
+        if getattr(update, "message", None):
+            update_type = "message"
+        elif getattr(update, "callback_query", None):
+            update_type = "callback_query"
+        elif getattr(update, "inline_query", None):
+            update_type = "inline_query"
+        elif getattr(update, "edited_message", None):
+            update_type = "edited_message"
+        
+        logger.debug("[WEBHOOK] Received update_id=%s type=%s", update_id, update_type)
         
         # Check for duplicates
         if update_id and update_id in recent_update_ids:
@@ -818,6 +849,7 @@ def _make_web_app(
     app.router.add_get("/health", health)
     app.router.add_get("/", root)
     app.router.add_get("/diag/webhook", diag_webhook)
+    app.router.add_get("/diag/webhookinfo", diag_webhookinfo)
     app.router.add_get("/diag/lock", diag_lock)
     # aiohttp auto-registers HEAD for GET; explicit add_head causes duplicate route
     app.router.add_post(callback_route, kie_callback)

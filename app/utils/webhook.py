@@ -232,8 +232,16 @@ async def ensure_webhook(
     else:
         logger.info("[WEBHOOK] 🔄 Webhook mismatch, updating...")
 
+    # CRITICAL: allowed_updates=None means ALL update types
+    # Including: message, callback_query, inline_query, edited_message, etc
+    allowed_updates_list = None  # Accept ALL updates
+    
     async def _set_webhook() -> None:
-        await bot.set_webhook(webhook_url, secret_token=secret_token or None)
+        await bot.set_webhook(
+            webhook_url,
+            secret_token=secret_token or None,
+            allowed_updates=allowed_updates_list
+        )
 
     await _call_with_retry(
         "set_webhook",
@@ -242,7 +250,7 @@ async def ensure_webhook(
         retries=retries,
         backoff_s=backoff_s,
     )
-    logger.info("[WEBHOOK] ✅ Webhook set to %s", mask_webhook_url(webhook_url))
+    logger.info("[WEBHOOK] ✅ Webhook set to %s (allowed_updates=ALL)", mask_webhook_url(webhook_url))
     
     # Verify webhook was set
     verify_info = await bot.get_webhook_info()

@@ -265,6 +265,20 @@ class UpdateQueueManager:
                             continue
                     
                     # ACTIVE MODE: Process normally
+                    # Detect update type for logging
+                    update_type = "unknown"
+                    if getattr(update, "message", None):
+                        update_type = "message"
+                    elif getattr(update, "callback_query", None):
+                        update_type = "callback_query"
+                    elif getattr(update, "inline_query", None):
+                        update_type = "inline_query"
+                    
+                    logger.debug(
+                        "[WORKER_%d] Processing update_id=%s type=%s",
+                        worker_id, update_id, update_type
+                    )
+                    
                     start_time = time.monotonic()
                     
                     await asyncio.wait_for(
@@ -277,13 +291,13 @@ class UpdateQueueManager:
                     
                     if elapsed > 5.0:
                         logger.warning(
-                            "[WORKER_%d] Slow update_id=%s took %.2fs",
-                            worker_id, update_id, elapsed
+                            "[WORKER_%d] Slow update_id=%s type=%s took %.2fs",
+                            worker_id, update_id, update_type, elapsed
                         )
                     else:
                         logger.debug(
-                            "[WORKER_%d] Processed update_id=%s in %.2fs",
-                            worker_id, update_id, elapsed
+                            "[WORKER_%d] Processed update_id=%s type=%s in %.2fs",
+                            worker_id, update_id, update_type, elapsed
                         )
                 
                 except asyncio.TimeoutError:
