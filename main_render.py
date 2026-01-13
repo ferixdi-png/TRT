@@ -1079,17 +1079,21 @@ async def main() -> None:
     
     async def state_sync_loop() -> None:
         """Periodically sync active_state with lock_controller (every 1s)"""
+        logger.info("[STATE_SYNC] 🔄 Started, initial active=%s", active_state.active)
         while True:
             await asyncio.sleep(1)
             if hasattr(active_state, 'lock_controller'):
                 new_active = active_state.lock_controller.should_process_updates()
                 if new_active != active_state.active:
+                    old_active = active_state.active
                     active_state.active = new_active
                     runtime_state.lock_acquired = new_active
                     if new_active:
-                        logger.info("[STATE_SYNC] ✅ PASSIVE → ACTIVE (lock acquired)")
+                        logger.info("[STATE_SYNC] ✅ PASSIVE → ACTIVE (active_state: %s -> %s)", old_active, new_active)
                         # Note: init_active_services already called by lock_controller callback
                         logger.info("[STATE_SYNC] Services already initialized by controller callback")
+                    else:
+                        logger.info("[STATE_SYNC] ⏸️ ACTIVE → PASSIVE (active_state: %s -> %s)", old_active, new_active)
 
     # 🚀 START BACKGROUND INITIALIZATION (non-blocking)
     asyncio.create_task(background_initialization())
