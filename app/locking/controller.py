@@ -75,7 +75,9 @@ class SingletonLockController:
         """Atomic state transition (thread-safe) + sync active_state"""
         logger.info(f"[LOCK_CONTROLLER] 🔧 _set_state called: new_state={new_state.value}")
         try:
+            logger.info(f"[LOCK_CONTROLLER] 🔒 Acquiring mutex for state transition...")
             async with self.state._mutex:
+                logger.info(f"[LOCK_CONTROLLER] 🔓 Mutex acquired, proceeding with transition")
                 old_state = self.state.state
                 logger.info(f"[LOCK_CONTROLLER] 🔍 State transition: {old_state.value} → {new_state.value}")
                 self.state.state = new_state
