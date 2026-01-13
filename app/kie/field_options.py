@@ -135,6 +135,25 @@ FIELD_OPTIONS = {
         "webp",
     ],
     
+    # google/nano-banana - TEXT2IMAGE
+    # SOURCE: models/KIE_SOURCE_OF_TRUTH.json input_schema
+    "google/nano-banana.image_size": [
+        "1:1",                  # Default
+        "portrait_hd",
+        "square_hd",
+        "landscape_hd",
+        "1024x1024",
+        "512x512",
+        "portrait",
+        "square",
+        "landscape",
+    ],
+    "google/nano-banana.output_format": [
+        "png",                  # Default
+        "jpg",
+        "webp",
+    ],
+    
     # Flux models (verified from validate_flux_2*.py)
     "flux-2/pro-image-to-image.aspect_ratio": [
         "1:1",

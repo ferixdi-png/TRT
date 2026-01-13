@@ -45,6 +45,15 @@ MODEL_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "resolution": "1K",             # Default from SOURCE_OF_TRUTH
         "output_format": "png",         # Default from SOURCE_OF_TRUTH
     },
+    
+    # google/nano-banana - TEXT2IMAGE
+    # ERROR: Missing required field: output_format
+    # ERROR: Invalid value for image_size: 1920x1080. Must be one of: portrait_hd, square_hd, landscape_hd, 1024x1024, 512x512, 1:1, portrait, square, landscape
+    # SOURCE: models/KIE_SOURCE_OF_TRUTH.json example shows output_format=png, image_size=1:1
+    "google/nano-banana": {
+        "output_format": "png",         # Required, default from SOURCE_OF_TRUTH
+        "image_size": "1:1",            # Required, default from SOURCE_OF_TRUTH
+    },
 }
 
 
