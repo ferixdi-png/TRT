@@ -149,6 +149,32 @@ Migrations are applied automatically at startup via `app/storage/migrations.py::
 psql $DATABASE_URL -f migrations/011_fix_heartbeat_type.sql
 ```
 
+### Migration 011: Heartbeat Type Fix (2026-01-13)
+
+**Issue**: `update_lock_heartbeat()` function had type signature mismatch
+- psycopg2 passes Python strings as PostgreSQL `unknown` type
+- Function expects explicit `TEXT` parameter
+- Result: Heartbeat updates failed, lock staleness cascaded
+
+**Fix**: Added explicit `::TEXT` cast in migration 011 and render_singleton_lock.py calls
+
+**Verification**: Check logs for:
+```
+[LOCK] ✅ Heartbeat updated successfully  (periodic, ~hourly)
+[LOCK] 💓 Heartbeat monitor started (instance=...)
+```
+
+**If migration 011 not applied** (early after deploy):
+- Temporary mitigation: Heartbeat check disabled, only idle time checked
+- Production logs will show: `[LOCK] ⚠️ PASSIVE MODE - another instance is ACTIVE`
+- Expected: No more than 1 instance ACTIVE during normal operation
+
+**Automated check**:
+```bash
+./scripts/smoke_unified.py  # includes heartbeat function test
+```
+
+
 ---
 
 ## 4. Health Endpoints

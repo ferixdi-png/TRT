@@ -176,6 +176,13 @@ def _write_heartbeat(pool, lock_key: int, instance_id: str) -> None:
         with conn.cursor() as cur:
             # CRITICAL: Cast instance_id to TEXT explicitly for PostgreSQL
             cur.execute("SELECT update_lock_heartbeat(%s, %s::TEXT)", (lock_key, instance_id))
+        # Log success only once per hour to reduce noise
+        if not hasattr(_write_heartbeat, '_last_success_log'):
+            _write_heartbeat._last_success_log = time.time()
+            logger.debug("[LOCK] ✅ Heartbeat updated successfully (lock_key=%s)", lock_key)
+        elif time.time() - _write_heartbeat._last_success_log > 3600:
+            _write_heartbeat._last_success_log = time.time()
+            logger.info("[LOCK] ✅ Heartbeat still updating (instance=%s)", instance_id[:8])
     except Exception as exc:
         # Only log first failure to avoid spam (heartbeat runs every 15s)
         if not hasattr(_write_heartbeat, '_error_logged'):
@@ -190,6 +197,7 @@ def _write_heartbeat(pool, lock_key: int, instance_id: str) -> None:
 
 
 def start_lock_heartbeat(pool, lock_key: int, instance_id: str):
+    """Start background thread to update heartbeat every 15s."""
     stop_event = threading.Event()
 
     def _loop():
@@ -199,6 +207,7 @@ def start_lock_heartbeat(pool, lock_key: int, instance_id: str):
 
     thread = threading.Thread(target=_loop, daemon=True, name="lock_heartbeat")
     thread.start()
+    logger.info(f"[LOCK] 💓 Heartbeat monitor started (interval={HEARTBEAT_INTERVAL_SECONDS}s, instance={instance_id[:8]})")
     return stop_event, thread
 
 

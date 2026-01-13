@@ -180,6 +180,60 @@ async def test_billing_idempotency() -> bool:
         return False
 
 
+async def test_heartbeat_function() -> bool:
+    """Test that heartbeat function (migration 011) is working."""
+    logger.info("💓 Testing heartbeat function (migration 011)...")
+    try:
+        database_url = os.getenv("DATABASE_URL", "").strip()
+        if not database_url:
+            logger.warning("⚠️  No DATABASE_URL, skipping heartbeat test")
+            return True
+        
+        import asyncpg
+        
+        conn = await asyncpg.connect(database_url)
+        
+        # Verify lock_heartbeat table exists
+        schema_check = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='lock_heartbeat')"
+        )
+        if not schema_check:
+            logger.error("❌ lock_heartbeat table missing (migration 007 not applied)")
+            await conn.close()
+            return False
+        
+        # Test calling update_lock_heartbeat with TEXT parameter
+        # This tests that migration 011 (::TEXT cast) is working
+        try:
+            test_lock_key = 12345
+            test_instance_id = "test_instance_xyz"
+            
+            # This call should succeed if migration 011 is applied
+            await conn.execute(
+                """
+                SELECT update_lock_heartbeat($1, $2)
+                """,
+                test_lock_key,
+                test_instance_id,
+            )
+            
+            logger.info("✅ Heartbeat function OK (migration 011 active)")
+            await conn.close()
+            return True
+        except Exception as func_err:
+            if "does not exist" in str(func_err):
+                logger.error(f"❌ Heartbeat function signature mismatch: {func_err}")
+                logger.error("   (migration 011 may not be applied)")
+            else:
+                logger.error(f"❌ Heartbeat function error: {func_err}")
+            await conn.close()
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Heartbeat test failed: {e}")
+        return False
+
+
 async def test_webhook_simulation() -> bool:
     """Test webhook fast-ack queue."""
     logger.info("🌐 Testing webhook queue simulation...")
@@ -213,6 +267,7 @@ async def main() -> int:
     tests = [
         ("ENV Validation", test_env_validation),
         ("DB Connectivity", test_db_connectivity),
+        ("Heartbeat Function", test_heartbeat_function),
         ("Model SSOT", test_model_ssot),
         ("z-image Baseline", test_z_image_schema),
         ("Webhook Queue", test_webhook_simulation),
