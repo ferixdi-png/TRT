@@ -372,6 +372,29 @@ MODEL_DEFAULTS = {
 ]
 ```
 
+#### 3. aspect_ratio rejection
+
+```python
+# ERROR из логов:
+# "aspect_ratio is not within the range of allowed options"
+
+# ПРИЧИНА: Модель использует специфичный набор aspect_ratio значений
+# (например, grok-imagine использует "3:2" вместо "4:3")
+
+# РЕШЕНИЕ 1: Проверить SOURCE_OF_TRUTH для точных значений
+jq '.models."grok-imagine/text-to-image".input_schema.input.examples[0]' \\
+  models/KIE_SOURCE_OF_TRUTH.json
+
+# РЕШЕНИЕ 2: Добавить model-specific маппинг
+"grok-imagine/text-to-image.aspect_ratio": [
+    "1:1",
+    "3:2",   # Default from SOURCE_OF_TRUTH
+    "2:3",
+    "16:9",
+    "9:16",
+]
+```
+
 ### Workflow при новой validation error
 
 1. **Читай production logs** → находи точную ошибку

@@ -35,6 +35,16 @@ MODEL_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "qwen/image-edit": {
         "image_size": "square_hd",
     },
+    
+    # nano-banana-pro - TEXT2IMAGE with image conditioning
+    # ERROR: Missing required field: image_input, aspect_ratio, resolution, output_format
+    # SOURCE: models/KIE_SOURCE_OF_TRUTH.json (nano-banana-pro examples)
+    "nano-banana-pro": {
+        "image_input": [],              # Empty array for text-only generation
+        "aspect_ratio": "1:1",          # Default from SOURCE_OF_TRUTH
+        "resolution": "1K",             # Default from SOURCE_OF_TRUTH
+        "output_format": "png",         # Default from SOURCE_OF_TRUTH
+    },
 }
 
 

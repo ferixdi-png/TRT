@@ -241,6 +241,11 @@ observability:
       severity: "P0"
       description: "Enum value mismatch - check app/kie/field_options.py mapping"
       example_fix: "Update FIELD_OPTIONS with correct enum values from KIE API error"
+    
+    - pattern: "aspect_ratio is not within the range of allowed options"
+      severity: "P0"
+      description: "aspect_ratio enum mismatch - check SOURCE_OF_TRUTH for correct values"
+      example_fix: "Add model-specific aspect_ratio mapping in field_options.py"
       
   rate_limits:
     duplicate_error_same_type: "1/30s"  # Max 1 identical error per 30 seconds

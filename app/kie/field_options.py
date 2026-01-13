@@ -83,6 +83,15 @@ FIELD_OPTIONS = {
         "1:1",
     ],
     
+    # grok-imagine models (from SOURCE_OF_TRUTH)
+    "grok-imagine/text-to-image.aspect_ratio": [
+        "1:1",
+        "3:2",      # Default from SOURCE_OF_TRUTH
+        "2:3",
+        "16:9",
+        "9:16",
+    ],
+    
     # Google Imagen models (verified from validate_imagen4*.py)
     "google/imagen4.aspect_ratio": [
         "1:1",
@@ -106,6 +115,24 @@ FIELD_OPTIONS = {
         "9:16",
         "3:4",
         "4:3",
+    ],
+    
+    # nano-banana models (from SOURCE_OF_TRUTH)
+    "nano-banana-pro.aspect_ratio": [
+        "1:1",      # Default
+        "9:16",
+    ],
+    
+    "nano-banana-pro.resolution": [
+        "1K",       # Default
+        "2K",
+        "4K",
+    ],
+    
+    "nano-banana-pro.output_format": [
+        "png",      # Default
+        "jpg",
+        "webp",
     ],
     
     # Flux models (verified from validate_flux_2*.py)
