@@ -39,6 +39,8 @@ class TruthValidator:
         """Run all validation checks. Returns True if all pass."""
         print("🔍 Validating architecture truth contract (product/truth.yaml)...\n")
         
+        self.check_no_duplicate_truth()
+        self.check_env_example_required()
         self.check_single_entrypoint()
         self.check_forbidden_entrypoints()
         self.check_wildcard_imports()
@@ -49,6 +51,34 @@ class TruthValidator:
         self.check_invariants()
         
         return self.report_results()
+
+    def check_no_duplicate_truth(self):
+        """Fail if alternate truth files exist outside legacy/quarantine."""
+        legacy_roots = {"legacy", "quarantine"}
+        duplicates = []
+        for path in PROJECT_ROOT.glob("**/SOURCE_OF_TRUTH.json"):
+            parts = set(path.relative_to(PROJECT_ROOT).parts)
+            if parts.isdisjoint(legacy_roots):
+                duplicates.append(str(path.relative_to(PROJECT_ROOT)))
+        if duplicates:
+            self.errors.append(f"❌ Duplicate truth files detected: {duplicates}. Only product/truth.yaml is allowed.")
+        else:
+            print("✅ Single source of truth enforced (product/truth.yaml)")
+
+    def check_env_example_required(self):
+        """Ensure .env.example lists all required env vars from truth.yaml."""
+        env_example_path = PROJECT_ROOT / ".env.example"
+        required_vars = list(self.truth.get("env_contract", {}).get("required", {}).keys())
+        if not env_example_path.exists():
+            self.errors.append("❌ .env.example missing (required for env_contract)")
+            return
+
+        content = env_example_path.read_text()
+        missing = [var for var in required_vars if f"{var}=" not in content]
+        if missing:
+            self.errors.append(f"❌ .env.example missing required env vars: {missing}")
+        else:
+            print(f"✅ .env.example includes required env vars ({len(required_vars)})")
     
     def check_single_entrypoint(self):
         """Verify only ONE production entrypoint exists."""

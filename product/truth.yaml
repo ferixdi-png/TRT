@@ -166,8 +166,9 @@ database:
     mechanism: "pg_advisory_lock"
     parameters: 2  # classid, objid
     parameter_type: "int32"  # signed int32 (-2^31 to 2^31-1)
-    heartbeat_interval_sec: 30
-    stale_threshold_sec: 300
+    heartbeat_interval_sec: 15
+    stale_idle_sec: 30
+    stale_heartbeat_sec: 45
 
 queue:
   implementation: "asyncio.Queue"
@@ -275,6 +276,7 @@ legacy:
   quarantine_directory: "quarantine"
   quarantined_files:
     - "quarantine/legacy-20260113-run_bot.py"
+    - "legacy/SOURCE_OF_TRUTH.json"
   forbidden_imports:
     - "from bot_kie import *"
     - "from run_bot import *"

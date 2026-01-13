@@ -91,7 +91,7 @@ class SmokeTestRunner:
             return False
         
         # Required fields from truth.yaml observability schema
-        required = ["status", "uptime", "active", "lock_state", "queue"]
+        required = ["status", "uptime", "active", "lock_state", "queue", "lock_heartbeat_age"]
         missing = [f for f in required if f not in data]
         
         if missing:
@@ -120,13 +120,15 @@ class SmokeTestRunner:
         resp = requests.get(f"{self.base_url}/health", timeout=5)
         data = resp.json()
         
-        db_status = data.get("database", {})
+        db_status = data.get("database")
         if isinstance(db_status, str):
-            # Old format: "database": "connected"
             return db_status == "connected"
-        
-        # New format: "database": {"status": "connected", "pool_size": 5}
-        return db_status.get("status") == "connected"
+        if isinstance(db_status, dict):
+            return db_status.get("status") == "connected"
+        # Fallback for TRT: db_schema_ready flag
+        if "db_schema_ready" in data:
+            return bool(data.get("db_schema_ready"))
+        return False
     
     def s3_webhook_fast_ack(self) -> bool:
         """S3: Webhook responds < 500ms (fast-ack contract)."""
