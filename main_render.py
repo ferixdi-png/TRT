@@ -881,6 +881,9 @@ async def main() -> None:
     lock = SingletonLock(cfg.database_url)
     active_state = ActiveState(active=False)  # Start as passive, will activate after lock
     
+    # Configure queue manager with dp, bot, and active_state BEFORE starting workers
+    queue_manager.configure(dp, bot, active_state)
+    
     # 🔧 BACKGROUND TASKS: migrations + lock acquisition (NON-BLOCKING)
     # This ensures HTTP server starts IMMEDIATELY without waiting
     async def background_initialization():
@@ -921,11 +924,8 @@ async def main() -> None:
             except Exception as exc:
                 logger.warning(f"[RECONCILER] ⚠️ Failed to start reconciler: {exc}")
         
-        # Start update queue workers
-        from app.utils.update_queue import get_queue_manager
-        queue_mgr = get_queue_manager()
-        queue_mgr.configure(dp, bot, active_state)
-        await queue_mgr.start()
+        # Start update queue workers (already configured above)
+        await queue_manager.start()
         logger.info("[QUEUE] ✅ Workers started (background update processing)")
         
         # PHASE 6: CRITICAL - Setup webhook IMMEDIATELY (before lock acquisition)
