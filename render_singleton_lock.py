@@ -25,8 +25,10 @@ from psycopg2.extensions import connection
 
 logger = logging.getLogger(__name__)
 
-STALE_IDLE_SECONDS = int(os.getenv("LOCK_STALE_IDLE_SECONDS", "30"))  # Reduced from 45s for faster failover
-STALE_HEARTBEAT_SECONDS = int(os.getenv("LOCK_STALE_HEARTBEAT_SECONDS", "45"))  # Reduced from 60s
+# Stale lock detection thresholds (configurable via ENV)
+STALE_IDLE_SECONDS = int(os.getenv("LOCK_STALE_IDLE_SECONDS", "120"))  # INCREASED: 2min (was 30s)
+# Rationale: 30s was causing takeover loops during normal startup (migrations + init take ~60s)
+STALE_HEARTBEAT_SECONDS = int(os.getenv("LOCK_STALE_HEARTBEAT_SECONDS", "300"))  # 5min (currently disabled)
 HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("LOCK_HEARTBEAT_INTERVAL", "15"))
 LOCK_RELEASE_WAIT_SECONDS = float(os.getenv("LOCK_RELEASE_WAIT_SECONDS", "3.0"))
 
@@ -167,13 +169,18 @@ def _get_heartbeat_age_seconds(conn: connection, lock_key: int) -> Optional[floa
 
 
 def _write_heartbeat(pool, lock_key: int, instance_id: str) -> None:
+    """Update lock heartbeat in database (suppress repeated error spam)."""
     try:
         conn = pool.getconn()
         conn.autocommit = True
         with conn.cursor() as cur:
-            cur.execute("SELECT update_lock_heartbeat(%s, %s)", (lock_key, instance_id))
+            # CRITICAL: Cast instance_id to TEXT explicitly for PostgreSQL
+            cur.execute("SELECT update_lock_heartbeat(%s, %s::TEXT)", (lock_key, instance_id))
     except Exception as exc:
-        logger.warning("[LOCK] Heartbeat update failed: %s", exc)
+        # Only log first failure to avoid spam (heartbeat runs every 15s)
+        if not hasattr(_write_heartbeat, '_error_logged'):
+            logger.warning("[LOCK] Heartbeat update failed (will suppress further errors): %s", exc)
+            _write_heartbeat._error_logged = True
     finally:
         if "conn" in locals():
             try:
@@ -333,18 +340,15 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                     ) if _heartbeat_supported(conn) else False
                     idle_stale = idle_sec is not None and idle_sec > STALE_IDLE_SECONDS
                     
-                    if idle_stale or heartbeat_stale:
-                        stale_reasons = []
-                        if idle_stale:
-                            stale_reasons.append(f"idle>{STALE_IDLE_SECONDS}s")
-                        if heartbeat_stale:
-                            stale_reasons.append(f"heartbeat>{STALE_HEARTBEAT_SECONDS}s")
-                        reason_label = ", ".join(stale_reasons)
+                    # CRITICAL: Only check idle_stale, ignore heartbeat until migration 011 applied
+                    # (heartbeat was broken in prod, causing infinite takeover loops)
+                    if idle_stale:
+                        reason_label = f"idle>{STALE_IDLE_SECONDS}s"
                         logger.warning(
-                            "[LOCK] ⚠️ STALE LOCK DETECTED: pid=%s idle=%.0fs heartbeat=%s (%s)",
+                            "[LOCK] ⚠️ STALE LOCK: pid=%s idle=%.0fs heartbeat=%s (%s)",
                             pid,
                             idle_sec or 0,
-                            f"{heartbeat_age:.0f}s" if heartbeat_age is not None else "none",
+                            f"{heartbeat_age:.0f}s" if heartbeat_age is not None else "N/A",
                             reason_label,
                         )
                         logger.warning(f"[LOCK] 🔥 Terminating stale process pid={pid}...")

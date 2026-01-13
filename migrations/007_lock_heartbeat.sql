@@ -12,14 +12,14 @@ CREATE TABLE IF NOT EXISTS lock_heartbeat (
 CREATE INDEX IF NOT EXISTS idx_lock_heartbeat_last_heartbeat 
 ON lock_heartbeat(last_heartbeat);
 
--- Function to update heartbeat
+-- Function to update heartbeat (FIXED: explicit type cast for psycopg2 compatibility)
 CREATE OR REPLACE FUNCTION update_lock_heartbeat(
     p_lock_key BIGINT,
     p_instance_id TEXT
 ) RETURNS VOID AS $$
 BEGIN
     INSERT INTO lock_heartbeat (lock_key, instance_id, last_heartbeat, acquired_at)
-    VALUES (p_lock_key, p_instance_id, NOW(), NOW())
+    VALUES (p_lock_key, p_instance_id::TEXT, NOW(), NOW())
     ON CONFLICT (lock_key) DO UPDATE
     SET last_heartbeat = NOW(),
         instance_id = EXCLUDED.instance_id;
