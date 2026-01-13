@@ -18,6 +18,7 @@ from typing import Optional, Literal
 
 from app.utils.logging_config import get_logger
 from app.config import get_settings
+from app.utils.runtime_state import runtime_state
 
 logger = get_logger(__name__)
 
@@ -100,8 +101,17 @@ def _acquire_postgres_lock() -> Optional[object]:
             # Retry НЕ НУЖЕН - если lock не получен, значит другой АКТИВНЫЙ инстанс
             conn = render_singleton_lock.acquire_lock_session(pool, lock_key)
             if conn:
+                instance_id = os.getenv("INSTANCE_NAME", runtime_state.instance_id)
+                heartbeat_stop, _thread = render_singleton_lock.start_lock_heartbeat(
+                    pool, lock_key, instance_id
+                )
                 logger.info(f"[LOCK] PostgreSQL advisory lock acquired (key={lock_key})")
-                return {'connection': conn, 'pool': pool, 'lock_key': lock_key}
+                return {
+                    'connection': conn,
+                    'pool': pool,
+                    'lock_key': lock_key,
+                    'heartbeat_stop': heartbeat_stop,
+                }
             
             logger.debug(f"[LOCK] PostgreSQL advisory lock NOT acquired (key={lock_key}) - another active instance")
             return None
@@ -264,6 +274,7 @@ def release_single_instance_lock():
                 if conn and pool and lock_key is not None:
                     try:
                         import render_singleton_lock
+                        render_singleton_lock.stop_lock_heartbeat(lock_data.get("heartbeat_stop"))
                         render_singleton_lock.release_lock_session(pool, conn, lock_key)
                         logger.info("[LOCK] PostgreSQL advisory lock released")
                     except Exception as e:
@@ -385,6 +396,7 @@ class SingletonLock:
         self.instance_name = instance_name
         self._lock_handle = None  # dict with connection/pool/lock_key from render_singleton_lock
         self._acquired = False
+        self._heartbeat_stop = None
     
     async def acquire(self, timeout: float = 5.0) -> bool:
         """
@@ -406,6 +418,7 @@ class SingletonLock:
             
             if lock_data:
                 self._lock_handle = lock_data
+                self._heartbeat_stop = lock_data.get("heartbeat_stop")
                 self._acquired = True
                 logger.info(f"✅ Singleton lock acquired by {self.instance_name}")
                 return True
@@ -441,6 +454,7 @@ class SingletonLock:
                 if conn and pool and lock_key is not None:
                     try:
                         import render_singleton_lock
+                        render_singleton_lock.stop_lock_heartbeat(self._heartbeat_stop)
                         render_singleton_lock.release_lock_session(pool, conn, lock_key)
                         logger.info(f"✅ Singleton lock fully released by {self.instance_name}")
                     except Exception as e:
@@ -449,4 +463,47 @@ class SingletonLock:
             logger.error(f"❌ Error during lock release: {e}", exc_info=True)
         finally:
             self._lock_handle = None
+            self._heartbeat_stop = None
 
+    def get_lock_debug_info(self) -> dict:
+        """Return diagnostic info about lock holder and heartbeat."""
+        try:
+            import render_singleton_lock
+        except Exception:
+            return {}
+
+        lock_key = None
+        pool = None
+        if isinstance(self._lock_handle, dict):
+            lock_key = self._lock_handle.get("lock_key")
+            pool = self._lock_handle.get("pool")
+
+        if not lock_key or not pool:
+            return {}
+
+        info = render_singleton_lock.get_lock_holder_info(pool, lock_key)
+        info["takeover_event"] = render_singleton_lock.get_last_takeover_event()
+        return info
+
+
+def get_lock_debug_info() -> dict:
+    """Return lock debug info for health endpoints."""
+    info = {
+        "state": "ACTIVE" if _is_active else "PASSIVE",
+    }
+    try:
+        import render_singleton_lock
+    except Exception:
+        return info
+
+    lock_key = None
+    pool = None
+    if isinstance(_lock_handle, dict):
+        lock_key = _lock_handle.get("lock_key")
+        pool = _lock_handle.get("pool")
+
+    if lock_key and pool:
+        info.update(render_singleton_lock.get_lock_holder_info(pool, lock_key))
+
+    info["takeover_event"] = render_singleton_lock.get_last_takeover_event()
+    return info
