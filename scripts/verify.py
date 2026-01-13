@@ -43,6 +43,7 @@ class TruthValidator:
         self.check_forbidden_entrypoints()
         self.check_wildcard_imports()
         self.check_circular_imports()
+        self.check_html_entities()
         self.check_required_files()
         self.check_forbidden_env_vars()
         self.check_invariants()
@@ -129,6 +130,40 @@ class TruthValidator:
             self.errors.append(f"❌ Circular import patterns:\n  " + "\n  ".join(violations))
         else:
             print("✅ No circular import patterns detected")
+    
+    def check_html_entities(self):
+        """Check for unsafe HTML entity usage in message texts."""
+        bot_handlers = PROJECT_ROOT / "bot" / "handlers"
+        if not bot_handlers.exists():
+            return
+        
+        # Forbidden: ₽ symbol in message texts (use "руб." instead)
+        # Forbidden: < > inside message strings (must be escaped)
+        violations = []
+        for py_file in bot_handlers.rglob("*.py"):
+            content = py_file.read_text()
+            lines = content.split("\n")
+            
+            for i, line in enumerate(lines, 1):
+                # Check for ₽ in string literals
+                if "₽" in line and ("edit_text" in line or "send_message" in line or "answer" in line):
+                    relative = py_file.relative_to(PROJECT_ROOT)
+                    violations.append(f"{relative}:{i}: Use 'руб.' instead of ₽ symbol")
+                
+                # Check for unescaped < > in message strings
+                if re.search(r'(edit_text|send_message|answer)\s*\([^)]*[<>](?!b>|/b>|i>|/i>|code>|/code>|pre>|/pre>)', line):
+                    relative = py_file.relative_to(PROJECT_ROOT)
+                    if not any(skip in line for skip in ["&lt;", "&gt;", "html.escape"]):
+                        violations.append(f"{relative}:{i}: Unescaped < or > in message text")
+        
+        if violations:
+            # Limit to first 5 violations (may be many)
+            shown = violations[:5]
+            self.warnings.append(f"⚠️  HTML entity issues:\n  " + "\n  ".join(shown))
+            if len(violations) > 5:
+                self.warnings.append(f"  ... and {len(violations) - 5} more")
+        else:
+            print("✅ No unsafe HTML entities detected")
     
     def check_required_files(self):
         """Verify all contract-required files exist."""

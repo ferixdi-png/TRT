@@ -256,6 +256,69 @@ await conn.execute(
 **Правило**: PostgreSQL не поддерживает параметры внутри строковых литералов INTERVAL.
 Всегда используй конкатенацию `($N || ' unit')::INTERVAL` или функцию `make_interval()`.
 
+### Database INSERT statements (CRITICAL)
+```python
+# ❌ ПЛОХО: missing PRIMARY KEY field
+await conn.execute(
+    "INSERT INTO users (user_id, username) VALUES ($1, $2)",
+    user_id, username
+)
+# ОШИБКА: null value in column "id" violates not-null constraint
+
+# ✅ ХОРОШО: all required fields including PK
+await conn.execute(
+    "INSERT INTO users (id, user_id, username) VALUES ($1, $1, $2)",
+    user_id, username
+)
+
+# ✅ Альтернатива: check schema for SERIAL/DEFAULT
+# If id is BIGSERIAL PRIMARY KEY, you don't need to specify it
+```
+
+**Правило**: Всегда проверяй CREATE TABLE для NOT NULL constraints без DEFAULT.
+При INSERT указывай ВСЕ обязательные поля (PRIMARY KEY, NOT NULL без DEFAULT).
+
+## Telegram HTML Safety
+
+### Never use ₽ symbol in HTML messages
+```python
+# ❌ ПЛОХО: ₽ breaks HTML parser
+await message.answer(
+    "Цена: 10₽\nСкидка: (<5₽)",
+    parse_mode="HTML"
+)
+# ОШИБКА: TelegramBadRequest: can't parse entities: Unsupported start tag "1₽)"
+
+# ✅ ХОРОШО: use "руб." instead
+await message.answer(
+    "Цена: 10 руб.\nСкидка: (до 5 руб.)",
+    parse_mode="HTML"
+)
+```
+
+### Use HTML sanitizer for user content
+```python
+from bot.utils import sanitize_message_html, format_price_rub
+
+# ❌ ПЛОХО: raw user input in HTML
+prompt = user_input  # May contain < > & "
+await message.answer(f"<b>Prompt:</b> {prompt}", parse_mode="HTML")
+
+# ✅ ХОРОШО: sanitize first
+safe_prompt = sanitize_message_html(user_input)
+await message.answer(f"<b>Prompt:</b> {safe_prompt}", parse_mode="HTML")
+
+# ✅ Use helper for prices
+price_text = format_price_rub(10.50)  # "10.5 руб."
+await message.answer(f"<b>Цена:</b> {price_text}", parse_mode="HTML")
+```
+
+**Правило**: В Telegram HTML:
+- НИКОГДА не используй символ ₽ (ломает парсер)
+- ВСЕГДА экранируй пользовательский ввод через `sanitize_message_html()`
+- Используй `format_price_rub()` для цен
+- Проверяй сообщения через `scripts/verify.py` (обнаруживает ₽)
+
 ## Security
 
 ### Validate all user input

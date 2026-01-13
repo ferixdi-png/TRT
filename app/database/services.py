@@ -111,8 +111,8 @@ class UserService:
             
             # Create new user + wallet
             user = await conn.fetchrow("""
-                INSERT INTO users (user_id, username, first_name)
-                VALUES ($1, $2, $3)
+                INSERT INTO users (id, user_id, username, first_name)
+                VALUES ($1, $1, $2, $3)
                 RETURNING *
             """, user_id, username, first_name)
             

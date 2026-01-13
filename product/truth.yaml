@@ -223,6 +223,14 @@ observability:
       severity: "P1"
       description: "Circular import or bot not exported - use get_queue_manager().get_bot() instead"
       
+    - pattern: "NotNullViolationError.*null value in column .* violates not-null constraint"
+      severity: "P0"
+      description: "Database INSERT missing required field - check schema vs INSERT columns"
+      
+    - pattern: "TelegramBadRequest.*can't parse entities"
+      severity: "P1"
+      description: "Invalid HTML entities in message - use bot/utils/html_safe.py helpers"
+      
   rate_limits:
     duplicate_error_same_type: "1/30s"  # Max 1 identical error per 30 seconds
     lock_held_spam: "1/30s"
