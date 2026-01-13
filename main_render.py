@@ -393,6 +393,7 @@ def _make_web_app(
             "webhook_mode": runtime_state.bot_mode == "webhook",
             "lock_acquired": runtime_state.lock_acquired,
             "db_schema_ready": runtime_state.db_schema_ready,
+            "queue_depth": queue_metrics.get("queue_depth_current", 0),
             "queue": queue_metrics,
         }
         return web.json_response(payload)
@@ -849,10 +850,18 @@ def _make_web_app(
 
 
 async def _start_web_server(app: web.Application, port: int) -> web.AppRunner:
+    """Start aiohttp server with deterministic port binding."""
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    host = "0.0.0.0"  # Always bind to all interfaces for Render
+    site = web.TCPSite(runner, host=host, port=port)
     await site.start()
+    
+    # CRITICAL: Log successful bind BEFORE background tasks
+    logger.info(
+        "[HTTP] ✅ Server listening on %s:%d (socket open, ready for traffic)",
+        host, port
+    )
     return runner
 
 

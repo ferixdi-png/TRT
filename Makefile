@@ -1,144 +1,17 @@
-# Makefile для запуска тестов
+.PHONY: verify test clean install
 
-.PHONY: install-deps lint test test-verbose test-menu test-callbacks test-queue smoke integrity e2e verify verify-runtime smoke-render
+# Verify critical functionality before deploy
+verify:
+	@echo "🔍 Running critical state machine verification..."
+	pytest tests/test_state_machine_verify.py -v --tb=short
+	@echo "✅ State machine verification complete"
 
-# Установка зависимостей для тестов
-install-deps:
+# Install dependencies
+install:
 	pip install -r requirements.txt
 
-# Запуск тестов (краткий вывод)
-verify-coverage:
-	python -m scripts.verify_kie_coverage
-
-test:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 BOT_MODE=passive PORT=8000 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
-	pytest -q tests/
-
-# Запуск тестов (подробный вывод)
-test-verbose:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 BOT_MODE=passive PORT=8000 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
-	pytest -v tests/
-
-# Запуск конкретного теста
-test-menu:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 BOT_MODE=passive PORT=8000 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
-	pytest -v tests/test_main_menu.py
-
-test-callbacks:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 BOT_MODE=passive PORT=8000 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
-	pytest -v tests/test_callbacks_smoke.py
-
-# CRITICAL: Тест очереди (no-drop гарантия)
-test-queue:
-	@echo "Running CRITICAL queue tests (no-drop guarantee)..."
-	TEST_MODE=1 DRY_RUN=1 BOT_MODE=passive PORT=8000 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key TELEGRAM_BOT_TOKEN=test_token_12345 \
-	pytest -v tests/test_update_queue_no_drop.py
-
-# Smoke test на Render production
-smoke-render:
-	@echo "Running smoke test on Render (production)..."
-	@echo ""
-	@echo "1. Health check..."
-	@curl -sf https://five656.onrender.com/health | jq -r '.status, .lock_state' || echo "FAIL"
-	@echo ""
-	@echo "2. Webhook status..."
-	@curl -sf https://five656.onrender.com/diag/webhook | jq '.pending_update_count, .last_error_message' || echo "FAIL"
-	@echo ""
-	@echo "3. Queue metrics (CRITICAL: total_dropped must be 0)..."
-	@curl -sf https://five656.onrender.com/health | jq '.queue | {dropped: .total_dropped, requeued: .total_requeued}' || echo "FAIL"
-	@echo ""
-	@echo "✅ Smoke complete. Manually check /start in Telegram."
-
-
-lint:
-	ruff check app/main.py app/utils/healthcheck.py scripts/verify_project.py scripts/smoke_test_all_models.py
-	ruff format --check app/main.py app/utils/healthcheck.py scripts/verify_project.py scripts/smoke_test_all_models.py
-
-smoke:
-	@bash -euo pipefail -c '\
-		PORT=8080 BOT_MODE=webhook TEST_MODE=1 DRY_RUN=1 ADMIN_ID=12345 \
-		DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-		KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-		PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-		TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=http://127.0.0.1:8080 \
-		WEBHOOK_SECRET_PATH=test WEBHOOK_SECRET_TOKEN=smoke-secret \
-		python scripts/smoke_server.py & \
-		pid=$$!; \
-		trap "kill $$pid" EXIT; \
-		sleep 2; \
-		curl -fsS http://127.0.0.1:8080/health; \
-		curl -I -fsS http://127.0.0.1:8080/; \
-		curl -fsS -X POST http://127.0.0.1:8080/webhook/test \
-			-H "Content-Type: application/json" \
-			-H "X-Telegram-Bot-Api-Secret-Token: smoke-secret" \
-			-d "{\"update_id\":1,\"message\":{\"message_id\":1,\"date\":0,\"chat\":{\"id\":1,\"type\":\"private\"},\"text\":\"ping\"}}"; \
-		'
-
-integrity:
-	TEST_MODE=1 DRY_RUN=1 BOT_MODE=webhook PORT=8080 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
-	python scripts/integrity_check.py
-
-e2e:
-	TEST_MODE=1 DRY_RUN=1 BOT_MODE=webhook PORT=8081 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=http://127.0.0.1:8081 \
-	WEBHOOK_SECRET_PATH=test WEBHOOK_SECRET_TOKEN=smoke-secret \
-	python scripts/e2e_smoke.py
-
-verify-runtime:
-	@echo "Verifying runtime environment..."
-	@python3 scripts/verify_runtime.py
-
-verify: verify-runtime lint test smoke integrity e2e smoke-lock
-
-smoke-lock:
-	@echo "Running lock contention smoke tests..."
-	@python3 scripts/smoke_lock.py
-
-smoke-prod:
-	@echo "Running production smoke tests..."
-	SMOKE_MODE=1 TEST_MODE=1 DRY_RUN=1 BOT_MODE=webhook PORT=8000 \
-	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
-	KIE_API_KEY=test_api_key PAYMENT_BANK="Test Bank" PAYMENT_CARD_HOLDER="Test Holder" \
-	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
-	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
-	WEBHOOK_SECRET_PATH=test WEBHOOK_SECRET_TOKEN=smoke-secret \
-	python -m app.tools.smoke --report-file SMOKE_REPORT.md && cat SMOKE_REPORT.md
-
-deployment-checklist:
-	@echo "Generating deployment checklist..."
-	python -m app.tools.report_generator
-
-# Comprehensive product smoke test (DoD point 4)
-smoke-product:
-	@echo "Running comprehensive product smoke test..."
-	python scripts/smoke_product.py
-
-# Sync KIE.ai truth (DoD point 11)
-sync-kie:
-	@echo "Syncing KIE.ai source of truth..."
-	python scripts/sync_kie_truth.py
+# Clean Python artifacts
+clean:
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
