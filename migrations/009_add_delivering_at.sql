@@ -3,6 +3,15 @@
 
 DO $$ 
 BEGIN
+    -- Add delivered_at column if not exists (CRITICAL: needed for atomic lock)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='generation_jobs' AND column_name='delivered_at'
+    ) THEN
+        ALTER TABLE generation_jobs ADD COLUMN delivered_at TIMESTAMP;
+        RAISE NOTICE 'Added delivered_at column to generation_jobs table';
+    END IF;
+
     -- Add delivering_at column if not exists
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
@@ -14,6 +23,14 @@ BEGIN
 
     -- Add delivering_at to jobs table (new schema)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'jobs') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name='jobs' AND column_name='delivered_at'
+        ) THEN
+            ALTER TABLE jobs ADD COLUMN delivered_at TIMESTAMP;
+            RAISE NOTICE 'Added delivered_at column to jobs table';
+        END IF;
+
         IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns 
             WHERE table_name='jobs' AND column_name='delivering_at'
