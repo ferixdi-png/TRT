@@ -383,6 +383,15 @@ def _make_web_app(
         else:
             lock_debug = get_lock_debug_info()
 
+        # Defense-in-depth: ensure idle_duration is JSON serializable (float, not Decimal)
+        idle_duration = lock_debug.get("idle_duration")
+        if idle_duration is not None:
+            idle_duration = float(idle_duration)
+        
+        heartbeat_age = lock_debug.get("heartbeat_age")
+        if heartbeat_age is not None:
+            heartbeat_age = float(heartbeat_age)
+
         payload = {
             "status": "ok",
             "uptime": uptime,
@@ -391,7 +400,8 @@ def _make_web_app(
             "webhook_mode": runtime_state.bot_mode == "webhook",
             "lock_acquired": runtime_state.lock_acquired,
             "lock_holder_pid": lock_debug.get("holder_pid"),
-            "lock_idle_duration": lock_debug.get("idle_duration"),
+            "lock_idle_duration": idle_duration,
+            "lock_heartbeat_age": heartbeat_age,
             "lock_takeover_event": lock_debug.get("takeover_event"),
             "db_schema_ready": runtime_state.db_schema_ready,
             "queue": queue_metrics,
@@ -418,6 +428,15 @@ def _make_web_app(
         else:
             lock_debug = get_lock_debug_info()
 
+        # Defense-in-depth: ensure idle_duration is JSON serializable (float, not Decimal)
+        idle_duration = lock_debug.get("idle_duration")
+        if idle_duration is not None:
+            idle_duration = float(idle_duration)
+        
+        heartbeat_age = lock_debug.get("heartbeat_age")
+        if heartbeat_age is not None:
+            heartbeat_age = float(heartbeat_age)
+
         payload = {
             "status": "ok",
             "uptime": uptime,
@@ -426,7 +445,8 @@ def _make_web_app(
             "webhook_mode": runtime_state.bot_mode == "webhook",
             "lock_acquired": runtime_state.lock_acquired,
             "lock_holder_pid": lock_debug.get("holder_pid"),
-            "lock_idle_duration": lock_debug.get("idle_duration"),
+            "lock_idle_duration": idle_duration,
+            "lock_heartbeat_age": heartbeat_age,
             "lock_takeover_event": lock_debug.get("takeover_event"),
             "db_schema_ready": runtime_state.db_schema_ready,
             "queue_depth": queue_metrics.get("queue_depth_current", 0),
