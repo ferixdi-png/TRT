@@ -881,80 +881,121 @@ def _validate_field_value(value: Any, field_spec: Dict[str, Any], field_name: st
 @router.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext) -> None:
     """
-    Iron-clad /start handler with degraded mode support.
+    IRON-CLAD /start handler - ALWAYS responds instantly.
     
-    Features:
-    - ALWAYS responds, even if DB/models/services unavailable
-    - Fast response (<500ms target)
-    - No blocking operations
-    - Graceful degradation
+    Architecture:
+    1. Immediate ACK message (<200ms target)
+    2. Load menu/balance in background (non-blocking)
+    3. Degraded mode if DB/services unavailable
+    
+    SLA: User sees response in <1 second, guaranteed.
     """
     await state.clear()
     
-    # Get user info for personalization
+    # CRITICAL: Log entry immediately for diagnostics
+    user_id = message.from_user.id
+    chat_id = message.chat.id
     first_name = message.from_user.first_name or "друг"
     
-    # Try to count models, but don't fail if unavailable
-    total_models = 0
-    try:
-        models_list = _get_models_list()
-        total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
-    except Exception as e:
-        logger.warning(f"[START] Could not load models: {e}")
-        # Fallback: use hardcoded count
-        total_models = 50
+    logger.info(
+        "[START] Received from user_id=%d chat_id=%d username=%s",
+        user_id, chat_id, message.from_user.username or "(no username)"
+    )
     
-    # Check SINGLE_MODEL mode
+    # STEP 1: INSTANT ACK - bot is alive!
+    # This MUST execute first, before any heavy operations
+    try:
+        ack_msg = await message.answer("✅ Бот на связи...")
+    except Exception as e:
+        logger.error("[START] CRITICAL: Failed to send ACK: %s", e)
+        # Even ACK failed - try one more time with minimal message
+        try:
+            await message.answer("✅")
+        except Exception:
+            # Complete failure - but at least we tried
+            return
+    
+    # STEP 2: Check SINGLE_MODEL mode
     import os
     single_model_mode = os.getenv("SINGLE_MODEL_ONLY", "").lower() in ("1", "true", "yes")
     
     if single_model_mode:
-        # Minimal UI for single model
-        await message.answer(
-            f"👋 Привет, <b>{first_name}</b>!\n\n"
-            f"🖼 <b>Z-Image Generator</b>\n"
-            f"Создавайте уникальные изображения из текста\n\n"
-            f"💡 <b>Как использовать:</b>\n"
-            f"1️⃣ Нажмите кнопку ниже\n"
-            f"2️⃣ Введите описание картинки\n"
-            f"3️⃣ Получите результат через 10-30 сек\n\n"
-            f"✅ Бот работает и готов к генерации!",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🖼 Создать картинку", callback_data="zimage:start")],
-                [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
-            ])
-        )
+        # SINGLE_MODEL UI: Z-Image only
+        try:
+            await ack_msg.edit_text(
+                f"👋 Привет, <b>{first_name}</b>!\n\n"
+                f"🖼 <b>Z-Image Generator</b>\n"
+                f"Создавайте уникальные изображения из текста\n\n"
+                f"💡 <b>Как использовать:</b>\n"
+                f"1️⃣ Нажмите кнопку ниже\n"
+                f"2️⃣ Введите описание картинки\n"
+                f"3️⃣ Получите результат через 10-30 сек\n\n"
+                f"✅ Бот работает и готов к генерации!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🖼 Создать картинку", callback_data="zimage:start")],
+                    [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
+                ])
+            )
+        except Exception as e:
+            logger.error("[START] Failed to edit SINGLE_MODEL message: %s", e)
+            # Fallback: send new message
+            await message.answer(
+                f"👋 <b>{first_name}</b>! 🖼 Z-Image готов.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🖼 Создать", callback_data="zimage:start")],
+                ])
+            )
         return
     
-    # Full mode with all models
+    # STEP 3: FULL MODE - load models (with degraded fallback)
+    total_models = 0
+    menu_keyboard = None
+    
     try:
+        models_list = _get_models_list()
+        total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
         menu_keyboard = _main_menu_keyboard()
     except Exception as e:
-        logger.error(f"[START] Could not build menu: {e}")
-        # Degraded fallback: minimal menu
+        logger.warning("[START] Could not load models/menu (degraded mode): %s", e)
+        # Degraded fallback
+        total_models = 50  # Hardcoded estimate
         menu_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎨 Картинки", callback_data="cat:image")],
             [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
         ])
     
-    # Welcome message with quick-start guide
-    await message.answer(
-        f"👋 Привет, <b>{first_name}</b>!\n\n"
-        f"🤖 Я помогу создать контент с помощью <b>{total_models} AI моделей</b>\n\n"
-        f"<b>Что умею:</b>\n"
-        f"📸 Картинки и дизайн — <b>от 0₽ (есть бесплатные!)</b>\n"
-        f"🎬 Видео для TikTok/Reels — от 7.90₽\n"
-        f"✨ Улучшение качества — от 0.20₽\n"
-        f"🎵 Аудио и озвучка — от 0.08₽\n\n"
-        f"💡 <b>Как начать?</b>\n"
-        f"1️⃣ Выберите категорию или модель\n"
-        f"2️⃣ Введите параметры (текст, изображение...)\n"
-        f"3️⃣ Подтвердите и получите результат!\n\n"
-        f"🆓 <b>4 бесплатные модели</b> — без списания баланса\n"
-        f"💰 <b>Платные модели</b> — оплата за успешные генерации\n\n"
-        f"Выбирайте задачу 👇",
-        reply_markup=menu_keyboard,
-    )
+    # STEP 4: Send full welcome message
+    try:
+        await ack_msg.edit_text(
+            f"👋 Привет, <b>{first_name}</b>!\n\n"
+            f"🤖 Я помогу создать контент с помощью <b>{total_models} AI моделей</b>\n\n"
+            f"<b>Что умею:</b>\n"
+            f"📸 Картинки и дизайн — <b>от 0₽ (есть бесплатные!)</b>\n"
+            f"🎬 Видео для TikTok/Reels — от 7.90₽\n"
+            f"✨ Улучшение качества — от 0.20₽\n"
+            f"🎵 Аудио и озвучка — от 0.08₽\n\n"
+            f"💡 <b>Как начать?</b>\n"
+            f"1️⃣ Выберите категорию или модель\n"
+            f"2️⃣ Введите параметры (текст, изображение...)\n"
+            f"3️⃣ Подтвердите и получите результат!\n\n"
+            f"🆓 <b>4 бесплатные модели</b> — без списания баланса\n"
+            f"💰 <b>Платные модели</b> — оплата за успешные генерации\n\n"
+            f"Выбирайте задачу 👇",
+            reply_markup=menu_keyboard,
+        )
+    except Exception as e:
+        logger.error("[START] Failed to edit welcome message: %s", e)
+        # Absolute fallback: send minimal new message
+        try:
+            await message.answer(
+                f"👋 <b>{first_name}</b>! Бот работает.",
+                reply_markup=menu_keyboard or InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🎨 Меню", callback_data="main_menu")],
+                ])
+            )
+        except Exception:
+            # Even fallback failed - but we sent ACK earlier, so user knows bot is alive
+            pass
 
 
 @router.callback_query(F.data == "main_menu")

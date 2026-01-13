@@ -28,6 +28,9 @@ class QueueMetrics:
     total_processed: int = 0
     total_dropped: int = 0
     total_errors: int = 0
+    total_held: int = 0  # Held in PASSIVE mode
+    total_requeued: int = 0  # Put back to queue
+    total_processed_degraded: int = 0  # Processed despite PASSIVE (degraded mode)
     workers_active: int = 0
     queue_depth_current: int = 0
     last_drop_time: Optional[float] = None
@@ -116,9 +119,17 @@ class UpdateQueueManager:
         """
         self._metrics.total_received += 1
         
+        # Wrap update with metadata for PASSIVE handling
+        item = {
+            "update": update,
+            "update_id": update_id,
+            "attempt": 0,
+            "first_seen": time.time(),
+        }
+        
         try:
             # Try to put without blocking
-            self._queue.put_nowait((update, update_id))
+            self._queue.put_nowait(item)
             self._metrics.queue_depth_current = self._queue.qsize()
             return True
         except asyncio.QueueFull:
@@ -135,27 +146,88 @@ class UpdateQueueManager:
         """Background worker that processes updates from queue."""
         logger.info("[WORKER_%d] Started", worker_id)
         
+        # Constants for PASSIVE handling
+        MAX_HOLD_TIME_SEC = 30.0  # Max time to hold update in PASSIVE
+        REQUEUE_DELAY_SEC = 0.5  # Delay before requeue
+        MAX_REQUEUE_ATTEMPTS = 60  # 60 attempts * 0.5s = 30s max
+        
         while self._running:
             try:
                 # Wait for update from queue
-                update, update_id = await asyncio.wait_for(
+                item = await asyncio.wait_for(
                     self._queue.get(),
                     timeout=1.0
                 )
+                
+                # Extract item metadata
+                update = item["update"]
+                update_id = item["update_id"]
+                attempt = item["attempt"]
+                first_seen = item["first_seen"]
                 
                 self._metrics.workers_active += 1
                 self._metrics.queue_depth_current = self._queue.qsize()
                 
                 try:
-                    # Check if we should process (ACTIVE mode only)
+                    # Check if we should process (ACTIVE mode check)
                     if self._active_state and not self._active_state.active:
-                        logger.debug(
-                            "[WORKER_%d] Skipping update_id=%s (PASSIVE mode)",
-                            worker_id, update_id
-                        )
+                        # PASSIVE MODE: Don't drop - requeue or process degraded
+                        now = time.time()
+                        held_time = now - first_seen
+                        
+                        if held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:
+                            # Held too long - process anyway in DEGRADED mode
+                            logger.warning(
+                                "[WORKER_%d] DEGRADED processing update_id=%s (held %.1fs, attempt %d) - bot must respond!",
+                                worker_id, update_id, held_time, attempt
+                            )
+                            self._metrics.total_processed_degraded += 1
+                            
+                            # Process update even in PASSIVE (handlers should be defensive)
+                            start_time = time.monotonic()
+                            await asyncio.wait_for(
+                                self._dp.feed_update(self._bot, update),
+                                timeout=30.0
+                            )
+                            elapsed = time.monotonic() - start_time
+                            
+                            logger.info(
+                                "[WORKER_%d] DEGRADED processed update_id=%s in %.2fs",
+                                worker_id, update_id, elapsed
+                            )
+                        else:
+                            # Still within hold window - requeue for later
+                            logger.debug(
+                                "[WORKER_%d] PASSIVE hold update_id=%s (attempt %d, held %.1fs) - requeuing",
+                                worker_id, update_id, attempt, held_time
+                            )
+                            self._metrics.total_held += 1
+                            
+                            # Wait a bit before requeue to avoid busy loop
+                            await asyncio.sleep(REQUEUE_DELAY_SEC)
+                            
+                            # Requeue with incremented attempt
+                            item["attempt"] = attempt + 1
+                            try:
+                                self._queue.put_nowait(item)
+                                self._metrics.total_requeued += 1
+                            except asyncio.QueueFull:
+                                # Queue full during requeue - process anyway
+                                logger.warning(
+                                    "[WORKER_%d] Queue full during requeue, processing update_id=%s anyway",
+                                    worker_id, update_id
+                                )
+                                self._metrics.total_processed_degraded += 1
+                                await asyncio.wait_for(
+                                    self._dp.feed_update(self._bot, update),
+                                    timeout=30.0
+                                )
+                        
+                        # Mark task done
+                        self._queue.task_done()
                         continue
                     
-                    # Process update
+                    # ACTIVE MODE: Process normally
                     start_time = time.monotonic()
                     
                     await asyncio.wait_for(
@@ -213,6 +285,9 @@ class UpdateQueueManager:
         return {
             "total_received": self._metrics.total_received,
             "total_processed": self._metrics.total_processed,
+            "total_processed_degraded": self._metrics.total_processed_degraded,
+            "total_held": self._metrics.total_held,
+            "total_requeued": self._metrics.total_requeued,
             "total_dropped": self._metrics.total_dropped,
             "total_errors": self._metrics.total_errors,
             "workers_active": self._metrics.workers_active,
