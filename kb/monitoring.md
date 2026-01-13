@@ -1,5 +1,109 @@
 # Monitoring & Observability
 
+## P0 Telemetry Infrastructure (Cycle 9)
+
+**Status**: ✅ INTEGRATED (2026-01-13)
+
+### Цель
+Сделать продукт **инструментируемым** — любую проблему можно диагностировать по логам за 60 секунд без участия разработчика.
+
+### Компоненты
+
+#### 1. Telemetry Middleware ✅
+- **Файл**: `app/telemetry/telemetry_helpers.py`
+- **Регистрация**: `main_render.py:259` - `dp.update.middleware(TelemetryMiddleware())`
+- **Функция**: Автоматически добавляет `correlation_id` (cid) и `bot_state` ко всем updates
+- **События**:
+  - `UPDATE_RECEIVED` - каждый webhook
+  - `DISPATCH_OK` - успешная обработка
+  - `DISPATCH_FAIL` - ошибка обработки
+
+#### 2. Logging Contract ✅
+- **Файл**: `app/telemetry/logging_contract.py`
+- **Функция**: `log_event(name, correlation_id, ...)` - unified structured logging
+- **Формат**: JSON line (одна строка = одно событие)
+- **Поля**: 50+ опциональных (user_id, chat_id, screen_id, button_id, reason_code, latency_ms, etc.)
+- **PII Safety**: Автоматический hash для user_id/chat_id (8-char SHA256)
+
+#### 3. UI Registry (SSOT) ✅
+- **Файл**: `app/telemetry/ui_registry.py`
+- **Screens**: 11 enum значений (MAIN_MENU, CATEGORY_PICK, MODEL_PICK, PARAMS_FORM, CONFIRM, PROCESSING, RESULT, ...)
+- **Buttons**: 15+ enum значений (CAT_IMAGE, CAT_VIDEO, MODEL_ZIMAGE, CONFIRM_RUN, BACK, CANCEL, ...)
+- **Validation**: `UIMap.is_valid_button_on_screen()` - предотвращает невозможные комбинации
+
+#### 4. Reason Codes (Semantic Failure Classification) ✅
+- **Enum**: `ReasonCode` (14 значений)
+- **Примеры**:
+  - `PASSIVE_REJECT` - bot instance не ACTIVE (ждет другого instance)
+  - `UNKNOWN_ACTION` - callback_data malformed
+  - `STATE_MISMATCH` - FSM state неправильный (пользователь на неожиданном экране)
+  - `VALIDATION_FAILED` - параметр не соответствует schema
+  - `DOWNSTREAM_TIMEOUT` - KIE.ai или webhook timeout
+  - `DB_ERROR` - ошибка storage layer
+  - `SUCCESS`, `NOOP` - нормальные outcomes
+
+#### 5. Admin Debug Panel ✅
+- **Handler**: `app/handlers/debug_handler.py`
+- **Команда**: `/debug` (только admin)
+- **Функции**:
+  - Show bot_state (ACTIVE/PASSIVE)
+  - Last 10 events summary
+  - Last correlation_id for log search
+  - Enable DEBUG logs for 30 minutes
+- **Регистрация**: `main_render.py:263` - `dp.include_router(debug_router)`
+
+### Event Chain Example
+
+Успешное нажатие кнопки "Картинки":
+```json
+{"ts": "2026-01-13T10:30:45Z", "name": "UPDATE_RECEIVED", "cid": "a1b2c3d4", "event_type": "callback_query", "update_id": 12345}
+{"ts": "2026-01-13T10:30:45Z", "name": "CALLBACK_RECEIVED", "cid": "a1b2c3d4", "user_hash": "hash_xxx", "payload": "cat:image"}
+{"ts": "2026-01-13T10:30:45Z", "name": "CALLBACK_ROUTED", "cid": "a1b2c3d4", "handler": "category_cb", "button_id": "CAT_IMAGE"}
+{"ts": "2026-01-13T10:30:46Z", "name": "CALLBACK_ACCEPTED", "cid": "a1b2c3d4", "screen_id": "CATEGORY_PICK", "result": "accepted"}
+{"ts": "2026-01-13T10:30:46Z", "name": "UI_RENDER", "cid": "a1b2c3d4", "screen_id": "CATEGORY_PICK", "buttons_count": 5}
+{"ts": "2026-01-13T10:30:46Z", "name": "DISPATCH_OK", "cid": "a1b2c3d4"}
+```
+
+Отклоненная кнопка (STATE_MISMATCH):
+```json
+{"ts": "2026-01-13T10:31:00Z", "name": "UPDATE_RECEIVED", "cid": "b2c3d4e5", "event_type": "callback_query"}
+{"ts": "2026-01-13T10:31:00Z", "name": "CALLBACK_RECEIVED", "cid": "b2c3d4e5", "payload": "confirm"}
+{"ts": "2026-01-13T10:31:00Z", "name": "CALLBACK_ROUTED", "cid": "b2c3d4e5", "handler": "confirm_cb"}
+{"ts": "2026-01-13T10:31:00Z", "name": "CALLBACK_REJECTED", "cid": "b2c3d4e5", "reason_code": "STATE_MISMATCH", "reason_text": "Expected PARAMS_FORM, got MAIN_MENU"}
+{"ts": "2026-01-13T10:31:00Z", "name": "ANSWER_CALLBACK_QUERY", "cid": "b2c3d4e5", "text": "Кнопка устарела, используйте /start"}
+```
+
+### Integration Status
+
+| Handler | Status | Events Logged |
+|---------|--------|---------------|
+| `main_render.py` (middleware) | ✅ DONE | UPDATE_RECEIVED, DISPATCH_OK/FAIL |
+| `/debug` command | ✅ DONE | Admin diagnostics |
+| `flow.py::start_cmd` | ✅ DONE | COMMAND_START |
+| `flow.py::main_menu_cb` | ✅ DONE | CALLBACK_* chain |
+| `flow.py::category_cb` | ✅ DONE | CALLBACK_* chain |
+| `flow.py::model_cb` | ✅ DONE | CALLBACK_* chain |
+| `z_image.py` | 🔄 TODO | CALLBACK_* chain |
+| `balance.py` | 🔄 TODO | CALLBACK_* chain |
+| `history.py` | 🔄 TODO | CALLBACK_* chain |
+
+### 60-Second Diagnosis Workflow
+
+**Scenario**: "Кнопка не работает"
+
+1. User reports issue
+2. Admin: `/debug` → click "Show Last CID" → see `cid=a1b2c3d4`
+3. Go to Render logs, search: `cid=a1b2c3d4`
+4. See chain:
+   ```
+   CALLBACK_RECEIVED ✅
+   CALLBACK_ROUTED ✅
+   CALLBACK_REJECTED reason_code=PASSIVE_REJECT
+   ```
+5. **Diagnosis**: "Bot not ACTIVE (другой instance обрабатывает). Retry через 10 сек."
+
+**Time**: < 60 seconds from report to root cause.
+
 ## Log Analysis
 
 ### Forbidden Log Patterns (from product/truth.yaml)

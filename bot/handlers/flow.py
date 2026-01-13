@@ -47,6 +47,19 @@ from app.payments.integration import generate_with_payment
 from app.payments.pricing import calculate_kie_cost, calculate_user_price, format_price_rub
 from app.utils.validation import validate_url, validate_file_url, validate_text_input
 
+# P0: Telemetry для наблюдаемости
+from app.telemetry.telemetry_helpers import (
+    log_callback_received,
+    log_callback_routed,
+    log_callback_accepted,
+    log_callback_rejected,
+    log_callback_noop,
+    log_ui_render,
+    log_answer_callback_query,
+)
+from app.telemetry.logging_contract import ReasonCode, BotState
+from app.telemetry.ui_registry import ScreenId, ButtonId
+
 logger = logging.getLogger(__name__)
 router = Router(name="flow")
 
@@ -879,7 +892,7 @@ def _validate_field_value(value: Any, field_spec: Dict[str, Any], field_name: st
 
 
 @router.message(Command("start"))
-async def start_cmd(message: Message, state: FSMContext) -> None:
+async def start_cmd(message: Message, state: FSMContext, cid: str = None, bot_state: str = None) -> None:
     """
     IRON-CLAD /start handler - ALWAYS responds instantly.
     
@@ -896,6 +909,20 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
     chat_id = message.chat.id
     first_name = message.from_user.first_name or "друг"
+    
+    # P0: Telemetry - корреляция событий
+    from app.telemetry.logging_contract import log_event, EventType, Domain
+    if cid:
+        log_event(
+            "COMMAND_START",
+            correlation_id=cid,
+            event_type=EventType.COMMAND,
+            user_id=user_id,
+            chat_id=chat_id,
+            bot_state=bot_state or BotState.ACTIVE,
+            domain=Domain.UX,
+            screen_id=ScreenId.MAIN_MENU,
+        )
     
     logger.info(
         "[START] 🎬 Processing /start from user_id=%d chat_id=%d username=%s",
@@ -980,27 +1007,47 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "main_menu")
-async def main_menu_cb(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    await state.clear()
+async def main_menu_cb(callback: CallbackQuery, state: FSMContext, cid: str = None, bot_state: str = None) -> None:
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
     
-    # Get user info
-    first_name = callback.from_user.first_name or "друг"
+    # Telemetry: Log callback received
+    if cid:
+        log_callback_received(cid, callback.update_id, user_id, chat_id, "main_menu", bot_state or BotState.ACTIVE)
+        log_callback_routed(cid, user_id, chat_id, "main_menu_cb", "main_menu", ButtonId.MAIN_MENU)
     
-    # Count models
-    models_list = _get_models_list()
-    total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
-    
-    await callback.message.edit_text(
-        f"🎨 <b>Главное меню</b>\n\n"
-        f"✨ {total_models} AI моделей для ваших задач\n\n"
-        f"� <b>Категории:</b> Картинки, Видео, Аудио, Улучшение\n"
-        f"⭐ <b>Лучшие:</b> Топ моделей по цене/качеству\n"
-        f"🔍 <b>Поиск:</b> Найти нужную модель\n\n"
-        f"🆓 <b>4 бесплатные модели</b> — без списания баланса\n\n"
-        f"Выберите действие 👇",
-        reply_markup=_main_menu_keyboard(),
-    )
+    try:
+        await callback.answer()
+        await state.clear()
+        
+        # Get user info
+        first_name = callback.from_user.first_name or "друг"
+        
+        # Count models
+        models_list = _get_models_list()
+        total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
+        
+        await callback.message.edit_text(
+            f"🎨 <b>Главное меню</b>\n\n"
+            f"✨ {total_models} AI моделей для ваших задач\n\n"
+            f"📂 <b>Категории:</b> Картинки, Видео, Аудио, Улучшение\n"
+            f"⭐ <b>Лучшие:</b> Топ моделей по цене/качеству\n"
+            f"🔍 <b>Поиск:</b> Найти нужную модель\n\n"
+            f"🆓 <b>4 бесплатные модели</b> — без списания баланса\n\n"
+            f"Выберите действие 👇",
+            reply_markup=_main_menu_keyboard(),
+        )
+        
+        # Telemetry: Success
+        if cid:
+            log_callback_accepted(cid, user_id, chat_id, ScreenId.MAIN_MENU, "main_menu")
+            log_ui_render(cid, user_id, chat_id, ScreenId.MAIN_MENU, [ButtonId.CATEGORIES, ButtonId.BEST, ButtonId.SEARCH, ButtonId.FREE])
+    except Exception as e:
+        # Telemetry: Error
+        if cid:
+            log_callback_rejected(cid, user_id, chat_id, ReasonCode.HANDLER_ERROR, f"Exception: {str(e)[:100]}", bot_state=bot_state)
+        logger.exception(f"Error in main_menu_cb: {e}")
+        raise
 
 
 @router.callback_query(F.data == "menu:help")
@@ -1702,30 +1749,57 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("cat:"))
-async def category_cb(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    category = callback.data.split(":", 1)[1]
-    grouped = _models_by_category()
-    models = grouped.get(category, [])
+async def category_cb(callback: CallbackQuery, state: FSMContext, cid: str = None, bot_state: str = None) -> None:
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    
+    # Telemetry: Log callback received
+    if cid:
+        log_callback_received(cid, callback.update_id, user_id, chat_id, callback.data, bot_state or BotState.ACTIVE)
+    
+    try:
+        await callback.answer()
+        category = callback.data.split(":", 1)[1]
+        
+        # Telemetry: Log routing
+        if cid:
+            log_callback_routed(cid, user_id, chat_id, "category_cb", "category", f"CAT_{category.upper()}")
+        
+        grouped = _models_by_category()
+        models = grouped.get(category, [])
 
-    if not models:
-        category_label = _category_label(category)
+        if not models:
+            category_label = _category_label(category)
+            await callback.message.edit_text(
+                f"⚠️ {category_label}\n\n"
+                f"В этой категории пока нет доступных моделей.\n"
+                f"Попробуйте другую категорию или вернитесь в меню.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")],
+                    [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
+                ])
+            )
+            # Telemetry: No models found
+            if cid:
+                log_callback_noop(cid, user_id, chat_id, ReasonCode.NO_DATA, f"No models in category: {category}")
+            return
+
+        await state.update_data(category=category, category_models=models)
         await callback.message.edit_text(
-            f"⚠️ {category_label}\n\n"
-            f"В этой категории пока нет доступных моделей.\n"
-            f"Попробуйте другую категорию или вернитесь в меню.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")],
-                [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
-            ])
+            f"Категория: {_category_label(category)}\n\nВыберите модель:",
+            reply_markup=_model_keyboard(models, f"cat:{category}", page=0),
         )
-        return
-
-    await state.update_data(category=category, category_models=models)
-    await callback.message.edit_text(
-        f"Категория: {_category_label(category)}\n\nВыберите модель:",
-        reply_markup=_model_keyboard(models, f"cat:{category}", page=0),
-    )
+        
+        # Telemetry: Success
+        if cid:
+            log_callback_accepted(cid, user_id, chat_id, ScreenId.MODEL_PICK, "category")
+            log_ui_render(cid, user_id, chat_id, ScreenId.MODEL_PICK, [m.get("button_id", m.get("model_id", "")) for m in models[:5]])
+    except Exception as e:
+        # Telemetry: Error
+        if cid:
+            log_callback_rejected(cid, user_id, chat_id, ReasonCode.HANDLER_ERROR, f"Exception: {str(e)[:100]}", bot_state=bot_state)
+        logger.exception(f"Error in category_cb: {e}")
+        raise
 
 
 @router.callback_query(F.data.startswith("page:"))
@@ -1769,25 +1843,52 @@ async def noop_cb(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("model:"))
-async def model_cb(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    model_id = callback.data.split(":", 1)[1]
-    model = next((m for m in _get_models_list() if m.get("model_id") == model_id), None)
-    if not model:
-        await callback.message.edit_text("⚠️ Модель не найдена.", reply_markup=_category_keyboard())
-        return
+async def model_cb(callback: CallbackQuery, state: FSMContext, cid: str = None, bot_state: str = None) -> None:
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    
+    # Telemetry: Log callback received
+    if cid:
+        log_callback_received(cid, callback.update_id, user_id, chat_id, callback.data, bot_state or BotState.ACTIVE)
+    
+    try:
+        await callback.answer()
+        model_id = callback.data.split(":", 1)[1]
+        
+        # Telemetry: Log routing
+        if cid:
+            log_callback_routed(cid, user_id, chat_id, "model_cb", "model", f"MODEL_{model_id.replace('-', '_').upper()}")
+        
+        model = next((m for m in _get_models_list() if m.get("model_id") == model_id), None)
+        if not model:
+            await callback.message.edit_text("⚠️ Модель не найдена.", reply_markup=_category_keyboard())
+            # Telemetry: Model not found
+            if cid:
+                log_callback_rejected(cid, user_id, chat_id, ReasonCode.NOT_FOUND, f"Model not found: {model_id}", bot_state=bot_state)
+            return
 
-    data = await state.get_data()
-    back_cb = "menu:generate"
-    category = data.get("category")
-    if category:
-        back_cb = f"cat:{category}"
+        data = await state.get_data()
+        back_cb = "menu:generate"
+        category = data.get("category")
+        if category:
+            back_cb = f"cat:{category}"
 
-    await state.update_data(model_id=model_id)
-    await callback.message.edit_text(
-        _model_detail_text(model),
-        reply_markup=_model_detail_keyboard(model_id, back_cb),
-    )
+        await state.update_data(model_id=model_id)
+        await callback.message.edit_text(
+            _model_detail_text(model),
+            reply_markup=_model_detail_keyboard(model_id, back_cb),
+        )
+        
+        # Telemetry: Success
+        if cid:
+            log_callback_accepted(cid, user_id, chat_id, ScreenId.MODEL_DETAIL, "model")
+            log_ui_render(cid, user_id, chat_id, ScreenId.MODEL_DETAIL, [ButtonId.GENERATE, ButtonId.BACK])
+    except Exception as e:
+        # Telemetry: Error
+        if cid:
+            log_callback_rejected(cid, user_id, chat_id, ReasonCode.HANDLER_ERROR, f"Exception: {str(e)[:100]}", bot_state=bot_state)
+        logger.exception(f"Error in model_cb: {e}")
+        raise
 
 
 @router.callback_query(F.data.startswith("gen:"))

@@ -39,6 +39,8 @@ from app.utils.webhook import (
     get_webhook_base_url,
     get_webhook_secret_token,
 )  # noqa: E402
+from app.telemetry.telemetry_helpers import TelemetryMiddleware  # P0: Observability
+from app.telemetry.logging_config import configure_logging  # P0: JSON logs
 
 def _import_real_aiogram_symbols():
     """Import aiogram symbols from site-packages even if ./aiogram stubs exist."""
@@ -253,8 +255,13 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
         zero_silence_router,
         z_image_router,
     )
+    from app.handlers.debug_handler import router as debug_router  # P0: Admin diagnostics
 
+    # P0: Telemetry middleware FIRST (adds cid + bot_state to all updates)
+    dp.update.middleware(TelemetryMiddleware())
+    
     dp.include_router(error_handler_router)
+    dp.include_router(debug_router)  # P0: Admin debug panel
     dp.include_router(diag_router)
     dp.include_router(admin_router)
     dp.include_router(z_image_router)  # Z-image (SINGLE_MODEL support)
