@@ -33,6 +33,29 @@ _heartbeat_available: Optional[bool] = None
 _last_takeover_event: Optional[Dict[str, Any]] = None
 
 
+def split_bigint_to_pg_advisory_oids(lock_key: int) -> tuple[int, int]:
+    """
+    Разбивает 64-битный lock_key на пару 32-битных OID для pg_advisory_lock.
+    
+    PostgreSQL advisory locks используют пару (classid, objid), каждая из которых
+    является 32-битным unsigned integer (OID type, 0..4294967295).
+    
+    Args:
+        lock_key: 64-битный ключ (0 <= lock_key <= 2^63-1)
+    
+    Returns:
+        tuple[int, int]: (hi, lo) где каждый 0 <= value <= 4294967295
+    
+    Example:
+        >>> split_bigint_to_pg_advisory_oids(2797505866569588743)
+        (651107867, 2242801671)
+    """
+    # Разбиваем на старшие и младшие 32 бита (unsigned)
+    hi = (lock_key >> 32) & 0xFFFFFFFF  # Старшие 32 бита
+    lo = lock_key & 0xFFFFFFFF          # Младшие 32 бита
+    return hi, lo
+
+
 def make_lock_key(token: str, namespace: str = "telegram_polling") -> int:
     """
     Создает стабильный bigint ключ из токена и namespace.
@@ -145,6 +168,10 @@ def get_lock_holder_info(pool, lock_key: int) -> Dict[str, Any]:
     try:
         conn = pool.getconn()
         conn.autocommit = True
+        
+        # Разбиваем lock_key на два int4
+        k1, k2 = split_bigint_to_pg_advisory_oids(lock_key)
+        
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -156,11 +183,11 @@ def get_lock_holder_info(pool, lock_key: int) -> Dict[str, Any]:
                 LEFT JOIN pg_stat_activity sa ON pl.pid = sa.pid
                 WHERE pl.locktype = 'advisory'
                   AND pl.granted = true
-                  AND pl.classid = 1
+                  AND pl.classid = %s
                   AND pl.objid = %s
                 LIMIT 1
                 """,
-                (lock_key,),
+                (k1, k2),
             )
             row = cur.fetchone()
             if row:
@@ -202,9 +229,12 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
         conn.autocommit = True
         logger.debug(f"[LOCK] Connection autocommit enabled to prevent 'idle in transaction'")
         
-        # Пытаемся получить advisory lock (неблокирующий)
+        # Разбиваем lock_key на два int4 для двухпараметрового advisory lock
+        k1, k2 = split_bigint_to_pg_advisory_oids(lock_key)
+        
+        # Пытаемся получить advisory lock (неблокирующий, двухпараметровый)
         with conn.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
+            cur.execute("SELECT pg_try_advisory_lock(%s, %s)", (k1, k2))
             lock_acquired = cur.fetchone()[0]
         
         if lock_acquired:
@@ -216,8 +246,7 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
             logger.warning(f"⏸️ PostgreSQL advisory lock already held by another instance: key={lock_key}")
             
             # Проверяем timestamp последней активности держателя lock
-            # ВАЖНО: используем classid,objid,objsubid для advisory locks (не objid alone!)
-            # classid=0 для user locks, objid хранит lock key
+            # Используем двухпараметровый поиск по classid/objid (оба int4)
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -230,11 +259,11 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                     LEFT JOIN pg_stat_activity sa ON pl.pid = sa.pid
                     WHERE pl.locktype = 'advisory'
                       AND pl.granted = true
-                      AND pl.classid = 1
+                      AND pl.classid = %s
                       AND pl.objid = %s
                     LIMIT 1
                     """,
-                    (lock_key,),
+                    (k1, k2),
                 )
                 result = cur.fetchone()
                 
@@ -291,7 +320,7 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                                 time.sleep(LOCK_RELEASE_WAIT_SECONDS)
                                 
                                 # Retry lock acquisition
-                                cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
+                                cur.execute("SELECT pg_try_advisory_lock(%s, %s)", (k1, k2))
                                 lock_acquired_retry = cur.fetchone()[0]
                                 
                                 if lock_acquired_retry:
@@ -331,9 +360,12 @@ def release_lock_session(pool, conn: connection, lock_key: int) -> None:
     """
     try:
         if conn and not conn.closed:
-            # Освобождаем advisory lock
+            # Разбиваем lock_key на два int4
+            k1, k2 = split_bigint_to_pg_advisory_oids(lock_key)
+            
+            # Освобождаем advisory lock (двухпараметровый)
             with conn.cursor() as cur:
-                cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+                cur.execute("SELECT pg_advisory_unlock(%s, %s)", (k1, k2))
                 unlocked = cur.fetchone()[0]
             
             if unlocked:
