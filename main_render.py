@@ -532,36 +532,12 @@ def _make_web_app(
         if update_id:
             recent_update_ids.add(update_id)
         
-        # 🚀 FASTPATH /start: INSTANT ACK before queue
-        # This guarantees <300ms response even during PASSIVE or queue delays
-        fastpath_handled = False
-        message = getattr(update, "message", None)
-        if message:
-            text = getattr(message, "text", "")
-            chat_id = getattr(message.chat, "id", None) if hasattr(message, "chat") else None
-            
-            # Detect /start command (with or without @bot mention)
-            is_start = text and (text == "/start" or text.startswith("/start@"))
-            
-            if is_start and chat_id:
-                # INSTANT response (bypasses queue, PASSIVE mode, everything)
-                try:
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text="✅ Бот на связи. Загружаю меню…"
-                    )
-                    logger.info("[FASTPATH] /start ACK sent to chat_id=%s (update_id=%s)", chat_id, update_id)
-                    fastpath_handled = True  # Mark as handled - don't enqueue
-                except Exception as e:
-                    logger.warning("[FASTPATH] Failed to send instant ACK: %s", e)
-                    fastpath_handled = False  # Failed - let normal handler process
-        
-        # Enqueue for background processing ONLY if NOT fastpath handled
-        # This prevents /start duplicate processing
-        if fastpath_handled:
-            logger.info("[WEBHOOK] ✅ Fastpath handled /start update_id=%s, skipping enqueue (no duplicate)", update_id)
-            # Still return 200 OK
-            return web.Response(status=200, text="ok")
+        # 🚀 FASTPATH: Just fast HTTP ACK, ALL updates go to queue for proper processing
+        # Business logic (sending messages, menus) happens in worker/handler
+        # This architecture ensures:
+        # 1) HTTP webhook responds <200ms (prevents Telegram timeout)
+        # 2) /start handler in queue sends full welcome + menu (no "loading" message)
+        # 3) Idempotency via recent_update_ids dedup (already implemented above)
         
         # Enqueue for background processing (non-blocking)
         # This returns immediately - worker processes in background
@@ -569,10 +545,12 @@ def _make_web_app(
         queue_manager = get_queue_manager()
         enqueued = queue_manager.enqueue(update, update_id)
         
-        if not enqueued:
+        if enqueued:
+            logger.info("[WEBHOOK] ✅ ENQUEUED update_id=%s type=%s → worker will process", update_id, update_type)
+        else:
             # Queue full, update dropped - but still return 200
+            logger.warning("[WEBHOOK] ❌ Queue full, dropped update_id=%s", update_id)
             # (Metrics in queue_manager track drop rate)
-            pass
         
         # ALWAYS return 200 OK instantly
         return web.Response(status=200, text="ok")

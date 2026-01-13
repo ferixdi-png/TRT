@@ -898,22 +898,9 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
     first_name = message.from_user.first_name or "друг"
     
     logger.info(
-        "[START] Received from user_id=%d chat_id=%d username=%s",
+        "[START] 🎬 Processing /start from user_id=%d chat_id=%d username=%s",
         user_id, chat_id, message.from_user.username or "(no username)"
     )
-    
-    # STEP 1: INSTANT ACK - bot is alive!
-    # This MUST execute first, before any heavy operations
-    try:
-        ack_msg = await message.answer("✅ Бот на связи...")
-    except Exception as e:
-        logger.error("[START] CRITICAL: Failed to send ACK: %s", e)
-        # Even ACK failed - try one more time with minimal message
-        try:
-            await message.answer("✅")
-        except Exception:
-            # Complete failure - but at least we tried
-            return
     
     # STEP 2: Check SINGLE_MODEL mode
     import os
@@ -922,7 +909,7 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
     if single_model_mode:
         # SINGLE_MODEL UI: Z-Image only
         try:
-            await ack_msg.edit_text(
+            await message.answer(
                 f"👋 Привет, <b>{first_name}</b>!\n\n"
                 f"🖼 <b>Z-Image Generator</b>\n"
                 f"Создавайте уникальные изображения из текста\n\n"
@@ -936,15 +923,9 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
                     [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
                 ])
             )
+            logger.info("[START] ✅ SINGLE_MODEL menu sent to user_id=%d", user_id)
         except Exception as e:
-            logger.error("[START] Failed to edit SINGLE_MODEL message: %s", e)
-            # Fallback: send new message
-            await message.answer(
-                f"👋 <b>{first_name}</b>! 🖼 Z-Image готов.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🖼 Создать", callback_data="zimage:start")],
-                ])
-            )
+            logger.error("[START] Failed to send SINGLE_MODEL menu: %s", e)
         return
     
     # STEP 3: FULL MODE - load models (with degraded fallback)
@@ -964,9 +945,9 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
             [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
         ])
     
-    # STEP 4: Send full welcome message
+    # STEP 4: Send full welcome message with menu
     try:
-        await ack_msg.edit_text(
+        await message.answer(
             f"👋 Привет, <b>{first_name}</b>!\n\n"
             f"🤖 Я помогу создать контент с помощью <b>{total_models} AI моделей</b>\n\n"
             f"<b>Что умею:</b>\n"
@@ -983,9 +964,10 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
             f"Выбирайте задачу 👇",
             reply_markup=menu_keyboard,
         )
+        logger.info("[START] ✅ MAIN_MENU sent to user_id=%d (models=%d)", user_id, total_models)
     except Exception as e:
-        logger.error("[START] Failed to edit welcome message: %s", e)
-        # Absolute fallback: send minimal new message
+        logger.error("[START] Failed to send welcome message: %s", e)
+        # Absolute fallback: send minimal menu
         try:
             await message.answer(
                 f"👋 <b>{first_name}</b>! Бот работает.",
@@ -994,7 +976,6 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
                 ])
             )
         except Exception:
-            # Even fallback failed - but we sent ACK earlier, so user knows bot is alive
             pass
 
 

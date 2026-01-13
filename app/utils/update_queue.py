@@ -198,13 +198,14 @@ class UpdateQueueManager:
                             )
                             self._metrics.total_processed_degraded += 1
                             start_time = time.monotonic()
+                            logger.info("[WORKER_%d] 🎬 PROCESSING update_id=%s type=%s in PASSIVE", worker_id, update_id, update_type)
                             await asyncio.wait_for(
                                 self._dp.feed_update(self._bot, update),
                                 timeout=30.0
                             )
                             elapsed = time.monotonic() - start_time
                             logger.info(
-                                "[WORKER_%d] UI_UPDATE %s processed in %.2fs",
+                                "[WORKER_%d] ✅ UI_UPDATE %s processed in %.2fs",
                                 worker_id, update_type, elapsed
                             )
                             # task_done() in finally block
