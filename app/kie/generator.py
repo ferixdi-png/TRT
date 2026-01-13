@@ -424,66 +424,64 @@ class KieGenerator:
                 state = parsed['state']
                 logger.info(f"{correlation_tag()} [POLL_STATE] i={poll_iteration} task_id={task_id} state={state}")
                 
-                if state == 'success':
-                    # 🎯 ATOMIC DELIVERY LOCK: Polling competes with callback for delivery
+                # STATE NORMALIZATION: Treat done/completed as success
+                from app.delivery import normalize_state, SUCCESS_STATES, FAILURE_STATES
+                
+                normalized_state = normalize_state(state)
+                
+                if normalized_state != state:
+                    logger.info(f"{correlation_tag()} [POLL_SUCCESS_EQUIV] state={state} normalized_to={normalized_state}")
+                
+                if normalized_state == 'success':
+                    # 🎯 UNIFIED DELIVERY COORDINATOR (platform-wide atomic lock)
                     result_urls = parsed['result_urls']
                     
-                    # Try to acquire delivery lock
-                    lock_job = None
-                    if user_id is not None:
+                    # Determine category from model_id
+                    category = 'image'  # default
+                    if model_id:
+                        if 'video' in model_id.lower():
+                            category = 'video'
+                        elif 'audio' in model_id.lower() or 'music' in model_id.lower():
+                            category = 'audio'
+                        elif 'upscale' in model_id.lower() or 'enhance' in model_id.lower():
+                            category = 'upscale'
+                    
+                    # Try to deliver using atomic coordinator
+                    if chat_id and result_urls and user_id is not None:
                         try:
                             from app.storage import get_storage
+                            from main_render import bot
+                            from app.delivery import deliver_result_atomic
+                            
                             storage = get_storage()
-                            lock_job = await storage.try_acquire_delivery_lock(task_id, timeout_minutes=5)
-                        except Exception as e:
-                            logger.error(f"{correlation_tag()} [POLL_LOCK_ERROR] {e}")
-                    
-                    if not lock_job:
-                        # Already delivered (by callback or another polling instance)
-                        logger.info(f"{correlation_tag()} [POLL_LOCK_SKIP] Already delivered or delivering")
-                        return {
-                            'success': True,
-                            'message': parsed['message'],
-                            'result_urls': result_urls,
-                            'result_object': parsed['result_object'],
-                            'error_code': None,
-                            'error_message': None,
-                            'task_id': task_id,
-                            'already_delivered': True
-                        }
-                    
-                    # Won the delivery race
-                    logger.info(f"{correlation_tag()} [POLL_LOCK_WIN] Won delivery race")
-                    
-                    # Deliver to Telegram
-                    if chat_id and result_urls:
-                        logger.info(f"{correlation_tag()} [POLL_DELIVER_START] task_id={task_id} chat_id={chat_id}")
-                        try:
-                            # Import bot and delivery function
-                            from main_render import bot, _deliver_result_to_telegram
-                            await _deliver_result_to_telegram(bot, chat_id, result_urls, task_id, correlation_tag())
-                            logger.info(f"{correlation_tag()} [POLL_DELIVER_OK] task_id={task_id}")
                             
-                            # Mark as delivered AFTER successful delivery
-                            if user_id is not None:
-                                try:
-                                    from app.storage import get_storage
-                                    storage = get_storage()
-                                    await storage.mark_delivered(task_id, success=True)
-                                    logger.info(f"{correlation_tag()} [POLL_MARK_DELIVERED] task_id={task_id}")
-                                except Exception as e:
-                                    logger.error(f"{correlation_tag()} [POLL_MARK_FAIL] {e}")
-                        except Exception as e:
-                            logger.exception(f"{correlation_tag()} [POLL_DELIVER_FAIL] task_id={task_id}: {e}")
+                            delivery_result = await deliver_result_atomic(
+                                storage=storage,
+                                bot=bot,
+                                task_id=task_id,
+                                chat_id=chat_id,
+                                result_urls=result_urls,
+                                category=category,
+                                corr_id=correlation_tag(),
+                                timeout_minutes=5
+                            )
                             
-                            # Release lock on failure, allow retry
-                            if user_id is not None:
-                                try:
-                                    from app.storage import get_storage
-                                    storage = get_storage()
-                                    await storage.mark_delivered(task_id, success=False, error=str(e))
-                                except Exception:
-                                    pass
+                            if delivery_result['already_delivered']:
+                                # Lock skipped - someone else (callback or other poll) delivered
+                                logger.info(f"{correlation_tag()} [DELIVER_LOCK_SKIP_POLL_EXIT] Stopping poll, already delivered")
+                                return {
+                                    'success': True,
+                                    'message': parsed['message'],
+                                    'result_urls': result_urls,
+                                    'result_object': parsed['result_object'],
+                                    'error_code': None,
+                                    'error_message': None,
+                                    'task_id': task_id,
+                                    'already_delivered': True
+                                }
+                            
+                        except Exception as e:
+                            logger.exception(f"{correlation_tag()} [POLL_DELIVERY_ERROR] {e}")
                     
                     return {
                         'success': True,
@@ -495,7 +493,7 @@ class KieGenerator:
                         'task_id': task_id
                     }
                 
-                elif state == 'fail':
+                elif normalized_state == 'failed':
                     error_msg = get_human_readable_error(
                         parsed['error_code'],
                         parsed['error_message']

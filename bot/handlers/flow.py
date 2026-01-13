@@ -2494,11 +2494,23 @@ async def confirm_cb(callback: CallbackQuery, state: FSMContext) -> None:
         # CRITICAL: Wrap message sending in try-except to prevent silent failures
         try:
             if result.get("success"):
-                urls = result.get("result_urls") or []
-                if urls:
-                    await callback.message.answer("\n".join(urls))
-                else:
+                # Check if delivery coordinator already sent media
+                already_delivered = result.get("already_delivered", False)
+                
+                if already_delivered:
+                    # Coordinator (callback or polling) already sent media
+                    # Just send completion message, no URLs
+                    logger.info(f"[BG] [{correlation_id}] Delivery already handled by coordinator, skipping URL send")
                     await callback.message.answer("✅ Готово!")
+                else:
+                    # Fallback: coordinator didn't deliver, send URLs
+                    urls = result.get("result_urls") or []
+                    if urls:
+                        logger.info(f"[BG] [{correlation_id}] Coordinator didn't deliver, sending {len(urls)} URLs as fallback")
+                        await callback.message.answer("\n".join(urls))
+                    else:
+                        await callback.message.answer("✅ Готово!")
+                
                 await callback.message.answer(
                     "Что дальше?",
                     reply_markup=InlineKeyboardMarkup(

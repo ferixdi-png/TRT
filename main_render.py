@@ -784,15 +784,7 @@ def _make_web_app(
                 await storage.update_job_status(job_id, 'done', result_urls=result_urls)
                 logger.info(f"[{corr_id}] [CALLBACK_SUCCESS] task_id={task_id} urls={len(result_urls)}")
                 
-                # Atomic delivery lock - prevents race between callback+polling and ACTIVE+PASSIVE
-                lock_job = await storage.try_acquire_delivery_lock(task_id, timeout_minutes=5)
-                if not lock_job:
-                    logger.info(f"[{corr_id}] [DELIVER_LOCK_SKIP] Already delivered or delivering")
-                    return web.json_response({"ok": True}, status=200)
-                
-                logger.info(f"[{corr_id}] [DELIVER_LOCK_WIN] Won delivery race")
-                
-                # Get chat_id
+                # Get chat_id and category for delivery
                 user_id = job.get('user_id')
                 chat_id = user_id
                 if job.get('params'):
@@ -806,24 +798,33 @@ def _make_web_app(
                         except Exception:
                             pass
                 
+                # Determine category from model_id or params
+                category = 'image'  # default
+                model_id = job.get('model_id', '')
+                if 'video' in model_id.lower():
+                    category = 'video'
+                elif 'audio' in model_id.lower() or 'music' in model_id.lower():
+                    category = 'audio'
+                elif 'upscale' in model_id.lower() or 'enhance' in model_id.lower():
+                    category = 'upscale'
+                
                 if chat_id and result_urls:
-                    logger.info(f"[{corr_id}] [DELIVER_START] task_id={task_id} chat_id={chat_id} urls={len(result_urls)}")
+                    # UNIFIED DELIVERY COORDINATOR (platform-wide atomic lock)
+                    from app.delivery import deliver_result_atomic
                     
-                    try:
-                        # Real delivery with 3-level fallback
-                        await _deliver_result_to_telegram(bot, chat_id, result_urls, task_id, corr_id)
-                        logger.info(f"[{corr_id}] [DELIVER_OK] task_id={task_id} chat_id={chat_id}")
-                        
-                        # Mark delivered AFTER successful delivery
-                        await storage.mark_delivered(task_id, success=True)
-                        logger.info(f"[{corr_id}] [MARK_DELIVERED] job_id={job_id}")
-                    except Exception as e:
-                        logger.exception(f"[{corr_id}] [DELIVER_FAIL] task_id={task_id}: {e}")
-                        
-                        # Release lock on failure, allow retry
-                        await storage.mark_delivered(task_id, success=False, error=str(e))
-                        
-                        # Notify user about delivery failure
+                    delivery_result = await deliver_result_atomic(
+                        storage=storage,
+                        bot=bot,
+                        task_id=task_id,
+                        chat_id=chat_id,
+                        result_urls=result_urls,
+                        category=category,
+                        corr_id=corr_id,
+                        timeout_minutes=5
+                    )
+                    
+                    if not delivery_result['delivered'] and delivery_result['error']:
+                        # Delivery failed, notify user
                         try:
                             await bot.send_message(chat_id, f"⚠️ Генерация готова, но не удалось отправить результат.\nID: {task_id}")
                         except:
