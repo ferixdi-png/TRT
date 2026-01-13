@@ -31,6 +31,11 @@ class PostgresStorage(BaseStorage):
         self.database_url = database_url
         self._pool: Optional[asyncpg.Pool] = None
     
+    @property
+    def pool(self) -> Optional[asyncpg.Pool]:
+        """Public access to connection pool for workers/queue."""
+        return self._pool
+    
     async def _get_pool(self) -> asyncpg.Pool:
         """Получить или создать connection pool"""
         if self._pool is None:
@@ -41,6 +46,43 @@ class PostgresStorage(BaseStorage):
                 command_timeout=60
             )
         return self._pool
+    
+    async def is_update_processed(self, update_id: int) -> bool:
+        """
+        Check if update_id has been processed (dedup check).
+        
+        Returns:
+            True if update was already processed, False otherwise
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            result = await conn.fetchval(
+                "SELECT 1 FROM processed_updates WHERE update_id = $1",
+                update_id
+            )
+            return result is not None
+    
+    async def mark_update_processed(self, update_id: int, worker_id: str = "unknown", update_type: str = "unknown") -> bool:
+        """
+        Mark update_id as processed (dedup insert).
+        
+        Returns:
+            True if successfully marked, False if already existed
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO processed_updates (update_id, worker_instance_id, update_type)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (update_id) DO NOTHING
+                    """,
+                    update_id, worker_id, update_type
+                )
+                return True
+            except Exception:
+                return False
     
     async def async_test_connection(self) -> bool:
         """

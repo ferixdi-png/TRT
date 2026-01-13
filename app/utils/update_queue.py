@@ -168,63 +168,72 @@ class UpdateQueueManager:
                 self._metrics.workers_active += 1
                 self._metrics.queue_depth_current = self._queue.qsize()
                 
+                # Track attempts for this item
+                attempt = item.get("attempt", 0)
+                
                 try:
-                    # 🔐 STEP 1: Check persistent dedup BEFORE processing
+                    logger.info("[WORKER_%d] 🎯 WORKER_PICK update_id=%s (attempt %d)", worker_id, update_id, attempt + 1)
+                    
+                    # 🔐 STEP 1: Check persistent dedup BEFORE processing (FAIL-OPEN)
+                    dedup_failed = False
                     if update_id:
                         from app.storage.factory import get_storage
                         storage = get_storage()
                         
                         try:
-                            # Check if already processed
-                            async with storage.pool.acquire() as conn:
-                                existing = await conn.fetchval(
-                                    "SELECT 1 FROM processed_updates WHERE update_id = $1",
-                                    update_id
+                            # Check if already processed using storage method
+                            if await storage.is_update_processed(update_id):
+                                logger.warning(
+                                    "[WORKER_%d] ⏭️ DEDUP_SKIP update_id=%s (already processed)",
+                                    worker_id, update_id
                                 )
-                                
-                                if existing:
-                                    logger.warning(
-                                        "[WORKER_%d] ⏭️ DEDUP_SKIP update_id=%s (already processed)",
-                                        worker_id, update_id
-                                    )
-                                    self._metrics.total_dropped += 1
-                                    # Skip processing - task_done() in finally
-                                    continue
-                                
-                                # Mark as processing (insert with current timestamp)
-                                await conn.execute(
-                                    """
-                                    INSERT INTO processed_updates (update_id, worker_instance_id, update_type)
-                                    VALUES ($1, $2, $3)
-                                    ON CONFLICT (update_id) DO NOTHING
-                                    """,
-                                    update_id,
-                                    f"worker_{worker_id}",
-                                    "message" if getattr(update, "message", None) else "callback_query"
-                                )
+                                self._metrics.total_dropped += 1
+                                # Skip processing - task_done() in finally
+                                continue
+                            
+                            # Mark as processing
+                            await storage.mark_update_processed(
+                                update_id,
+                                worker_id=f"worker_{worker_id}",
+                                update_type="message" if getattr(update, "message", None) else "callback_query"
+                            )
+                            logger.debug("[WORKER_%d] ✅ DEDUP_OK update_id=%s marked as processing", worker_id, update_id)
+                            
                         except Exception as e:
-                            # Dedup DB error - log but continue processing (better duplicate than miss)
-                            logger.warning("[WORKER_%d] Dedup check failed for update_id=%s: %s", worker_id, update_id, e)
-                    # 🚨 CRITICAL GATE: PASSIVE = NO PROCESSING (prevents duplicate messages)
-                    # Worker MUST wait for ACTIVE state before processing ANY updates
+                            # FAIL-OPEN: Log once and continue processing without dedup
+                            # This prevents worker deadlock when DB is unavailable
+                            dedup_failed = True
+                            if attempt == 0:  # Log only on first attempt to avoid spam
+                                logger.error(
+                                    "[WORKER_%d] ⚠️ DEDUP_FAIL_OPEN update_id=%s: %s - continuing without dedup",
+                                    worker_id, update_id, str(e)
+                                )
+                            else:
+                                logger.debug("[WORKER_%d] Dedup failed (attempt %d): %s", worker_id, attempt + 1, e)
+                    
+                    # 🚨 STEP 2: ACTIVE GATE (PASSIVE = NO PROCESSING)
                     if self._active_state and not self._active_state.active:
-                        # PASSIVE MODE: Requeue until ACTIVE (or drop after timeout)
+                        # PASSIVE MODE: Requeue until ACTIVE (or drop after timeout/max attempts)
                         now = time.time()
                         held_time = now - first_seen
                         
-                        if held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:
-                            # Held too long - DROP with warning (ACTIVE instance will process)
+                        # Retry limits to prevent infinite loops
+                        MAX_RETRY_ATTEMPTS = 3 if dedup_failed else MAX_REQUEUE_ATTEMPTS
+                        
+                        if held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_RETRY_ATTEMPTS:
+                            # Held too long OR too many retries - DROP
+                            reason = "held too long" if held_time > MAX_HOLD_TIME_SEC else f"max retries ({attempt})"
                             logger.warning(
-                                "[WORKER_%d] ⏸️ PASSIVE_DROP update_id=%s (held %.1fs) - ACTIVE instance handles this",
-                                worker_id, update_id, held_time
+                                "[WORKER_%d] ⏸️ PASSIVE_DROP update_id=%s (%s, held %.1fs) - ACTIVE will process or dropped",
+                                worker_id, update_id, reason, held_time
                             )
                             self._metrics.total_dropped += 1
                             # task_done() in finally - this update is abandoned
                         else:
-                            # Still within hold window - requeue for ACTIVE processing
+                            # Still within limits - requeue for ACTIVE processing
                             logger.debug(
-                                "[WORKER_%d] ⏸️ PASSIVE_REQUEUE update_id=%s (attempt %d, held %.1fs)",
-                                worker_id, update_id, attempt, held_time
+                                "[WORKER_%d] ⏸️ PASSIVE_REQUEUE update_id=%s (attempt %d/%d, held %.1fs)",
+                                worker_id, update_id, attempt + 1, MAX_RETRY_ATTEMPTS, held_time
                             )
                             self._metrics.total_held += 1
                             
@@ -238,8 +247,10 @@ class UpdateQueueManager:
                                 self._queue.put_nowait(item)
                                 self._metrics.total_requeued += 1
                                 requeued = True
+                                logger.debug("[WORKER_%d] Requeued update_id=%s", worker_id, update_id)
                             except asyncio.QueueFull:
-                                logger.error("[WORKER_%d] Failed to requeue update_id=%s (queue full)", worker_id, update_id)
+                                logger.error("[WORKER_%d] Failed to requeue update_id=%s (queue full) - dropping", worker_id, update_id)
+                                self._metrics.total_dropped += 1
                             
                             # Skip task_done() if successfully requeued
                             if requeued:
@@ -249,7 +260,7 @@ class UpdateQueueManager:
                     else:
                         # ACTIVE MODE: Process update normally
                         logger.info(
-                            "[WORKER_%d] 🎬 ACTIVE_PROCESS_START update_id=%s",
+                            "[WORKER_%d] 🚀 DISPATCH_START update_id=%s",
                             worker_id, update_id
                         )
                         self._metrics.total_processed += 1
@@ -262,7 +273,7 @@ class UpdateQueueManager:
                         elapsed = time.monotonic() - start_time
                         
                         logger.info(
-                            "[WORKER_%d] ✅ Processed update_id=%s in %.2fs",
+                            "[WORKER_%d] ✅ DISPATCH_OK update_id=%s in %.2fs → DONE",
                             worker_id, update_id, elapsed
                         )
                 
