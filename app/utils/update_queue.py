@@ -195,6 +195,7 @@ class UpdateQueueManager:
                                 "[WORKER_%d] DEGRADED processed update_id=%s in %.2fs",
                                 worker_id, update_id, elapsed
                             )
+                            # task_done() will be called in finally block
                         else:
                             # Still within hold window - requeue for later
                             logger.debug(
@@ -208,9 +209,11 @@ class UpdateQueueManager:
                             
                             # Requeue with incremented attempt
                             item["attempt"] = attempt + 1
+                            requeued = False
                             try:
                                 self._queue.put_nowait(item)
                                 self._metrics.total_requeued += 1
+                                requeued = True
                             except asyncio.QueueFull:
                                 # Queue full during requeue - process anyway
                                 logger.warning(
@@ -222,10 +225,15 @@ class UpdateQueueManager:
                                     self._dp.feed_update(self._bot, update),
                                     timeout=30.0
                                 )
-                        
-                        # Mark task done
-                        self._queue.task_done()
-                        continue
+                            
+                            # CRITICAL: Only task_done() if we didn't requeue
+                            # If requeued, the item goes back to queue and will be processed later
+                            if not requeued:
+                                self._queue.task_done()
+                            else:
+                                # Skip task_done() AND finally block - item still in queue
+                                self._metrics.workers_active -= 1
+                            continue
                     
                     # ACTIVE MODE: Process normally
                     start_time = time.monotonic()
