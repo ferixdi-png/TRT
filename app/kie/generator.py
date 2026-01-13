@@ -367,6 +367,7 @@ class KieGenerator:
                         
                         if current_job:
                             job_status = normalize_job_status(current_job.get('status', ''))
+                            delivered_at = current_job.get('delivered_at')
                             
                             if job_status == 'done':
                                 # Callback уже обновил job - используем данные из storage
@@ -377,7 +378,12 @@ class KieGenerator:
                                     except Exception:
                                         result_urls = [result_urls]
                                 
-                                logger.info(f"✅ STORAGE-FIRST | Job done via callback | TaskID: {task_id}")
+                                # 🎯 IDEMPOTENCY: If callback already delivered, don't send again
+                                if delivered_at:
+                                    logger.info(f"✅ STORAGE-FIRST | Already delivered via callback | TaskID: {task_id}")
+                                else:
+                                    logger.info(f"✅ STORAGE-FIRST | Job done (not yet delivered) | TaskID: {task_id}")
+                                
                                 return {
                                     'success': True,
                                     'message': '✅ Генерация завершена',
@@ -385,7 +391,8 @@ class KieGenerator:
                                     'result_object': None,
                                     'error_code': None,
                                     'error_message': None,
-                                    'task_id': task_id
+                                    'task_id': task_id,
+                                    'already_delivered': delivered_at is not None
                                 }
                             
                             elif job_status == 'failed':

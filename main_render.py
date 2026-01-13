@@ -752,16 +752,22 @@ def _make_web_app(
             
             if user_id and chat_id:
                 try:
-                    if normalized_status == "done" and result_urls:
+                    # 🎯 IDEMPOTENCY: Check if already delivered (prevents duplicates)
+                    already_delivered = job.get('delivered_at') is not None
+                    if already_delivered:
+                        logger.info(f"[KIE_CALLBACK] ⏩ SKIP: Already delivered | task_id={effective_id} chat_id={chat_id}")
+                    elif normalized_status == "done" and result_urls:
                         # 🎯 Smart sender: detect content type and send appropriately
+                        logger.info(f"[KIE_CALLBACK] 📤 DELIVERING result | task_id={effective_id} chat_id={chat_id}")
                         await _send_generation_result(bot, chat_id, result_urls, effective_id)
-                        logger.info(f"[KIE_CALLBACK] ✅ Sent result to chat_id={chat_id} user_id={user_id}")
+                        logger.info(f"[KIE_CALLBACK] ✅ DELIVERED | task_id={effective_id} chat_id={chat_id} user_id={user_id}")
                         
                         # Mark as delivered (prevents duplicates)
                         try:
                             await storage.update_job_status(job_id, 'done', delivered=True)
-                        except Exception:
-                            pass  # Best effort - job still delivered
+                            logger.info(f"[KIE_CALLBACK] 🔒 MARKED delivered_at | job_id={job_id}")
+                        except Exception as e:
+                            logger.warning(f"[KIE_CALLBACK] ⚠️ Failed to mark delivered (non-critical): {e}")
                     elif normalized_status == "done" and not result_urls:
                         # Success but no URLs - this is suspicious
                         text = f"⚠️ Генерация завершилась, но результат пуст. ID: {effective_id}"
