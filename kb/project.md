@@ -5,6 +5,26 @@
 **Market**: Российский рынок (цены в RUB, оплата через Telegram Stars)  
 **Status**: Production-ready, активный коммерческий продукт
 
+## SSOT (Single Source of Truth)
+
+**Models & Metadata**: `models/KIE_SOURCE_OF_TRUTH.json` (v1.2.10-FINAL)  
+**Pricing & Margins**: Calculated from KIE_SOURCE_OF_TRUTH.json pricing field  
+**ENV Contract**: `kb/deployment.md` defines all required environment variables  
+**Telemetry Contract**: `app/telemetry/logging_contract.py` (event types, reason codes)  
+**UI Registry**: `app/telemetry/ui_registry.py` (screens, buttons, flows)
+
+## Deprecated / Legacy (DO NOT USE)
+
+**Files to IGNORE in runtime**:
+- `./aiogram/` folder - local stubs, shadowed by site-packages (removed in Docker build)
+- `models/kie_models.yaml` - legacy format, replaced by KIE_SOURCE_OF_TRUTH.json
+- `bot_kie.py` - old PTB (python-telegram-bot) runner, replaced by main_render.py
+- Any `*_old.py` or `*_backup.py` files in handlers/
+
+**Legacy Handlers** (move to /legacy if found active):
+- Multiple parallel UX flows (only flow.py + z_image.py are canonical)
+- Standalone model handlers (should use unified pipeline from Cycle 10+)
+
 ## Core Value Proposition
 
 Пользователь отправляет текстовый промпт → бот генерирует изображение/видео через AI модели → результат приходит в Telegram.
