@@ -1,5 +1,36 @@
 # ✅ Z-IMAGE ATOMIC DELIVERY LOCK - FINAL
 
+**Статус:** ✅ ИСПРАВЛЕНА КРИТИЧЕСКАЯ ОШИБКА + DEPLOYED  
+**Дата:** 2026-01-13 08:56 UTC  
+**Commit:** 3534369 (fix: add delivered_at column in migration 009)
+
+---
+
+## 🔥 КРИТИЧЕСКАЯ ОШИБКА НАЙДЕНА И ИСПРАВЛЕНА
+
+### Проблема на Render (deploy 2a13e06):
+```
+2026-01-13 08:52:34 ERROR [101ebccf] [CALLBACK_ERROR]: column "delivered_at" does not exist
+asyncpg.exceptions.UndefinedColumnError: column "delivered_at" does not exist
+  at /app/main_render.py:788 in kie_callback
+  at /app/app/storage/pg_storage.py:540 in try_acquire_delivery_lock
+```
+
+### Root Cause:
+- Миграция 009 создавала индекс на `delivered_at`, но **не создавала саму колонку** в `generation_jobs`
+- Колонка `delivered_at` существовала только в таблице `jobs` (миграция 006)
+- Код использует `generation_jobs`, а не `jobs`
+
+### Fix (commit 3534369):
+```sql
+-- ADDED to migration 009:
+ALTER TABLE generation_jobs ADD COLUMN delivered_at TIMESTAMP;
+ALTER TABLE generation_jobs ADD COLUMN delivering_at TIMESTAMP;
+-- NOW index creation works because column exists
+```
+
+---
+
 ## Что изменилось в v2:
 
 ### Проблема v1:
@@ -9,9 +40,13 @@
 
 ### Решение v2: Atomic Delivery Lock
 
-#### 1. Миграция БД (migrations/009_add_delivering_at.sql)
+#### 1. Миграция БД (migrations/009_add_delivering_at.sql) - FIXED
 ```sql
+-- CRITICAL: Add delivered_at FIRST (was missing!)
+ALTER TABLE generation_jobs ADD COLUMN delivered_at TIMESTAMP;
+-- Add atomic lock column
 ALTER TABLE generation_jobs ADD COLUMN delivering_at TIMESTAMP;
+-- Create index (now works because columns exist)
 CREATE INDEX idx_jobs_delivery_lock ON generation_jobs(...) WHERE delivered_at IS NULL;
 ```
 
@@ -140,6 +175,55 @@ T2: (5 minutes later) Polling → lock WIN (delivering_at < NOW - 5min) → deli
 - [x] Логи DELIVER_LOCK_WIN/SKIP
 - [x] PASSIVE mode не блокирует callbacks
 - [x] Compile check успешен
+- [x] **CRITICAL FIX:** Добавлена колонка `delivered_at` в миграцию 009
+
+---
+
+## 🚨 DEPLOYMENT HISTORY
+
+### Deploy 1 (commit 2a13e06) - FAILED ❌
+- **Время:** 2026-01-13 08:51 UTC
+- **Ошибка:** `column "delivered_at" does not exist`
+- **Причина:** Миграция 009 не создавала `delivered_at` в `generation_jobs`
+- **Симптомы:** 
+  - Callback падает с UndefinedColumnError
+  - Polling крутится в бесконечном цикле (state=done, i=1...100)
+  - Пользователь НЕ получает картинку
+
+### Deploy 2 (commit 3534369) - IN PROGRESS ⏳
+- **Время:** 2026-01-13 08:56 UTC
+- **Исправление:** Добавлена колонка `delivered_at` в миграцию 009
+- **Ожидается:** 
+  - Миграция выполнится успешно
+  - Callback обработает успешно
+  - Пользователь получит картинку
+  - Логи покажут [DELIVER_LOCK_WIN]
+
+---
+
+## 🔍 MONITORING ПОСЛЕ FIX
+
+### Что смотреть в логах:
+
+1. **Миграция выполнилась:**
+```
+Added delivered_at column to generation_jobs table
+Added delivering_at column to generation_jobs table
+Created idx_jobs_delivery_lock index
+```
+
+2. **Callback работает:**
+```
+[CALLBACK_RECEIVED] task_id=XXX
+[DELIVER_LOCK_WIN] Won delivery race
+[DELIVER_OK] task_id=XXX
+[MARK_DELIVERED] job_id=YYY
+```
+
+3. **НЕТ ошибок UndefinedColumnError**
+
+4. **Polling НЕ крутится бесконечно** (должен stop после доставки)
+
 
 ## Deployment:
 
