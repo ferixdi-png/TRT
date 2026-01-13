@@ -559,7 +559,7 @@ def _make_web_app(
         # Enqueue for background processing ONLY if NOT fastpath handled
         # This prevents /start duplicate processing
         if fastpath_handled:
-            logger.debug("[WEBHOOK] Fastpath handled /start, skipping enqueue (no duplicate)")
+            logger.info("[WEBHOOK] ✅ Fastpath handled /start update_id=%s, skipping enqueue (no duplicate)", update_id)
             # Still return 200 OK
             return web.Response(status=200, text="ok")
         
