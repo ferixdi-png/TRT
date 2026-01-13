@@ -74,19 +74,25 @@ class SingletonLockController:
     async def _set_state(self, new_state: LockState) -> None:
         """Atomic state transition (thread-safe) + sync active_state"""
         logger.info(f"[LOCK_CONTROLLER] 🔧 _set_state called: new_state={new_state.value}")
-        async with self.state._mutex:
-            old_state = self.state.state
-            logger.info(f"[LOCK_CONTROLLER] 🔍 State transition: {old_state.value} → {new_state.value}")
-            self.state.state = new_state
-            
-            # CRITICAL: Sync active_state for workers
-            if self.active_state:
+        try:
+            async with self.state._mutex:
+                old_state = self.state.state
+                logger.info(f"[LOCK_CONTROLLER] 🔍 State transition: {old_state.value} → {new_state.value}")
+                self.state.state = new_state
+                
+                # CRITICAL: Sync active_state for workers
+                if self.active_state:
+                    logger.info(f"[LOCK_CONTROLLER] 🔄 Syncing active_state (current: {self.active_state.active})")
+                    if new_state == LockState.ACTIVE:
+                        self.active_state.set(True, reason="lock_acquired")
+                        logger.info(f"[LOCK_CONTROLLER] ✅ active_state synced: {self.active_state.active}")
+                    elif new_state == LockState.PASSIVE:
+                        self.active_state.set(False, reason="lock_lost")
+                        logger.info(f"[LOCK_CONTROLLER] ⏸️ active_state synced: {self.active_state.active}")
+                else:
+                    logger.error("[LOCK_CONTROLLER] ❌ active_state is None! Cannot sync!")
+                
                 if new_state == LockState.ACTIVE:
-                    self.active_state.set(True, reason="lock_acquired")
-                elif new_state == LockState.PASSIVE:
-                    self.active_state.set(False, reason="lock_lost")
-            
-            if new_state == LockState.ACTIVE:
                 logger.info("[LOCK_CONTROLLER] ✅ Setting ACTIVE state...")
                 self.state.lock_acquired_at = datetime.now()
                 logger.info(f"[LOCK_CONTROLLER] 🔍 Checking callback: old_state={old_state.value}, has_callback={self.on_active_callback is not None}, first_activation={self.state.first_activation}")
