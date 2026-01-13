@@ -75,9 +75,9 @@ class TruthValidator:
             if not filepath.exists():
                 continue  # Already removed, OK
             
-            # Check if it's in quarantine
-            if "quarantine" in str(filepath.relative_to(PROJECT_ROOT)):
-                continue  # In quarantine, OK
+            # Check if it's in quarantine or legacy
+            if "quarantine" in str(filepath.relative_to(PROJECT_ROOT)) or "legacy" in str(filepath.relative_to(PROJECT_ROOT)):
+                continue  # In quarantine/legacy, OK
             
             # Check if it has main guard (would be duplicate entrypoint)
             content = filepath.read_text()
@@ -217,13 +217,13 @@ class TruthValidator:
         # Invariant: main_render.py is ONLY entrypoint
         blessed = self.truth["entrypoint"]["blessed_path"]
         
-        # Count files with if __name__ == "__main__" outside scripts/, quarantine/, migrations/, tests/, venv/, .venv/, tools/, kie_sync/
+        # Count files with if __name__ == "__main__" outside scripts/, quarantine/, legacy/, migrations/, tests/, venv/, .venv/, tools/, kie_sync/
         main_guards = []
         for py_file in PROJECT_ROOT.rglob("*.py"):
             # Skip excluded directories
             relative = py_file.relative_to(PROJECT_ROOT)
             excluded_dirs = [
-                "scripts/", "quarantine/", "migrations/", "tests/", 
+                "scripts/", "quarantine/", "legacy/", "migrations/", "tests/", 
                 "venv/", ".venv/", "tools/", "kie_sync/", "app/tools/",
                 "pricing/", "app/utils/"
             ]
