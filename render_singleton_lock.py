@@ -72,24 +72,32 @@ def _reset_backoff():
 
 def split_bigint_to_pg_advisory_oids(lock_key: int) -> tuple[int, int]:
     """
-    Разбивает 64-битный lock_key на пару 32-битных OID для pg_advisory_lock.
+    Разбивает 64-битный lock_key на пару 32-битных signed int для pg_advisory_lock.
     
-    PostgreSQL advisory locks используют пару (classid, objid), каждая из которых
-    является 32-битным unsigned integer (OID type, 0..4294967295).
+    PostgreSQL pg_try_advisory_lock(int, int) принимает два SIGNED int32 параметра.
+    Диапазон signed int32: -2147483648..2147483647
     
     Args:
         lock_key: 64-битный ключ (0 <= lock_key <= 2^63-1)
     
     Returns:
-        tuple[int, int]: (hi, lo) где каждый 0 <= value <= 4294967295
+        tuple[int, int]: (k1, k2) где каждый -2^31 <= value <= 2^31-1
     
     Example:
         >>> split_bigint_to_pg_advisory_oids(2797505866569588743)
-        (651107867, 2242801671)
+        (651107867, -2052522489)  # Второй параметр signed
     """
-    # Разбиваем на старшие и младшие 32 бита (unsigned)
-    hi = (lock_key >> 32) & 0xFFFFFFFF  # Старшие 32 бита
-    lo = lock_key & 0xFFFFFFFF          # Младшие 32 бита
+    # Разбиваем на старшие и младшие 32 бита
+    hi = (lock_key >> 32) & 0xFFFFFFFF
+    lo = lock_key & 0xFFFFFFFF
+    
+    # Конвертируем в signed int32 (PostgreSQL int type)
+    # Если значение > 2^31-1, вычитаем 2^32 для получения отрицательного числа
+    if hi > 0x7FFFFFFF:
+        hi -= 0x100000000
+    if lo > 0x7FFFFFFF:
+        lo -= 0x100000000
+    
     return hi, lo
 
 

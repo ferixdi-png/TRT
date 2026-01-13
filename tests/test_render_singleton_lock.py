@@ -17,12 +17,14 @@ class TestSplitBigintToPgAdvisoryOids:
         lock_key = 2797505866569588743
         hi, lo = split_bigint_to_pg_advisory_oids(lock_key)
         
-        # Проверяем что оба значения в диапазоне OID (0..2^32-1)
-        assert 0 <= hi <= 0xFFFFFFFF, f"hi={hi} out of OID range"
-        assert 0 <= lo <= 0xFFFFFFFF, f"lo={lo} out of OID range"
+        # Проверяем что оба значения в диапазоне signed int32
+        assert -0x80000000 <= hi <= 0x7FFFFFFF, f"hi={hi} out of signed int32 range"
+        assert -0x80000000 <= lo <= 0x7FFFFFFF, f"lo={lo} out of signed int32 range"
         
-        # Проверяем обратное восстановление
-        reconstructed = (hi << 32) | lo
+        # Проверяем обратное восстановление (через unsigned)
+        hi_unsigned = hi if hi >= 0 else hi + 0x100000000
+        lo_unsigned = lo if lo >= 0 else lo + 0x100000000
+        reconstructed = (hi_unsigned << 32) | lo_unsigned
         assert reconstructed == lock_key, f"Reconstructed {reconstructed} != original {lock_key}"
     
     def test_split_max_signed_int64(self):
@@ -30,10 +32,12 @@ class TestSplitBigintToPgAdvisoryOids:
         lock_key = 0x7FFFFFFFFFFFFFFF  # 2^63 - 1
         hi, lo = split_bigint_to_pg_advisory_oids(lock_key)
         
-        assert 0 <= hi <= 0xFFFFFFFF
-        assert 0 <= lo <= 0xFFFFFFFF
+        assert -0x80000000 <= hi <= 0x7FFFFFFF
+        assert -0x80000000 <= lo <= 0x7FFFFFFF
         
-        reconstructed = (hi << 32) | lo
+        hi_unsigned = hi if hi >= 0 else hi + 0x100000000
+        lo_unsigned = lo if lo >= 0 else lo + 0x100000000
+        reconstructed = (hi_unsigned << 32) | lo_unsigned
         assert reconstructed == lock_key
     
     def test_split_zero(self):
@@ -61,7 +65,7 @@ class TestSplitBigintToPgAdvisoryOids:
         hi, lo = split_bigint_to_pg_advisory_oids(lock_key)
         
         assert hi == 0
-        assert lo == 0xFFFFFFFF
+        assert lo == -1  # 0xFFFFFFFF как signed int32 = -1
     
     def test_split_all_ones_upper_32(self):
         """Test with all ones in upper 32 bits (within int64 range)."""
@@ -112,16 +116,18 @@ class TestMakeLockKey:
         assert key1 != key2, "Different namespaces should produce different keys"
     
     def test_make_lock_key_splittable(self):
-        """Test that generated key can be split into valid OIDs."""
+        """Test that generated key can be split into valid signed int32."""
         token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
         key = make_lock_key(token)
         
         hi, lo = split_bigint_to_pg_advisory_oids(key)
         
-        # Проверяем что части в допустимом диапазоне
-        assert 0 <= hi <= 0xFFFFFFFF
-        assert 0 <= lo <= 0xFFFFFFFF
+        # Проверяем что части в допустимом диапазоне signed int32
+        assert -0x80000000 <= hi <= 0x7FFFFFFF
+        assert -0x80000000 <= lo <= 0x7FFFFFFF
         
         # Проверяем обратное восстановление
-        reconstructed = (hi << 32) | lo
+        hi_unsigned = hi if hi >= 0 else hi + 0x100000000
+        lo_unsigned = lo if lo >= 0 else lo + 0x100000000
+        reconstructed = (hi_unsigned << 32) | lo_unsigned
         assert reconstructed == key
