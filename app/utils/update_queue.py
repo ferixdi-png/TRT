@@ -305,8 +305,8 @@ class UpdateQueueManager:
                         await asyncio.sleep(0.5)
                         continue
 
-                    if is_passive:
-                        self._metrics.total_processed_degraded += 1
+                    # Don't count PASSIVE-allowed updates as "degraded" - they're normal
+                    # (degraded only applies to forced ACTIVE mode processing without lock)
                     # ACTIVE: Log first entry
                     if not active_enter_logged and not is_passive:
                         logger.info("[WORKER_%d] ✅ ACTIVE_ENTER active=True", worker_id)

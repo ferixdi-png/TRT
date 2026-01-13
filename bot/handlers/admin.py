@@ -127,13 +127,13 @@ async def cmd_admin_user(message: Message):
 
     parts = (message.text or "").strip().split(maxsplit=1)
     if len(parts) < 2:
-        await message.answer("❌ Использование: /admin_user <id>")
+        await message.answer("❌ Использование: /admin_user [id]")
         return
     try:
         user_id = int(parts[1])
     except ValueError as e:
         logger.error("Failed to parse admin_user id '%s': %s", parts[1], e)
-        await message.answer("❌ Неверный формат. Использование: /admin_user <id>")
+        await message.answer("❌ Неверный формат. Использование: /admin_user [id]")
         return
 
     user_info = await _admin_service.get_user_info(user_id)
@@ -183,7 +183,7 @@ async def cmd_admin_toggle_model(message: Message):
 
     parts = (message.text or "").strip().split(maxsplit=1)
     if len(parts) < 2:
-        await message.answer("❌ Использование: /admin_toggle_model <model_id>")
+        await message.answer("❌ Использование: /admin_toggle_model [model_id]")
         return
     model_id = parts[1].strip()
     source_file = Path("models/KIE_SOURCE_OF_TRUTH.json")
@@ -207,7 +207,7 @@ async def cmd_admin_toggle_model(message: Message):
         status_text = "⛔️ Модель отключена"
 
     logger.info("Admin %s toggled model %s -> %s", message.from_user.id, model_id, action)
-    await message.answer(f"{status_text}: <code>{model_id}</code>")
+    await message.answer(f"{status_text}: `{model_id}`", parse_mode="HTML")
 
 
 @router.message(Command("admin"))

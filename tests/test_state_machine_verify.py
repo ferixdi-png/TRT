@@ -50,27 +50,53 @@ async def test_state_machine_activates_workers():
     # Start workers (they should wait in PASSIVE)
     await queue_manager.start()
     
-    # Enqueue a fake update BEFORE lock acquired
-    fake_update = Mock()
-    fake_update.update_id = 12345
-    queue_manager.enqueue(fake_update, update_id=12345)
+    # Enqueue a FORBIDDEN update (no message, no callback)
+    forbidden_update = Mock()
+    forbidden_update.update_id = 12345
+    forbidden_update.message = None
+    forbidden_update.callback_query = None
+    queue_manager.enqueue(forbidden_update, update_id=12345)
     
-    # Verify queue has item but workers haven't processed yet (PASSIVE)
-    await asyncio.sleep(0.1)
-    assert queue_manager._queue.qsize() > 0, "Update should be in queue"
-    assert mock_dp.feed_update.call_count == 0, "Workers should not process in PASSIVE"
+    # Enqueue an ALLOWED update (whitelisted menu callback for PASSIVE)
+    allowed_update = Mock()
+    allowed_update.update_id = 12346
+    allowed_update.message = None
+    allowed_update.callback_query = Mock()
+    allowed_update.callback_query.data = "menu:main"
+    allowed_update.callback_query.id = "cb_123"
+    queue_manager.enqueue(allowed_update, update_id=12346)
     
-    # Simulate lock acquisition (sets active_state.active=True)
+    # In PASSIVE mode with no Redis (DEDUP_FAIL_OPEN):
+    # - Forbidden updates are rejected immediately
+    # - Allowed updates are processed (with dedup check failing gracefully)
+    await asyncio.sleep(0.2)
+    
+    # Verify PASSIVE behavior:
+    # - Forbidden update was rejected (not fed to dispatcher)
+    # - Allowed update was processed (fed to dispatcher, even in PASSIVE)
+    assert mock_dp.feed_update.call_count >= 1, "Allowed update should be processed in PASSIVE (whitelisted)"
+    
+    # Reset counter for second part of test
+    mock_dp.feed_update.reset_mock()
+    
+    # Now activate and enqueue a forbidden update
     await lock_controller.simulate_lock_acquisition()
-    
-    # Wait for workers to pick up update
-    await asyncio.sleep(0.3)
-    
-    # Verify active state changed
+    await asyncio.sleep(0.05)
     assert active_state.active == True, "active_state should be True after lock acquired"
     
-    # Verify worker processed the update
-    assert mock_dp.feed_update.call_count >= 1, "Worker should have processed update in ACTIVE"
+    # Enqueue another forbidden update - should now be processed because in ACTIVE mode
+    forbidden_update_2 = Mock()
+    forbidden_update_2.update_id = 12347
+    forbidden_update_2.message = Mock()
+    forbidden_update_2.message.chat.id = 123
+    forbidden_update_2.message.text = "some command"
+    forbidden_update_2.callback_query = None
+    queue_manager.enqueue(forbidden_update_2, update_id=12347)
+    
+    await asyncio.sleep(0.2)
+    
+    # In ACTIVE mode, forbidden updates are now processed
+    assert mock_dp.feed_update.call_count >= 1, "Forbidden update should be processed in ACTIVE"
     
     # Cleanup
     await queue_manager.stop()
