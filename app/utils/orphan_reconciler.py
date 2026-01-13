@@ -174,8 +174,16 @@ class OrphanCallbackReconciler:
         
         else:
             # Job still not found - check age
-            from datetime import datetime as dt_class
-            age = dt_class.now() - received_at
+            from datetime import datetime, timezone
+            
+            # Normalize received_at to timezone-aware UTC
+            if received_at.tzinfo is None:
+                # Naive datetime - assume UTC
+                received_at = received_at.replace(tzinfo=timezone.utc)
+            
+            # Calculate age using timezone-aware now
+            now = datetime.now(timezone.utc)
+            age = now - received_at
             if age.total_seconds() > self.max_age_minutes * 60:
                 # Too old - give up
                 error_msg = f"Orphan timeout: no job found after {self.max_age_minutes} minutes"
