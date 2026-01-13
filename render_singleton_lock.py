@@ -23,6 +23,29 @@ from psycopg2.extensions import connection
 logger = logging.getLogger(__name__)
 
 
+def split_bigint_to_pg_advisory_oids(lock_key: int) -> tuple[int, int]:
+    """
+    Разбивает 64-битный lock_key на пару 32-битных OID для pg_advisory_lock.
+    
+    PostgreSQL advisory locks используют пару (classid, objid), каждая из которых
+    является 32-битным unsigned integer (OID type, 0..4294967295).
+    
+    Args:
+        lock_key: 64-битный ключ (0 <= lock_key <= 2^63-1)
+    
+    Returns:
+        tuple[int, int]: (hi, lo) где каждый 0 <= value <= 4294967295
+    
+    Example:
+        >>> split_bigint_to_pg_advisory_oids(2797505866569588743)
+        (651107867, 2242801671)
+    """
+    # Разбиваем на старшие и младшие 32 бита (unsigned)
+    hi = (lock_key >> 32) & 0xFFFFFFFF  # Старшие 32 бита
+    lo = lock_key & 0xFFFFFFFF          # Младшие 32 бита
+    return hi, lo
+
+
 def make_lock_key(token: str, namespace: str = "telegram_polling") -> int:
     """
     Создает стабильный bigint ключ из токена и namespace.
@@ -96,24 +119,34 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
             logger.warning(f"⏸️ PostgreSQL advisory lock already held by another instance: key={lock_key}")
             
             # Проверяем timestamp последней активности держателя lock
-            # ВАЖНО: используем classid,objid,objsubid для advisory locks (не objid alone!)
-            # classid=0 для user locks, objid хранит lock key
-            with conn.cursor() as cur:
-                # Advisory lock key распределён по (classid, objid, objsubid)
-                # Для user locks: classid=0, objid=key (если key fits in 32-bit) или classid,objid pair
-                cur.execute("""
-                    SELECT 
-                        pl.pid,
-                        sa.state,
-                        EXTRACT(EPOCH FROM (NOW() - sa.query_start)) as duration_sec,
-                        EXTRACT(EPOCH FROM (NOW() - sa.state_change)) as idle_sec
-                    FROM pg_locks pl
-                    LEFT JOIN pg_stat_activity sa ON pl.pid = sa.pid
-                    WHERE pl.locktype = 'advisory'
-                    AND pl.granted = true
-                    LIMIT 1
-                """)
-                result = cur.fetchone()
+            # КРИТИЧНО: Для 64-битных advisory locks PostgreSQL использует пару (classid, objid)
+            # где каждая часть - 32-битный OID (0..2^32-1)
+            hi, lo = split_bigint_to_pg_advisory_oids(lock_key)
+            
+            try:
+                with conn.cursor() as cur:
+                    # Находим holder нашего конкретного lock по classid/objid паре
+                    cur.execute("""
+                        SELECT 
+                            pl.pid,
+                            sa.state,
+                            EXTRACT(EPOCH FROM (NOW() - sa.query_start)) as duration_sec,
+                            EXTRACT(EPOCH FROM (NOW() - sa.state_change)) as idle_sec
+                        FROM pg_locks pl
+                        LEFT JOIN pg_stat_activity sa ON pl.pid = sa.pid
+                        WHERE pl.locktype = 'advisory'
+                        AND pl.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+                        AND pl.classid = %s
+                        AND pl.objid = %s
+                        AND pl.granted = true
+                        LIMIT 1
+                    """, (hi, lo))
+                    result = cur.fetchone()
+            except Exception as e:
+                # FAIL-SAFE: Ошибка диагностики НЕ должна ломать acquire цикл
+                logger.warning(f"[LOCK] ⚠️ Cannot check lock holder (key={lock_key}): {e}")
+                pool.putconn(conn)
+                return None
                 
                 if result:
                     pid, state, duration_sec, idle_sec = result
@@ -151,8 +184,8 @@ def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
                                     return conn
                                 else:
                                     logger.warning("[LOCK] ⚠️ Still cannot acquire lock after termination")
-                        except Exception as e:
-                            logger.error(f"[LOCK] ❌ Failed to terminate stale process: {e}")
+                        except Exception as term_err:
+                            logger.warning(f"[LOCK] ⚠️ Cannot terminate stale process (pid={pid}): {term_err}")
                 else:
                     logger.warning("[LOCK] ⚠️ Lock holder process not found in pg_stat_activity (already dead?)")
             

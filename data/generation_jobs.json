@@ -885,5 +885,125 @@
       "https://example.com/result.mp4"
     ],
     "error_message": null
+  },
+  "462f8209-e29c-472f-b54b-ca67f3a4a1b1": {
+    "job_id": "462f8209-e29c-472f-b54b-ca67f3a4a1b1",
+    "user_id": 999999999,
+    "model_id": "test-model",
+    "model_name": "Test Model",
+    "params": {
+      "prompt": "test"
+    },
+    "price": 10.0,
+    "status": "done",
+    "task_id": null,
+    "external_task_id": null,
+    "created_at": "2026-01-13T09:03:33.805249",
+    "updated_at": "2026-01-13T09:03:33.807592",
+    "finished_at": "2026-01-13T09:03:33.807600",
+    "result_urls": [
+      "http://test.com/result"
+    ],
+    "error_message": null
+  },
+  "a341ed72-119d-4de4-98c4-e565e9fdf807": {
+    "job_id": "a341ed72-119d-4de4-98c4-e565e9fdf807",
+    "user_id": 999999999,
+    "model_id": "test-model",
+    "model_name": "Test Model",
+    "params": {
+      "prompt": "test prompt"
+    },
+    "price": 10.0,
+    "status": "done",
+    "task_id": "a341ed72-119d-4de4-98c4-e565e9fdf807",
+    "external_task_id": "a341ed72-119d-4de4-98c4-e565e9fdf807",
+    "created_at": "2026-01-13T09:03:33.812360",
+    "updated_at": "2026-01-13T09:03:36.816467",
+    "finished_at": "2026-01-13T09:03:36.816480",
+    "result_urls": [
+      "https://example.com/generated/result_a341ed72-119d-4de4-98c4-e565e9fdf807.txt"
+    ],
+    "error_message": null
+  },
+  "47efd2d7-ddbb-4f2b-a870-c06fdfb5032a": {
+    "job_id": "47efd2d7-ddbb-4f2b-a870-c06fdfb5032a",
+    "user_id": 999999999,
+    "model_id": "test-model",
+    "model_name": "Test Model",
+    "params": {
+      "prompt": "test"
+    },
+    "price": 10.0,
+    "status": "done",
+    "task_id": null,
+    "external_task_id": null,
+    "created_at": "2026-01-13T09:19:07.531935",
+    "updated_at": "2026-01-13T09:19:07.534400",
+    "finished_at": "2026-01-13T09:19:07.534407",
+    "result_urls": [
+      "http://test.com/result"
+    ],
+    "error_message": null
+  },
+  "ec67a38d-06a7-4f7f-bbd5-0fd1d7df9d00": {
+    "job_id": "ec67a38d-06a7-4f7f-bbd5-0fd1d7df9d00",
+    "user_id": 999999999,
+    "model_id": "test-model",
+    "model_name": "Test Model",
+    "params": {
+      "prompt": "test prompt"
+    },
+    "price": 10.0,
+    "status": "done",
+    "task_id": "ec67a38d-06a7-4f7f-bbd5-0fd1d7df9d00",
+    "external_task_id": "ec67a38d-06a7-4f7f-bbd5-0fd1d7df9d00",
+    "created_at": "2026-01-13T09:19:07.539335",
+    "updated_at": "2026-01-13T09:19:10.542809",
+    "finished_at": "2026-01-13T09:19:10.542822",
+    "result_urls": [
+      "https://example.com/generated/result_ec67a38d-06a7-4f7f-bbd5-0fd1d7df9d00.txt"
+    ],
+    "error_message": null
+  },
+  "0aeb697b-5817-403b-86e1-9b058dec643f": {
+    "job_id": "0aeb697b-5817-403b-86e1-9b058dec643f",
+    "user_id": 999999999,
+    "model_id": "test-model",
+    "model_name": "Test Model",
+    "params": {
+      "prompt": "test"
+    },
+    "price": 10.0,
+    "status": "done",
+    "task_id": null,
+    "external_task_id": null,
+    "created_at": "2026-01-13T09:20:08.421583",
+    "updated_at": "2026-01-13T09:20:08.424905",
+    "finished_at": "2026-01-13T09:20:08.424916",
+    "result_urls": [
+      "http://test.com/result"
+    ],
+    "error_message": null
+  },
+  "a9f49ccd-baac-4503-b01b-2484a72c6c83": {
+    "job_id": "a9f49ccd-baac-4503-b01b-2484a72c6c83",
+    "user_id": 999999999,
+    "model_id": "test-model",
+    "model_name": "Test Model",
+    "params": {
+      "prompt": "test prompt"
+    },
+    "price": 10.0,
+    "status": "done",
+    "task_id": "a9f49ccd-baac-4503-b01b-2484a72c6c83",
+    "external_task_id": "a9f49ccd-baac-4503-b01b-2484a72c6c83",
+    "created_at": "2026-01-13T09:20:08.431443",
+    "updated_at": "2026-01-13T09:20:11.436010",
+    "finished_at": "2026-01-13T09:20:11.436022",
+    "result_urls": [
+      "https://example.com/generated/result_a9f49ccd-baac-4503-b01b-2484a72c6c83.txt"
+    ],
+    "error_message": null
   }
 }

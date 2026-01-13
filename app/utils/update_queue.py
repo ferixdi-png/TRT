@@ -21,6 +21,47 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _is_allowed_in_passive(update) -> bool:
+    """
+    Проверяет, разрешен ли update в PASSIVE режиме.
+    
+    Разрешены:
+    - /start команда
+    - main_menu, back_to_menu callback
+    - help, menu:* callback
+    
+    Запрещены:
+    - Генерации (gen:*, flow:*, generate:*)
+    - Платежи (pay:*, payment:*, topup:*)
+    - Редактирование параметров (param:*, edit:*)
+    - Любые другие опасные действия
+    """
+    # Команда /start всегда разрешена
+    if hasattr(update, 'message') and update.message:
+        msg = update.message
+        if msg.text and msg.text.startswith('/start'):
+            return True
+    
+    # Проверяем callback_query
+    if hasattr(update, 'callback_query') and update.callback_query:
+        data = update.callback_query.data or ""
+        
+        # Разрешенные префиксы/значения
+        allowed = [
+            'main_menu',
+            'back_to_menu',
+            'help',
+            'menu:',
+        ]
+        
+        for pattern in allowed:
+            if data == pattern or data.startswith(pattern):
+                return True
+    
+    # По умолчанию запрещаем
+    return False
+
+
 @dataclass
 class QueueMetrics:
     """Metrics for monitoring queue health."""
@@ -196,6 +237,53 @@ class UpdateQueueManager:
                 # Extract item metadata
                 update = item["update"]
                 update_id = item["update_id"]
+                
+                # 🔒 PASSIVE CHECK: Reject forbidden updates immediately with user feedback
+                if self._active_state and not self._active_state.active:
+                    if not _is_allowed_in_passive(update):
+                        # Запрещенный update в PASSIVE режиме - отвечаем пользователю
+                        try:
+                            passive_msg = "⏸️ Сервис обновляется, попробуй через минуту"
+                            
+                            # callback_query - answer немедленно
+                            if hasattr(update, 'callback_query') and update.callback_query:
+                                await self._bot.answer_callback_query(
+                                    update.callback_query.id,
+                                    text=passive_msg,
+                                    show_alert=False
+                                )
+                                logger.info(
+                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT callback_query data=%s",
+                                    worker_id, update.callback_query.data
+                                )
+                            
+                            # message - отправляем сообщение
+                            elif hasattr(update, 'message') and update.message:
+                                await self._bot.send_message(
+                                    chat_id=update.message.chat.id,
+                                    text=passive_msg
+                                )
+                                logger.info(
+                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT message text=%s",
+                                    worker_id, update.message.text[:50] if update.message.text else "(no text)"
+                                )
+                            
+                            self._metrics.total_held += 1
+                        except Exception as notify_err:
+                            logger.warning(
+                                "[WORKER_%d] ⚠️ PASSIVE_REJECT failed to notify user: %s",
+                                worker_id, notify_err
+                            )
+                        finally:
+                            # Помечаем как обработанный (не оставляем в очереди)
+                            self._queue.task_done()
+                        continue  # Переходим к следующему update
+                    else:
+                        # Разрешенный update (menu/start) - обрабатываем
+                        logger.info(
+                            "[WORKER_%d] ✅ PASSIVE_MENU_OK processing allowed update",
+                            worker_id
+                        )
                 
                 self._metrics.workers_active += 1
                 self._metrics.queue_depth_current = self._queue.qsize()
