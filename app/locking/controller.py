@@ -93,15 +93,15 @@ class SingletonLockController:
                     logger.error("[LOCK_CONTROLLER] ❌ active_state is None! Cannot sync!")
                 
                 if new_state == LockState.ACTIVE:
-                logger.info("[LOCK_CONTROLLER] ✅ Setting ACTIVE state...")
-                self.state.lock_acquired_at = datetime.now()
-                logger.info(f"[LOCK_CONTROLLER] 🔍 Checking callback: old_state={old_state.value}, has_callback={self.on_active_callback is not None}, first_activation={self.state.first_activation}")
-                
-                # Call callback on FIRST activation OR when transitioning from PASSIVE
-                should_call_callback = (
-                    (old_state == LockState.PASSIVE or self.state.first_activation)
-                    and self.on_active_callback is not None
-                )
+                    logger.info("[LOCK_CONTROLLER] ✅ Setting ACTIVE state...")
+                    self.state.lock_acquired_at = datetime.now()
+                    logger.info(f"[LOCK_CONTROLLER] 🔍 Checking callback: old_state={old_state.value}, has_callback={self.on_active_callback is not None}, first_activation={self.state.first_activation}")
+                    
+                    # Call callback on FIRST activation OR when transitioning from PASSIVE
+                    should_call_callback = (
+                        (old_state == LockState.PASSIVE or self.state.first_activation)
+                        and self.on_active_callback is not None
+                    )
                 
                 if should_call_callback:
                     logger.info(
@@ -124,15 +124,19 @@ class SingletonLockController:
                         logger.warning("[LOCK_CONTROLLER] ⚠️ on_active_callback is None!")
                     else:
                         logger.info(f"[LOCK_CONTROLLER] ℹ️ Callback skipped: old_state={old_state.value}, first_activation={self.state.first_activation}")
-            elif new_state == LockState.PASSIVE:
-                self.state.lock_acquired_at = None
-                if old_state == LockState.ACTIVE:
-                    logger.warning(
-                        "[LOCK_CONTROLLER] %s → %s (lock lost) | instance=%s",
-                        old_state.value,
-                        new_state.value,
-                        self.state.instance_id
-                    )
+                
+                if new_state == LockState.PASSIVE:
+                    self.state.lock_acquired_at = None
+                    if old_state == LockState.ACTIVE:
+                        logger.warning(
+                            "[LOCK_CONTROLLER] %s → %s (lock lost) | instance=%s",
+                            old_state.value,
+                            new_state.value,
+                            self.state.instance_id
+                        )
+        except Exception as e:
+            logger.exception(f"[LOCK_CONTROLLER] ❌❌ _set_state EXCEPTION: {e}")
+            raise
     
     async def _should_send_passive_notice(self, chat_id: int) -> bool:
         """Check if we should send 'updating' message (throttled)"""
