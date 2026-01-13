@@ -231,6 +231,31 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance);
 ```
 
+### asyncpg: SQL parameters (CRITICAL)
+```python
+# ❌ ПЛОХО: параметр внутри INTERVAL строки
+await conn.execute(
+    "UPDATE jobs SET stale = TRUE WHERE updated_at < NOW() - INTERVAL '$1 minutes'",
+    timeout_minutes
+)
+# ОШИБКА: the server expects 0 arguments for this query, 1 were passed
+
+# ✅ ХОРОШО: параметр через конкатенацию + ::INTERVAL
+await conn.execute(
+    "UPDATE jobs SET stale = TRUE WHERE updated_at < NOW() - ($1 || ' minutes')::INTERVAL",
+    timeout_minutes
+)
+
+# ✅ Альтернатива: make_interval()
+await conn.execute(
+    "UPDATE jobs SET stale = TRUE WHERE updated_at < NOW() - make_interval(mins => $1)",
+    timeout_minutes
+)
+```
+
+**Правило**: PostgreSQL не поддерживает параметры внутри строковых литералов INTERVAL.
+Всегда используй конкатенацию `($N || ' unit')::INTERVAL` или функцию `make_interval()`.
+
 ## Security
 
 ### Validate all user input

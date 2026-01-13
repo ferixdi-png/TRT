@@ -450,10 +450,21 @@ class KieGenerator:
                     if chat_id and result_urls and user_id is not None:
                         try:
                             from app.storage import get_storage
-                            from main_render import bot
+                            from app.utils.update_queue import get_queue_manager
                             from app.delivery import deliver_result_atomic
                             
                             storage = get_storage()
+                            queue_manager = get_queue_manager()
+                            bot = queue_manager.get_bot()
+                            
+                            if not bot:
+                                logger.warning("[corr=%s] [POLL_DELIVERY_SKIP] Bot not configured in queue manager", correlation_tag())
+                                return {
+                                    "success": True,
+                                    "task_id": task_id,
+                                    "result_urls": result_urls,
+                                    "delivery_note": "fallback_no_bot"
+                                }
                             
                             delivery_result = await deliver_result_atomic(
                                 storage=storage,

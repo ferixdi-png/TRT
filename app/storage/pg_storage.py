@@ -545,7 +545,7 @@ class PostgresStorage(BaseStorage):
                   AND delivered_at IS NULL
                   AND (
                     delivering_at IS NULL
-                    OR delivering_at < NOW() - INTERVAL '$2 minutes'
+                    OR delivering_at < NOW() - ($2 || ' minutes')::INTERVAL
                   )
                 RETURNING *
                 """,

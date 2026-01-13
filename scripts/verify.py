@@ -42,6 +42,7 @@ class TruthValidator:
         self.check_single_entrypoint()
         self.check_forbidden_entrypoints()
         self.check_wildcard_imports()
+        self.check_circular_imports()
         self.check_required_files()
         self.check_forbidden_env_vars()
         self.check_invariants()
@@ -100,6 +101,34 @@ class TruthValidator:
             )
         else:
             print("✅ No wildcard imports in blessed path")
+    
+    def check_circular_imports(self):
+        """Check for common circular import patterns."""
+        # Look for: from main_render import bot (or similar globals)
+        app_dir = PROJECT_ROOT / "app"
+        if not app_dir.exists():
+            return
+        
+        forbidden_patterns = [
+            (r'from main_render import bot\b', "Use get_queue_manager().get_bot() instead"),
+            (r'from main_render import dp\b', "Use dependency injection instead"),
+        ]
+        
+        violations = []
+        for py_file in app_dir.rglob("*.py"):
+            if "test" in str(py_file):
+                continue  # Tests can import from main_render
+            
+            content = py_file.read_text()
+            for pattern, suggestion in forbidden_patterns:
+                if re.search(pattern, content):
+                    relative = py_file.relative_to(PROJECT_ROOT)
+                    violations.append(f"{relative}: {suggestion}")
+        
+        if violations:
+            self.errors.append(f"❌ Circular import patterns:\n  " + "\n  ".join(violations))
+        else:
+            print("✅ No circular import patterns detected")
     
     def check_required_files(self):
         """Verify all contract-required files exist."""

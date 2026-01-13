@@ -215,6 +215,14 @@ observability:
       severity: "P0"
       description: "Duplicate import time inside function shadows global import"
       
+    - pattern: "asyncpg.*the server expects .* argument.* for this query, .* were passed"
+      severity: "P0"
+      description: "asyncpg parameter count mismatch - check SQL INTERVAL syntax"
+      
+    - pattern: "ImportError.*cannot import name 'bot' from 'main_render'"
+      severity: "P1"
+      description: "Circular import or bot not exported - use get_queue_manager().get_bot() instead"
+      
   rate_limits:
     duplicate_error_same_type: "1/30s"  # Max 1 identical error per 30 seconds
     lock_held_spam: "1/30s"

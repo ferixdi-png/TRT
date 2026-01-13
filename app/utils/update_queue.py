@@ -108,6 +108,10 @@ class UpdateQueueManager:
         logger.info("[QUEUE] Configured with dp=%s bot=%s", 
                    type(dp).__name__, type(bot).__name__)
     
+    def get_bot(self):
+        """Get configured bot instance."""
+        return self._bot
+    
     async def start(self):
         """Start background workers."""
         if self._running:
