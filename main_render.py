@@ -501,6 +501,28 @@ def _make_web_app(
         if update_id:
             recent_update_ids.add(update_id)
         
+        # 🚀 FASTPATH /start: INSTANT ACK before queue
+        # This guarantees <300ms response even during PASSIVE or queue delays
+        message = getattr(update, "message", None)
+        if message:
+            text = getattr(message, "text", "")
+            chat_id = getattr(message.chat, "id", None) if hasattr(message, "chat") else None
+            
+            # Detect /start command (with or without @bot mention)
+            is_start = text and (text == "/start" or text.startswith("/start@"))
+            
+            if is_start and chat_id:
+                # INSTANT response (bypasses queue, PASSIVE mode, everything)
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="✅ Бот на связи. Загружаю меню…"
+                    )
+                    logger.info("[FASTPATH] /start ACK sent to chat_id=%s (update_id=%s)", chat_id, update_id)
+                except Exception as e:
+                    logger.warning("[FASTPATH] Failed to send instant ACK: %s", e)
+                # Continue to enqueue for full /start handler (menu rendering)
+        
         # Enqueue for background processing (non-blocking)
         # This returns immediately - worker processes in background
         from app.utils.update_queue import get_queue_manager
@@ -965,6 +987,29 @@ async def main() -> None:
             # Update runtime state
             active_state.active = True
             runtime_state.lock_acquired = True
+            
+            # 🎯 WEBHOOK ON ACTIVE: Ensure webhook is set on ACTIVE instance
+            # This guarantees webhook ownership after lock acquired
+            if effective_bot_mode == "webhook" and not cfg.dry_run:
+                logger.info("[WEBHOOK_ACTIVE] 🔧 Ensuring webhook on ACTIVE instance...")
+                webhook_url = _build_webhook_url(cfg)
+                if webhook_url:
+                    from app.utils.webhook import ensure_webhook
+                    try:
+                        webhook_set = await ensure_webhook(
+                            bot,
+                            webhook_url=webhook_url,
+                            secret_token=cfg.webhook_secret_token or None,
+                            force_reset=False,  # No force - respect no-op logic
+                        )
+                        if webhook_set:
+                            logger.info("[WEBHOOK_ACTIVE] ✅ Webhook ensured on ACTIVE instance")
+                        else:
+                            logger.warning("[WEBHOOK_ACTIVE] ⚠️ Webhook ensure returned False")
+                    except Exception as e:
+                        logger.exception("[WEBHOOK_ACTIVE] ❌ Exception: %s", e)
+                else:
+                    logger.error("[WEBHOOK_ACTIVE] ❌ Cannot build webhook URL!")
 
             if cfg.database_url:
                 logger.info("[INIT_SERVICES] Initializing DatabaseService...")
@@ -992,39 +1037,6 @@ async def main() -> None:
                 except Exception as e:
                     logger.exception("[DB] ❌ Database init failed: %s", e)
                     db_service = None
-            
-            logger.info(f"[ACTIVE_INIT] Webhook setup check: mode={effective_bot_mode}, dry_run={cfg.dry_run}")
-            if effective_bot_mode == "webhook" and not cfg.dry_run:
-                logger.info("[ACTIVE_INIT] Building webhook URL...")
-                webhook_url = _build_webhook_url(cfg)
-                if not webhook_url:
-                    logger.error("[ACTIVE_INIT] ❌ Cannot build webhook URL!")
-                    raise RuntimeError("WEBHOOK_BASE_URL is required for BOT_MODE=webhook")
-                
-                logger.info(f"[ACTIVE_INIT] Webhook URL built: {webhook_url[:50]}...")
-
-                from app.utils.webhook import ensure_webhook
-                
-                logger.info("[WEBHOOK_SETUP] 🔧 Calling ensure_webhook (force_reset=True)...")
-                try:
-                    webhook_set = await ensure_webhook(
-                        bot,
-                        webhook_url=webhook_url,
-                        secret_token=cfg.webhook_secret_token or None,
-                        force_reset=True,
-                    )
-                    logger.info(f"[WEBHOOK_SETUP] ensure_webhook() returned: {webhook_set}")
-                    
-                    if not webhook_set:
-                        logger.error("[WEBHOOK_SETUP] ❌ Failed to set webhook! Bot will NOT receive updates.")
-                    else:
-                        logger.info("[WEBHOOK_SETUP] ✅ ✅ ✅ WEBHOOK CONFIGURED SUCCESSFULLY")
-                        logger.info("[WEBHOOK_SETUP] ✅ Bot will now receive /start and other commands")
-                except Exception as e:
-                    logger.exception("[WEBHOOK_SETUP] ❌ EXCEPTION during ensure_webhook: %s", e)
-                    raise
-            else:
-                logger.info(f"[ACTIVE_INIT] Skipping webhook (mode={effective_bot_mode}, dry_run={cfg.dry_run})")
         
         # Step 2: Start unified lock controller with callback
         from app.locking.controller import SingletonLockController

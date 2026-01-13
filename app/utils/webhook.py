@@ -170,30 +170,42 @@ async def ensure_webhook(
     logger.info(f"[WEBHOOK] Desired: {mask_webhook_url(desired_url)}")
     logger.info(f"[WEBHOOK] Pending updates: {webhook_info.pending_update_count}")
     
-    # Auto-flush pending updates if error or high pending count
-    should_flush = (
+    # Check URL match FIRST - no-op if already correct
+    url_matches = current_url == desired_url
+    
+    # Determine if flush/reset needed (STRICT criteria)
+    needs_flush = (
         webhook_info.last_error_message or 
-        webhook_info.pending_update_count > 10 or
+        webhook_info.pending_update_count > 10
+    )
+    
+    needs_reset = (
+        not url_matches or
+        needs_flush or
         force_reset
     )
     
+    # NO-OP if URL matches and no issues
+    if url_matches and not needs_flush and not force_reset:
+        logger.info("[WEBHOOK] ✅ OK (no-op): URL matches, pending=%d, no errors", webhook_info.pending_update_count)
+        return True
+    
+    # Log reasons for reset
     if webhook_info.last_error_message:
         logger.warning(
             f"[WEBHOOK] ⚠️ Previous error detected: {webhook_info.last_error_message}"
         )
     
-    if webhook_info.pending_update_count > 0:
+    if webhook_info.pending_update_count > 10:
         logger.warning(
-            f"[WEBHOOK] ⚠️ {webhook_info.pending_update_count} pending updates"
+            f"[WEBHOOK] ⚠️ High pending count: {webhook_info.pending_update_count}"
         )
     
-    # Check if reset needed
-    if current_url == desired_url and not should_flush:
-        logger.info("[WEBHOOK] ✅ Webhook already set to %s", mask_webhook_url(webhook_url))
-        return True
+    if not url_matches:
+        logger.info("[WEBHOOK] 🔄 URL mismatch - updating...")
     
-    # Reset webhook with pending updates flush if needed
-    if should_flush:
+    # Reset webhook ONLY if we have a valid reason
+    if needs_flush:
         logger.info(
             "[WEBHOOK] 🔄 Flushing pending updates (error=%s, pending=%d)",
             bool(webhook_info.last_error_message),

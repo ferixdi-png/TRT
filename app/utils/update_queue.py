@@ -175,7 +175,36 @@ class UpdateQueueManager:
                         now = time.time()
                         held_time = now - first_seen
                         
-                        if held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:
+                        # 🚀 HIGH PRIORITY: /start commands bypass hold window
+                        # Process immediately even in PASSIVE (FASTPATH already sent ACK)
+                        is_start_cmd = False
+                        try:
+                            message = getattr(update, "message", None)
+                            if message:
+                                text = getattr(message, "text", "")
+                                is_start_cmd = text and (text == "/start" or text.startswith("/start@"))
+                        except Exception:
+                            pass
+                        
+                        if is_start_cmd:
+                            # PRIORITY: /start never waits in PASSIVE
+                            logger.info(
+                                "[WORKER_%d] HIGH_PRIORITY /start update_id=%s - processing in PASSIVE",
+                                worker_id, update_id
+                            )
+                            self._metrics.total_processed_degraded += 1
+                            start_time = time.monotonic()
+                            await asyncio.wait_for(
+                                self._dp.feed_update(self._bot, update),
+                                timeout=30.0
+                            )
+                            elapsed = time.monotonic() - start_time
+                            logger.info(
+                                "[WORKER_%d] HIGH_PRIORITY /start processed in %.2fs",
+                                worker_id, elapsed
+                            )
+                            # task_done() in finally block
+                        elif held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:
                             # Held too long - process anyway in DEGRADED mode
                             logger.warning(
                                 "[WORKER_%d] DEGRADED processing update_id=%s (held %.1fs, attempt %d) - bot must respond!",
