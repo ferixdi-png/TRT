@@ -15,8 +15,12 @@ forbidden_errors = [
     "Queue full",                          # P2: Overload
     "Database connection lost",            # P0: Connection pool issue
     "Webhook timeout",                     # P1: Slow response (> 500ms)
+    "Migration.*failed",                   # P0: DB schema corruption
+    "heartbeat=none.*idle>30",            # P0: Stale lock without heartbeat (CYCLE 8)
 ]
 ```
+
+**CYCLE 8 Update**: Added `heartbeat=none` detection after production incident where migration 007 was skipped due to duplicate numbering.
 
 Если любой из этих паттернов появляется → **IMMEDIATE ACTION REQUIRED**.
 
@@ -95,10 +99,17 @@ logger.info("User balance checked", extra={
 - **Measure**: PostgreSQL `pg_stat_activity`
 - **Alert**: If > 18 for 5 minutes → connection leak
 
-### Lock Heartbeat
-- **Target**: Heartbeat every 30 seconds
-- **Measure**: `last_heartbeat` in `lock_heartbeat` table
-- **Alert**: If > 60 seconds since last heartbeat → stale lock
+### Lock Heartbeat (CYCLE 8 update)
+- **Target**: Heartbeat every 15 seconds, stale detection at 30s idle
+- **Measure**: `heartbeat_age` in `/health` response
+- **Alert**: If `heartbeat=none` OR `heartbeat_age > 45s` → lock table migration missing
+- **Fix**: Ensure migration 007_lock_heartbeat.sql applied (CYCLE 8: fixed duplicate migration number)
+
+**Lock Failover Metrics** (from production logs):
+- Time to detect stale lock: 30s (STALE_IDLE_SECONDS)
+- Grace period after termination: 3s (LOCK_RELEASE_WAIT_SECONDS)
+- Total time-to-ACTIVE: ~33s (down from 53s pre-CYCLE 8)
+- Heartbeat interval: 15s (ensures 2 updates within stale window)
 
 ## Render Dashboard Metrics
 
