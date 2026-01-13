@@ -171,8 +171,8 @@ class PostgresStorage(BaseStorage):
             # Use COALESCE to avoid overwriting existing values with NULL
             await conn.execute(
                 """
-                INSERT INTO users (id, username, first_name, last_name, balance, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, 0.00, NOW(), NOW())
+                INSERT INTO users (id, username, first_name, last_name, balance, created_at, updated_at, user_id)
+                VALUES ($1, $2, $3, $4, 0.00, NOW(), NOW(), $1)
                 ON CONFLICT (id) DO UPDATE SET
                     username = CASE 
                         WHEN EXCLUDED.username IS NOT NULL THEN EXCLUDED.username

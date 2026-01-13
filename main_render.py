@@ -1013,7 +1013,7 @@ async def main() -> None:
             logger.info(f"[INIT_SERVICES] BOT_MODE={effective_bot_mode}, DRY_RUN={cfg.dry_run}")
 
             # Update runtime state
-            active_state.active = True
+            # active_state synced automatically by lock_controller, no need to set manually
             runtime_state.lock_acquired = True
             
             # 🎯 WEBHOOK ON ACTIVE: Ensure webhook is set on ACTIVE instance
