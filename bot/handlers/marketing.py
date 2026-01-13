@@ -16,6 +16,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from app.telemetry.telemetry_helpers import (
+    log_callback_received, log_callback_routed, log_callback_accepted,
+    log_callback_rejected, log_ui_render
+)
+from app.telemetry.logging_contract import ReasonCode
+from app.telemetry.ui_registry import ScreenId, ButtonId
+
 from app.ui.marketing_menu import (
     MARKETING_CATEGORIES,
     build_ui_tree,
@@ -125,7 +132,7 @@ async def cmd_marketing(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "marketing:main")
-async def cb_marketing_main(callback: CallbackQuery, state: FSMContext):
+async def cb_marketing_main(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Marketing main menu callback."""
     await state.clear()
     
@@ -141,6 +148,13 @@ async def cb_marketing_main(callback: CallbackQuery, state: FSMContext):
 
 def _build_marketing_menu() -> InlineKeyboardMarkup:
     """Build marketing categories menu."""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "marketing:main", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "cb_marketing_main", "marketing:main", ButtonId.UNKNOWN)
+
     tree = build_ui_tree()
     rows = []
     
@@ -176,7 +190,7 @@ def _build_marketing_menu() -> InlineKeyboardMarkup:
 
 
 @router.callback_query(F.data == "marketing:free")
-async def cb_marketing_free(callback: CallbackQuery):
+async def cb_marketing_free(callback: CallbackQuery, cid=None, bot_state=None):
     """Show free models."""
     free_manager = _get_free_manager()
     
@@ -233,6 +247,13 @@ async def cb_marketing_free(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("mcat:"))
 async def cb_marketing_category(callback: CallbackQuery, state: FSMContext):
     """Show models in marketing category."""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "marketing:free", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "cb_marketing_free", "marketing:free", ButtonId.UNKNOWN)
+
     cat_key = callback.data.split(":", 1)[1]
     cat_info = get_category_info(cat_key)
     
@@ -685,7 +706,7 @@ async def process_prompt(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "mgen:confirm")
-async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
+async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Confirm and start actual KIE generation with full database integration + free tier support."""
     if _is_debounced(callback.from_user.id, callback.data):
         await callback.answer("⏳ Уже обрабатывается", show_alert=True)
@@ -799,6 +820,13 @@ async def cb_confirm_generation(callback: CallbackQuery, state: FSMContext):
         # Call KIE API with timeout=300s and progress updates
         async def progress_update(msg: str):
             """Send progress updates to user."""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "mgen:confirm", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "cb_confirm_generation", "mgen:confirm", ButtonId.UNKNOWN)
+
             try:
                 await callback.message.edit_text(
                     f"🔄 <b>Генерация в процессе</b>\n\n"

@@ -7,6 +7,13 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
+from app.telemetry.telemetry_helpers import (
+    log_callback_received, log_callback_routed, log_callback_accepted,
+    log_callback_rejected, log_ui_render
+)
+from app.telemetry.logging_contract import ReasonCode
+from app.telemetry.ui_registry import ScreenId, ButtonId
+
 from app.payments.pricing import format_price_rub
 
 logger = logging.getLogger(__name__)
@@ -29,7 +36,7 @@ def _get_db_service():
 
 
 @router.callback_query(F.data == "history:main")
-async def cb_history_main(callback: CallbackQuery, state: FSMContext):
+async def cb_history_main(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Show generation history with visual gallery."""
     await state.clear()
     
@@ -102,8 +109,15 @@ async def cb_history_main(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "history:gallery")
-async def cb_history_gallery(callback: CallbackQuery, state: FSMContext):
+async def cb_history_gallery(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Show visual gallery of successful generations."""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "history:main", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "cb_history_main", "history:main", ButtonId.HISTORY_MAIN)
+
     await callback.answer()
     
     db_service = _get_db_service()
@@ -162,8 +176,22 @@ async def cb_history_gallery(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "history:transactions")
-async def cb_history_transactions(callback: CallbackQuery, state: FSMContext):
+async def cb_history_transactions(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "history:transactions", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "cb_history_transactions", "history:transactions", ButtonId.HISTORY_TRANSACTIONS)
+
     """Show transaction history."""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "history:gallery", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "cb_history_gallery", "history:gallery", ButtonId.HISTORY_GALLERY)
+
     db_service = _get_db_service()
     if not db_service:
         await callback.answer("⚠️ База данных недоступна", show_alert=True)

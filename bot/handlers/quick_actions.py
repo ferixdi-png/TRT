@@ -4,6 +4,13 @@ Quick actions for common use cases - Instagram, TikTok, YouTube, etc.
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+
+from app.telemetry.telemetry_helpers import (
+    log_callback_received, log_callback_routed, log_callback_accepted,
+    log_callback_rejected, log_ui_render
+)
+from app.telemetry.logging_contract import ReasonCode
+from app.telemetry.ui_registry import ScreenId, ButtonId
 import json
 from pathlib import Path
 
@@ -80,7 +87,7 @@ QUICK_ACTIONS = {
 
 
 @router.callback_query(F.data == "quick:menu")
-async def show_quick_actions(callback: CallbackQuery, state: FSMContext):
+async def show_quick_actions(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Show quick actions menu"""
     await callback.answer()
     
@@ -106,6 +113,13 @@ async def show_quick_actions(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("quick:action:"))
 async def show_action_details(callback: CallbackQuery, state: FSMContext):
     """Show quick action details with model recommendations"""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "quick:menu", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "show_quick_actions", "quick:menu", ButtonId.QUICK_MENU)
+
     await callback.answer()
     
     action_id = callback.data.split(":", 2)[2]

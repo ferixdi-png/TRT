@@ -4,6 +4,13 @@ Enhanced model gallery with examples - Syntx-like experience
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
+
+from app.telemetry.telemetry_helpers import (
+    log_callback_received, log_callback_routed, log_callback_accepted,
+    log_callback_rejected, log_ui_render
+)
+from app.telemetry.logging_contract import ReasonCode
+from app.telemetry.ui_registry import ScreenId, ButtonId
 import json
 from pathlib import Path
 
@@ -70,7 +77,7 @@ EXAMPLE_GALLERY = {
 
 
 @router.callback_query(F.data == "gallery:trending")
-async def show_trending_gallery(callback: CallbackQuery, state: FSMContext):
+async def show_trending_gallery(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Show trending models with example gallery"""
     await callback.answer()
     
@@ -111,6 +118,13 @@ async def show_trending_gallery(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("gallery:show:"))
 async def show_model_gallery(callback: CallbackQuery, state: FSMContext):
     """Show example gallery for specific model"""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "gallery:trending", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "show_trending_gallery", "gallery:trending", ButtonId.UNKNOWN)
+
     await callback.answer()
     
     model_id = callback.data.split(":", 2)[2]
@@ -207,7 +221,14 @@ async def use_example(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "gallery:free")
-async def show_free_models(callback: CallbackQuery, state: FSMContext):
+async def show_free_models(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "gallery:free", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "show_free_models", "gallery:free", ButtonId.UNKNOWN)
+
     """Show FREE models with quick start"""
     await callback.answer()
     
