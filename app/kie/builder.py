@@ -215,10 +215,24 @@ def build_payload(
     # Parse input_schema: support BOTH flat and nested formats
     # FLAT format (source_of_truth.json): {"field": {"type": "...", "required": true}}
     # NESTED format (old): {"required": [...], "properties": {...}}
+    # BUGGY format (many models): {"required": true/false (boolean!), "examples": [...]}
     
     # ВАЖНО: Системные поля ВСЕГДА фильтруются из пользовательского ввода
     # Они добавляются автоматически при создании задачи
     SYSTEM_FIELDS = {'model', 'callBackUrl', 'callback', 'callback_url', 'webhookUrl', 'webhook_url'}
+    
+    # Handle buggy "required: true/false" by inferring from examples
+    required_fields_inferred = []
+    if isinstance(input_schema.get('required'), bool):
+        # SOURCE_OF_TRUTH has "required: True" (boolean) instead of list
+        # WORKAROUND: Infer required fields from first example
+        examples = input_schema.get('examples', [])
+        if examples:
+            first_example = examples[0]
+            required_fields_inferred = list(first_example.keys())
+            logger.warning(
+                f"[WORKAROUND] {model_id}: required is boolean, inferring from example: {required_fields_inferred}"
+            )
     
     # Для ЛЮБОГО формата фильтруем системные поля из required/optional
     if is_direct_format:
@@ -235,6 +249,9 @@ def build_payload(
     elif 'properties' in input_schema:
         # Nested format
         required_fields = input_schema.get('required', [])
+        # Handle buggy boolean required
+        if isinstance(required_fields, bool):
+            required_fields = required_fields_inferred
         properties = input_schema.get('properties', {})
         # Calculate optional fields as difference
         optional_fields = [k for k in properties.keys() if k not in required_fields]
