@@ -171,26 +171,30 @@ class UpdateQueueManager:
                 try:
                     # Check if we should process (ACTIVE mode check)
                     if self._active_state and not self._active_state.active:
-                        # PASSIVE MODE: Don't drop - requeue or process degraded
+                        # PASSIVE MODE: Don't drop - but UI updates process immediately
                         now = time.time()
                         held_time = now - first_seen
                         
-                        # 🚀 HIGH PRIORITY: /start commands bypass hold window
-                        # Process immediately even in PASSIVE (FASTPATH already sent ACK)
-                        is_start_cmd = False
-                        try:
-                            message = getattr(update, "message", None)
-                            if message:
-                                text = getattr(message, "text", "")
-                                is_start_cmd = text and (text == "/start" or text.startswith("/start@"))
-                        except Exception:
-                            pass
+                        # 📡 DETECT UPDATE TYPE: UI updates never wait
+                        is_callback_query = getattr(update, "callback_query", None) is not None
+                        is_message = getattr(update, "message", None) is not None
+                        is_command = False
                         
-                        if is_start_cmd:
-                            # PRIORITY: /start never waits in PASSIVE
+                        if is_message:
+                            message = getattr(update, "message")
+                            text = getattr(message, "text", "") or ""
+                            is_command = text.startswith("/")
+                        
+                        # ✨ POLICY: UI updates (callback_query + commands) process IMMEDIATELY
+                        # Lock gating only for heavy background tasks, NOT UI interactions
+                        is_ui_update = is_callback_query or is_command
+                        
+                        if is_ui_update:
+                            # INSTANT processing for UI updates (no wait, no requeue)
+                            update_type = "callback_query" if is_callback_query else "command"
                             logger.info(
-                                "[WORKER_%d] HIGH_PRIORITY /start update_id=%s - processing in PASSIVE",
-                                worker_id, update_id
+                                "[WORKER_%d] UI_UPDATE type=%s update_id=%s - processing in PASSIVE (no wait)",
+                                worker_id, update_type, update_id
                             )
                             self._metrics.total_processed_degraded += 1
                             start_time = time.monotonic()
@@ -200,8 +204,8 @@ class UpdateQueueManager:
                             )
                             elapsed = time.monotonic() - start_time
                             logger.info(
-                                "[WORKER_%d] HIGH_PRIORITY /start processed in %.2fs",
-                                worker_id, elapsed
+                                "[WORKER_%d] UI_UPDATE %s processed in %.2fs",
+                                worker_id, update_type, elapsed
                             )
                             # task_done() in finally block
                         elif held_time > MAX_HOLD_TIME_SEC or attempt >= MAX_REQUEUE_ATTEMPTS:

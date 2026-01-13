@@ -534,6 +534,7 @@ def _make_web_app(
         
         # 🚀 FASTPATH /start: INSTANT ACK before queue
         # This guarantees <300ms response even during PASSIVE or queue delays
+        fastpath_handled = False
         message = getattr(update, "message", None)
         if message:
             text = getattr(message, "text", "")
@@ -550,9 +551,17 @@ def _make_web_app(
                         text="✅ Бот на связи. Загружаю меню…"
                     )
                     logger.info("[FASTPATH] /start ACK sent to chat_id=%s (update_id=%s)", chat_id, update_id)
+                    fastpath_handled = True  # Mark as handled - don't enqueue
                 except Exception as e:
                     logger.warning("[FASTPATH] Failed to send instant ACK: %s", e)
-                # Continue to enqueue for full /start handler (menu rendering)
+                    fastpath_handled = False  # Failed - let normal handler process
+        
+        # Enqueue for background processing ONLY if NOT fastpath handled
+        # This prevents /start duplicate processing
+        if fastpath_handled:
+            logger.debug("[WEBHOOK] Fastpath handled /start, skipping enqueue (no duplicate)")
+            # Still return 200 OK
+            return web.Response(status=200, text="ok")
         
         # Enqueue for background processing (non-blocking)
         # This returns immediately - worker processes in background
@@ -990,11 +999,12 @@ async def main() -> None:
             if webhook_url:
                 from app.utils.webhook import ensure_webhook
                 try:
+                    # NO force_reset - respect no-op logic (only reset on errors/pending)
                     webhook_set = await ensure_webhook(
                         bot,
                         webhook_url=webhook_url,
                         secret_token=cfg.webhook_secret_token or None,
-                        force_reset=True,
+                        force_reset=False,  # Only reset if mismatch/pending/error
                     )
                     if webhook_set:
                         logger.info("[WEBHOOK_EARLY] ✅ ✅ ✅ WEBHOOK CONFIGURED (early setup)")
