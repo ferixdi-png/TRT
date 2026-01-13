@@ -880,15 +880,62 @@ def _validate_field_value(value: Any, field_spec: Dict[str, Any], field_name: st
 
 @router.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext) -> None:
-    """Start command - personalized welcome with quick-start guide."""
+    """
+    Iron-clad /start handler with degraded mode support.
+    
+    Features:
+    - ALWAYS responds, even if DB/models/services unavailable
+    - Fast response (<500ms target)
+    - No blocking operations
+    - Graceful degradation
+    """
     await state.clear()
     
     # Get user info for personalization
     first_name = message.from_user.first_name or "друг"
     
-    # Count available models
-    models_list = _get_models_list()
-    total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
+    # Try to count models, but don't fail if unavailable
+    total_models = 0
+    try:
+        models_list = _get_models_list()
+        total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
+    except Exception as e:
+        logger.warning(f"[START] Could not load models: {e}")
+        # Fallback: use hardcoded count
+        total_models = 50
+    
+    # Check SINGLE_MODEL mode
+    import os
+    single_model_mode = os.getenv("SINGLE_MODEL_ONLY", "").lower() in ("1", "true", "yes")
+    
+    if single_model_mode:
+        # Minimal UI for single model
+        await message.answer(
+            f"👋 Привет, <b>{first_name}</b>!\n\n"
+            f"🖼 <b>Z-Image Generator</b>\n"
+            f"Создавайте уникальные изображения из текста\n\n"
+            f"💡 <b>Как использовать:</b>\n"
+            f"1️⃣ Нажмите кнопку ниже\n"
+            f"2️⃣ Введите описание картинки\n"
+            f"3️⃣ Получите результат через 10-30 сек\n\n"
+            f"✅ Бот работает и готов к генерации!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🖼 Создать картинку", callback_data="zimage:start")],
+                [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
+            ])
+        )
+        return
+    
+    # Full mode with all models
+    try:
+        menu_keyboard = _main_menu_keyboard()
+    except Exception as e:
+        logger.error(f"[START] Could not build menu: {e}")
+        # Degraded fallback: minimal menu
+        menu_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎨 Картинки", callback_data="cat:image")],
+            [InlineKeyboardButton(text="💰 Баланс", callback_data="balance:show")],
+        ])
     
     # Welcome message with quick-start guide
     await message.answer(
@@ -906,7 +953,7 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
         f"🆓 <b>4 бесплатные модели</b> — без списания баланса\n"
         f"💰 <b>Платные модели</b> — оплата за успешные генерации\n\n"
         f"Выбирайте задачу 👇",
-        reply_markup=_main_menu_keyboard(),
+        reply_markup=menu_keyboard,
     )
 
 

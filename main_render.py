@@ -254,11 +254,13 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
         marketing_router,
         quick_actions_router,
         zero_silence_router,
+        z_image_router,
     )
 
     dp.include_router(error_handler_router)
     dp.include_router(diag_router)
     dp.include_router(admin_router)
+    dp.include_router(z_image_router)  # Z-image (SINGLE_MODEL support)
     dp.include_router(balance_router)
     dp.include_router(history_router)
     dp.include_router(marketing_router)
@@ -350,25 +352,104 @@ def _make_web_app(
         return False
 
     async def health(_request: web.Request) -> web.Response:
-        return web.json_response(_health_payload(active_state))
+        """Health check endpoint with queue metrics."""
+        from app.utils.update_queue import get_queue_manager
+        
+        uptime = 0
+        if runtime_state.last_start_time:
+            started = datetime.fromisoformat(runtime_state.last_start_time)
+            uptime = int((datetime.now(timezone.utc) - started).total_seconds())
+        
+        # Get queue metrics
+        queue_manager = get_queue_manager()
+        queue_metrics = queue_manager.get_metrics()
+        
+        payload = {
+            "status": "ok",
+            "uptime": uptime,
+            "active": active_state.active,
+            "webhook_mode": runtime_state.bot_mode == "webhook",
+            "lock_acquired": runtime_state.lock_acquired,
+            "db_schema_ready": runtime_state.db_schema_ready,
+            "queue": queue_metrics,
+        }
+        return web.json_response(payload)
 
     async def root(_request: web.Request) -> web.Response:
-        return web.json_response(_health_payload(active_state))
+        """Root endpoint (same as health)."""
+        from app.utils.update_queue import get_queue_manager
+        
+        uptime = 0
+        if runtime_state.last_start_time:
+            started = datetime.fromisoformat(runtime_state.last_start_time)
+            uptime = int((datetime.now(timezone.utc) - started).total_seconds())
+        
+        queue_manager = get_queue_manager()
+        queue_metrics = queue_manager.get_metrics()
+        
+        payload = {
+            "status": "ok",
+            "uptime": uptime,
+            "active": active_state.active,
+            "webhook_mode": runtime_state.bot_mode == "webhook",
+            "lock_acquired": runtime_state.lock_acquired,
+            "db_schema_ready": runtime_state.db_schema_ready,
+            "queue": queue_metrics,
+        }
+        return web.json_response(payload)
+    
+    async def diag_webhook(_request: web.Request) -> web.Response:
+        """Diagnostic endpoint for webhook status."""
+        try:
+            info = await bot.get_webhook_info()
+            
+            # Mask secret path for security
+            url = info.url or ""
+            if url:
+                parts = url.rsplit("/", 1)
+                if len(parts) == 2:
+                    url = parts[0] + "/***"
+            
+            return web.json_response({
+                "url": url,
+                "has_custom_certificate": info.has_custom_certificate,
+                "pending_update_count": info.pending_update_count,
+                "last_error_date": info.last_error_date.isoformat() if info.last_error_date else None,
+                "last_error_message": info.last_error_message or "",
+                "max_connections": info.max_connections,
+                "ip_address": info.ip_address or "",
+            })
+        except Exception as e:
+            logger.exception("[DIAG] Failed to get webhook info: %s", e)
+            return web.json_response({"error": str(e)}, status=500)
+    
+    async def diag_lock(_request: web.Request) -> web.Response:
+        """Diagnostic endpoint for lock status."""
+        controller = getattr(active_state, "lock_controller", None)
+        
+        if not controller:
+            return web.json_response({
+                "error": "Lock controller not initialized"
+            }, status=503)
+        
+        return web.json_response({
+            "active": active_state.active,
+            "should_process": controller.should_process_updates(),
+            "lock_acquired": runtime_state.lock_acquired,
+            "last_check": controller._last_check.isoformat() if hasattr(controller, "_last_check") and controller._last_check else None,
+        })
 
     async def webhook(request: web.Request) -> web.Response:
-        """Webhook handler with full validation and error handling.
+        """
+        Fast-ack webhook handler - ALWAYS returns 200 OK within <200ms.
         
-        Security:
-        - Verifies webhook secret path
-        - Validates X-Telegram-Bot-Api-Secret-Token header
-        - Rate limits and protects against malformed payloads
+        Architecture:
+        - Validates secret/token
+        - Enqueues update to background queue
+        - Returns 200 OK immediately (Telegram gets instant response)
+        - Background workers process updates from queue
         
-        Errors:
-        - 400: Malformed JSON
-        - 401: Invalid secret token
-        - 404: Invalid path (hides existence)
-        - 503: Instance not ready (during rolling deploy)
-        - 200: OK (even if processing failed - Telegram will retry)
+        This prevents timeout errors and pending updates accumulation.
         """
         secret = request.match_info.get("secret")
         if secret != cfg.webhook_secret_path:
@@ -382,85 +463,56 @@ def _make_web_app(
                 logger.warning("[WEBHOOK] Invalid secret token")
                 raise web.HTTPUnauthorized()
 
-        if not active_state.active:
-            # 🎯 PASSIVE MODE: Throttled user notifications via controller
-            try:
-                payload = await request.json()
-                update = Update.model_validate(payload)
-                
-                # Extract chat_id
-                chat_id = None
-                if update.message:
-                    chat_id = update.message.chat.id
-                elif update.callback_query:
-                    chat_id = update.callback_query.message.chat.id if update.callback_query.message else None
-                
-                # Controller handles throttling (max 1 per 60s)
-                if chat_id and hasattr(active_state, 'lock_controller'):
-                    await active_state.lock_controller.send_passive_notice_if_needed(chat_id)
-            except Exception as e:
-                logger.debug(f"[PASSIVE MODE] Could not parse update: {e}")
-            
-            return web.Response(status=200, text="ok")
-
         # Basic rate limiting per IP
         ip = _client_ip(request)
         now = time.time()
         if _rate_limited(ip, now):
             logger.warning("[WEBHOOK] Rate limit exceeded for ip=%s", ip)
+            # Still return 200 to avoid Telegram retry storm
             return web.Response(status=200, text="ok")
 
-        # Parse JSON with timeout protection
+        # Fast JSON parse (no timeout needed - aiohttp handles this)
         try:
-            try:
-                payload = await asyncio.wait_for(
-                    request.json(),
-                    timeout=5.0  # 5 second timeout for JSON parsing
-                )
-            except asyncio.TimeoutError:
-                logger.warning("[WEBHOOK] JSON parsing timeout")
-                return web.Response(status=400, text="timeout")
+            payload = await request.json()
         except Exception as e:
             logger.warning("[WEBHOOK] Bad JSON: %s", e)
-            return web.Response(status=400, text="bad json")
+            # Return 200 anyway (invalid updates will be ignored)
+            return web.Response(status=200, text="ok")
 
-        # Process update with error isolation and duplicate suppression
+        # Validate and extract update
         try:
-            try:
-                update = Update.model_validate(payload)
-            except Exception as e:
-                logger.warning("[WEBHOOK] Invalid Telegram update: %s", e)
-                return web.Response(status=400, text="invalid update")
-            
-            try:
-                update_id = int(getattr(update, "update_id", 0))
-            except Exception:
-                update_id = 0
-            if update_id and update_id in recent_update_ids:
-                logger.info("[WEBHOOK] Duplicate update_id=%s ignored", update_id)
-                return web.Response(status=200, text="ok")
-
-            # Feed update to dispatcher with timeout
-            try:
-                await asyncio.wait_for(
-                    dp.feed_update(bot, update),
-                    timeout=30.0  # 30 second timeout for update processing
-                )
-            except asyncio.TimeoutError:
-                logger.error("[WEBHOOK] Update processing timeout for update_id=%s", 
-                           update.update_id)
-                # Still return 200 - Telegram will retry if needed
-            except Exception as e:
-                logger.exception("[WEBHOOK] Error processing update_id=%s: %s",
-                               update.update_id, e)
-                # Still return 200 - prevent Telegram storm
-            else:
-                if update_id:
-                    recent_update_ids.add(update_id)
+            update = Update.model_validate(payload)
         except Exception as e:
-            logger.exception("[WEBHOOK] Unexpected error: %s", e)
-            # 200 to prevent Telegram retry storm; errors are logged for monitoring
+            logger.warning("[WEBHOOK] Invalid Telegram update: %s", e)
+            # Return 200 anyway
+            return web.Response(status=200, text="ok")
         
+        try:
+            update_id = int(getattr(update, "update_id", 0))
+        except Exception:
+            update_id = 0
+        
+        # Check for duplicates
+        if update_id and update_id in recent_update_ids:
+            logger.debug("[WEBHOOK] Duplicate update_id=%s ignored", update_id)
+            return web.Response(status=200, text="ok")
+        
+        # Mark as seen BEFORE enqueueing (prevent duplicate processing)
+        if update_id:
+            recent_update_ids.add(update_id)
+        
+        # Enqueue for background processing (non-blocking)
+        # This returns immediately - worker processes in background
+        from app.utils.update_queue import get_queue_manager
+        queue_manager = get_queue_manager()
+        enqueued = queue_manager.enqueue(update, update_id)
+        
+        if not enqueued:
+            # Queue full, update dropped - but still return 200
+            # (Metrics in queue_manager track drop rate)
+            pass
+        
+        # ALWAYS return 200 OK instantly
         return web.Response(status=200, text="ok")
 
     async def _send_generation_result(bot: Bot, chat_id: int, result_urls: list[str], task_id: str) -> None:
@@ -743,6 +795,8 @@ def _make_web_app(
     callback_route = f"/{cfg.kie_callback_path.lstrip('/')}"
     app.router.add_get("/health", health)
     app.router.add_get("/", root)
+    app.router.add_get("/diag/webhook", diag_webhook)
+    app.router.add_get("/diag/lock", diag_lock)
     # aiohttp auto-registers HEAD for GET; explicit add_head causes duplicate route
     app.router.add_post(callback_route, kie_callback)
     app.router.add_post("/webhook/{secret}", webhook)
@@ -792,6 +846,12 @@ async def main() -> None:
     
     # Verify bot identity and webhook configuration BEFORE anything else
     await verify_bot_identity(bot)
+    
+    # Initialize update queue manager
+    from app.utils.update_queue import get_queue_manager
+    queue_manager = get_queue_manager()
+    logger.info("[QUEUE] Initializing update queue (max_size=%d workers=%d)", 
+               queue_manager.max_size, queue_manager.num_workers)
 
     # IMPORTANT: the advisory lock helper in app.locking.single_instance relies on
     # the psycopg2 connection pool from database.py being initialized.
@@ -860,6 +920,13 @@ async def main() -> None:
                 logger.info("[RECONCILER] ✅ Background orphan reconciliation started (10s interval, 30min timeout)")
             except Exception as exc:
                 logger.warning(f"[RECONCILER] ⚠️ Failed to start reconciler: {exc}")
+        
+        # Start update queue workers
+        from app.utils.update_queue import get_queue_manager
+        queue_mgr = get_queue_manager()
+        queue_mgr.configure(dp, bot, active_state)
+        await queue_mgr.start()
+        logger.info("[QUEUE] ✅ Workers started (background update processing)")
         
         # PHASE 6: CRITICAL - Setup webhook IMMEDIATELY (before lock acquisition)
         # This ensures webhook is configured even if lock callback has race conditions

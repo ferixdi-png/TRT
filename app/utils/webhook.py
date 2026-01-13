@@ -168,18 +168,54 @@ async def ensure_webhook(
     current_url = (webhook_info.url or "").rstrip("/")
     logger.info(f"[WEBHOOK] Current: {mask_webhook_url(current_url or '(not set)')}")
     logger.info(f"[WEBHOOK] Desired: {mask_webhook_url(desired_url)}")
+    logger.info(f"[WEBHOOK] Pending updates: {webhook_info.pending_update_count}")
     
-    # Log webhook errors if any
+    # Auto-flush pending updates if error or high pending count
+    should_flush = (
+        webhook_info.last_error_message or 
+        webhook_info.pending_update_count > 10 or
+        force_reset
+    )
+    
     if webhook_info.last_error_message:
-        logger.warning(f"[WEBHOOK] ⚠️ Previous error: {webhook_info.last_error_message}")
+        logger.warning(
+            f"[WEBHOOK] ⚠️ Previous error detected: {webhook_info.last_error_message}"
+        )
+    
+    if webhook_info.pending_update_count > 0:
+        logger.warning(
+            f"[WEBHOOK] ⚠️ {webhook_info.pending_update_count} pending updates"
+        )
     
     # Check if reset needed
-    if current_url == desired_url and not force_reset:
+    if current_url == desired_url and not should_flush:
         logger.info("[WEBHOOK] ✅ Webhook already set to %s", mask_webhook_url(webhook_url))
         return True
     
-    # Reset webhook
-    if force_reset:
+    # Reset webhook with pending updates flush if needed
+    if should_flush:
+        logger.info(
+            "[WEBHOOK] 🔄 Flushing pending updates (error=%s, pending=%d)",
+            bool(webhook_info.last_error_message),
+            webhook_info.pending_update_count
+        )
+        
+        async def _delete_webhook() -> None:
+            await bot.delete_webhook(drop_pending_updates=True)
+        
+        await _call_with_retry(
+            "delete_webhook",
+            _delete_webhook,
+            timeout_s=timeout_s,
+            retries=retries,
+            backoff_s=backoff_s,
+        )
+        logger.info("[WEBHOOK] ✅ Old webhook deleted (pending updates flushed)")
+        
+        # Wait briefly for Telegram to process
+        await asyncio.sleep(0.5)
+    
+    elif force_reset:
         logger.info("[WEBHOOK] 🔄 Force reset requested")
     else:
         logger.info("[WEBHOOK] 🔄 Webhook mismatch, updating...")
