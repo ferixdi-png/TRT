@@ -310,13 +310,27 @@ def _build_kie_callback_url(cfg: RuntimeConfig) -> str:
 
 
 def _health_payload(active_state: ActiveState) -> dict[str, Any]:
+    from app.locking.single_instance import get_lock_debug_info
+
+    lock_state = "ACTIVE" if active_state.active else "PASSIVE"
+    lock_debug = {}
+    controller = getattr(active_state, "lock_controller", None)
+    if controller and getattr(controller, "lock", None) and hasattr(controller.lock, "get_lock_debug_info"):
+        lock_debug = controller.lock.get_lock_debug_info()
+    else:
+        lock_debug = get_lock_debug_info()
+
     return {
         "ok": True,
         "mode": "active" if active_state.active else "passive",
         "active": bool(active_state.active),
+        "lock_state": lock_state,
         "bot_mode": runtime_state.bot_mode,
         "storage_mode": runtime_state.storage_mode,
         "lock_acquired": runtime_state.lock_acquired,
+        "lock_holder_pid": lock_debug.get("holder_pid"),
+        "lock_idle_duration": lock_debug.get("idle_duration"),
+        "lock_takeover_event": lock_debug.get("takeover_event"),
         "instance_id": runtime_state.instance_id,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
@@ -351,6 +365,7 @@ def _make_web_app(
     async def health(_request: web.Request) -> web.Response:
         """Health check endpoint with queue metrics."""
         from app.utils.update_queue import get_queue_manager
+        from app.locking.single_instance import get_lock_debug_info
         
         uptime = 0
         if runtime_state.last_start_time:
@@ -361,12 +376,23 @@ def _make_web_app(
         queue_manager = get_queue_manager()
         queue_metrics = queue_manager.get_metrics()
         
+        lock_debug = {}
+        controller = getattr(active_state, "lock_controller", None)
+        if controller and getattr(controller, "lock", None) and hasattr(controller.lock, "get_lock_debug_info"):
+            lock_debug = controller.lock.get_lock_debug_info()
+        else:
+            lock_debug = get_lock_debug_info()
+
         payload = {
             "status": "ok",
             "uptime": uptime,
             "active": active_state.active,
+            "lock_state": "ACTIVE" if active_state.active else "PASSIVE",
             "webhook_mode": runtime_state.bot_mode == "webhook",
             "lock_acquired": runtime_state.lock_acquired,
+            "lock_holder_pid": lock_debug.get("holder_pid"),
+            "lock_idle_duration": lock_debug.get("idle_duration"),
+            "lock_takeover_event": lock_debug.get("takeover_event"),
             "db_schema_ready": runtime_state.db_schema_ready,
             "queue": queue_metrics,
         }
@@ -375,6 +401,7 @@ def _make_web_app(
     async def root(_request: web.Request) -> web.Response:
         """Root endpoint (same as health)."""
         from app.utils.update_queue import get_queue_manager
+        from app.locking.single_instance import get_lock_debug_info
         
         uptime = 0
         if runtime_state.last_start_time:
@@ -384,12 +411,23 @@ def _make_web_app(
         queue_manager = get_queue_manager()
         queue_metrics = queue_manager.get_metrics()
         
+        lock_debug = {}
+        controller = getattr(active_state, "lock_controller", None)
+        if controller and getattr(controller, "lock", None) and hasattr(controller.lock, "get_lock_debug_info"):
+            lock_debug = controller.lock.get_lock_debug_info()
+        else:
+            lock_debug = get_lock_debug_info()
+
         payload = {
             "status": "ok",
             "uptime": uptime,
             "active": active_state.active,
+            "lock_state": "ACTIVE" if active_state.active else "PASSIVE",
             "webhook_mode": runtime_state.bot_mode == "webhook",
             "lock_acquired": runtime_state.lock_acquired,
+            "lock_holder_pid": lock_debug.get("holder_pid"),
+            "lock_idle_duration": lock_debug.get("idle_duration"),
+            "lock_takeover_event": lock_debug.get("takeover_event"),
             "db_schema_ready": runtime_state.db_schema_ready,
             "queue_depth": queue_metrics.get("queue_depth_current", 0),
             "queue": queue_metrics,
