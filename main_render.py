@@ -764,22 +764,33 @@ def _make_web_app(
                 await storage.update_job_status(job_id, 'failed', error_message=error_msg)
                 logger.info(f"[{corr_id}] [CALLBACK_FAIL] task_id={task_id} error={error_msg}")
                 
-                # Send error to user
-                user_id = job.get('user_id')
-                if user_id:
-                    try:
-                        await bot.send_message(user_id, f"❌ Генерация не завершилась: {error_msg}\nID: {task_id}")
-                    except Exception as e:
-                        logger.error(f"[{corr_id}] Failed to send error to user: {e}")
+                # Try to acquire delivery lock for error notification (prevent spam)
+                lock_job = await storage.try_acquire_delivery_lock(task_id, timeout_minutes=5)
+                if lock_job:
+                    logger.info(f"[{corr_id}] [DELIVER_LOCK_WIN] Won lock for error notification")
+                    user_id = job.get('user_id')
+                    if user_id:
+                        try:
+                            await bot.send_message(user_id, f"❌ Генерация не завершилась: {error_msg}\nID: {task_id}")
+                            await storage.mark_delivered(task_id, success=True)
+                            logger.info(f"[{corr_id}] [MARK_DELIVERED] Error notified")
+                        except Exception as e:
+                            logger.exception(f"[{corr_id}] Failed to send error to user: {e}")
+                            await storage.mark_delivered(task_id, success=False, error=str(e))
+                else:
+                    logger.info(f"[{corr_id}] [DELIVER_LOCK_SKIP] Error already notified")
             
             elif state == 'success':
                 await storage.update_job_status(job_id, 'done', result_urls=result_urls)
                 logger.info(f"[{corr_id}] [CALLBACK_SUCCESS] task_id={task_id} urls={len(result_urls)}")
                 
-                # Idempotency check
-                if job.get('delivered_at'):
-                    logger.info(f"[{corr_id}] [CALLBACK_SKIP] Already delivered")
+                # Atomic delivery lock - prevents race between callback+polling and ACTIVE+PASSIVE
+                lock_job = await storage.try_acquire_delivery_lock(task_id, timeout_minutes=5)
+                if not lock_job:
+                    logger.info(f"[{corr_id}] [DELIVER_LOCK_SKIP] Already delivered or delivering")
                     return web.json_response({"ok": True}, status=200)
+                
+                logger.info(f"[{corr_id}] [DELIVER_LOCK_WIN] Won delivery race")
                 
                 # Get chat_id
                 user_id = job.get('user_id')
@@ -799,15 +810,20 @@ def _make_web_app(
                     logger.info(f"[{corr_id}] [DELIVER_START] task_id={task_id} chat_id={chat_id} urls={len(result_urls)}")
                     
                     try:
-                        # Real delivery with fallback
+                        # Real delivery with 3-level fallback
                         await _deliver_result_to_telegram(bot, chat_id, result_urls, task_id, corr_id)
                         logger.info(f"[{corr_id}] [DELIVER_OK] task_id={task_id} chat_id={chat_id}")
                         
-                        # Mark delivered
-                        await storage.update_job_status(job_id, 'done', delivered=True)
+                        # Mark delivered AFTER successful delivery
+                        await storage.mark_delivered(task_id, success=True)
                         logger.info(f"[{corr_id}] [MARK_DELIVERED] job_id={job_id}")
                     except Exception as e:
                         logger.exception(f"[{corr_id}] [DELIVER_FAIL] task_id={task_id}: {e}")
+                        
+                        # Release lock on failure, allow retry
+                        await storage.mark_delivered(task_id, success=False, error=str(e))
+                        
+                        # Notify user about delivery failure
                         try:
                             await bot.send_message(chat_id, f"⚠️ Генерация готова, но не удалось отправить результат.\nID: {task_id}")
                         except:

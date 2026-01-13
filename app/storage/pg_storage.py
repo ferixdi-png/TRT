@@ -516,6 +516,80 @@ class PostgresStorage(BaseStorage):
             )
             return dict(row) if row else None
 
+    async def try_acquire_delivery_lock(self, task_id: str, timeout_minutes: int = 5) -> Optional[Dict[str, Any]]:
+        """
+        Atomically acquire delivery lock for a task.
+        
+        Uses delivering_at as a lock mechanism to prevent race conditions between:
+        - callback + polling
+        - ACTIVE + PASSIVE instances
+        - multiple concurrent callbacks
+        
+        Args:
+            task_id: External task ID from Kie.ai
+            timeout_minutes: Consider stale if delivering_at older than this
+        
+        Returns:
+            Job dict if lock acquired (this instance won the race)
+            None if already delivered or another process is delivering
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # Atomic update: set delivering_at=NOW() only if not delivered and not currently delivering
+            # OR if delivering but stale (timeout_minutes passed)
+            row = await conn.fetchrow(
+                """
+                UPDATE generation_jobs
+                SET delivering_at = NOW()
+                WHERE (external_task_id = $1 OR job_id = $1)
+                  AND delivered_at IS NULL
+                  AND (
+                    delivering_at IS NULL
+                    OR delivering_at < NOW() - INTERVAL '$2 minutes'
+                  )
+                RETURNING *
+                """,
+                task_id,
+                timeout_minutes
+            )
+            return dict(row) if row else None
+
+    async def mark_delivered(self, task_id: str, success: bool = True, error: Optional[str] = None) -> None:
+        """
+        Mark job as delivered (or failed delivery).
+        
+        Args:
+            task_id: External task ID
+            success: True if delivery succeeded, False if failed
+            error: Error message if delivery failed
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            if success:
+                # Success: set delivered_at and clear delivering_at
+                await conn.execute(
+                    """
+                    UPDATE generation_jobs
+                    SET delivered_at = NOW(), 
+                        delivering_at = NULL,
+                        status = 'done'
+                    WHERE external_task_id = $1 OR job_id = $1
+                    """,
+                    task_id
+                )
+            else:
+                # Failed: clear delivering_at, save error, allow retry
+                await conn.execute(
+                    """
+                    UPDATE generation_jobs
+                    SET delivering_at = NULL,
+                        error_message = COALESCE(error_message, '') || $2
+                    WHERE external_task_id = $1 OR job_id = $1
+                    """,
+                    task_id,
+                    f"\n[DELIVERY_FAIL] {error}" if error else ""
+                )
+
     async def get_undelivered_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get jobs that are done but not delivered to Telegram."""
         pool = await self._get_pool()

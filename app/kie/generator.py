@@ -425,24 +425,38 @@ class KieGenerator:
                 logger.info(f"{correlation_tag()} [POLL_STATE] i={poll_iteration} task_id={task_id} state={state}")
                 
                 if state == 'success':
-                    # 🎯 POLLING DELIVERY: If callback didn't deliver, polling must do it
+                    # 🎯 ATOMIC DELIVERY LOCK: Polling competes with callback for delivery
                     result_urls = parsed['result_urls']
                     
-                    # Check if already delivered via callback
-                    delivered_via_callback = False
+                    # Try to acquire delivery lock
+                    lock_job = None
                     if user_id is not None:
                         try:
                             from app.storage import get_storage
                             storage = get_storage()
-                            current_job = await storage.find_job_by_task_id(task_id)
-                            if current_job and current_job.get('delivered_at'):
-                                delivered_via_callback = True
-                                logger.info(f"{correlation_tag()} [POLL_SUCCESS_SKIP] Already delivered via callback")
-                        except Exception:
-                            pass
+                            lock_job = await storage.try_acquire_delivery_lock(task_id, timeout_minutes=5)
+                        except Exception as e:
+                            logger.error(f"{correlation_tag()} [POLL_LOCK_ERROR] {e}")
                     
-                    # Deliver if callback didn't
-                    if not delivered_via_callback and chat_id and result_urls:
+                    if not lock_job:
+                        # Already delivered (by callback or another polling instance)
+                        logger.info(f"{correlation_tag()} [POLL_LOCK_SKIP] Already delivered or delivering")
+                        return {
+                            'success': True,
+                            'message': parsed['message'],
+                            'result_urls': result_urls,
+                            'result_object': parsed['result_object'],
+                            'error_code': None,
+                            'error_message': None,
+                            'task_id': task_id,
+                            'already_delivered': True
+                        }
+                    
+                    # Won the delivery race
+                    logger.info(f"{correlation_tag()} [POLL_LOCK_WIN] Won delivery race")
+                    
+                    # Deliver to Telegram
+                    if chat_id and result_urls:
                         logger.info(f"{correlation_tag()} [POLL_DELIVER_START] task_id={task_id} chat_id={chat_id}")
                         try:
                             # Import bot and delivery function
@@ -450,18 +464,26 @@ class KieGenerator:
                             await _deliver_result_to_telegram(bot, chat_id, result_urls, task_id, correlation_tag())
                             logger.info(f"{correlation_tag()} [POLL_DELIVER_OK] task_id={task_id}")
                             
-                            # Mark as delivered
+                            # Mark as delivered AFTER successful delivery
                             if user_id is not None:
                                 try:
                                     from app.storage import get_storage
                                     storage = get_storage()
-                                    job_id = current_job.get('job_id') or current_job.get('id') or task_id
-                                    await storage.update_job_status(job_id, 'done', delivered=True)
-                                    logger.info(f"{correlation_tag()} [POLL_MARK_DELIVERED] job_id={job_id}")
+                                    await storage.mark_delivered(task_id, success=True)
+                                    logger.info(f"{correlation_tag()} [POLL_MARK_DELIVERED] task_id={task_id}")
                                 except Exception as e:
                                     logger.error(f"{correlation_tag()} [POLL_MARK_FAIL] {e}")
                         except Exception as e:
                             logger.exception(f"{correlation_tag()} [POLL_DELIVER_FAIL] task_id={task_id}: {e}")
+                            
+                            # Release lock on failure, allow retry
+                            if user_id is not None:
+                                try:
+                                    from app.storage import get_storage
+                                    storage = get_storage()
+                                    await storage.mark_delivered(task_id, success=False, error=str(e))
+                                except Exception:
+                                    pass
                     
                     return {
                         'success': True,
