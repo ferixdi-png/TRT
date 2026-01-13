@@ -11,7 +11,6 @@ Render ищет структурированные логи, поэтому ис
 import logging
 import json
 import os
-from logging.handlers import StreamHandler
 
 # ============================================================================
 # JSON FORMATTER
@@ -93,8 +92,8 @@ def configure_logging():
     # Clear existing handlers
     root_logger.handlers.clear()
     
-    # Stream handler (stdout для Render)
-    handler = StreamHandler()
+    # Stream handler (stdout для Render) - StreamHandler из logging, не logging.handlers
+    handler = logging.StreamHandler()
     
     # Выбрать formatter
     if log_format == "kv":
