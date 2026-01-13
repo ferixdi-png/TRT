@@ -319,6 +319,84 @@ await message.answer(f"<b>Цена:</b> {price_text}", parse_mode="HTML")
 - Используй `format_price_rub()` для цен
 - Проверяй сообщения через `scripts/verify.py` (обнаруживает ₽)
 
+---
+
+## Model Parameter Validation
+
+Правила валидации входных параметров для KIE AI моделей:
+
+### Источники правды
+
+1. **models/KIE_SOURCE_OF_TRUTH.json** - примеры из документации KIE
+2. **Production error logs** - реальные ошибки валидации
+3. **app/kie/field_options.py** - маппинг user-friendly → API enum values
+4. **app/kie/model_defaults.py** - дефолтные значения required полей
+
+### Частые ошибки валидации
+
+#### 1. Missing required field
+
+```python
+# ERROR из логов:
+# "Missing required field: guidance_scale"
+
+# ПРИЧИНА: Пользователь не выбрал параметр через UI,
+# но поле required в API схеме
+
+# РЕШЕНИЕ: Добавить default в app/kie/model_defaults.py
+MODEL_DEFAULTS = {
+    "bytedance/seedream": {
+        "guidance_scale": 2.5,  # From SOURCE_OF_TRUTH examples
+    }
+}
+```
+
+#### 2. Invalid enum value
+
+```python
+# ERROR из логов:
+# "Invalid value for image_size: portrait_4_3.
+#  Must be one of: square_hd, square, portrait, portrait_hd, landscape, landscape_hd"
+
+# ПРИЧИНА: app/kie/field_options.py содержит старые enum значения
+# (например, portrait_4_3 вместо portrait)
+
+# РЕШЕНИЕ: Обновить маппинг согласно ошибке API
+"bytedance/seedream.image_size": [
+    "square_hd",
+    "square",
+    "portrait",      # НЕ portrait_4_3
+    "portrait_hd",
+    "landscape",
+    "landscape_hd",
+]
+```
+
+### Workflow при новой validation error
+
+1. **Читай production logs** → находи точную ошибку
+2. **Определи root cause**:
+   - Missing field → добавь в MODEL_DEFAULTS
+   - Invalid enum → обнови FIELD_OPTIONS
+3. **Проверь SOURCE_OF_TRUTH** → найди правильные значения
+4. **Обнови forbidden_log_patterns** в product/truth.yaml
+5. **Commit + push** → деплой исправления
+
+### Forbidden patterns (product/truth.yaml)
+
+```yaml
+forbidden_log_patterns:
+  - pattern: "Input validation failed.*Missing required field"
+    severity: P0
+    description: "Model parameter validation error - check app/kie/model_defaults.py"
+    
+  - pattern: "Invalid value for .* Must be one of"
+    severity: P0
+    description: "Enum value mismatch - check app/kie/field_options.py mapping"
+```
+
+---
+
 ## Security
 
 ### Validate all user input

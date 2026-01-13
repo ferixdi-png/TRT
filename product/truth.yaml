@@ -230,6 +230,17 @@ observability:
     - pattern: "TelegramBadRequest.*can't parse entities"
       severity: "P1"
       description: "Invalid HTML entities in message - use bot/utils/html_safe.py helpers"
+      example_fix: "Replace ₽ with 'руб.', use escape_html() for user content"
+    
+    - pattern: "Input validation failed.*Missing required field"
+      severity: "P0"
+      description: "Model parameter validation error - check app/kie/model_defaults.py"
+      example_fix: "Add default value in MODEL_DEFAULTS for missing required field"
+    
+    - pattern: "Invalid value for .* Must be one of"
+      severity: "P0"
+      description: "Enum value mismatch - check app/kie/field_options.py mapping"
+      example_fix: "Update FIELD_OPTIONS with correct enum values from KIE API error"
       
   rate_limits:
     duplicate_error_same_type: "1/30s"  # Max 1 identical error per 30 seconds

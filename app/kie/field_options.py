@@ -39,14 +39,16 @@ FIELD_OPTIONS = {
         "webp",
     ],
     
-    # bytedance/seedream (verified from KIE docs)
+    # bytedance/seedream (FIXED: use correct KIE API enum values from error logs)
     "bytedance/seedream.image_size": [
         "square_hd",        # 2048x2048 (default)
         "square",           # 1024x1024
-        "portrait_4_3",     # 896x1152
-        "portrait_16_9",    # 768x1344
-        "landscape_4_3",    # 1152x896
-        "landscape_16_9",   # 1344x768
+        "portrait_hd",      # High-res portrait
+        "portrait",         # Standard portrait
+        "landscape_hd",     # High-res landscape
+        "landscape",        # Standard landscape
+        "512x512",          # Legacy small square
+        "1024x1024",        # Standard square
     ],
     
     # Video aspect ratios (verified from validate_wan_*.py)

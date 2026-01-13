@@ -12,6 +12,7 @@ from app.kie.builder import build_payload, load_source_of_truth
 from app.kie.validator import ModelContractError
 from app.kie.parser import parse_record_info, get_human_readable_error
 from app.kie.router import is_v4_model, build_category_payload
+from app.kie.model_defaults import apply_defaults
 from app.models.input_schema import validate_inputs
 
 logger = logging.getLogger(__name__)
@@ -167,8 +168,12 @@ class KieGenerator:
             if not self.source_of_truth:
                 self.source_of_truth = load_source_of_truth()
             
+            # ✅ PHASE A: Apply model defaults for missing required fields
+            # Prevents "Missing required field: guidance_scale" errors
+            user_inputs = apply_defaults(model_id, user_inputs)
+            logger.info(f"{correlation_tag()} [GENERATOR]   - after defaults: {list(user_inputs.keys())}")
+            
             # ✅ PHASE B: Validate inputs before creating payload
-            # NO MAGIC DEFAULTS - пользователь должен выбрать все required/enum поля через UI
             is_valid, validation_errors = validate_inputs(model_id, user_inputs)
             if not is_valid:
                 error_details = "\n".join([f"  • {err}" for err in validation_errors])
