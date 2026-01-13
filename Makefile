@@ -1,7 +1,6 @@
 # Makefile для запуска тестов
 
-# .PHONY: install-deps lint test test-verbose test-menu test-callbacks smoke integrity e2e verify
-.PHONY: install-deps lint test test-verbose test-menu test-callbacks smoke integrity e2e verify verify-runtime
+.PHONY: install-deps lint test test-verbose test-menu test-callbacks test-queue smoke integrity e2e verify verify-runtime smoke-render
 
 # Установка зависимостей для тестов
 install-deps:
@@ -44,6 +43,30 @@ test-callbacks:
 	PAYMENT_PHONE="+79991234567" SUPPORT_TELEGRAM="@test" SUPPORT_TEXT="Test support" \
 	TELEGRAM_BOT_TOKEN=test_token_12345 WEBHOOK_BASE_URL=https://test.example.com \
 	pytest -v tests/test_callbacks_smoke.py
+
+# CRITICAL: Тест очереди (no-drop гарантия)
+test-queue:
+	@echo "Running CRITICAL queue tests (no-drop guarantee)..."
+	TEST_MODE=1 DRY_RUN=1 BOT_MODE=passive PORT=8000 \
+	ADMIN_ID=12345 DATABASE_URL=postgresql://test:test@localhost/test DB_MAXCONN=5 \
+	KIE_API_KEY=test_api_key TELEGRAM_BOT_TOKEN=test_token_12345 \
+	pytest -v tests/test_update_queue_no_drop.py
+
+# Smoke test на Render production
+smoke-render:
+	@echo "Running smoke test on Render (production)..."
+	@echo ""
+	@echo "1. Health check..."
+	@curl -sf https://five656.onrender.com/health | jq -r '.status, .lock_state' || echo "FAIL"
+	@echo ""
+	@echo "2. Webhook status..."
+	@curl -sf https://five656.onrender.com/diag/webhook | jq '.pending_update_count, .last_error_message' || echo "FAIL"
+	@echo ""
+	@echo "3. Queue metrics (CRITICAL: total_dropped must be 0)..."
+	@curl -sf https://five656.onrender.com/health | jq '.queue | {dropped: .total_dropped, requeued: .total_requeued}' || echo "FAIL"
+	@echo ""
+	@echo "✅ Smoke complete. Manually check /start in Telegram."
+
 
 lint:
 	ruff check app/main.py app/utils/healthcheck.py scripts/verify_project.py scripts/smoke_test_all_models.py
