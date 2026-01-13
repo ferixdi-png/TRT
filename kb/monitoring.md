@@ -110,6 +110,19 @@ logger.info("User balance checked", extra={
 - Grace period after termination: 3s (LOCK_RELEASE_WAIT_SECONDS)
 - Total time-to-ACTIVE: ~33s (down from 53s pre-CYCLE 8)
 - Heartbeat interval: 15s (ensures 2 updates within stale window)
+@@**Health Endpoint Lock Fields** (`GET /health`):
+@@- `lock_state`: "ACTIVE" or "PASSIVE"
+@@- `lock_holder_pid`: Process ID holding the advisory lock
+@@- `lock_idle_duration`: Seconds since last state change (null if no holder)
+@@- `lock_heartbeat_age`: Seconds since last heartbeat update (null if table unavailable)
+@@- `lock_takeover_event`: Last lock takeover details (null if never occurred)
+@@
+@@**Diagnostic Pattern** (when heartbeat is not working):
+@@1. Check `/health` → `lock_heartbeat_age: null`
+@@2. Check logs → "⚠️ Heartbeat table unavailable (migration 007 not applied?)"
+@@3. Verify migration: `psql -c "SELECT * FROM lock_heartbeat LIMIT 1"`
+@@4. Apply if missing: Run migration 007_lock_heartbeat.sql manually
+@@
 
 ## Render Dashboard Metrics
 

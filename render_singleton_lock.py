@@ -144,7 +144,7 @@ def _heartbeat_supported(conn: connection) -> bool:
             cur.execute("SELECT 1 FROM lock_heartbeat LIMIT 1")
         _heartbeat_available = True
     except Exception as exc:
-        logger.debug("[LOCK] Heartbeat table unavailable: %s", exc)
+        logger.warning("[LOCK] ⚠️ Heartbeat table unavailable (migration 007 not applied?): %s", exc)
         _heartbeat_available = False
     return _heartbeat_available
 
@@ -162,7 +162,7 @@ def _get_heartbeat_age_seconds(conn: connection, lock_key: int) -> Optional[floa
             # Convert Decimal to float for JSON serialization
             return float(row[0]) if (row and row[0] is not None) else None
     except Exception as exc:
-        logger.debug("[LOCK] Failed to fetch heartbeat age: %s", exc)
+        logger.warning("[LOCK] Failed to fetch heartbeat age: %s", exc)
         return None
 
 
@@ -173,7 +173,7 @@ def _write_heartbeat(pool, lock_key: int, instance_id: str) -> None:
         with conn.cursor() as cur:
             cur.execute("SELECT update_lock_heartbeat(%s, %s)", (lock_key, instance_id))
     except Exception as exc:
-        logger.debug("[LOCK] Heartbeat update failed: %s", exc)
+        logger.warning("[LOCK] Heartbeat update failed: %s", exc)
     finally:
         if "conn" in locals():
             try:

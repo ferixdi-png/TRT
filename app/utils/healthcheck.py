@@ -83,6 +83,7 @@ async def health_handler(request):
         "lock_state": lock_debug.get("state"),
         "lock_holder_pid": lock_debug.get("holder_pid"),
         "lock_idle_duration": lock_debug.get("idle_duration"),
+            "lock_heartbeat_age": lock_debug.get("heartbeat_age"),
         "lock_takeover_event": lock_debug.get("takeover_event"),
     }
 
