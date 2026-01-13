@@ -257,37 +257,39 @@ class SingletonLockController:
     
     async def start(self) -> None:
         """Start lock controller (single watcher task)"""
-        async with self.state._mutex:
-            if self.state.watcher_task is not None:
-                logger.warning(
-                    "[LOCK_CONTROLLER] Watcher already running | watcher=%s",
-                    self.state.watcher_id
-                )
-                return
-            
-            # Try immediate acquire first (fast path)
-            logger.info("[LOCK_CONTROLLER] 🔍 Attempting immediate acquire (timeout=0.5s)...")
-            try:
-                got_lock = await self.lock.acquire(timeout=0.5)
-                logger.info(f"[LOCK_CONTROLLER] Immediate acquire returned: {got_lock}")
-                if got_lock:
-                    await self._set_state(LockState.ACTIVE)
-                    logger.info(
-                        "[LOCK_CONTROLLER] ✅ Lock acquired immediately | instance=%s",
-                        self.state.instance_id
-                    )
-                    return  # No need for watcher
-                else:
-                    logger.warning("[LOCK_CONTROLLER] ⏸️ Immediate acquire FAILED - lock held by another instance")
-            except Exception as e:
-                logger.debug(
-                    "[LOCK_CONTROLLER] Immediate acquire failed: %s | instance=%s",
-                    e,
+        # Check if already running (without holding mutex during lock acquire)
+        if self.state.watcher_task is not None:
+            logger.warning(
+                "[LOCK_CONTROLLER] Watcher already running | watcher=%s",
+                self.state.watcher_id
+            )
+            return
+        
+        # Try immediate acquire first (fast path) - DON'T hold mutex during this
+        logger.info("[LOCK_CONTROLLER] 🔍 Attempting immediate acquire (timeout=0.5s)...")
+        try:
+            got_lock = await self.lock.acquire(timeout=0.5)
+            logger.info(f"[LOCK_CONTROLLER] Immediate acquire returned: {got_lock}")
+            if got_lock:
+                # SUCCESS: Call _set_state (which has its own mutex)
+                await self._set_state(LockState.ACTIVE)
+                logger.info(
+                    "[LOCK_CONTROLLER] ✅ Lock acquired immediately | instance=%s",
                     self.state.instance_id
                 )
-            
-            # Start background watcher
-            await self._set_state(LockState.PASSIVE)
+                return  # No need for watcher
+            else:
+                logger.warning("[LOCK_CONTROLLER] ⏸️ Immediate acquire FAILED - lock held by another instance")
+        except Exception as e:
+            logger.debug(
+                "[LOCK_CONTROLLER] Immediate acquire failed: %s | instance=%s",
+                e,
+                self.state.instance_id
+            )
+        
+        # Start background watcher
+        await self._set_state(LockState.PASSIVE)
+        async with self.state._mutex:
             self.state.watcher_task = asyncio.create_task(self._watcher_loop())
             logger.info(
                 "[LOCK_CONTROLLER] Started background watcher | watcher=%s instance=%s",
