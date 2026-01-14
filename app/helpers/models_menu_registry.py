@@ -70,16 +70,47 @@ def build_models_menu_from_registry(user_lang: str = 'ru') -> InlineKeyboardMark
             callback_data="provider_header:ignore"
         )])
         
-        # Кнопки моделей
+        # Кнопки моделей с metadata (title, subtitle, badge)
         for model_spec in sorted(provider_models, key=lambda m: m.model_id):
             price_rub = price_for_model_rub(model_spec.model_id, settings)
-            title = model_spec.title_ru or model_spec.model_id
             
-            # Сокращаем длинные названия
-            if len(title) > 30:
-                title = title[:27] + "..."
+            # Get menu metadata with defaults
+            menu_title = model_spec.menu_title or model_spec.title_ru or model_spec.model_id
+            menu_badge = model_spec.menu_badge
             
-            button_text = f"{title} (₽{price_rub})"
+            # Build button text with badge if present
+            parts = [menu_title]
+            if menu_badge:
+                parts.append(menu_badge)
+            
+            # Price tag
+            if price_rub == 0:
+                price_tag = "🆓"
+            elif price_rub < 1.0:
+                price_tag = f"{price_rub:.2f}₽"
+            elif price_rub < 10.0:
+                price_tag = f"{price_rub:.1f}₽"
+            else:
+                price_tag = f"{price_rub:.0f}₽"
+            
+            parts.append(price_tag)
+            button_text = " • ".join(parts)
+            
+            # Truncate if too long (max 60 chars for Telegram button)
+            if len(button_text) > 60:
+                # Try to keep title and price, truncate badge if needed
+                if menu_badge and len(menu_badge) > 10:
+                    short_badge = menu_badge[:8] + ".."
+                    button_text = f"{menu_title} • {short_badge} • {price_tag}"
+                if len(button_text) > 60:
+                    # Truncate title
+                    title_max = 60 - len(f" • {menu_badge if menu_badge else ''} • {price_tag}")
+                    if title_max > 10:
+                        menu_title = menu_title[:title_max-3] + "..."
+                        button_text = f"{menu_title} • {menu_badge if menu_badge else ''} • {price_tag}".replace(" •  • ", " • ")
+                    else:
+                        # Fallback: just title and price
+                        button_text = f"{menu_title[:50]}... • {price_tag}"
             
             # Используем короткий callback если model_id длинный
             if len(model_spec.model_id) > 50:
@@ -108,12 +139,41 @@ def build_models_menu_from_registry(user_lang: str = 'ru') -> InlineKeyboardMark
         
         for model_spec in sorted(provider_models, key=lambda m: m.model_id):
             price_rub = price_for_model_rub(model_spec.model_id, settings)
-            title = model_spec.title_ru or model_spec.model_id
             
-            if len(title) > 30:
-                title = title[:27] + "..."
+            # Get menu metadata with defaults
+            menu_title = model_spec.menu_title or model_spec.title_ru or model_spec.model_id
+            menu_badge = model_spec.menu_badge
             
-            button_text = f"{title} (₽{price_rub})"
+            # Build button text with badge if present
+            parts = [menu_title]
+            if menu_badge:
+                parts.append(menu_badge)
+            
+            # Price tag
+            if price_rub == 0:
+                price_tag = "🆓"
+            elif price_rub < 1.0:
+                price_tag = f"{price_rub:.2f}₽"
+            elif price_rub < 10.0:
+                price_tag = f"{price_rub:.1f}₽"
+            else:
+                price_tag = f"{price_rub:.0f}₽"
+            
+            parts.append(price_tag)
+            button_text = " • ".join(parts)
+            
+            # Truncate if too long
+            if len(button_text) > 60:
+                if menu_badge and len(menu_badge) > 10:
+                    short_badge = menu_badge[:8] + ".."
+                    button_text = f"{menu_title} • {short_badge} • {price_tag}"
+                if len(button_text) > 60:
+                    title_max = 60 - len(f" • {menu_badge if menu_badge else ''} • {price_tag}")
+                    if title_max > 10:
+                        menu_title = menu_title[:title_max-3] + "..."
+                        button_text = f"{menu_title} • {menu_badge if menu_badge else ''} • {price_tag}".replace(" •  • ", " • ")
+                    else:
+                        button_text = f"{menu_title[:50]}... • {price_tag}"
             callback_data = f"model:{model_spec.model_id}"
             
             keyboard.append([InlineKeyboardButton(
