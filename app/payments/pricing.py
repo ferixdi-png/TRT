@@ -80,6 +80,34 @@ def calculate_kie_cost(
     # Priority 2: SOURCE_OF_TRUTH format (direct RUB price)
     pricing = model.get("pricing", {})
     if isinstance(pricing, dict):
+        # Check for pricing_rules (resolution-based, duration-based, etc.)
+        pricing_rules = pricing.get("pricing_rules", {})
+        if pricing_rules and isinstance(pricing_rules, dict):
+            strategy = pricing_rules.get("strategy", "")
+            
+            # Resolution-based pricing (e.g., nano-banana-pro: 1K/2K=18, 4K=24)
+            if strategy == "by_resolution" and "resolution" in pricing_rules:
+                resolution = user_inputs.get("resolution", "1K")
+                resolution_map = pricing_rules["resolution"]
+                if isinstance(resolution_map, dict):
+                    credits = resolution_map.get(str(resolution), resolution_map.get("1K", 18))
+                    # Convert credits to RUB: 1 credit = $0.005 USD = 0.005 * 78 RUB = 0.39 RUB
+                    cost_rub = credits * 0.005 * USD_TO_RUB
+                    logger.info(f"Using pricing_rules (by_resolution) for {model_id}: resolution={resolution} → {credits} credits → {cost_rub} RUB")
+                    return cost_rub
+            
+            # Duration-based pricing (future: for video models)
+            if strategy == "by_duration" and "duration" in pricing_rules:
+                duration = user_inputs.get("duration") or user_inputs.get("n_frames", "10")
+                duration_map = pricing_rules["duration"]
+                if isinstance(duration_map, dict):
+                    # Find matching duration tier
+                    credits = duration_map.get(str(duration), duration_map.get("default", 10))
+                    cost_rub = credits * 0.005 * USD_TO_RUB
+                    logger.info(f"Using pricing_rules (by_duration) for {model_id}: duration={duration} → {credits} credits → {cost_rub} RUB")
+                    return cost_rub
+        
+        # Fallback to flat pricing
         rub_price = pricing.get("rub_per_gen")
         if rub_price is not None:
             try:

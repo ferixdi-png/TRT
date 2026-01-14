@@ -878,6 +878,54 @@
         "input": {
           "type": "dict",
           "required": true,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "required": true,
+              "max_length": 20000,
+              "description": "Текстовое описание изображения",
+              "label_ru": "Промпт",
+              "hint_ru": "Опишите что вы хотите создать (макс. 20000 символов)"
+            },
+            "image_input": {
+              "type": "array",
+              "required": false,
+              "item_type": "string",
+              "max_items": 8,
+              "description": "Входные изображения для трансформации или использования как референс (до 8 изображений, jpeg/png/webp, макс. 30MB каждое)",
+              "label_ru": "Входные изображения",
+              "hint_ru": "Загрузите до 8 изображений (jpeg/png/webp, макс. 30MB каждое)"
+            },
+            "aspect_ratio": {
+              "type": "enum",
+              "required": false,
+              "default": "1:1",
+              "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"],
+              "description": "Соотношение сторон изображения",
+              "label_ru": "Соотношение сторон",
+              "hint_ru": "Выберите соотношение сторон для изображения"
+            },
+            "resolution": {
+              "type": "enum",
+              "required": false,
+              "default": "1K",
+              "enum": ["1K", "2K", "4K"],
+              "description": "Разрешение изображения (1K/2K = 18 кредитов, 4K = 24 кредита)",
+              "label_ru": "Разрешение",
+              "hint_ru": "1K/2K: 18 кредитов, 4K: 24 кредита"
+            },
+            "output_format": {
+              "type": "enum",
+              "required": false,
+              "default": "png",
+              "enum": ["png", "jpg"],
+              "description": "Формат выходного изображения",
+              "label_ru": "Формат",
+              "hint_ru": "PNG или JPG"
+            }
+          },
+          "required": ["prompt"],
+          "optional": ["image_input", "aspect_ratio", "resolution", "output_format"],
           "examples": [
             {
               "prompt": "Comic poster: cool banana hero in shades leaps from sci-fi pad. Six panels: 1) 4K mountain landscape, 2) banana holds page of long multilingual text with auto translation, 3) Gemini 3 hologram for search/knowledge/reasoning, 4) camera UI sliders for angle focus color, 5) frame trio 1:1-9:16, 6) consistent banana poses. Footer shows Google icons. Tagline: Nano Banana Pro now on Kie AI.",
@@ -920,7 +968,15 @@
         "credits_per_gen": 18.0,
         "is_free": false,
         "rank": 16,
-        "source": "mapped_from_google/nano-banana-pro"
+        "source": "mapped_from_google/nano-banana-pro",
+        "pricing_rules": {
+          "resolution": {
+            "1K": 18,
+            "2K": 18,
+            "4K": 24
+          },
+          "strategy": "by_resolution"
+        }
       },
       "_metadata": {
         "source": "copy_page",
@@ -3515,6 +3571,43 @@
         "input": {
           "type": "dict",
           "required": true,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "required": true,
+              "max_length": 10000,
+              "description": "Текстовый промпт для генерации видео",
+              "label_ru": "Промпт",
+              "hint_ru": "Опишите что вы хотите создать в видео (макс. 10000 символов)"
+            },
+            "image_url": {
+              "type": "string",
+              "required": true,
+              "description": "URL изображения для генерации видео (макс. 10MB, jpeg/png/webp)",
+              "label_ru": "Изображение",
+              "hint_ru": "Загрузите изображение или укажите URL (макс. 10MB, jpeg/png/webp)"
+            },
+            "resolution": {
+              "type": "enum",
+              "required": false,
+              "default": "720p",
+              "enum": ["720p", "1080p"],
+              "description": "Разрешение видео (720p для баланса, 1080p для более высокого качества)",
+              "label_ru": "Разрешение",
+              "hint_ru": "720p для баланса, 1080p для более высокого качества"
+            },
+            "duration": {
+              "type": "enum",
+              "required": false,
+              "default": "5",
+              "enum": ["5", "10"],
+              "description": "Длительность видео в секундах",
+              "label_ru": "Длительность",
+              "hint_ru": "5 или 10 секунд"
+            }
+          },
+          "required": ["prompt", "image_url"],
+          "optional": ["resolution", "duration"],
           "examples": [
             {
               "prompt": "A cinematic close-up sequence of a single elegant ceramic coffee cup with saucer on a rustic wooden table near a sunlit window, hot rich espresso poured in a thin golden stream from above, gradually filling the cup in distinct stages: empty with faint steam, 1/4 filled with dark crema, half-filled with swirling coffee and rising steam, 3/4 filled nearing the rim, perfectly full just below overflow with glossy surface and soft bokeh highlights; ultra-realistic, warm golden-hour light, shallow depth of field, photorealism, detailed textures, subtle steam wisps, serene inviting atmosphere --ar 16:9 --q 2 --style raw",
@@ -3561,26 +3654,26 @@
       },
       "model_id": "bytedance/v1-pro-fast-image-to-video",
       "provider": "bytedance",
-      "category": "image",
+      "category": "video",
       "slug": "market/bytedance/v1-pro-fast-image-to-video",
       "display_name": "Bytedance - V1 Pro Fast Image to Video",
-      "description": "Создание и редактирование изображений с помощью Bytedance - V1 Pro Fast Image to Video",
+      "description": "Генерация видео из изображения с помощью Bytedance - V1 Pro Fast Image to Video. Быстрая версия с качеством Seedance 1.0 Pro, в 3 раза быстрее рендеринга.",
       "method": "POST",
       "source_url": "https://docs.kie.ai/market/bytedance/v1-pro-fast-image-to-video",
       "tags": [
         "bytedance",
-        "picture",
+        "video",
         "v1 pro fast image to video",
-        "изображение",
-        "картинка",
-        "фото"
+        "видео",
+        "image-to-video",
+        "изображение-в-видео"
       ],
       "ui_example_prompts": [
         "A cinematic close-up sequence of a single elegant ceramic coffee cup with sau...",
         "A cinematic close-up sequence of a single elegant ceramic coffee cup with sau...",
         "A cinematic close-up sequence of a single elegant ceramic coffee cup with sau..."
       ],
-      "use_case": "Идеально для создания постов, баннеров, иллюстраций, концепт-артов, визуализации идей без навыков рисования"
+      "use_case": "Идеально для создания видео из изображений: анимация статичных изображений, создание динамичных визуалов, генерация коротких видеоклипов"
     },
     "bytedance/v1-pro-image-to-video": {
       "endpoint": "/api/v1/jobs/createTask",

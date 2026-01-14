@@ -25057,6 +25057,13 @@ async def create_bot_application(settings) -> Application:
     no_silence_guard = get_no_silence_guard()
     logger.info("✅ NO-SILENCE GUARD: Integrated in button_callback, input_parameters, error_handler")
     
+    # ==================== PASSIVE MODE MIDDLEWARE ====================
+    # Add passive mode middleware BEFORE exception middleware to handle PASSIVE UX
+    from bot.middleware.passive_mode_middleware import PassiveModeMiddleware
+    passive_middleware = PassiveModeMiddleware()
+    application.middleware.setup(passive_middleware)
+    logger.info("✅ PASSIVE MODE MIDDLEWARE: Registered to provide UX feedback during deploy overlap")
+    
     # ==================== EXCEPTION MIDDLEWARE ====================
     # Add exception middleware FIRST (before handlers) to catch all unhandled exceptions
     from bot.middleware.exception_middleware import ExceptionMiddleware

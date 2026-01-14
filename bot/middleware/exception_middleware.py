@@ -36,6 +36,9 @@ class ExceptionMiddleware(BaseMiddleware):
         """
         Wrap handler execution with exception catching.
         
+        CRITICAL: This middleware must NEVER throw exceptions.
+        All exception handling is wrapped in try/except to prevent cascading failures.
+        
         Args:
             handler: Next handler in chain
             event: Telegram event (Update or CallbackQuery)
@@ -47,26 +50,50 @@ class ExceptionMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except Exception as e:
-            # Extract update from event or data
-            update = self._extract_update(event, data)
+            # CRITICAL: Extract callback BEFORE any other operations
+            # This ensures we can always answer callback even if logging fails
+            callback_to_answer = None
+            try:
+                if isinstance(event, CallbackQuery):
+                    callback_to_answer = event
+                elif isinstance(event, Update) and event.callback_query:
+                    callback_to_answer = event.callback_query
+            except Exception:
+                pass  # Fail-safe: if extraction fails, continue
+            
+            # Extract update from event or data (fail-safe)
+            update = None
+            try:
+                update = self._extract_update(event, data)
+            except Exception:
+                pass  # Fail-safe: continue without update
+            
+            # ALWAYS answer callback first (prevent infinite spinner)
+            if callback_to_answer:
+                try:
+                    await callback_to_answer.answer("⚠️ Ошибка", show_alert=False)
+                except Exception:
+                    pass  # Fail-safe: ignore if already answered or fails
             
             # Log error with full context (fail-safe)
             try:
                 self._log_exception(e, update, data)
             except Exception as log_err:
                 # Fail-safe: if logging fails, at least log to stderr
-                logger.critical(f"CRITICAL: Exception logging failed: {log_err}", exc_info=True)
+                try:
+                    logger.critical(f"CRITICAL: Exception logging failed: {log_err}", exc_info=True)
+                except Exception:
+                    pass  # Ultimate fail-safe
             
             # Send user-friendly message (fail-safe)
             try:
-                await self._send_error_message(update, e)
+                await self._send_error_message(update, e, callback_to_answer)
             except Exception as msg_err:
                 # Fail-safe: if sending message fails, log but don't crash
                 try:
                     logger.error(f"Failed to send error message to user: {msg_err}", exc_info=True)
                 except Exception:
-                    # Ultimate fail-safe: if even logging fails, just pass
-                    pass
+                    pass  # Ultimate fail-safe
             
             # Don't re-raise - we've handled it
             return None
@@ -142,7 +169,7 @@ class ExceptionMiddleware(BaseMiddleware):
             logger.critical(f"Exception logging failed: {log_err}", exc_info=True)
             logger.error(f"Original exception: {type(exception).__name__}: {exception}")
     
-    async def _send_error_message(self, update: Optional[Update], exception: Exception) -> None:
+    async def _send_error_message(self, update: Optional[Update], exception: Exception, callback: Optional[CallbackQuery] = None) -> None:
         """
         Send user-friendly error message.
         Fail-safe: wrapped in try/except to prevent cascading failures.
@@ -177,41 +204,48 @@ class ExceptionMiddleware(BaseMiddleware):
             )
         
         # Send message based on update type
+        # CRITICAL: callback is already answered in __call__, so we only need to send message
         try:
-            if update.message:
+            if update and update.message:
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")]
                 ])
-                await update.message.answer(user_message, reply_markup=keyboard)
-            elif update.callback_query:
-                callback = update.callback_query
-                # Always answer callback first
-                try:
-                    await callback.answer("⚠️ Ошибка")
-                except Exception:
-                    pass  # Ignore if already answered
-                
-                # Try to edit message
+                await update.message.answer(user_message, reply_markup=keyboard, parse_mode="HTML")
+            elif callback:
+                # Callback already answered in __call__, just send/edit message
                 try:
                     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")]
                     ])
                     if callback.message:
-                        await callback.message.edit_text(user_message, reply_markup=keyboard)
+                        try:
+                            await callback.message.edit_text(user_message, reply_markup=keyboard, parse_mode="HTML")
+                        except Exception:
+                            # If edit fails, try to send new message
+                            await callback.message.answer(user_message, reply_markup=keyboard, parse_mode="HTML")
                 except Exception:
-                    # If edit fails, try to send new message
-                    try:
-                        if callback.message:
-                            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                                [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")]
-                            ])
-                            await callback.message.answer(user_message, reply_markup=keyboard)
-                    except Exception:
-                        pass  # Ultimate fail-safe: if all fails, just pass
+                    pass  # Fail-safe: if all fails, just pass
+            elif update and update.callback_query:
+                # Fallback: if callback wasn't passed but exists in update
+                callback = update.callback_query
+                try:
+                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")]
+                    ])
+                    if callback.message:
+                        try:
+                            await callback.message.edit_text(user_message, reply_markup=keyboard, parse_mode="HTML")
+                        except Exception:
+                            await callback.message.answer(user_message, reply_markup=keyboard, parse_mode="HTML")
+                except Exception:
+                    pass  # Fail-safe
         except Exception as send_err:
             # Fail-safe: if sending fails, log but don't crash
-            logger.error(f"Failed to send error message: {send_err}", exc_info=True)
+            try:
+                logger.error(f"Failed to send error message: {send_err}", exc_info=True)
+            except Exception:
+                pass  # Ultimate fail-safe
 

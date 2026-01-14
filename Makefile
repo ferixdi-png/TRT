@@ -39,6 +39,20 @@ smoke-render:
 	@echo "🧪 Smoke test на Render..."
 	python3 smoke_test.py --url https://five656.onrender.com
 
+# Smoke test для button instrumentation
+smoke-buttons:
+	@echo "🧪 Smoke test: Button Instrumentation..."
+	python3 scripts/smoke_buttons_instrumentation.py
+
+# Smoke test для webhook production readiness (P0)
+smoke-webhook:
+	@echo "🧪 Smoke test: Webhook Production Readiness..."
+	python3 scripts/smoke_webhook.py
+
+# Smoke test (alias для удобства)
+smoke: smoke-webhook
+	@echo "✅ Smoke tests complete"
+
 # Проверка логов Render после деплоя (ждем 2 минуты)
 deploy-check:
 	@echo "🔍 Проверка Render логов..."

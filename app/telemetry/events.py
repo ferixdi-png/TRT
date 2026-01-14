@@ -84,6 +84,7 @@ def log_callback_received(
     query_id: Optional[str] = None,
     message_id: Optional[int] = None,
     user_id: Optional[int] = None,
+    update_id: Optional[int] = None,
     cid: Optional[str] = None,
     **extra
 ) -> str:
@@ -95,6 +96,7 @@ def log_callback_received(
         query_id: Callback query ID
         message_id: Message ID
         user_id: User ID
+        update_id: Update ID (optional, may be None for callbacks)
         cid: Correlation ID (generated if not provided)
         **extra: Additional context
         
@@ -106,9 +108,11 @@ def log_callback_received(
     
     try:
         truncated_data = _truncate_callback_data(callback_data or "")
+        # Use update_id parameter if provided, otherwise try extra
+        final_update_id = update_id if update_id is not None else extra.get("update_id")
         logger.info(
             f"🔘 CALLBACK_RECEIVED cid={cid} data='{truncated_data}' "
-            f"query_id={query_id} message_id={message_id} user_id={user_id}",
+            f"query_id={query_id} message_id={message_id} user_id={user_id} update_id={final_update_id}",
             extra={
                 "event_type": "CALLBACK_RECEIVED",
                 "cid": cid,
@@ -116,7 +120,8 @@ def log_callback_received(
                 "query_id": query_id,
                 "message_id": message_id,
                 "user_id": user_id,
-                **extra,
+                "update_id": final_update_id,
+                **{k: v for k, v in extra.items() if k != "update_id"},
             }
         )
     except Exception as e:
@@ -202,6 +207,9 @@ def log_callback_rejected(
     callback_data: Optional[str] = None,
     reason: Optional[str] = None,
     reason_detail: Optional[str] = None,
+    reason_code: Optional[str] = None,
+    error_type: Optional[str] = None,
+    error_message: Optional[str] = None,
     cid: Optional[str] = None,
     **extra
 ) -> None:
@@ -210,31 +218,50 @@ def log_callback_rejected(
     
     Args:
         callback_data: Callback data
-        reason: Rejection reason code
+        reason: Rejection reason code (deprecated, use reason_code)
+        reason_code: Rejection reason code (e.g., "PASSIVE_REJECT", "VALIDATION_FAIL", "UNKNOWN_CALLBACK")
         reason_detail: Detailed reason (optional, backward compatible)
+        error_type: Error type if rejection was due to exception
+        error_message: Error message if rejection was due to exception
         cid: Correlation ID
         **extra: Additional context (ignored safely for backward compatibility)
     """
     try:
         truncated_data = _truncate_callback_data(callback_data or "")
+        # Use reason_code if provided, fallback to reason for backward compatibility
+        final_reason = reason_code or reason or "UNKNOWN"
         detail = reason_detail or extra.get("reason_detail") or ""
         if detail:
             detail = f" detail={detail}"
         
+        # Build log message
+        log_msg = f"⚠️ CALLBACK_REJECTED cid={cid} data='{truncated_data}' reason={final_reason}{detail}"
+        if error_type:
+            log_msg += f" error_type={error_type}"
+        if error_message:
+            log_msg += f" error_msg={error_message[:100]}"
+        
         logger.warning(
-            f"⚠️ CALLBACK_REJECTED cid={cid} data='{truncated_data}' "
-            f"reason={reason}{detail}",
+            log_msg,
             extra={
                 "event_type": "CALLBACK_REJECTED",
                 "cid": cid,
                 "callback_data": truncated_data,
-                "reason": reason,
+                "reason": final_reason,
+                "reason_code": final_reason,
                 "reason_detail": reason_detail or extra.get("reason_detail"),
-                **{k: v for k, v in extra.items() if k != "reason_detail"},
+                "error_type": error_type,
+                "error_message": error_message,
+                **{k: v for k, v in extra.items() if k not in ("reason_detail", "reason_code", "error_type", "error_message")},
             }
         )
     except Exception as e:
-        logger.error(f"Failed to log CALLBACK_REJECTED: {e}")
+        # Ultimate fail-safe: if even logging fails, at least log basic info
+        try:
+            logger.error(f"Failed to log CALLBACK_REJECTED: {e}")
+            logger.warning(f"CALLBACK_REJECTED (fallback): cid={cid} reason={reason_code or reason}")
+        except Exception:
+            pass  # If even this fails, just pass silently
 
 
 def log_callback_accepted(
