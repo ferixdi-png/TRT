@@ -70,13 +70,23 @@ make ops-critical5
 
 ## Checklist
 
-- [x] Code changes complete
-- [x] Tests added
-- [x] Makefile targets added
-- [x] .gitignore updated
+- [x] Code changes complete (A-F all tasks)
+- [x] Tests added (config loader + smoke tests)
+- [x] Makefile targets added (ops-*)
+- [x] .gitignore updated (artifacts/)
 - [x] TRT_REPORT.md updated (repo + Desktop)
+- [x] Admin command added (`/admin_ops_snapshot`)
 - [x] Branch pushed to GitHub
-- [ ] PR created (use link from git push output)
-- [ ] Smoke tests pass
+- [x] All commits pushed
+- [ ] PR created (use link: https://github.com/ferixdi-png/TRT/pull/new/feat/ops-observability-loop)
+- [ ] Smoke tests pass (run `make ops-all` after setting up TRT_RENDER.env)
 - [ ] Ready for review
+
+## Next Steps
+
+1. Create PR using GitHub link above
+2. Set up Desktop `TRT_RENDER.env` with credentials
+3. Run `make ops-all` to verify
+4. Test admin command: `/admin_ops_snapshot` (admin only)
+5. Review critical5.md output for accuracy
 
