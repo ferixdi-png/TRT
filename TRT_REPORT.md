@@ -62,6 +62,12 @@
   - Generates unified report: `artifacts/ops_report_<timestamp>.md` and `.json`
   - Creates latest symlinks: `artifacts/ops_report_latest.*`
   - Categories: Startup (ImportError/Traceback), Database (connection/usage), Application (errors/exceptions)
+- **KIE sync verify-only mode**: `python scripts/kie_verify_parser.py --verify-only`
+  - Verifies only existing models against upstream Kie.ai docs
+  - New models are marked as "candidates" in `artifacts/kie_model_candidates.json`
+  - Does not automatically add new models to registry
+  - Use `--allow-new` to process new models (default: verify-only mode)
+  - Candidates require manual review before adding to registry
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
