@@ -32,6 +32,7 @@ from app.storage import get_storage
 from app.utils.logging_config import setup_logging  # noqa: E402
 from app.utils.orphan_reconciler import OrphanCallbackReconciler  # PHASE 5
 from app.utils.runtime_state import runtime_state  # noqa: E402
+from app.utils.version import get_app_version, get_version_info  # noqa: E402
 from app.locking.active_state import ActiveState  # NEW: unified active state
 from app.utils.webhook import (
     build_kie_callback_url,
@@ -982,8 +983,13 @@ async def main() -> None:
     runtime_state.bot_mode = effective_bot_mode
     runtime_state.last_start_time = datetime.now(timezone.utc).isoformat()
 
+    # Get app version (git SHA or build ID) - safe, no secrets
+    app_version = get_app_version()
+    version_info = get_version_info()
+    
     logger.info("=" * 60)
     logger.info("STARTUP (aiogram)")
+    logger.info("APP_VERSION=%s (source: %s)", app_version, version_info["source"])
     logger.info("BOT_MODE=%s PORT=%s", effective_bot_mode, cfg.port or "(not set)")
     logger.info("WEBHOOK_BASE_URL=%s", cfg.webhook_base_url or "(not set)")
     logger.info("WEBHOOK_SECRET_PATH=%s", (cfg.webhook_secret_path[:6] + "..."))
