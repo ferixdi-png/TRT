@@ -11,7 +11,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update, CallbackQuery, Message
 
 from app.telemetry.logging_contract import ReasonCode
-from app.telemetry.telemetry_helpers import log_callback_rejected
+from app.telemetry import log_callback_rejected, get_event_ids, generate_cid
 
 logger = logging.getLogger(__name__)
 
@@ -42,46 +42,43 @@ class ExceptionMiddleware(BaseMiddleware):
             return await handler(event, data)
         
         except Exception as exc:
-            # Extract context
-            user_id = None
-            chat_id = None
-            update_id = None
-            event_type = type(event).__name__
+            # Generate CID if not provided
+            if not cid:
+                cid = generate_cid()
             
-            if isinstance(event, Update):
-                update_id = event.update_id
-                if event.callback_query:
-                    user_id = event.callback_query.from_user.id
-                    chat_id = event.callback_query.message.chat.id if event.callback_query.message else None
-                elif event.message:
-                    user_id = event.message.from_user.id
-                    chat_id = event.message.chat.id
-            elif isinstance(event, CallbackQuery):
-                user_id = event.from_user.id
-                chat_id = event.message.chat.id if event.message else None
-            elif isinstance(event, Message):
-                user_id = event.from_user.id
-                chat_id = event.chat.id
+            # Use unified get_event_ids for safe extraction
+            event_ids = get_event_ids(event, data)
+            
+            # Extract callback_data if available
+            callback_data = None
+            if isinstance(event, CallbackQuery):
+                callback_data = getattr(event, 'data', None)
+            elif isinstance(event, Update) and event.callback_query:
+                callback_data = getattr(event.callback_query, 'data', None)
+            
+            event_type = type(event).__name__
             
             # Log with full context
             logger.error(
                 f"[EXCEPTION_MIDDLEWARE] Unhandled exception in handler\n"
-                f"cid={cid} user_id={user_id} chat_id={chat_id} update_id={update_id}\n"
+                f"cid={cid} user_id={event_ids.get('user_id')} chat_id={event_ids.get('chat_id')} update_id={event_ids.get('update_id')}\n"
                 f"event_type={event_type} bot_state={bot_state}\n"
                 f"Exception: {exc.__class__.__name__}: {exc}\n"
                 f"{''.join(traceback.format_tb(exc.__traceback__))}"
             )
             
-            # Log telemetry rejection
-            if cid and user_id and chat_id:
+            # Log telemetry rejection with unified contract
+            try:
                 log_callback_rejected(
-                    cid=cid,
-                    user_id=user_id,
-                    chat_id=chat_id,
+                    callback_data=callback_data,
                     reason_code=ReasonCode.INTERNAL_ERROR,
                     reason_detail=f"{exc.__class__.__name__}: {str(exc)[:200]}",
-                    bot_state=bot_state
+                    error_type=exc.__class__.__name__,
+                    error_message=str(exc)[:200],
+                    cid=cid
                 )
+            except Exception as log_err:
+                logger.error(f"[EXCEPTION_MIDDLEWARE] Failed to log telemetry: {log_err}")
             
             # Send safe error message to user
             try:

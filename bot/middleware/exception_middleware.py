@@ -131,37 +131,36 @@ class ExceptionMiddleware(BaseMiddleware):
         Fail-safe: wrapped in try/except to prevent cascading failures.
         """
         try:
-            # Extract context info
-            update_id = None
-            user_id = None
-            chat_id = None
-            callback_data = None
-            message_id = None
+            # Use unified get_event_ids for safe extraction
+            from app.telemetry.telemetry_helpers import get_event_ids
             
-            if update:
-                update_id = getattr(update, 'update_id', None)
-                
-                if update.message:
-                    user_id = update.message.from_user.id if update.message.from_user else None
-                    chat_id = update.message.chat_id
-                    message_id = update.message.message_id
-                elif update.callback_query:
-                    callback = update.callback_query
-                    user_id = callback.from_user.id if callback.from_user else None
-                    chat_id = callback.message.chat_id if callback.message else None
-                    message_id = callback.message.message_id if callback.message else None
-                    callback_data = callback.data if callback else None
+            # Extract event from update or data
+            event = update
+            if not event and "event_update" in data:
+                event = data["event_update"]
+            elif not event and "update" in data:
+                event = data["update"]
+            
+            # Get all IDs safely
+            event_ids = get_event_ids(event, data) if event else {}
+            
+            # Extract callback_data if available
+            callback_data = None
+            if update and update.callback_query:
+                callback_data = getattr(update.callback_query, 'data', None)
+            elif event and hasattr(event, 'callback_query') and event.callback_query:
+                callback_data = getattr(event.callback_query, 'data', None)
             
             # Log with structured context
             logger.error(
                 f"❌ UNHANDLED EXCEPTION: {type(exception).__name__}: {exception}",
                 exc_info=exception,
                 extra={
-                    "update_id": update_id,
-                    "user_id": user_id,
-                    "chat_id": chat_id,
+                    "update_id": event_ids.get("update_id"),
+                    "user_id": event_ids.get("user_id"),
+                    "chat_id": event_ids.get("chat_id"),
                     "callback_data": callback_data,
-                    "message_id": message_id,
+                    "message_id": event_ids.get("message_id"),
                 }
             )
         except Exception as log_err:

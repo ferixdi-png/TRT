@@ -1357,18 +1357,16 @@ async def category_cb(callback: CallbackQuery, state: FSMContext, data: dict = N
     )
     
     cid = generate_cid()
-    # Use safe helpers to extract context
-    update_id = get_update_id(callback, data or {})
-    callback_id = get_callback_id(callback)
-    user_id = get_user_id(callback)
-    message_id = get_message_id(callback)
+    # Use unified get_event_ids to safely extract all IDs at once
+    from app.telemetry.telemetry_helpers import get_event_ids
+    event_ids = get_event_ids(callback, data or {})
     
     log_callback_received(
         callback_data=callback.data,
-        query_id=callback_id,
-        message_id=message_id,
-        user_id=user_id,
-        update_id=update_id,
+        query_id=event_ids.get("callback_id"),
+        message_id=event_ids.get("message_id"),
+        user_id=event_ids.get("user_id"),
+        update_id=event_ids.get("update_id"),
         cid=cid
     )
     

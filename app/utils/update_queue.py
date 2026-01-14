@@ -18,7 +18,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import aiohttp
 
@@ -29,7 +29,7 @@ async def _send_passive_ack(
     update: Any,
     update_id: int,
     worker_id: int
-) -> tuple[bool, Optional[str]]:
+) -> Tuple[bool, Optional[str]]:
     """
     Send user feedback for PASSIVE mode update using direct Telegram API.
     
