@@ -568,8 +568,20 @@ ModelFingerprint(
 
 ---
 
-**Отчет создан**: 2026-01-XX  
+**Отчет создан**: 2026-01-14  
 **Автор**: Cursor Pro Autonomous Senior Engineer  
-**Ветка**: `fix/production-readiness`  
+**Ветка**: `fix/production-readiness` → **MERGED to main** (`95163fd`)  
 **Desktop Path**: `C:\Users\User\Desktop\TRT_REPORT.md` ✅
+
+---
+
+## BLOCKERS (if any)
+
+**Нет блокеров**: Merge выполнен успешно, ветка удалена, Render auto-deploy запущен.
+
+**Примечание**: Smoke тесты будут выполнены после завершения деплоя на Render (обычно 3-5 минут). После этого нужно:
+1. Проверить `GET /health` → 200 OK
+2. Проверить webhook fast-ack
+3. Проверить e2e клик в Telegram (cat:image)
+4. Обновить секцию "DEPLOYMENT STATUS" в отчете с результатами smoke тестов.
 
