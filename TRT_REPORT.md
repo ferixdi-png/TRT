@@ -28,7 +28,13 @@
   - Uses lazy import (importlib) to break circular dependency
   - `app/telemetry/__init__.py` also exports TelemetryMiddleware for convenience
 - `main_render.py` imports from `telemetry_helpers` (old path works, no breaking changes)
-- Startup import self-check added: verifies `main_render`, `TelemetryMiddleware`, `ExceptionMiddleware` can be imported
+- **MANDATORY boot self-check added** (`boot_self_check()`):
+  - Import validation: verifies `main_render`, `TelemetryMiddleware`, `ExceptionMiddleware`, `runtime_state` can be imported
+  - Config validation: checks required ENV vars (TELEGRAM_BOT_TOKEN, BOT_MODE) without printing secrets
+  - Format validation: validates DATABASE_URL, WEBHOOK_BASE_URL, PORT formats
+  - Database connection test: optional, non-blocking, readonly
+  - Runs BEFORE handlers are registered to catch errors early
+  - Goal: ZERO Traceback/ImportError in logs before first user click
 - Desktop report sync script created: `scripts/sync_desktop_report.py`
 - Pre-deploy verify target added: `make pre-deploy-verify`
 
