@@ -108,10 +108,11 @@ def log_callback_received(
     
     try:
         truncated_data = _truncate_callback_data(callback_data or "")
-        update_id = extra.get("update_id")
+        # Use update_id parameter if provided, otherwise try extra
+        final_update_id = update_id if update_id is not None else extra.get("update_id")
         logger.info(
             f"🔘 CALLBACK_RECEIVED cid={cid} data='{truncated_data}' "
-            f"query_id={query_id} message_id={message_id} user_id={user_id} update_id={update_id}",
+            f"query_id={query_id} message_id={message_id} user_id={user_id} update_id={final_update_id}",
             extra={
                 "event_type": "CALLBACK_RECEIVED",
                 "cid": cid,
@@ -119,7 +120,7 @@ def log_callback_received(
                 "query_id": query_id,
                 "message_id": message_id,
                 "user_id": user_id,
-                "update_id": update_id,
+                "update_id": final_update_id,
                 **{k: v for k, v in extra.items() if k != "update_id"},
             }
         )
