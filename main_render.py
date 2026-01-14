@@ -40,7 +40,14 @@ from app.utils.webhook import (
     get_webhook_base_url,
     get_webhook_secret_token,
 )  # noqa: E402
-from app.telemetry.telemetry_helpers import TelemetryMiddleware  # P0: Observability
+# P0: Telemetry middleware (fail-open: if import fails, app still starts)
+try:
+    from app.telemetry.middleware import TelemetryMiddleware
+    TELEMETRY_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"[STARTUP] Telemetry disabled: {e}")
+    TelemetryMiddleware = None
+    TELEMETRY_AVAILABLE = False
 from app.telemetry.logging_config import configure_logging  # P0: JSON logs
 
 def _import_real_aiogram_symbols():
@@ -261,7 +268,15 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
     from app.middleware.exception_middleware import ExceptionMiddleware  # P0: Catch all exceptions
 
     # P0: Telemetry middleware FIRST (adds cid + bot_state to all updates)
-    dp.update.middleware(TelemetryMiddleware())
+    # Fail-open: if telemetry unavailable, app still works
+    if TELEMETRY_AVAILABLE and TelemetryMiddleware:
+        try:
+            dp.update.middleware(TelemetryMiddleware())
+            logger.info("[TELEMETRY] ✅ Middleware registered")
+        except Exception as e:
+            logger.warning(f"[TELEMETRY] Failed to register middleware (non-critical): {e}")
+    else:
+        logger.warning("[TELEMETRY] ⚠️ Telemetry middleware disabled - app continues without telemetry")
     
     # P0: Exception middleware SECOND (catches all unhandled exceptions)
     dp.update.middleware(ExceptionMiddleware())

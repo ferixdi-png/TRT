@@ -1,5 +1,7 @@
 """
 Telemetry helper functions for safe attribute access and context extraction.
+
+NOTE: TelemetryMiddleware class is in app/telemetry/middleware.py
 """
 
 from typing import Optional, Any, Dict
