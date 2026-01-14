@@ -59,6 +59,21 @@ render-logs-10:
 	@echo "📊 Fetching Render logs (last 10 minutes)..."
 	python scripts/render_watch.py --minutes 10
 
+# Render logs check (error detection)
+render:logs:
+	@echo "🔍 Checking Render logs for errors..."
+	python scripts/render_logs_check.py --minutes 30
+
+# Render logs check (last 10 minutes)
+render:logs-10:
+	@echo "🔍 Checking Render logs for errors (last 10 minutes)..."
+	python scripts/render_logs_check.py --minutes 10
+
+# Database readonly check
+db:check:
+	@echo "🔍 Checking database connection (readonly)..."
+	python scripts/db_readonly_check.py
+
 # Ops observability targets
 ops-fetch-logs:
 	@echo "📊 Fetching Render logs..."

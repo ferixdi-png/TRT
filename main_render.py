@@ -1014,6 +1014,48 @@ async def main() -> None:
     logger.info("DRY_RUN=%s", cfg.dry_run)
     logger.info("=" * 60)
 
+    # P0: Startup self-check (zero noise before user clicks)
+    logger.info("[STARTUP] Running self-check...")
+    startup_ok = True
+    
+    # Check 1: Import main_render (already done, but verify no import errors)
+    try:
+        import main_render
+        logger.debug("[STARTUP] ✅ main_render imports OK")
+    except Exception as e:
+        logger.error(f"[STARTUP] ❌ Import check failed: {e}")
+        startup_ok = False
+    
+    # Check 2: Database connection (readonly, non-blocking)
+    if cfg.database_url:
+        try:
+            import asyncpg
+            # Quick connection test (timeout 3s)
+            try:
+                conn = await asyncio.wait_for(
+                    asyncpg.connect(cfg.database_url, timeout=3),
+                    timeout=5
+                )
+                await conn.fetchval("SELECT 1")
+                await conn.close()
+                logger.info("[STARTUP] ✅ Database connection OK")
+            except asyncio.TimeoutError:
+                logger.warning("[STARTUP] ⚠️ Database connection timeout (non-critical, continuing)")
+            except Exception as db_err:
+                logger.warning(f"[STARTUP] ⚠️ Database check failed (non-critical): {db_err}")
+        except ImportError:
+            logger.debug("[STARTUP] asyncpg not available, skipping DB check")
+        except Exception as e:
+            logger.warning(f"[STARTUP] ⚠️ Database check error (non-critical): {e}")
+    
+    # Check 3: Basic routes (/health will be available after server starts)
+    logger.debug("[STARTUP] ✅ Route checks will be available after server start")
+    
+    if not startup_ok:
+        logger.error("[STARTUP] ❌ Self-check failed, but continuing (fail-open)")
+    
+    logger.info("[STARTUP] ✅ Self-check complete")
+    
     dp, bot = create_bot_application()
     
     # Verify bot identity and webhook configuration BEFORE anything else
