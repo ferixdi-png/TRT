@@ -290,11 +290,30 @@ Production readiness hardening focused on:
 
 ### Files Changed
 
-- `bot/middleware/exception_middleware.py` - Hardened exception handling
-- `scripts/smoke_webhook.py` - New smoke test script
-- `scripts/validate_model_doc_against_ssot.py` - New SSOT validator
+**P0 Fixes:**
+- `app/telemetry/telemetry_helpers.py` - Added `get_event_ids()` unified function
+- `app/telemetry/__init__.py` - Exported `get_event_ids`
+- `bot/handlers/flow.py` - Updated to use `get_event_ids()` and unified contract
+- `bot/handlers/fallback.py` - Updated to use `get_event_ids()` and unified contract
+- `bot/middleware/exception_middleware.py` - Updated to use `get_event_ids()`
+- `app/middleware/exception_middleware.py` - Updated to use `get_event_ids()` and unified contract
+- `tests/test_telemetry_contract.py` - New unit test for telemetry contract
+
+**PASSIVE Mode UX:**
+- `app/utils/update_queue.py` - Added `_send_passive_ack()` with direct Telegram API
+- `scripts/smoke_passive_ack.py` - Smoke test for PASSIVE mode UX
+
+**E2E Smoke Tests:**
+- `scripts/e2e_smoke_all_buttons.py` - E2E smoke test for all buttons/models matrix
+- `scripts/smoke_webhook.py` - Webhook production readiness smoke test
 - `Makefile` - Added smoke-webhook and smoke targets
-- `TRT_REPORT.md` - Updated with production readiness section
+
+**Registry Tools:**
+- `scripts/registry_diff_check.py` - Compares vendor docs with SSOT
+- `scripts/validate_model_doc_against_ssot.py` - Validates specific model docs
+
+**Documentation:**
+- `TRT_REPORT.md` - Updated with complete verification steps
 
 ---
 
