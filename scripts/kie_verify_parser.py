@@ -22,6 +22,9 @@ from dataclasses import dataclass, asdict
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import KIE config (единый источник для USD_TO_RUB)
+from scripts.kie_config import get_usd_to_rub_rate, calculate_rub_price, KIEConfigError
+
 
 @dataclass
 class UpstreamModelInfo:
@@ -189,11 +192,9 @@ def compare_with_local(
         
         # Сравниваем цены
         if upstream_info.upstream_usd_price:
-            usd_to_rub = float(os.getenv("USD_TO_RUB", "0"))
-            if usd_to_rub == 0:
-                print("⚠️  USD_TO_RUB not set, skipping price calculation")
-            else:
-                calculated_rub = round(upstream_info.upstream_usd_price * usd_to_rub * 2, 2)
+            try:
+                # Используем единый источник конфигурации (запрещает тихие дефолты)
+                calculated_rub = calculate_rub_price(upstream_info.upstream_usd_price, markup_multiplier=2.0)
                 local_price = local_model.get("pricing", {}).get("rub_per_gen")
                 if local_price and local_price != calculated_rub:
                     price_changes = {
@@ -202,6 +203,10 @@ def compare_with_local(
                         "calculated_rub": calculated_rub,
                         "difference": calculated_rub - local_price
                     }
+            except KIEConfigError as e:
+                # Не молчим - выводим ошибку, но продолжаем работу
+                print(f"⚠️  Price calculation skipped: {e}")
+                schema_changes.append(f"Price calculation failed: USD_TO_RUB not configured")
     else:
         # Новая модель (только если verify_only=False)
         schema_changes.append("NEW MODEL - not in local registry")
