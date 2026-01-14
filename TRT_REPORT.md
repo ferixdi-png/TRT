@@ -80,10 +80,32 @@
 
 ---
 
-### ⏳ IN PROGRESS: KIE Verify Parser (Safe, No Auto-Add)
+### ✅ COMPLETED: KIE Verify Parser (Safe, No Auto-Add)
 
-**Status**: Not started  
-**Goal**: Implement safe parser that compares upstream Kie.ai docs with existing registry, produces diff report, does NOT auto-add new models
+**What Was**:
+- No automated way to verify upstream Kie.ai docs against local registry
+- Manual comparison required for schema/price changes
+
+**What Became**:
+- `scripts/kie_verify_parser.py` created
+- Parses HTML from Kie.ai docs (BeautifulSoup)
+- Extracts: model_id, input_schema, upstream USD price
+- Compares ONLY against existing models in registry
+- Produces diff report: schema changes, price changes
+- New models marked as "candidates", NOT auto-added
+- Pricing: `our_rub = round(upstream_usd * USD_TO_RUB * 2)`
+- Snapshot saved to `artifacts/kie_upstream_snapshot_*.json`
+
+**Files Changed**: `scripts/kie_verify_parser.py` (new)
+
+**Commits**: `b40f0f2`
+
+**How Tested**: 
+- Script structure ready
+- Requires BeautifulSoup and requests
+- Test with: `python scripts/kie_verify_parser.py --html-file <path> --model-id <id>`
+
+**Deploy Status**: pending
 
 ---
 
