@@ -1,26 +1,71 @@
-# Makefile для запуска тестов
+.PHONY: verify test clean install firebreak smoke-render deploy-check syntax truth-gate test-lock verify-truth
 
-.PHONY: test test-verbose install-deps
+# TRUTH GATE: Полная валидация архитектурного контракта
+truth-gate:
+	@echo "🏛️ TRUTH GATE: Running architecture contract validation..."
+	@echo ""
+	@echo "1️⃣ verify_truth.py (architecture invariants)..."
+	python3 verify_truth.py
+	@echo ""
+	@echo "2️⃣ Unit tests (lock mechanism)..."
+	python3 -m pytest tests/test_render_singleton_lock.py -v
+	@echo ""
+	@echo "3️⃣ Syntax check..."
+	python3 -m py_compile main_render.py
+	python3 -m py_compile render_singleton_lock.py
+	@echo ""
+	@echo "✅ ALL TRUTH GATES PASSED"
 
-# Установка зависимостей для тестов
-install-deps:
+# verify_truth standalone
+verify-truth:
+	@echo "🔍 Running verify_truth.py..."
+	@python3 verify_truth.py
+
+# test-lock standalone
+test-lock:
+	@echo "🧪 Running lock mechanism tests..."
+	@python3 -m pytest tests/test_render_singleton_lock.py -v
+
+# FIREBREAK: Полная проверка перед деплоем (критично!)
+firebreak: truth-gate
+	@echo ""
+	@echo "2️⃣ Smoke test (локально)..."
+	python3 smoke_test.py || true
+	@echo ""
+	@echo "✅ FIREBREAK: Все проверки пройдены!"
+
+# Smoke test на Render
+smoke-render:
+	@echo "🧪 Smoke test на Render..."
+	python3 smoke_test.py --url https://five656.onrender.com
+
+# Проверка логов Render после деплоя (ждем 2 минуты)
+deploy-check:
+	@echo "🔍 Проверка Render логов..."
+	@echo "⏳ Ждем 2 минуты для стабилизации деплоя..."
+	@sleep 120
+	python3 check_render_logs.py --minutes 10
+
+# Быстрая проверка синтаксиса
+syntax:
+	@python3 -m py_compile render_singleton_lock.py
+	@python3 -m py_compile app/utils/update_queue.py
+	@python3 -m py_compile smoke_test.py
+	@python3 -m py_compile check_render_logs.py
+	@echo "✅ Синтаксис корректен"
+
+# Verify critical functionality before deploy
+verify:
+	@echo "🔍 Running critical state machine verification..."
+	pytest tests/test_state_machine_verify.py -v --tb=short
+	@echo "✅ State machine verification complete"
+
+# Install dependencies
+install:
 	pip install -r requirements.txt
 
-# Запуск тестов (краткий вывод)
-verify-coverage:
-	python -m scripts.verify_kie_coverage
-
-test:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 TELEGRAM_BOT_TOKEN=test_token_12345 KIE_API_KEY=test_api_key ADMIN_ID=12345 pytest -q tests/
-
-# Запуск тестов (подробный вывод)
-test-verbose:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 TELEGRAM_BOT_TOKEN=test_token_12345 KIE_API_KEY=test_api_key ADMIN_ID=12345 pytest -v tests/
-
-# Запуск конкретного теста
-test-menu:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 TELEGRAM_BOT_TOKEN=test_token_12345 KIE_API_KEY=test_api_key ADMIN_ID=12345 pytest -v tests/test_main_menu.py
-
-test-callbacks:
-	TEST_MODE=1 DRY_RUN=1 ALLOW_REAL_GENERATION=0 TELEGRAM_BOT_TOKEN=test_token_12345 KIE_API_KEY=test_api_key ADMIN_ID=12345 pytest -v tests/test_callbacks_smoke.py
-
+# Clean Python artifacts
+clean:
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true

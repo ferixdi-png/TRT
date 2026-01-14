@@ -11,6 +11,8 @@ from typing import Dict, Any
 
 import requests
 
+from app.utils.correlation import correlation_tag
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,9 +35,9 @@ class KieApiClient:
         }
 
     def _post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info(f"POST {url} with payload: {payload}")
+        logger.info(f"{correlation_tag()} POST {url} with payload: {payload}")
         response = requests.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
-        logger.info(f"Response status: {response.status_code}, body: {response.text[:500]}")
+        logger.info(f"{correlation_tag()} Response status: {response.status_code}, body: {response.text[:500]}")
         response.raise_for_status()
         return response.json()
 
@@ -57,9 +59,9 @@ class KieApiClient:
             try:
                 return await asyncio.to_thread(self._post, url, payload)
             except requests.RequestException as exc:
-                logger.warning(f"Kie createTask attempt {attempt+1}/{max_retries} failed: {exc}")
+                logger.warning(f"{correlation_tag()} Kie createTask attempt {attempt+1}/{max_retries} failed: {exc}")
                 if attempt == max_retries - 1:
-                    logger.error("Kie createTask failed after retries: %s", exc, exc_info=True)
+                    logger.error("%s Kie createTask failed after retries: %s", correlation_tag(), exc, exc_info=True)
                     return {"error": str(exc), "state": "fail"}
                 await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
 
@@ -72,9 +74,9 @@ class KieApiClient:
             try:
                 return await asyncio.to_thread(self._get, url, payload)
             except requests.RequestException as exc:
-                logger.warning(f"Kie recordInfo attempt {attempt+1}/{max_retries} failed: {exc}")
+                logger.warning(f"{correlation_tag()} Kie recordInfo attempt {attempt+1}/{max_retries} failed: {exc}")
                 if attempt == max_retries - 1:
-                    logger.error("Kie recordInfo failed after retries: %s", exc, exc_info=True)
+                    logger.error("%s Kie recordInfo failed after retries: %s", correlation_tag(), exc, exc_info=True)
                     return {"error": str(exc), "state": "fail"}
                 await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
 
@@ -103,7 +105,7 @@ class KieApiClient:
             elapsed = asyncio.get_event_loop().time() - start_time
             
             if elapsed > max_wait_seconds:
-                logger.error(f"Task {task_id} timeout after {elapsed:.1f}s")
+                logger.error(f"{correlation_tag()} Task {task_id} timeout after {elapsed:.1f}s")
                 return {
                     "error": "timeout",
                     "state": "fail",
@@ -115,17 +117,17 @@ class KieApiClient:
             record = await self.get_record_info(task_id)
             
             if "error" in record:
-                logger.error(f"Task {task_id} polling error: {record['error']}")
+                logger.error(f"{correlation_tag()} Task {task_id} polling error: {record['error']}")
                 return record
             
             data = record.get("data", {})
             state = data.get("state", "unknown")
             
-            logger.debug(f"Poll #{attempts} for {task_id}: state={state}, elapsed={elapsed:.1f}s")
+            logger.debug(f"{correlation_tag()} Poll #{attempts} for {task_id}: state={state}, elapsed={elapsed:.1f}s")
             
             # Terminal states
             if state in ("success", "fail"):
-                logger.info(f"Task {task_id} completed: {state} (elapsed={elapsed:.1f}s)")
+                logger.info(f"{correlation_tag()} Task {task_id} completed: {state} (elapsed={elapsed:.1f}s)")
                 return data
             
             # Still processing
@@ -166,12 +168,12 @@ class KieApiClient:
         if callback_url:
             payload["callBackUrl"] = callback_url
         
-        logger.info(f"Creating task for model: {model_id}")
+        logger.info(f"{correlation_tag()} Creating task for model: {model_id}")
         create_resp = await self.create_task(payload)
         
         if "error" in create_resp or create_resp.get("code") != 200:
             error_msg = create_resp.get("error") or create_resp.get("msg", "Unknown error")
-            logger.error(f"Failed to create task: {error_msg}")
+            logger.error(f"{correlation_tag()} Failed to create task: {error_msg}")
             return {
                 "state": "fail",
                 "error": error_msg,
@@ -181,14 +183,14 @@ class KieApiClient:
         task_id = create_resp.get("data", {}).get("taskId")
         
         if not task_id:
-            logger.error("No taskId in create response")
+            logger.error(f"{correlation_tag()} No taskId in create response")
             return {
                 "state": "fail",
                 "error": "No taskId returned",
                 "raw_response": create_resp
             }
         
-        logger.info(f"Task created: {task_id}, polling for completion...")
+        logger.info(f"{correlation_tag()} Task created: {task_id}, polling for completion...")
         
         # Poll until complete
         final_data = await self.poll_task_until_complete(task_id, max_wait_seconds=max_wait)

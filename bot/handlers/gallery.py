@@ -4,6 +4,13 @@ Enhanced model gallery with examples - Syntx-like experience
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
+
+from app.telemetry.telemetry_helpers import (
+    log_callback_received, log_callback_routed, log_callback_accepted,
+    log_callback_rejected, log_ui_render
+)
+from app.telemetry.logging_contract import ReasonCode
+from app.telemetry.ui_registry import ScreenId, ButtonId
 import json
 from pathlib import Path
 
@@ -70,7 +77,7 @@ EXAMPLE_GALLERY = {
 
 
 @router.callback_query(F.data == "gallery:trending")
-async def show_trending_gallery(callback: CallbackQuery, state: FSMContext):
+async def show_trending_gallery(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Show trending models with example gallery"""
     await callback.answer()
     
@@ -79,7 +86,7 @@ async def show_trending_gallery(callback: CallbackQuery, state: FSMContext):
     
     if not trending:
         await callback.message.edit_text(
-            "🔥 <b>Trending модели</b>\\n\\n"
+            "🔥 <b>Trending модели</b>\n\n"
             "Скоро появятся популярные модели!",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
@@ -101,8 +108,8 @@ async def show_trending_gallery(callback: CallbackQuery, state: FSMContext):
     buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
     
     await callback.message.edit_text(
-        "🔥 <b>Trending сейчас</b>\\n\\n"
-        "Самые популярные модели с примерами использования:\\n\\n"
+        "🔥 <b>Trending сейчас</b>\n\n"
+        "Самые популярные модели с примерами использования:\n\n"
         "👆 Выберите модель чтобы посмотреть примеры",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
     )
@@ -111,6 +118,13 @@ async def show_trending_gallery(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("gallery:show:"))
 async def show_model_gallery(callback: CallbackQuery, state: FSMContext):
     """Show example gallery for specific model"""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "gallery:trending", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "show_trending_gallery", "gallery:trending", ButtonId.UNKNOWN)
+
     await callback.answer()
     
     model_id = callback.data.split(":", 2)[2]
@@ -118,8 +132,8 @@ async def show_model_gallery(callback: CallbackQuery, state: FSMContext):
     
     if not gallery:
         await callback.message.edit_text(
-            f"📸 <b>Примеры для {model_id}</b>\\n\\n"
-            "Скоро добавим примеры использования!\\n\\n"
+            f"📸 <b>Примеры для {model_id}</b>\n\n"
+            "Скоро добавим примеры использования!\n\n"
             "А пока можете попробовать создать что-то своё 🎨",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="✨ Попробовать", callback_data=f"model:{model_id}")],
@@ -132,13 +146,13 @@ async def show_model_gallery(callback: CallbackQuery, state: FSMContext):
     name = gallery.get('name', model_id)
     
     # Build examples text
-    examples_text = f"📸 <b>{name}</b>\\n\\n<b>Примеры использования:</b>\\n\\n"
+    examples_text = f"✨ <b>{name}</b>\n\n<b>Примеры использования:</b>\n\n"
     
     for idx, ex in enumerate(examples, 1):
         examples_text += (
-            f"{idx}. <b>{ex['use_case']}</b>\\n"
-            f"   <i>{ex['description']}</i>\\n"
-            f"   Prompt: \"{ex['prompt']}\"\\n\\n"
+            f"{idx}. <b>{ex['use_case']}</b>\n"
+            f"   <i>{ex['description']}</i>\n"
+            f"   Prompt: \"{ex['prompt']}\"\n\n"
         )
     
     examples_text += "💡 Выберите пример или создайте свой!"
@@ -194,9 +208,9 @@ async def use_example(callback: CallbackQuery, state: FSMContext):
     
     # Show confirmation with pre-filled prompt
     await callback.message.edit_text(
-        f"✨ <b>Создаём с примером!</b>\\n\\n"
-        f"<b>Модель:</b> {gallery.get('name', model_id)}\\n"
-        f"<b>Промпт:</b> {prompt}\\n\\n"
+        f"✨ <b>Создаём с примером!</b>\n\n"
+        f"<b>Модель:</b> {gallery.get('name', model_id)}\n"
+        f"<b>Промпт:</b> {prompt}\n\n"
         f"Начинаем генерацию?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✅ Да, создать!", callback_data=f"gen:{model_id}")],
@@ -207,7 +221,14 @@ async def use_example(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "gallery:free")
-async def show_free_models(callback: CallbackQuery, state: FSMContext):
+async def show_free_models(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    if cid:
+        log_callback_received(cid, callback.id, user_id, chat_id, "gallery:free", bot_state)
+        log_callback_routed(cid, user_id, chat_id, "show_free_models", "gallery:free", ButtonId.UNKNOWN)
+
     """Show FREE models with quick start"""
     await callback.answer()
     
@@ -227,11 +248,11 @@ async def show_free_models(callback: CallbackQuery, state: FSMContext):
     buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
     
     await callback.message.edit_text(
-        "🆓 <b>Бесплатные модели</b>\\n\\n"
-        "Попробуйте без списания баланса!\\n\\n"
-        "✨ Полностью бесплатно\\n"
-        "🚀 Без лимитов\\n"
-        "💯 Высокое качество\\n\\n"
+        "🆓 <b>Бесплатные модели</b>\n\n"
+        "🎨 Попробуйте без списания баланса!\n\n"
+        "✨ Полностью бесплатно\n"
+        "🚀 Без лимитов\n"
+        "💯 Высокое качество\n\n"
         "Выберите модель:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
     )

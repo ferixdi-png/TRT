@@ -12,6 +12,8 @@ from app.kie.builder import build_payload, load_source_of_truth
 from app.kie.validator import ModelContractError
 from app.kie.parser import parse_record_info, get_human_readable_error
 from app.kie.router import is_v4_model, build_category_payload
+from app.kie.model_defaults import apply_defaults
+from app.models.input_schema import validate_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +132,10 @@ class KieGenerator:
         model_id: str,
         user_inputs: Dict[str, Any],
         progress_callback: Optional[Callable[[str], None]] = None,
-        timeout: int = 300
+        timeout: int = 300,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        price: float = 0.0
     ) -> Dict[str, Any]:
         """
         Generate content using Kie.ai model.
@@ -140,6 +145,9 @@ class KieGenerator:
             user_inputs: User inputs (text, url, file, etc.)
             progress_callback: Optional callback for progress updates
             timeout: Maximum wait time in seconds
+            user_id: User ID for job tracking (REQUIRED for storage)
+            chat_id: Telegram chat ID for result delivery
+            price: Generation price (for job record)
             
         Returns:
             Result dictionary with:
@@ -150,10 +158,39 @@ class KieGenerator:
             - error_code: Optional[str]
             - error_message: Optional[str]
         """
+        from app.utils.correlation import correlation_tag
+        
+        logger.info(f"{correlation_tag()} [GENERATOR] Starting generate for model={model_id}")
+        logger.info(f"{correlation_tag()} [GENERATOR]   - user_inputs keys: {list(user_inputs.keys())}")
+        
         try:
             # Load source of truth if needed
             if not self.source_of_truth:
                 self.source_of_truth = load_source_of_truth()
+            
+            # ✅ PHASE A: Apply model defaults for missing required fields
+            # Prevents "Missing required field: guidance_scale" errors
+            user_inputs = apply_defaults(model_id, user_inputs)
+            logger.info(f"{correlation_tag()} [GENERATOR]   - after defaults: {list(user_inputs.keys())}")
+            
+            # ✅ PHASE B: Validate inputs before creating payload
+            is_valid, validation_errors = validate_inputs(model_id, user_inputs)
+            if not is_valid:
+                error_details = "\n".join([f"  • {err}" for err in validation_errors])
+                logger.error(
+                    f"{correlation_tag()} [GENERATOR] Input validation failed for {model_id}:\n{error_details}"
+                )
+                return {
+                    'success': False,
+                    'message': f'❌ Некорректные входные данные:\n{error_details}',
+                    'result_urls': [],
+                    'result_object': None,
+                    'error_code': 'VALIDATION_ERROR',
+                    'error_message': f'Input validation failed: {validation_errors}',
+                    'task_id': None
+                }
+            
+            logger.info(f"{correlation_tag()} [GENERATOR] ✅ Input validation passed for {model_id}")
             
             # Check if this is a V4 model (new architecture)
             is_v4 = USE_V4_API and is_v4_model(model_id)
@@ -161,7 +198,10 @@ class KieGenerator:
             # Build payload using appropriate builder
             if is_v4:
                 logger.info(f"Using V4 API for model {model_id}")
+                logger.info(f"  - user_inputs to build_category_payload: {user_inputs}")
+                logger.info(f"  - user_inputs keys: {list(user_inputs.keys())}")
                 payload = build_category_payload(model_id, user_inputs)
+                logger.info(f"  - payload built: {payload}")
             else:
                 logger.info(f"Using V3 API for model {model_id}")
                 payload = build_payload(model_id, user_inputs, self.source_of_truth)
@@ -195,6 +235,32 @@ class KieGenerator:
             # Check for error in response (from exception handling)
             if 'error' in create_response:
                 error_msg = create_response.get('error', 'Unknown error')
+                error_code = create_response.get('code')
+                
+                # Special handling for 402 (insufficient credits)
+                if error_code == 402:
+                    logger.warning(
+                        "⚠️ API 402 (insufficient credits): %s",
+                        error_msg
+                    )
+                    user_message = (
+                        "Недостаточно кредитов Kie.ai (код 402). "
+                        "Пополните Kie.ai / проверьте ключ. Генерация не запущена."
+                    )
+                    # CRITICAL: NEVER return mocked success in PROD
+                    # 402 is ALWAYS failure, regardless of DRY_RUN/test mode
+                    return {
+                        'success': False,
+                        'status': 'failed',
+                        'mocked': False,
+                        'message': user_message,
+                        'result_urls': [],
+                        'result_object': None,
+                        'error_code': 'INSUFFICIENT_CREDITS',
+                        'error_message': error_msg,
+                        'task_id': None
+                    }
+
                 logger.error(f"API error in create_task: {error_msg}")
                 return {
                     'success': False,
@@ -219,7 +285,12 @@ class KieGenerator:
                 error_code = create_response.get('code')
                 error_msg = create_response.get('msg', 'Unknown error')
                 
-                logger.error(f"No taskId in response. Full response: {create_response}")
+                logger.error(
+                    f"❌ NO TASK ID | Model: {model_id} | "
+                    f"Response code: {error_code} | "
+                    f"Error: {error_msg} | "
+                    f"Full response: {create_response}"
+                )
                 return {
                     'success': False,
                     'message': f'❌ Ошибка API: {error_msg}',
@@ -230,11 +301,57 @@ class KieGenerator:
                     'task_id': None
                 }
             
+            # 🎯 CREATE JOB IN STORAGE (CRITICAL FOR E2E DELIVERY)
+            if user_id is not None:
+                try:
+                    from app.storage import get_storage
+                    storage = get_storage()
+                    
+                    # PHASE 3: ENSURE USER EXISTS BEFORE JOB INSERT (FK FIX)
+                    # Prevents: violates foreign key generation_jobs_user_id_fkey
+                    await storage.ensure_user(
+                        user_id=user_id,
+                        username=None,  # Will be filled by bot handler
+                        first_name=None,
+                        last_name=None
+                    )
+                    
+                    # Create job with all metadata
+                    job_params = {
+                        'model_id': model_id,
+                        'inputs': user_inputs,
+                        'chat_id': chat_id,
+                        'task_id': task_id
+                    }
+                    
+                    await storage.add_generation_job(
+                        user_id=user_id,
+                        model_id=model_id,
+                        model_name=model_id,  # Can enhance with display name later
+                        params=job_params,
+                        price=price,
+                        task_id=task_id,
+                        status='queued'
+                    )
+                    logger.info(f"✅ JOB CREATED | TaskID: {task_id} | User: {user_id} | Chat: {chat_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to create job in storage: {e}", exc_info=True)
+                    # Continue even if storage fails - callback will handle it
+            else:
+                logger.warning(f"⚠️ No user_id provided - job not created in storage (task_id: {task_id})")
+            
+            # Set polling interval
+            poll_interval = 2  # Check every 2 seconds
+            
+            logger.info(f"⏳ POLLING | TaskID: {task_id} | Timeout: {timeout}s | Interval: {poll_interval}s")
+            
             # Wait for completion with heartbeat
             start_time = datetime.now()
             last_heartbeat = datetime.now()
+            poll_iteration = 0
             
             while True:
+                poll_iteration += 1
                 # Check timeout
                 elapsed = (datetime.now() - start_time).total_seconds()
                 if elapsed > timeout:
@@ -248,24 +365,151 @@ class KieGenerator:
                         'task_id': task_id
                     }
                 
-                # Get record info
+                # 🎯 STORAGE-FIRST CHECK (callback может уже обновить job)
+                if user_id is not None:
+                    try:
+                        from app.storage import get_storage
+                        storage = get_storage()
+                        current_job = await storage.find_job_by_task_id(task_id)
+                        
+                        if current_job:
+                            job_status = normalize_job_status(current_job.get('status', ''))
+                            delivered_at = current_job.get('delivered_at')
+                            
+                            if job_status == 'done':
+                                # Callback уже обновил job - используем данные из storage
+                                result_urls = current_job.get('result_urls') or []
+                                if isinstance(result_urls, str):
+                                    try:
+                                        result_urls = json.loads(result_urls)
+                                    except Exception:
+                                        result_urls = [result_urls]
+                                
+                                # 🎯 IDEMPOTENCY: If callback already delivered, don't send again
+                                if delivered_at:
+                                    logger.info(f"✅ STORAGE-FIRST | Already delivered via callback | TaskID: {task_id}")
+                                else:
+                                    logger.info(f"✅ STORAGE-FIRST | Job done (not yet delivered) | TaskID: {task_id}")
+                                
+                                return {
+                                    'success': True,
+                                    'message': '✅ Генерация завершена',
+                                    'result_urls': result_urls,
+                                    'result_object': None,
+                                    'error_code': None,
+                                    'error_message': None,
+                                    'task_id': task_id,
+                                    'already_delivered': delivered_at is not None
+                                }
+                            
+                            elif job_status == 'failed':
+                                error_msg = current_job.get('error_message') or 'Unknown error'
+                                logger.info(f"❌ STORAGE-FIRST | Job failed via callback | TaskID: {task_id}")
+                                return {
+                                    'success': False,
+                                    'message': f'❌ {error_msg}',
+                                    'result_urls': [],
+                                    'result_object': None,
+                                    'error_code': 'GENERATION_FAILED',
+                                    'error_message': error_msg,
+                                    'task_id': task_id
+                                }
+                    except Exception as e:
+                        # Storage error - продолжаем с API polling
+                        logger.debug(f"Storage check failed (continuing with API): {e}")
+                
+                # Get record info from API (fallback)
+                from app.utils.correlation import correlation_tag
+                
                 record_info = await api_client.get_record_info(task_id)
+                logger.info(f"{correlation_tag()} [POLL_TICK] i={poll_iteration} task_id={task_id} http_ok={record_info is not None}")
+                
                 parsed = parse_record_info(record_info)
                 
                 state = parsed['state']
+                logger.info(f"{correlation_tag()} [POLL_STATE] i={poll_iteration} task_id={task_id} state={state}")
                 
-                if state == 'success':
+                # STATE NORMALIZATION: Treat done/completed as success
+                from app.delivery import normalize_state, SUCCESS_STATES, FAILURE_STATES
+                
+                normalized_state = normalize_state(state)
+                
+                if normalized_state != state:
+                    logger.info(f"{correlation_tag()} [POLL_SUCCESS_EQUIV] state={state} normalized_to={normalized_state}")
+                
+                if normalized_state == 'success':
+                    # 🎯 UNIFIED DELIVERY COORDINATOR (platform-wide atomic lock)
+                    result_urls = parsed['result_urls']
+                    
+                    # Determine category from model_id
+                    category = 'image'  # default
+                    if model_id:
+                        if 'video' in model_id.lower():
+                            category = 'video'
+                        elif 'audio' in model_id.lower() or 'music' in model_id.lower():
+                            category = 'audio'
+                        elif 'upscale' in model_id.lower() or 'enhance' in model_id.lower():
+                            category = 'upscale'
+                    
+                    # Try to deliver using atomic coordinator
+                    if chat_id and result_urls and user_id is not None:
+                        try:
+                            from app.storage import get_storage
+                            from app.utils.update_queue import get_queue_manager
+                            from app.delivery import deliver_result_atomic
+                            
+                            storage = get_storage()
+                            queue_manager = get_queue_manager()
+                            bot = queue_manager.get_bot()
+                            
+                            if not bot:
+                                logger.warning("[corr=%s] [POLL_DELIVERY_SKIP] Bot not configured in queue manager", correlation_tag())
+                                return {
+                                    "success": True,
+                                    "task_id": task_id,
+                                    "result_urls": result_urls,
+                                    "delivery_note": "fallback_no_bot"
+                                }
+                            
+                            delivery_result = await deliver_result_atomic(
+                                storage=storage,
+                                bot=bot,
+                                task_id=task_id,
+                                chat_id=chat_id,
+                                result_urls=result_urls,
+                                category=category,
+                                corr_id=correlation_tag(),
+                                timeout_minutes=5
+                            )
+                            
+                            if delivery_result['already_delivered']:
+                                # Lock skipped - someone else (callback or other poll) delivered
+                                logger.info(f"{correlation_tag()} [DELIVER_LOCK_SKIP_POLL_EXIT] Stopping poll, already delivered")
+                                return {
+                                    'success': True,
+                                    'message': parsed['message'],
+                                    'result_urls': result_urls,
+                                    'result_object': parsed['result_object'],
+                                    'error_code': None,
+                                    'error_message': None,
+                                    'task_id': task_id,
+                                    'already_delivered': True
+                                }
+                            
+                        except Exception as e:
+                            logger.exception(f"{correlation_tag()} [POLL_DELIVERY_ERROR] {e}")
+                    
                     return {
                         'success': True,
                         'message': parsed['message'],
-                        'result_urls': parsed['result_urls'],
+                        'result_urls': result_urls,
                         'result_object': parsed['result_object'],
                         'error_code': None,
                         'error_message': None,
                         'task_id': task_id
                     }
                 
-                elif state == 'fail':
+                elif normalized_state == 'failed':
                     error_msg = get_human_readable_error(
                         parsed['error_code'],
                         parsed['error_message']
@@ -322,7 +566,7 @@ class KieGenerator:
                         last_heartbeat = datetime.now()
                     
                     # Wait before next check
-                    await asyncio.sleep(2)  # Check every 2 seconds
+                    await asyncio.sleep(poll_interval)
                     continue
                 
                 else:

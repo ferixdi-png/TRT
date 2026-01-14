@@ -13,6 +13,26 @@ Production-grade Telegram bot for AI model generation via Kie.ai API.
 
 ## 🚀 БЫСТРЫЙ СТАРТ
 
+### Codespaces Quickstart
+
+Запуск в GitHub Codespaces занимает 1-2 минуты:
+
+```bash
+# 1) Открой репозиторий в Codespaces (Use this template → Create Codespace)
+# 2) Проверь Python и окружение
+python3 --version
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 3) Базовая проверка проекта
+make verify
+
+# 4) Локальный запуск (webhook/polling по необходимости)
+source .env.test && python main_render.py
+```
+
+Devcontainer (.devcontainer/devcontainer.json) настроен: venv + зависимости устанавливаются автоматически; при необходимости запусти команды выше вручную.
+
 ### Локальная разработка:
 
 ```bash
@@ -49,6 +69,52 @@ pip install -r requirements.txt
 python main_render.py
 ```
 
+### Render Deploy Checklist
+
+- ENV (обязательные):
+   - `TELEGRAM_BOT_TOKEN`, `KIE_API_KEY`, `DATABASE_URL`, `ADMIN_ID`, `BOT_MODE=webhook`, `PORT`
+- ENV (рекомендуемые):
+   - `WEBHOOK_BASE_URL`, `WEBHOOK_SECRET_PATH`, `WEBHOOK_SECRET_TOKEN`, `DB_MAXCONN`
+- Build: `pip install -r requirements.txt`
+- Start: `python main_render.py`
+- Health URL: `/health` (GET) — ожидается 200
+- Webhook URL: `${WEBHOOK_BASE_URL}/webhook/${TELEGRAM_BOT_TOKEN}` — секрет-токен проверяется, если задан
+
+**FINAL RENDER REQUIREMENTS (источник правды):**
+
+| Переменная | Обязательно | Описание |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | ✅ | Токен от @BotFather |
+| `KIE_API_KEY` | ✅ | API ключ от kie.ai |
+| `DATABASE_URL` | ✅ | PostgreSQL DSN (Internal URL из Render) |
+| `ADMIN_ID` | ✅ | Ваш Telegram ID (целое число) |
+| `BOT_MODE` | ✅ | Должен быть `webhook` для Render |
+| `PORT` | ✅ | По умолчанию 8000 (Render устанавливает автоматически) |
+| `WEBHOOK_BASE_URL` | ✅ для webhook | Полный URL вашего сервиса (https://yourservice.onrender.com) |
+| `WEBHOOK_SECRET_PATH` | ⭐ рекомендуется | Скрытая часть пути webhook (для безопасности, например `secret123`) |
+| `WEBHOOK_SECRET_TOKEN` | ⭐ рекомендуется | Дополнительный токен валидации для Telegram webhook (генерируй с `openssl rand -hex 32`) |
+| `KIE_CALLBACK_PATH` | ⭐ рекомендуется | Путь для KIE callback (по умолчанию `callbacks/kie`) |
+| `KIE_CALLBACK_TOKEN` | ⭐ рекомендуется | Токен валидации для KIE callback (генерируй с `openssl rand -hex 32`) |
+| `DB_MAXCONN` | Опционально | Макс. connections к БД (по умолчанию 5) |
+| `PAYMENT_BANK`, `PAYMENT_CARD_HOLDER`, `PAYMENT_PHONE` | Опционально | Для платежных систем (если используются) |
+| `SUPPORT_TELEGRAM`, `SUPPORT_TEXT` | Опционально | Контакты поддержки для пользователей |
+
+**Webhook URLs (как их найти):**
+
+1. **Telegram webhook** → Render URL будет: `https://yourservice.onrender.com/webhook/{WEBHOOK_SECRET_PATH}`
+   - Telegram отправляет POST с header `X-Telegram-Bot-Api-Secret-Token: {WEBHOOK_SECRET_TOKEN}`
+   
+2. **KIE callback** → URL будет: `https://yourservice.onrender.com/{KIE_CALLBACK_PATH}`
+   - KIE отправляет POST с header `X-KIE-Callback-Token: {KIE_CALLBACK_TOKEN}`
+
+**Health check:** `curl https://yourservice.onrender.com/health`  
+→ Ожидается: `{"status": "ok", "storage": "postgres", "kie_mode": "real"}`
+
+**⚠️ РИСК: Кредиты KIE.ai** — В PRODUCTION 402 ошибка вернёт **честный FAIL** (не мок). Убедись, что:
+- Ключ `KIE_API_KEY` актуален  
+- На аккаунте Kie.ai достаточно кредитов  
+- Режим тестирования отключен (`DRY_RUN` и `TEST_MODE` = 0 или не установлены)
+
 ### Автоматический деплой через GitHub Actions:
 
 1. **Добавь GitHub Secrets** (один раз):
@@ -64,6 +130,54 @@ python main_render.py
 - Перейди: Repository → Settings → Secrets and variables → Actions
 - Добавь: `RENDER_DEPLOY_HOOK` = `https://api.render.com/deploy/srv-XXXXX?key=XXXXX`
   - Получи из: Render Dashboard → Service → Settings → Deploy Hook
+
+---
+
+## ✅ Проверка перед деплоем
+
+### Локальная разработка (с .env.test):
+
+```bash
+# Активируй тестовое окружение
+source .env.test
+
+# Запусти полную верификацию (тесты + smoke + lint)
+make verify
+```
+
+`.env.test` содержит:
+- Valid Telegram bot token (формат: `1234567890:ABC...`)
+- Test Kie.ai credentials
+- Localhost PostgreSQL (или JSON storage fallback)
+- Webhook secrets для локального тестирования
+
+**Результаты проверки:**
+- ✅ Runtime validation (ENV vars, API connectivity)
+- ✅ Lint checks (ruff)
+- ✅ Unit tests (pytest, 211+ tests)
+- ✅ E2E smoke tests (webhook, callback, generation)
+- ✅ Health endpoint check (`/health`)
+
+### Перед деплоем на Render:
+
+```bash
+# Проверить что все ENV переменные установлены и работают
+make verify-runtime
+```
+
+Скрипт проверит:
+1. ✅ Все обязательные ENV переменные заданы
+2. ✅ Telegram Bot API доступен (валидирует токен)
+3. ✅ KIE API доступен (валидирует ключ)
+4. ✅ PostgreSQL база доступна (валидирует соединение)
+5. ❌ Падает с понятным сообщением об ошибке если что-то не так
+
+**Все чувствительные данные маскируются в логах** (выводит только `****abcd`).
+
+**В CI:**
+```bash
+make verify  # Запускает verify-runtime + все тесты + smoke + integrity
+```
 
 ---
 
@@ -147,7 +261,47 @@ python -m pytest tests/ -v
 
 ### Проверка проекта:
 ```bash
+# Все гейты (lint, test, smoke, integrity, e2e)
+make verify
+
+# Только проверка проекта
 python scripts/verify_project.py
+```
+
+### Comprehensive Smoke Test (DoD point 4):
+```bash
+# Запустить полный smoke test продукта
+make smoke-product
+# или
+python scripts/smoke_product.py
+
+# Проверяет:
+# - Health endpoint (200 OK)
+# - Webhook/callback configuration
+# - Button audit (нет мертвых callbacks)
+# - Flow type validation (70/72 models)
+# - image_edit input order (image FIRST)
+# - Payment idempotency
+# - Partnership section presence
+# - No mock success in production
+```
+
+### Sync KIE.ai Truth (DoD point 11):
+```bash
+# Попытаться синхронизировать модели с KIE.ai API
+make sync-kie
+# или
+python scripts/sync_kie_truth.py
+
+# Процесс:
+# 1. Пытается получить JSON от KIE.ai (модели/цены)
+# 2. Валидирует структуру данных
+# 3. Обновляет models/KIE_SOURCE_OF_TRUTH.json
+# 4. Пишет отчет об изменениях в TRT_REPORT.md
+# 5. Если API недоступен: возвращает SYNC_UNAVAILABLE (не ошибка)
+#
+# Примечание: KIE.ai не предоставляет публичный JSON API для моделей.
+# Обновления производятся вручную через SOURCE_OF_TRUTH.json
 ```
 
 ### Поведенческое тестирование:

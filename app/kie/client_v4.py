@@ -99,8 +99,12 @@ class KieApiClientV4:
         # Полный URL для category-specific API
         url = f"{base_url}{endpoint}"
         
-        logger.info(f"Creating task for {model_id} ({category}): POST {url}")
-        logger.debug(f"Payload: {payload}")
+        logger.info(
+            f"🚀 CREATE TASK | Model: {model_id} | Category: {category} | "
+            f"URL: POST {url} | "
+            f"Payload keys: {list(payload.keys())}"
+        )
+        logger.debug(f"Full payload: {payload}")
         
         try:
             response = await asyncio.to_thread(
@@ -109,14 +113,53 @@ class KieApiClientV4:
                 payload
             )
             
-            logger.info(f"Response status: {response.status_code}")
-            logger.debug(f"Response body: {response.text[:500]}")
+            logger.info(
+                f"✅ RESPONSE | Status: {response.status_code} | "
+                f"Body preview: {response.text[:200]}"
+            )
+            logger.debug(f"Full response: {response.text}")
             
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Проверяем если результат вообще валидный JSON
+            if not isinstance(result, dict):
+                logger.error(f"❌ Invalid response format: {type(result)}")
+                return {"error": "Invalid response format", "state": "fail"}
+            
+            # Проверяем успешность в коде ответа
+            response_code = result.get('code')
+            if response_code and response_code >= 400:
+                # API вернула ошибку
+                error_msg = result.get('msg', 'Unknown error')
+                logger.error(f"❌ API Error: Code {response_code} - {error_msg}")
+                return {
+                    "error": error_msg,
+                    "code": response_code,
+                    "state": "fail"
+                }
+            
+            # Логируем taskId если есть
+            task_id = result.get('data', {}).get('taskId') or result.get('taskId')
+            if task_id:
+                logger.info(f"📝 Task created successfully | TaskID: {task_id}")
+                return result
+            
+            # Если нет taskId и нет ошибки - это тоже ошибка
+            logger.warning(f"⚠️ No taskId in response: {result}")
+            return {
+                "error": "No taskId in response",
+                "response": result,
+                "state": "fail"
+            }
             
         except requests.RequestException as exc:
-            logger.error(f"Create task failed: {exc}", exc_info=True)
+            logger.error(
+                f"❌ CREATE TASK FAILED | Model: {model_id} | "
+                f"Error: {type(exc).__name__}: {str(exc)} | "
+                f"URL: {url}",
+                exc_info=True
+            )
             return {"error": str(exc), "state": "fail"}
     
     async def get_record_info(self, task_id: str) -> Dict[str, Any]:

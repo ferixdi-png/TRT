@@ -1,0 +1,57 @@
+name: smoke
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python files
+        run: |
+          python -m compileall -q .
+
+      - name: Run production smoke tests
+        run: |
+          make smoke-prod
+        env:
+          ADMIN_ID: "123456789"
+          BOT_MODE: "webhook"
+          DATABASE_URL: "postgresql://test:test@localhost/test"
+          DB_MAXCONN: "5"
+          KIE_API_KEY: "test_key"
+          PAYMENT_BANK: "Test Bank"
+          PAYMENT_CARD_HOLDER: "Test Holder"
+          PAYMENT_PHONE: "+79991234567"
+          PORT: "8000"
+          SUPPORT_TELEGRAM: "@test"
+          SUPPORT_TEXT: "Test support"
+          TELEGRAM_BOT_TOKEN: "1234567890:TEST_TOKEN"
+          WEBHOOK_BASE_URL: "https://test.example.com"
+          WEBHOOK_SECRET_PATH: "webhook"
+          WEBHOOK_SECRET_TOKEN: "test-secret"
+          SMOKE_MODE: "1"
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: smoke-report
+          path: SMOKE_REPORT.md

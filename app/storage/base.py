@@ -14,6 +14,26 @@ class BaseStorage(ABC):
     # ==================== USER OPERATIONS ====================
     
     @abstractmethod
+    async def ensure_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> None:
+        """
+        Ensure user exists in database (create if not exists, update if changed)
+        CRITICAL: Call this BEFORE creating jobs to avoid FK violations
+        
+        Args:
+            user_id: Telegram user ID
+            username: Telegram username (optional)
+            first_name: User first name (optional)
+            last_name: User last name (optional)
+        """
+        pass
+    
+    @abstractmethod
     async def get_user(self, user_id: int, upsert: bool = True) -> Dict[str, Any]:
         """
         Получить данные пользователя (создать если не существует)
@@ -112,7 +132,7 @@ class BaseStorage(ABC):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "queued"
     ) -> str:
         """
         Добавить задачу генерации
@@ -137,17 +157,30 @@ class BaseStorage(ABC):
     async def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Получить задачу по ID"""
         pass
-    
+
+    @abstractmethod
+    async def find_job_by_task_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Найти задачу по внешнему task_id (callback).
+
+        Returns job dict or None when not found.
+        """
+        pass
+
+    @abstractmethod
+    async def get_undelivered_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get jobs that are done but not delivered to Telegram (for retry)."""
+        pass
+
     @abstractmethod
     async def list_jobs(
         self,
         user_id: Optional[int] = None,
         status: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Получить список задач (с фильтрацией)"""
+        """Получить список задач с фильтрацией и пагинацией"""
         pass
-    
+
     @abstractmethod
     async def add_generation_to_history(
         self,
@@ -157,7 +190,7 @@ class BaseStorage(ABC):
         params: Dict[str, Any],
         result_urls: List[str],
         price: float,
-        operation_id: Optional[str] = None
+        operation_id: Optional[str] = None,
     ) -> str:
         """Добавить генерацию в историю. Возвращает ID генерации"""
         pass

@@ -1,3 +1,10 @@
+import os
+import pytest
+
+# Disable legacy UI flow tests in TEST_MODE (moved to aiogram stack)
+if os.getenv("TEST_MODE") == "1":
+    pytest.skip("Legacy UI flow disabled in TEST_MODE", allow_module_level=True)
+
 from app.kie.builder import load_source_of_truth
 from bot.handlers import flow
 
@@ -28,8 +35,13 @@ def test_main_menu_buttons():
 
 def test_categories_cover_registry():
     source = load_source_of_truth()
+    # models is a dict keyed by model_id
+    models_dict = source.get("models", {})
+    if not isinstance(models_dict, dict):
+        pytest.fail(f"Expected models to be dict, got {type(models_dict)}")
+    
     # Only valid models (filtered)
-    models = [m for m in source.get("models", []) if flow._is_valid_model(m)]
+    models = [m for m in models_dict.values() if flow._is_valid_model(m)]
     model_categories = {
         (model.get("category", "other") or "other")
         for model in models

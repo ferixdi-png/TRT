@@ -150,7 +150,7 @@ async def process_topup_amount(message: Message, state: FSMContext):
             await message.answer("❌ Сумма должна быть больше нуля")
             return
         if amount > 100000:
-            await message.answer("❌ Максимальная сумма: 100 000₽")
+            await message.answer("❌ Максимальная сумма: 100 000 руб.")
             return
     except (ValueError, decimal.InvalidOperation) as e:
         # MASTER PROMPT: No bare except - specific exception types for Decimal parsing
@@ -167,7 +167,7 @@ async def _show_payment_instructions(callback: CallbackQuery, state: FSMContext,
     
     # Validate amount range: 50-50000 RUB (payment safety)
     if amount < 50 or amount > 50000:
-        await callback.answer("❌ Сумма должна быть от 50 до 50 000₽", show_alert=True)
+        await callback.answer("❌ Сумма должна быть от 50 до 50 000 руб.", show_alert=True)
         return
     
     # Payment credentials from ENV

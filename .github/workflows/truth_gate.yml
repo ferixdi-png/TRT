@@ -1,0 +1,114 @@
+name: Truth Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-truth:
+    name: Verify Architecture Truth (v2.0)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml requests || echo "Minimal deps for gates"
+    
+    - name: Validate product/truth.yaml
+      run: |
+        python3 -c "import yaml; yaml.safe_load(open('product/truth.yaml'))"
+    
+    - name: Run scripts/verify.py
+      run: |
+        python3 scripts/verify.py
+    
+    - name: Start mock service for smoke tests
+      run: |
+      python - <<'PY'
+      import json, threading, time
+      from http.server import HTTPServer, BaseHTTPRequestHandler
+
+      class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+          if self.path in ['/', '/health']:
+            payload = {
+              "status": "ok",
+              "uptime": 1,
+              "active": False,
+                        "lock_state": "PASSIVE",
+                        "queue": {"queue_depth": 0},
+                        "lock_heartbeat_age": 0.1,
+                        "db_schema_ready": true,
+            }
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+          else:
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+          if self.path.startswith('/webhook'):
+            self.send_response(200)
+            self.end_headers()
+          else:
+            self.send_response(404)
+            self.end_headers()
+
+        def log_message(self, fmt, *args):
+          return
+
+      server = HTTPServer(('0.0.0.0', 8080), Handler)
+      threading.Thread(target=server.serve_forever, daemon=True).start()
+      time.sleep(0.5)
+      PY
+
+    - name: Run scripts/smoke.py (local)
+      run: |
+      python3 scripts/smoke.py --url http://localhost:8080
+  
+  firebreak-gate:
+    name: FIREBREAK Gate (No Forbidden Patterns)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check for wildcard imports
+      run: |
+        if grep -rn "from .* import \*" --include="*.py" --exclude-dir=tests --exclude-dir=quarantine --exclude-dir=.venv .; then
+          echo "❌ FIREBREAK FAILED: Wildcard imports detected"
+          exit 1
+        else
+          echo "✅ No wildcard imports"
+        fi
+    
+    - name: Check for duplicate entrypoints
+      run: |
+        MAIN_COUNT=$(grep -rl "if __name__ == [\"']__main__[\"']" --include="*.py" --exclude-dir=quarantine --exclude-dir=tests . | wc -l)
+        if [ "$MAIN_COUNT" -gt 1 ]; then
+          echo "❌ FIREBREAK FAILED: Multiple entrypoints detected"
+          grep -rl "if __name__ == [\"']__main__[\"']" --include="*.py" --exclude-dir=quarantine --exclude-dir=tests .
+          exit 1
+        else
+          echo "✅ Single entrypoint verified"
+        fi
+    
+    - name: Python syntax check
+      run: |
+        python -m py_compile main_render.py
+        find app -name "*.py" -exec python -m py_compile {} \;
+        echo "✅ Syntax check passed"

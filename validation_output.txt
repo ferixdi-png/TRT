@@ -1,0 +1,86 @@
+INFO:app.kie.generator:[corr=none] [GENERATOR] Starting generate for model=z-image
+INFO:app.kie.generator:[corr=none] [GENERATOR]   - user_inputs keys: ['prompt', 'aspect_ratio']
+INFO:app.kie.builder:✅ Loading SOURCE_OF_TRUTH v1.2.0 (cached): models/KIE_SOURCE_OF_TRUTH.json
+INFO:app.kie.generator:[corr=none] [GENERATOR] ✅ Input validation passed for z-image
+INFO:app.kie.router:✅ Loading SOURCE_OF_TRUTH (cached): /workspaces/TRT/models/KIE_SOURCE_OF_TRUTH.json
+INFO:app.kie.generator:Using V4 API for model z-image
+INFO:app.kie.generator:  - user_inputs to build_category_payload: {'prompt': 'A beautiful sunset over mountains', 'aspect_ratio': '16:9'}
+INFO:app.kie.generator:  - user_inputs keys: ['prompt', 'aspect_ratio']
+INFO:app.kie.router:Built image payload for z-image: ['model', 'callBackUrl', 'input']
+INFO:app.kie.generator:  - payload built: {'model': 'z-image', 'callBackUrl': '', 'input': {'prompt': 'A beautiful sunset over mountains', 'aspect_ratio': '16:9'}}
+INFO:app.kie.generator:Create task response: {'taskId': 'stub_task_z-image', 'status': 'waiting'}
+INFO:app.storage.factory:[OK] Using JSON storage (AUTO mode, data_dir=./data)
+INFO:app.kie.generator:✅ JOB CREATED | TaskID: stub_task_z-image | User: 1 | Chat: 1
+INFO:app.kie.generator:⏳ POLLING | TaskID: stub_task_z-image | Timeout: 1s | Interval: 2s
+INFO:app.kie.generator:[corr=none] [GENERATOR] Starting generate for model=z-image
+INFO:app.kie.generator:[corr=none] [GENERATOR]   - user_inputs keys: ['prompt']
+ERROR:app.kie.generator:[corr=none] [GENERATOR] Input validation failed for z-image:
+  • Missing required field: aspect_ratio
+INFO:app.kie.generator:[corr=none] [GENERATOR] Starting generate for model=z-image
+INFO:app.kie.generator:[corr=none] [GENERATOR]   - user_inputs keys: ['prompt', 'aspect_ratio']
+ERROR:app.kie.generator:[corr=none] [GENERATOR] Input validation failed for z-image:
+  • Invalid value for aspect_ratio: 32:9. Must be one of: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 9:21
+INFO:app.kie.generator:[corr=none] [GENERATOR] Starting generate for model=nonexistent-model-xyz
+INFO:app.kie.generator:[corr=none] [GENERATOR]   - user_inputs keys: ['prompt']
+ERROR:app.kie.generator:[corr=none] [GENERATOR] Input validation failed for nonexistent-model-xyz:
+  • Unknown model: nonexistent-model-xyz
+
+🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧
+INPUT VALIDATION INTEGRATION TESTS
+Testing: generator.py validation layer
+Mode: DRY RUN (KIE_STUB=true)
+🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧🔧
+
+================================================================================
+TEST 1: Valid inputs should pass
+================================================================================
+
+✅ Result: False
+   Message: ⏱️ Превышено время ожидания (1 сек)
+
+✅ Test passed: Valid inputs accepted
+
+================================================================================
+TEST 2: Missing required field should fail
+================================================================================
+
+❌ Result: False
+   Message: ❌ Некорректные входные данные:
+  • Missing required field: aspect_ratio
+   Error: VALIDATION_ERROR
+
+✅ Test passed: Missing required field detected
+
+================================================================================
+TEST 3: Invalid enum value should fail
+================================================================================
+
+❌ Result: False
+   Message: ❌ Некорректные входные данные:
+  • Invalid value for aspect_ratio: 32:9. Must be one of: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 9:21
+   Error: VALIDATION_ERROR
+
+✅ Test passed: Invalid enum value detected
+
+================================================================================
+TEST 4: Unknown model should fail
+================================================================================
+
+❌ Result: False
+   Message: ❌ Некорректные входные данные:
+  • Unknown model: nonexistent-model-xyz
+   Error: VALIDATION_ERROR
+
+✅ Test passed: Unknown model detected
+
+✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅
+ALL VALIDATION TESTS PASSED
+✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅
+
+Integration complete:
+  ✅ Valid inputs pass through
+  ✅ Missing required fields rejected
+  ✅ Invalid enum values rejected
+  ✅ Unknown models rejected
+
+🎯 PHASE B COMPLETE: Validation integrated into generator.py

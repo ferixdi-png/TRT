@@ -38,11 +38,38 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
     # Extract state
     state = record_info.get('state', '').lower()
     result['state'] = state
+    # V4 compatibility: if record_info has 'data' field, work with it as primary object
+    main_obj = record_info
+    if 'data' in record_info and isinstance(record_info['data'], dict):
+        main_obj = record_info['data']
     
-    if state == 'waiting':
+    # Normalize state/status from multiple possible field names
+    state_raw = (
+        main_obj.get('state') or 
+        main_obj.get('status') or 
+        record_info.get('state') or 
+        record_info.get('status') or 
+        ''
+    ).lower()
+    
+    # Normalize state to canonical: done, fail, pending
+    if state_raw in ('success', 'succeed', 'done', 'completed', 'finished'):
+        state = 'done'
+    elif state_raw in ('fail', 'failed', 'error'):
+        state = 'fail'
+    elif state_raw in ('waiting', 'pending', 'processing', 'running', 'in_progress'):
+        state = 'pending'
+    else:
+        state = state_raw if state_raw else 'pending'  # default to pending if unsure
+    
+    result['state'] = state
+    result['is_done'] = state == 'done'
+    result['is_failed'] = state == 'fail'
+    
+    if state == 'pending':
         # Extract progress info if available
-        progress_percent = record_info.get('progress', 0)
-        eta_seconds = record_info.get('eta')
+        progress_percent = main_obj.get('progress', 0)
+        eta_seconds = main_obj.get('eta')
         
         if progress_percent and progress_percent > 0:
             result['message'] = f"⏳ Генерация: {progress_percent}% готово"
@@ -55,9 +82,9 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
         result['eta'] = eta_seconds
         return result
     
-    elif state == 'success':
+    elif state == 'done':
         # Parse resultJson
-        result_json = record_info.get('resultJson')
+        result_json = main_obj.get('resultJson') or main_obj.get('result_json')
         if result_json:
             try:
                 # Handle string JSON
@@ -87,6 +114,10 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
                             result_json.startswith('https://')
                         ):
                             result['result_urls'] = [result_json]
+                # After parsing JSON, if result_json is now a string (was JSON string with URL)
+                elif isinstance(result_json, str):
+                    if result_json.startswith(('http://', 'https://')):
+                        result['result_urls'] = [result_json]
                 elif isinstance(result_json, list):
                     # List of URLs or objects
                     for item in result_json:
@@ -113,7 +144,7 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
         
         # Also check direct resultUrls field
         if not result['result_urls']:
-            direct_urls = record_info.get('resultUrls') or record_info.get('result_urls')
+            direct_urls = main_obj.get('resultUrls') or main_obj.get('result_urls')
             if direct_urls:
                 if isinstance(direct_urls, list):
                     result['result_urls'] = [str(url) for url in direct_urls if url]
@@ -129,8 +160,21 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
     
     elif state == 'fail':
         # Extract error information
-        fail_msg = record_info.get('failMsg') or record_info.get('fail_message') or record_info.get('error')
-        fail_code = record_info.get('failCode') or record_info.get('fail_code') or record_info.get('error_code')
+        fail_msg = (
+            main_obj.get('failMsg') or 
+            main_obj.get('fail_message') or 
+            main_obj.get('error') or
+            main_obj.get('errorMessage') or
+            record_info.get('failMsg') or 
+            record_info.get('fail_message')
+        )
+        fail_code = (
+            main_obj.get('failCode') or 
+            main_obj.get('fail_code') or 
+            main_obj.get('error_code') or
+            main_obj.get('code') or
+            record_info.get('failCode')
+        )
         
         result['error_code'] = fail_code
         result['error_message'] = fail_msg
@@ -148,7 +192,7 @@ def parse_record_info(record_info: Dict[str, Any]) -> Dict[str, Any]:
         return result
     
     else:
-        result['message'] = f"⚠️ Неизвестное состояние: {state}"
+        result['message'] = f"⚠️ Неизвестное состояние: {state_raw}"
         return result
 
 

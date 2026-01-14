@@ -14,6 +14,9 @@ class RuntimeState:
     storage_mode: str = "auto"
     bot_mode: str = "polling"
     last_start_time: str | None = None
+    db_schema_ready: bool = False  # CRITICAL: tracks if migrations applied
+    callback_job_not_found_count: int = 0  # Metric: orphan callbacks
+    telegram_send_fail_count: int = 0  # Metric: delivery failures
 
 
 def _build_instance_id() -> str:

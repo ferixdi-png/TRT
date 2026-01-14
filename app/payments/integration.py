@@ -2,6 +2,7 @@
 Integration of payments with generation flow.
 Ensures charges are only committed on success.
 Handles FREE tier models (no charge).
+Includes user rate limiting to prevent spam/abuse.
 """
 import logging
 import time
@@ -12,6 +13,8 @@ from app.payments.charges import ChargeManager, get_charge_manager
 from app.kie.generator import KieGenerator
 from app.utils.metrics import track_generation
 from app.pricing.free_models import is_free_model
+from app.utils.correlation import ensure_correlation_id, correlation_tag
+from app.utils.user_rate_limiter import get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,8 @@ async def generate_with_payment(
     timeout: int = 300,
     task_id: Optional[str] = None,
     reserve_balance: bool = False,
-    charge_manager: Optional[ChargeManager] = None
+    charge_manager: Optional[ChargeManager] = None,
+    chat_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Generate with payment safety guarantees:
@@ -39,15 +43,64 @@ async def generate_with_payment(
         amount: Charge amount (ignored for FREE models)
         progress_callback: Progress callback
         timeout: Generation timeout
+        chat_id: Telegram chat ID for result delivery
         
     Returns:
         Result dict with generation and payment info
     """
+    ensure_correlation_id(task_id or f"{user_id}:{model_id}")
+    
+    # CRITICAL LOGGING: Log inputs at entry with correlation
+    logger.info(f"{correlation_tag()} [PAYMENT] generate_with_payment called:")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - user_id: {user_id}")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - model_id: {model_id}")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - user_inputs keys: {list(user_inputs.keys())}")
+    logger.info(f"{correlation_tag()} [PAYMENT]   - amount: {amount}")
+    
+    # ✅ ITERATION 8: Check user rate limit BEFORE any payment/generation
+    is_free = is_free_model(model_id)
+    rate_limiter = get_rate_limiter()
+    rate_check = rate_limiter.check_rate_limit(user_id, is_paid=not is_free)
+    
+    if not rate_check["allowed"]:
+        logger.warning(
+            f"{correlation_tag()} [RATE_LIMIT] ⏱ User {user_id} limited: {rate_check['reason']} "
+            f"(wait {rate_check['wait_seconds']}s)"
+        )
+        return {
+            'success': False,
+            'message': f"⏱ Превышен лимит генераций. Подождите {rate_check['wait_seconds']}с\n"
+                       f"Причина: {rate_check['reason']}",
+            'error_code': 'RATE_LIMIT_EXCEEDED',
+            'rate_limit_info': rate_check
+        }
+    
     # Check if model is FREE (TOP-5 cheapest)
-    if is_free_model(model_id):
-        logger.info(f"🆓 Model {model_id} is FREE - skipping payment")
+    if is_free:
+        logger.info(f"{correlation_tag()} 🆓 Model {model_id} is FREE - skipping payment")
         generator = KieGenerator()
-        gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        gen_result = await generator.generate(
+            model_id, user_inputs, progress_callback, timeout,
+            user_id=user_id, chat_id=chat_id or user_id, price=0.0
+        )
+        
+        # CRITICAL: If KIE returns 402 for "free" model, it's a config mismatch
+        if not gen_result.get('success') and gen_result.get('error_code') == 'INSUFFICIENT_CREDITS':
+            logger.error(
+                f"⚠️ Model {model_id} marked FREE but KIE returned 402! "
+                f"This is a SOURCE_OF_TRUTH mismatch. Model requires credits."
+            )
+            # Return honest error to user
+            return {
+                **gen_result,
+                'charge_task_id': None,
+                'payment_status': 'free_tier_mismatch',
+                'message': (
+                    f"❌ Модель {model_id} помечена как бесплатная, но требует кредиты KIE.ai. "
+                    f"Пожалуйста, пополните баланс KIE.ai или выберите другую модель."
+                ),
+            }
+        
         return {
             **gen_result,
             'charge_task_id': None,
@@ -59,8 +112,10 @@ async def generate_with_payment(
     charge_manager = charge_manager or get_charge_manager()
     generator = KieGenerator()
     charge_task_id = task_id or f"charge_{user_id}_{model_id}_{uuid4().hex[:8]}"
+    ensure_correlation_id(charge_task_id)
     
     # Create pending charge
+    logger.info(f"{correlation_tag()} Creating pending charge for {charge_task_id}")
     charge_result = await charge_manager.create_pending_charge(
         task_id=charge_task_id,
         user_id=user_id,
@@ -71,7 +126,10 @@ async def generate_with_payment(
     
     if charge_result['status'] == 'already_committed':
         # Already paid, just generate
-        gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+        gen_result = await generator.generate(
+            model_id, user_inputs, progress_callback, timeout,
+            user_id=user_id, chat_id=chat_id or user_id, price=amount
+        )
         return {
             **gen_result,
             'charge_task_id': charge_task_id,
@@ -94,7 +152,11 @@ async def generate_with_payment(
     
     # Generate
     start_time = time.time()
-    gen_result = await generator.generate(model_id, user_inputs, progress_callback, timeout)
+    logger.info(f"{correlation_tag()} Starting generation for model={model_id}")
+    gen_result = await generator.generate(
+        model_id, user_inputs, progress_callback, timeout,
+        user_id=user_id, chat_id=chat_id or user_id, price=amount
+    )
     duration = time.time() - start_time
     
     # Track metrics
@@ -109,8 +171,17 @@ async def generate_with_payment(
     # Determine task_id from generation (if available)
     # Commit or release charge based on generation result
     if gen_result.get('success'):
-        # SUCCESS: Commit charge
+        # SUCCESS: Commit charge + record generation for rate limit
+        logger.info(f"{correlation_tag()} Committing charge for {charge_task_id}")
         commit_result = await charge_manager.commit_charge(charge_task_id)
+        
+        # ✅ ITERATION 8: Record successful generation for rate limiting
+        rate_limiter.record_generation(user_id, is_paid=not is_free)
+        logger.info(
+            f"{correlation_tag()} [RATE_LIMIT] ✅ Generation recorded: user={user_id}, "
+            f"paid={not is_free}, stats={rate_limiter.get_user_stats(user_id)}"
+        )
+        
         # Add to history
         result_urls = gen_result.get('result_urls', [])
         result_text = '\n'.join(result_urls) if result_urls else 'Success'
@@ -123,6 +194,7 @@ async def generate_with_payment(
         }
     else:
         # FAIL/TIMEOUT: Release charge (auto-refund)
+        logger.info(f"{correlation_tag()} Releasing charge for {charge_task_id}")
         release_result = await charge_manager.release_charge(
             charge_task_id,
             reason=gen_result.get('error_code', 'generation_failed')

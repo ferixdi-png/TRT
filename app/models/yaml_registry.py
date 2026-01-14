@@ -28,6 +28,16 @@ logger = logging.getLogger(__name__)
 # Global cache
 _yaml_cache: Optional[Dict[str, Any]] = None
 
+_ALLOWED_KIE_CATEGORIES = {
+    "video",
+    "image",
+    "avatar",
+    "audio",
+    "music",
+    "enhance",
+    "other",
+}
+
 
 def _get_yaml_path() -> Path:
     """Получить путь к YAML файлу."""
@@ -73,26 +83,7 @@ def load_yaml_models() -> Dict[str, Dict[str, Any]]:
             data = yaml.safe_load(f)
         
         models_dict = data.get('models', {})
-        
-        # Валидация: проверяем что у каждой модели есть model_type и input
-        validated = {}
-        for model_id, model_data in models_dict.items():
-            if not isinstance(model_data, dict):
-                logger.warning(f"Invalid model data for {model_id}: expected dict, got {type(model_data)}")
-                continue
-            
-            if 'model_type' not in model_data:
-                logger.warning(f"Model {model_id} missing model_type, skipping")
-                continue
-            
-            if 'input' not in model_data or not model_data['input']:
-                logger.warning(f"Model {model_id} missing or empty input, skipping")
-                continue
-            
-            validated[model_id] = {
-                'model_type': model_data['model_type'],
-                'input': model_data['input']
-            }
+        validated = _validate_yaml_models(models_dict)
         
         _yaml_cache = validated
         logger.info(f"Loaded {len(validated)} models from YAML: {yaml_path}")
@@ -127,6 +118,38 @@ def get_yaml_meta() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to load YAML meta: {e}")
         return {}
+
+
+def _validate_yaml_models(models_dict: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Validate YAML model catalog entries and skip invalid ones."""
+    validated: Dict[str, Dict[str, Any]] = {}
+    seen_ids = set()
+    for model_id, model_data in models_dict.items():
+        if not model_id or not isinstance(model_id, str):
+            logger.warning("Invalid model_id in YAML: %s", model_id)
+            continue
+        if model_id in seen_ids:
+            logger.warning("Duplicate model_id in YAML: %s", model_id)
+            continue
+        if not isinstance(model_data, dict):
+            logger.warning("Invalid model data for %s: expected dict, got %s", model_id, type(model_data))
+            continue
+        if 'model_type' not in model_data:
+            logger.warning("Model %s missing model_type, skipping", model_id)
+            continue
+        if 'input' not in model_data or not model_data['input']:
+            logger.warning("Model %s missing or empty input, skipping", model_id)
+            continue
+        category = model_data.get("category")
+        if category is not None and category not in _ALLOWED_KIE_CATEGORIES:
+            logger.warning("Model %s has invalid category: %s", model_id, category)
+            continue
+        validated[model_id] = {
+            'model_type': model_data['model_type'],
+            'input': model_data['input']
+        }
+        seen_ids.add(model_id)
+    return validated
 
 
 def _convert_yaml_input_to_input_params(yaml_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -280,4 +303,3 @@ def normalize_yaml_model(
         normalized['pricing'] = pricing
     
     return normalized
-

@@ -11,6 +11,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from app.utils.webhook import (
+    build_webhook_url,
+    get_webhook_base_url,
+    get_webhook_secret_path,
+    get_webhook_secret_token,
+)
+
 # Глобальный экземпляр settings (singleton)
 _settings: Optional['Settings'] = None
 
@@ -48,7 +55,11 @@ class Settings:
         
         self.database_url = os.getenv('DATABASE_URL', '').strip()
         self.kie_api_key = os.getenv('KIE_API_KEY', '').strip()
-        self.kie_api_url = os.getenv('KIE_API_URL', 'https://api.kie.ai').strip()
+        self.kie_api_url = (
+            os.getenv('KIE_API_URL', '').strip()
+            or os.getenv('KIE_BASE_URL', '').strip()
+            or 'https://api.kie.ai'
+        )
         
         # Runtime configuration
         self.test_mode = os.getenv('TEST_MODE', '0') == '1'
@@ -61,7 +72,10 @@ class Settings:
         
         # Bot mode
         self.bot_mode = os.getenv('BOT_MODE', 'polling').lower()
-        self.webhook_url = os.getenv('WEBHOOK_URL', '').strip()
+        self.webhook_base_url = get_webhook_base_url()
+        self.webhook_secret_path = get_webhook_secret_path(self.telegram_bot_token)
+        self.webhook_secret_token = get_webhook_secret_token()
+        self.webhook_url = build_webhook_url(self.webhook_base_url, self.webhook_secret_path)
         
         # Port for healthcheck
         port_str = os.getenv('PORT', '0')

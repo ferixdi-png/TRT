@@ -1,0 +1,66 @@
+Загрузка SOURCE_OF_TRUTH...
+Анализ моделей...
+Проверка UI покрытия...
+================================================================================
+TRT SYSTEM AUDIT REPORT
+================================================================================
+
+📊 ОБЩАЯ СТАТИСТИКА
+Всего моделей: 72
+Бесплатных: 4
+Платных: 68
+
+📁 КАТЕГОРИИ
+  audio: 4 моделей
+  avatar: 2 моделей
+  enhance: 6 моделей
+  image: 27 моделей
+  music: 2 моделей
+  other: 8 моделей
+  video: 23 моделей
+
+🆓 FREE МОДЕЛИ (для E2E тестирования)
+  ✓ qwen/image-edit
+    Required inputs: prompt, image_url, acceleration, image_size, num_inference_steps, guidance_scale, sync_mode, enable_safety_checker, output_format, negative_prompt
+  ✓ qwen/image-to-image
+    Required inputs: prompt, image_url, strength, output_format, acceleration, negative_prompt, num_inference_steps, guidance_scale, enable_safety_checker
+  ✓ qwen/text-to-image
+    Required inputs: prompt, image_size, num_inference_steps, guidance_scale, enable_safety_checker, output_format, negative_prompt, acceleration
+  ✓ z-image
+    Required inputs: prompt, aspect_ratio
+
+🔧 ПОПУЛЯРНЫЕ INPUT ПОЛЯ
+  prompt: используется в 55 моделях
+  image_url: используется в 24 моделях
+  aspect_ratio: используется в 22 моделях
+  resolution: используется в 22 моделях
+  duration: используется в 20 моделях
+  negative_prompt: используется в 15 моделях
+  image_size: используется в 10 моделях
+  enable_safety_checker: используется в 9 моделях
+  image_urls: используется в 8 моделях
+  seed: используется в 8 моделях
+
+🏢 ПРОВАЙДЕРЫ
+  bytedance: 5 моделей
+  elevenlabs: 4 моделей
+  flux2: 4 моделей
+  google: 7 моделей
+  grok-imagine: 4 моделей
+  hailuo: 6 моделей
+  ideogram: 4 моделей
+  infinitalk: 1 моделей
+  kling: 10 моделей
+  qwen: 3 моделей
+  recraft: 2 моделей
+  seedream: 3 моделей
+  sora-2-pro-storyboard: 1 моделей
+  sora2: 6 моделей
+  suno: 1 моделей
+  topaz: 2 моделей
+  wan: 8 моделей
+  z-image: 1 моделей
+
+================================================================================
+
+✅ Результаты сохранены в /workspaces/TRT/AUDIT_RESULT.json

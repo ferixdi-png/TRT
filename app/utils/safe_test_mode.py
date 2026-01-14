@@ -130,20 +130,19 @@ if __name__ == "__main__":
     # Test
     logging.basicConfig(level=logging.INFO)
     
-    print("="*60)
-    print("SAFE TEST MODE CONFIGURATION")
-    print("="*60)
-    print()
+    logger.info("="*60)
+    logger.info("SAFE TEST MODE CONFIGURATION")
+    logger.info("="*60)
     
     info = get_test_budget_info()
     
-    print(f"Safe mode enabled: {info['safe_mode_enabled']}")
-    print(f"Max cost per run: {info['max_cost_per_run']} RUB")
-    print(f"Max total budget: {info['max_total_budget']} RUB")
-    print(f"Max models: {info['max_models']}")
-    print()
-    print(f"Allowed models ({len(info['allowed_models'])}):")
+    logger.info(f"Safe mode enabled: {info['safe_mode_enabled']}")
+    logger.info(f"Max cost per run: {info['max_cost_per_run']} RUB")
+    logger.info(f"Max total budget: {info['max_total_budget']} RUB")
+    logger.info(f"Max models: {info['max_models']}")
+    logger.info("")
+    logger.info(f"Allowed models ({len(info['allowed_models'])}):")
     for model_id in info['allowed_models']:
-        print(f"  • {model_id}")
-    print()
-    print("="*60)
+        logger.info(f"  • {model_id}")
+    logger.info("")
+    logger.info("="*60)

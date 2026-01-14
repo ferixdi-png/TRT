@@ -16,6 +16,7 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
 
 from app.storage.base import BaseStorage
+from app.storage.status import normalize_job_status
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +30,71 @@ class PostgresStorage(BaseStorage):
         
         self.database_url = database_url
         self._pool: Optional[asyncpg.Pool] = None
+        self._pool_lock = None  # Will be initialized on first async call
+    
+    @property
+    def pool(self) -> Optional[asyncpg.Pool]:
+        """Public access to connection pool for workers/queue."""
+        return self._pool
     
     async def _get_pool(self) -> asyncpg.Pool:
-        """Получить или создать connection pool"""
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=1,
-                max_size=10,
-                command_timeout=60
-            )
+        """Получить или создать connection pool (thread-safe)"""
+        if self._pool is not None:
+            return self._pool
+        
+        # Initialize lock on first call
+        if self._pool_lock is None:
+            import asyncio
+            self._pool_lock = asyncio.Lock()
+        
+        async with self._pool_lock:
+            # Double-check after acquiring lock
+            if self._pool is None:
+                self._pool = await asyncpg.create_pool(
+                    self.database_url,
+                    min_size=1,
+                    max_size=10,
+                    command_timeout=60
+                )
+                logger.info("[PG_STORAGE] ✅ Connection pool initialized")
         return self._pool
+    
+    async def is_update_processed(self, update_id: int) -> bool:
+        """
+        Check if update_id has been processed (dedup check).
+        
+        Returns:
+            True if update was already processed, False otherwise
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            result = await conn.fetchval(
+                "SELECT 1 FROM processed_updates WHERE update_id = $1",
+                update_id
+            )
+            return result is not None
+    
+    async def mark_update_processed(self, update_id: int, worker_id: str = "unknown", update_type: str = "unknown") -> bool:
+        """
+        Mark update_id as processed (dedup insert).
+        
+        Returns:
+            True if successfully marked, False if already existed
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO processed_updates (update_id, worker_instance_id, update_type)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (update_id) DO NOTHING
+                    """,
+                    update_id, worker_id, update_type
+                )
+                return True
+            except Exception:
+                return False
     
     async def async_test_connection(self) -> bool:
         """
@@ -110,6 +165,43 @@ class PostgresStorage(BaseStorage):
         return False
     
     # ==================== USER OPERATIONS ====================
+    
+    async def ensure_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> None:
+        """
+        Ensure user exists in database (idempotent, safe for concurrent calls)
+        CRITICAL: Prevents FK violations when creating jobs
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # INSERT or UPDATE user record
+            # Use COALESCE to avoid overwriting existing values with NULL
+            await conn.execute(
+                """
+                INSERT INTO users (id, username, first_name, last_name, balance, created_at, updated_at, user_id)
+                VALUES ($1, $2, $3, $4, 0.00, NOW(), NOW(), $1)
+                ON CONFLICT (id) DO UPDATE SET
+                    username = CASE 
+                        WHEN EXCLUDED.username IS NOT NULL THEN EXCLUDED.username
+                        ELSE users.username
+                    END,
+                    first_name = CASE
+                        WHEN EXCLUDED.first_name IS NOT NULL THEN EXCLUDED.first_name
+                        ELSE users.first_name
+                    END,
+                    last_name = CASE
+                        WHEN EXCLUDED.last_name IS NOT NULL THEN EXCLUDED.last_name
+                        ELSE users.last_name
+                    END,
+                    updated_at = NOW()
+                """,
+                user_id, username, first_name, last_name
+            )
     
     async def get_user(self, user_id: int, upsert: bool = True) -> Dict[str, Any]:
         """Получить данные пользователя"""
@@ -371,10 +463,11 @@ class PostgresStorage(BaseStorage):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "queued"
     ) -> str:
         """Добавить задачу генерации"""
         job_id = task_id or str(uuid.uuid4())
+        normalized_status = normalize_job_status(status)
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             # Сохраняем task_id как external_task_id
@@ -383,7 +476,7 @@ class PostgresStorage(BaseStorage):
                 INSERT INTO generation_jobs (job_id, user_id, model_id, model_name, params, price, status, external_task_id)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
-                job_id, user_id, model_id, model_name, json.dumps(params), price, status, task_id
+                job_id, user_id, model_id, model_name, json.dumps(params), price, normalized_status, task_id
             )
         return job_id
     
@@ -397,8 +490,9 @@ class PostgresStorage(BaseStorage):
         """Обновить статус задачи"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
+            normalized_status = normalize_job_status(status)
             updates = ["status = $2"]
-            params = [job_id, status]
+            params = [job_id, normalized_status]
             
             if result_urls is not None:
                 updates.append("result_urls = $3")
@@ -423,7 +517,109 @@ class PostgresStorage(BaseStorage):
             if row:
                 return dict(row)
             return None
-    
+
+    async def find_job_by_task_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Найти задачу по внешнему task_id."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM generation_jobs WHERE external_task_id = $1 OR job_id = $1",
+                task_id
+            )
+            return dict(row) if row else None
+
+    async def try_acquire_delivery_lock(self, task_id: str, timeout_minutes: int = 5) -> Optional[Dict[str, Any]]:
+        """
+        Atomically acquire delivery lock for a task.
+        
+        Uses delivering_at as a lock mechanism to prevent race conditions between:
+        - callback + polling
+        - ACTIVE + PASSIVE instances
+        - multiple concurrent callbacks
+        
+        Args:
+            task_id: External task ID from Kie.ai
+            timeout_minutes: Consider stale if delivering_at older than this
+        
+        Returns:
+            Job dict if lock acquired (this instance won the race)
+            None if already delivered or another process is delivering
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # Atomic update: set delivering_at=NOW() only if not delivered and not currently delivering
+            # OR if delivering but stale (timeout_minutes passed)
+            row = await conn.fetchrow(
+                """
+                UPDATE generation_jobs
+                SET delivering_at = NOW()
+                WHERE (external_task_id = $1 OR job_id = $1)
+                  AND delivered_at IS NULL
+                  AND (
+                    delivering_at IS NULL
+                    OR delivering_at < NOW() - ($2 || ' minutes')::INTERVAL
+                  )
+                RETURNING *
+                """,
+                task_id,
+                timeout_minutes
+            )
+            return dict(row) if row else None
+
+    async def mark_delivered(self, task_id: str, success: bool = True, error: Optional[str] = None) -> None:
+        """
+        Mark job as delivered (or failed delivery).
+        
+        Args:
+            task_id: External task ID
+            success: True if delivery succeeded, False if failed
+            error: Error message if delivery failed
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            if success:
+                # Success: set delivered_at and clear delivering_at
+                await conn.execute(
+                    """
+                    UPDATE generation_jobs
+                    SET delivered_at = NOW(), 
+                        delivering_at = NULL,
+                        status = 'done'
+                    WHERE external_task_id = $1 OR job_id = $1
+                    """,
+                    task_id
+                )
+            else:
+                # Failed: clear delivering_at, save error, allow retry
+                await conn.execute(
+                    """
+                    UPDATE generation_jobs
+                    SET delivering_at = NULL,
+                        error_message = COALESCE(error_message, '') || $2
+                    WHERE external_task_id = $1 OR job_id = $1
+                    """,
+                    task_id,
+                    f"\n[DELIVERY_FAIL] {error}" if error else ""
+                )
+
+    async def get_undelivered_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get jobs that are done but not delivered to Telegram."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM generation_jobs
+                WHERE status = 'done'
+                  AND result_urls IS NOT NULL
+                  AND result_urls != ''
+                  AND result_urls != '[]'
+                ORDER BY created_at ASC
+                LIMIT $1
+                """,
+                limit
+            )
+            return [dict(row) for row in rows]
+
     async def list_jobs(
         self,
         user_id: Optional[int] = None,
@@ -431,6 +627,64 @@ class PostgresStorage(BaseStorage):
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """Получить список задач"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            query = "SELECT * FROM generation_jobs WHERE 1=1"
+            params = []
+    
+    # ==================== ORPHAN CALLBACKS (PHASE 4) ====================
+    
+    async def _save_orphan_callback(self, task_id: str, payload: Dict[str, Any]) -> None:
+        """Save orphan callback for later reconciliation"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO orphan_callbacks (task_id, payload, received_at, processed)
+                VALUES ($1, $2, NOW(), FALSE)
+                ON CONFLICT (task_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    received_at = EXCLUDED.received_at
+                """,
+                task_id, json.dumps(payload)
+            )
+    
+    async def _get_unprocessed_orphans(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get unprocessed orphan callbacks for reconciliation"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT task_id, payload, received_at
+                FROM orphan_callbacks
+                WHERE processed = FALSE
+                ORDER BY received_at ASC
+                LIMIT $1
+                """,
+                limit
+            )
+            return [dict(row) for row in rows]
+    
+    async def _mark_orphan_processed(self, task_id: str, error: Optional[str] = None) -> None:
+        """Mark orphan callback as processed"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE orphan_callbacks
+                SET processed = TRUE, processed_at = NOW(), error_message = $2
+                WHERE task_id = $1
+                """,
+                task_id, error
+            )
+    
+    async def list_jobs(
+        self,
+        user_id: Optional[int] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Получить список задач с фильтрацией и пагинацией"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             query = "SELECT * FROM generation_jobs WHERE 1=1"

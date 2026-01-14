@@ -6,29 +6,37 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
+from functools import lru_cache
+
+from app.kie.field_options import get_field_options
+from app.utils.webhook import build_kie_callback_url
 
 logger = logging.getLogger(__name__)
 
-# Загрузка source of truth
+# Загрузка source of truth с кэшированием
+@lru_cache(maxsize=1)
 def load_v4_source_of_truth() -> Dict[str, Any]:
     """
-    Load source of truth with new API architecture.
+    Load source of truth with new API architecture (cached for performance).
     
     Tries in order:
     1. models/kie_source_of_truth_v4.json (old name)
     2. models/KIE_SOURCE_OF_TRUTH.json (new canonical name)
     3. Fallback to stub
+    
+    Note: Cached with @lru_cache to avoid repeated file reads on hot path.
     """
     # Try old v4 path first (for backwards compatibility)
     v4_path_old = Path(__file__).parent.parent.parent / "models" / "kie_source_of_truth_v4.json"
     if v4_path_old.exists():
+        logger.info(f"✅ Loading SOURCE_OF_TRUTH (cached): {v4_path_old}")
         with open(v4_path_old, 'r', encoding='utf-8') as f:
             return json.load(f)
     
     # Try new canonical path
     sot_path = Path(__file__).parent.parent.parent / "models" / "KIE_SOURCE_OF_TRUTH.json"
     if sot_path.exists():
-        logger.info(f"✅ Using SOURCE_OF_TRUTH (v4 router): {sot_path}")
+        logger.info(f"✅ Loading SOURCE_OF_TRUTH (cached): {sot_path}")
         with open(sot_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     
@@ -69,6 +77,11 @@ def get_api_category_for_model(model_id: str, source_v4: Optional[Dict] = None) 
     return None
 
 
+def _default_callback_url() -> str:
+    """Return a real callback URL built from webhook env settings."""
+    return build_kie_callback_url()
+
+
 def build_category_payload(
     model_id: str, 
     user_inputs: Dict[str, Any],
@@ -77,12 +90,13 @@ def build_category_payload(
     """
     Build payload for category-specific API endpoint.
     
-    This is different from old universal createTask - each category
-    has its own payload format.
+    Handles both:
+    - Direct format: {prompt: "...", aspect_ratio: "1:1"}
+    - Wrapped format: {model: "z-image", input: {prompt: "...", aspect_ratio: "1:1"}, callBackUrl: "..."}
     
     Args:
         model_id: Model ID
-        user_inputs: User-provided inputs
+        user_inputs: User-provided inputs (should NOT include model/callBackUrl)
         source_v4: Optional pre-loaded v4 source of truth
     
     Returns:
@@ -110,31 +124,128 @@ def build_category_payload(
     
     category = model_schema.get('category') or model_schema.get('api_category')
     input_schema = model_schema.get('input_schema', {})
-    properties = input_schema.get('properties', {})
-    required_fields = input_schema.get('required', [])
     
-    # Build payload based on category
-    # CRITICAL: Always include model field for V4 API
-    payload = {'model': model_id}
+    # CRITICAL: input_schema in SOURCE_OF_TRUTH is PROPERTIES DIRECTLY, not {properties: ...}
+    # Check format
+    if 'properties' in input_schema and isinstance(input_schema['properties'], dict):
+        # Nested format: {properties: {...}, required: [...]}
+        properties = input_schema.get('properties', {})
+        required_fields = input_schema.get('required', [])
+    else:
+        # FLAT format (SOURCE_OF_TRUTH): input_schema IS properties dict directly
+        # Example: {'model': {...}, 'callBackUrl': {...}, 'input': {...}}
+        properties = input_schema
+        required_fields = [k for k, v in properties.items() if v.get('required', False)]
     
-    # Add required fields
-    for field in required_fields:
-        if field in user_inputs:
-            payload[field] = user_inputs[field]
-        elif field in properties and 'default' in properties[field]:
-            payload[field] = properties[field]['default']
-        else:
-            raise ValueError(f"Required field '{field}' missing for model {model_id}")
+    # CRITICAL: Filter out system fields from required - they're added by system
+    system_fields = {'model', 'callBackUrl', 'webhookUrl'}
+    user_required_fields = [f for f in required_fields if f not in system_fields]
     
-    # Add optional fields if provided
-    for field, field_schema in properties.items():
-        if field not in required_fields and field in user_inputs:
-            payload[field] = user_inputs[field]
-        elif field not in payload and 'default' in field_schema:
-            # Add defaults for optional fields
-            payload[field] = field_schema['default']
+    # IMPORTANT: Check if this is wrapped format (input field contains dict)
+    has_input_wrapper = False
+    actual_properties = properties
     
-    logger.info(f"Built {category} payload for {model_id}: {payload}")
+    if 'input' in properties and isinstance(properties['input'], dict):
+        input_field_spec = properties['input']
+        
+        # Check if input has examples
+        if 'examples' in input_field_spec and isinstance(input_field_spec['examples'], list):
+            examples = input_field_spec['examples']
+            if examples and isinstance(examples[0], dict):
+                # Extract field list from first example
+                example_structure = examples[0]
+                actual_properties = {}
+                for field_name, field_value in example_structure.items():
+                    # Infer type from example value
+                    if isinstance(field_value, bool):
+                        field_type = 'boolean'
+                    elif isinstance(field_value, str):
+                        field_type = 'string'
+                    elif isinstance(field_value, (int, float)):
+                        field_type = 'number'
+                    elif isinstance(field_value, dict):
+                        field_type = 'object'
+                    elif isinstance(field_value, list):
+                        field_type = 'array'
+                    else:
+                        field_type = 'string'
+                    
+                    actual_properties[field_name] = {
+                        'type': field_type,
+                        'required': False  # Conservative default
+                    }
+                
+                # Mark prompt as required if it exists
+                if 'prompt' in actual_properties:
+                    actual_properties['prompt']['required'] = True
+                
+                has_input_wrapper = True
+                logger.debug(f"Extracted input wrapper schema for {model_id}: {list(actual_properties.keys())}")
+        
+        elif 'properties' in input_field_spec:
+            # input has nested properties schema
+            actual_properties = input_field_spec['properties']
+            has_input_wrapper = True
+            logger.debug(f"Using nested input properties for {model_id}")
+    
+    # Build payload
+    payload = {
+        'model': model_id,
+        'callBackUrl': _default_callback_url(),
+    }
+    
+    # If wrapped format, add input container
+    if has_input_wrapper:
+        payload['input'] = {}
+    
+    # Process fields
+    user_field_names = set(actual_properties.keys()) - system_fields
+    
+    for field_name in user_field_names:
+        field_spec = actual_properties.get(field_name, {})
+        is_required = field_spec.get('required', False)
+        
+        if field_name in user_inputs:
+            value = user_inputs[field_name]
+            
+            # Validate enum constraints if present
+            field_enum = field_spec.get('enum')
+            if not field_enum:
+                # Check if field has predefined options
+                field_enum = get_field_options(model_id, field_name)
+                if field_enum:
+                    field_spec['enum'] = field_enum
+            
+            if field_enum and value not in field_enum:
+                logger.warning(
+                    f"Field '{field_name}' value '{value}' not in allowed options {field_enum} "
+                    f"for model {model_id}"
+                )
+            
+            if has_input_wrapper:
+                payload['input'][field_name] = value
+            else:
+                payload[field_name] = value
+        elif is_required and 'default' in field_spec:
+            default_value = field_spec['default']
+            if has_input_wrapper:
+                payload['input'][field_name] = default_value
+            else:
+                payload[field_name] = default_value
+        elif is_required:
+            logger.warning(f"Required field '{field_name}' missing for model {model_id}")
+    
+    logger.info(f"Built {category} payload for {model_id}: {list(payload.keys())}")
+    
+    # DETAILED LOGGING FOR DEBUGGING
+    logger.debug(f"  - has_input_wrapper: {has_input_wrapper}")
+    logger.debug(f"  - user_inputs keys: {list(user_inputs.keys())}")
+    if has_input_wrapper:
+        logger.debug(f"  - payload['input'] keys: {list(payload.get('input', {}).keys())}")
+        logger.debug(f"  - payload['input'] content: {payload.get('input', {})}")
+    else:
+        logger.debug(f"  - payload top-level keys: {[k for k in payload.keys() if k not in ['model', 'callBackUrl']]}")
+    
     return payload
 
 

@@ -1,0 +1,365 @@
+# PRODUCT TRUTH CONTRACT
+# Single source of truth for TRT (Telegram bot for KIE.ai image generation)
+# Version: 2.0.0
+# Last Updated: 2026-01-13
+# Status: PRODUCTION
+
+product:
+  name: "TRT"
+  full_name: "Telegram Render Tool (KIE.ai bot)"
+  version: "2.0.0"
+  environment: "production"  # dev | staging | production
+  market: "ru"  # Russian market (prices in RUB, Telegram Stars)
+
+entrypoint:
+  blessed_path: "main_render.py"
+  command: "python main_render.py"
+  runtime: "aiohttp + aiogram"
+  port_env: "PORT"  # Render provides PORT
+  forbidden_entrypoints:
+    - "bot_kie.py"  # Legacy PTB implementation
+    - "app/main.py"  # Old entrypoint
+    - "run_bot.py"  # Duplicate (quarantined)
+  startup_checks:
+    - "env_contract"
+    - "database_connection"
+    - "lock_availability"
+    - "webhook_setup"
+
+modes:
+  active:
+    description: "Holds PostgreSQL advisory lock, processes all updates"
+    capabilities:
+      - "webhook_management"
+      - "image_generation"
+      - "payment_processing"
+      - "database_writes"
+      - "admin_operations"
+    lock_required: true
+    
+  passive:
+    description: "No lock, fast-ack only for safe operations"
+    capabilities:
+      - "menu_display"
+      - "help_messages"
+      - "status_checks"
+      - "/start command"
+    forbidden_operations:
+      - "image_generation"
+      - "payment_processing"
+      - "balance_modifications"
+      - "webhook_changes"
+    ux_strategy: "REJECT"  # REJECT | HOLD
+    reject_message: "⏸️ Сервис обновляется. Попробуйте через минуту."
+    whitelist_callbacks:
+      - "main_menu"
+      - "back_to_menu"
+      - "help"
+      - "menu:*"
+
+routes:
+  health:
+    path: "/"
+    alt_path: "/health"
+    method: "GET"
+    response_schema:
+      status: "string"  # "ok"
+      uptime: "integer"
+      active: "boolean"
+      lock_state: "string"  # "ACTIVE" | "PASSIVE"
+      webhook_mode: "boolean"
+      lock_acquired: "boolean"
+      lock_holder_pid: "integer|null"
+      lock_idle_duration: "float|null"
+      lock_heartbeat_age: "float|null"
+      lock_takeover_event: "object|null"
+      db_schema_ready: "boolean"
+      queue_depth: "integer"
+      queue:
+        total_received: "integer"
+        total_processed: "integer"
+        queue_depth: "integer"
+        drop_rate: "float"
+    sla_ms: 300
+    
+  webhook:
+    path: "/webhook/{secret}"
+    method: "POST"
+    fast_ack_sla_ms: 500  # MUST return 200 within 500ms
+    deduplication: "update_id"
+    queue_max_size: 100
+    workers: 4
+    
+  kie_callback:
+    path: "/kie-callback"
+    method: "POST"
+    description: "KIE.ai payment webhook"
+    verification: "signature_check"
+
+env_contract:
+  required:
+    TELEGRAM_BOT_TOKEN:
+      type: "string"
+      pattern: "^[0-9]+:[A-Za-z0-9_-]+"
+      sensitive: true
+      
+    DATABASE_URL:
+      type: "string"
+      pattern: "^postgres(ql)?://"
+      sensitive: true
+      example: "postgresql://user:pass@host:5432/dbname"
+      
+    RENDER_EXTERNAL_URL:
+      type: "string"
+      pattern: "^https://"
+      example: "https://five656.onrender.com"
+      
+  optional:
+    BOT_MODE:
+      type: "string"
+      default: "webhook"
+      allowed: ["webhook", "polling"]
+      
+    LOCK_WAIT_SECONDS:
+      type: "integer"
+      default: 60
+      min: 10
+      max: 300
+      
+    LOCK_MODE:
+      type: "string"
+      default: "wait_then_passive"
+      allowed: ["wait_then_passive", "wait_then_force"]
+      
+    PASSIVE_MODE:
+      type: "string"
+      default: "REJECT"
+      allowed: ["REJECT", "HOLD"]
+      
+    KIE_API_KEY:
+      type: "string"
+      sensitive: true
+      required_for_active: true
+      
+  forbidden:
+    - "USE_PTB"  # Legacy python-telegram-bot flag
+    - "POLLING_MODE"  # Use BOT_MODE instead
+    - "LOCAL_LOCK_FILE"  # Only PostgreSQL advisory lock in prod
+
+database:
+  pool_min: 2
+  pool_max: 20
+  connection_timeout_sec: 10
+  query_timeout_sec: 30
+  idle_timeout_sec: 600
+  
+  migrations:
+    directory: "migrations"
+    idempotency: "IF NOT EXISTS"
+    required_tables:
+      - "user_balances"
+      - "transactions"
+      - "jobs"
+      - "lock_heartbeat"
+      
+  lock:
+    mechanism: "pg_advisory_lock"
+    parameters: 2  # classid, objid
+    parameter_type: "int32"  # signed int32 (-2^31 to 2^31-1)
+    heartbeat_interval_sec: 15
+    stale_idle_sec: 30
+    stale_heartbeat_sec: 45
+
+queue:
+  implementation: "asyncio.Queue"
+  max_size: 100
+  workers: 4
+  fast_ack_pattern: true
+  deduplication: "update_id"
+  drop_policy: "drop_oldest_on_full"
+  metrics:
+    - "total_received"
+    - "total_processed"
+    - "total_dropped"
+    - "queue_depth"
+    - "drop_rate"
+
+observability:
+  log_format: "structured"
+  log_level: "INFO"
+  log_tags:
+    - "[LOCK]"
+    - "[WEBHOOK]"
+    - "[QUEUE]"
+    - "[DB]"
+    - "[PASSIVE_REJECT]"
+    
+  forbidden_log_patterns:
+    - pattern: "TypeError.*Decimal.*not JSON serializable"
+      severity: "P0"
+      description: "PostgreSQL EXTRACT(EPOCH) not converted to float"
+      
+    - pattern: "function pg_try_advisory_lock\\(integer, bigint\\) does not exist"
+      severity: "P0"
+      description: "Advisory lock parameter type mismatch"
+      
+    - pattern: "OID out of range"
+      severity: "P0"
+      description: "Unsigned int overflow in PostgreSQL OID field"
+      
+    - pattern: "Error handling request"
+      severity: "P0"
+      max_occurrences_per_10min: 0
+      description: "Unhandled exception in aiohttp handler"
+      
+    - pattern: "UnboundLocalError.*cannot access local variable 'time'"
+      severity: "P0"
+      description: "Duplicate import time inside function shadows global import"
+      
+    - pattern: "asyncpg.*the server expects .* argument.* for this query, .* were passed"
+      severity: "P0"
+      description: "asyncpg parameter count mismatch - check SQL INTERVAL syntax"
+      
+    - pattern: "ImportError.*cannot import name 'bot' from 'main_render'"
+      severity: "P1"
+      description: "Circular import or bot not exported - use get_queue_manager().get_bot() instead"
+      
+    - pattern: "NotNullViolationError.*null value in column .* violates not-null constraint"
+      severity: "P0"
+      description: "Database INSERT missing required field - check schema vs INSERT columns"
+      
+    - pattern: "TelegramBadRequest.*can't parse entities"
+      severity: "P1"
+      description: "Invalid HTML entities in message - use bot/utils/html_safe.py helpers"
+      example_fix: "Replace ₽ with 'руб.', use escape_html() for user content"
+    
+    - pattern: "Input validation failed.*Missing required field"
+      severity: "P0"
+      description: "Model parameter validation error - check app/kie/model_defaults.py"
+      example_fix: "Add default value in MODEL_DEFAULTS for missing required field"
+    
+    - pattern: "Invalid value for .* Must be one of"
+      severity: "P0"
+      description: "Enum value mismatch - check app/kie/field_options.py mapping"
+      example_fix: "Update FIELD_OPTIONS with correct enum values from KIE API error"
+    
+    - pattern: "aspect_ratio is not within the range of allowed options"
+      severity: "P0"
+      description: "aspect_ratio enum mismatch - check SOURCE_OF_TRUTH for correct values"
+      example_fix: "Add model-specific aspect_ratio mapping in field_options.py"
+      
+  rate_limits:
+    duplicate_error_same_type: "1/30s"  # Max 1 identical error per 30 seconds
+    lock_held_spam: "1/30s"
+    
+  never_log:
+    - "TELEGRAM_BOT_TOKEN"
+    - "DATABASE_URL"
+    - "KIE_API_KEY"
+    - "user passwords"
+    - "payment card numbers"
+
+security:
+  webhook_secret_required: true
+  kie_callback_signature_check: true
+  admin_ids_env: "ADMIN_IDS"
+  rate_limiting: true
+  ddos_protection: true
+  
+  forbidden_in_passive:
+    - "database writes (except read-only queries)"
+    - "external API calls (KIE.ai)"
+    - "webhook modifications"
+    - "payment processing"
+
+legacy:
+  quarantine_directory: "quarantine"
+  quarantined_files:
+    - "quarantine/legacy-20260113-run_bot.py"
+    - "legacy/SOURCE_OF_TRUTH.json"
+  forbidden_imports:
+    - "from bot_kie import *"
+    - "from run_bot import *"
+  verification: "scripts/verify.py checks no legacy imports in blessed path"
+
+invariants:
+  - "main_render.py is the ONLY production entrypoint"
+  - "All PostgreSQL advisory lock parameters are signed int32"
+  - "All callback_query updates receive answer_callback_query within 1 second"
+  - "Webhook handler returns 200 OK within 500ms"
+  - "PASSIVE mode never modifies database/webhook/external APIs"
+  - "All EXTRACT(EPOCH) results converted to float before JSON serialization"
+  - "UpdateQueueManager is singleton"
+  - "DatabaseService connection pool managed by app lifecycle"
+  - "All DDL migrations use IF NOT EXISTS"
+  - "No wildcard imports in production code"
+  - "Single source of truth: product/truth.yaml only"
+
+smoke_scenarios:
+  S0_health:
+    description: "Health endpoint responds with valid JSON"
+    endpoint: "/health"
+    expected_status: 200
+    required_fields: ["status", "uptime", "active", "lock_state", "queue"]
+    
+  S1_bot_responsive:
+    description: "Bot responds to /start"
+    method: "telegram_api"
+    command: "/start"
+    max_response_time_sec: 3
+    
+  S2_storage:
+    description: "Database accessible (read/write)"
+    checks: ["connection", "simple_query", "migration_status"]
+    
+  S3_webhook_fast_ack:
+    description: "Webhook returns 200 within 500ms"
+    path: "/webhook/{secret}"
+    method: "POST"
+    max_response_time_ms: 500
+    
+  S4_passive_ux:
+    description: "PASSIVE mode rejects unsafe operations gracefully"
+    condition: "lock_state=PASSIVE"
+    whitelist: ["/start", "main_menu"]
+    reject_message: "⏸️ Сервис обновляется"
+    max_response_time_sec: 1
+    
+  S5_active_generation:
+    description: "ACTIVE mode allows image generation"
+    condition: "lock_state=ACTIVE"
+    operations: ["image_generation", "payment_processing"]
+    
+  S6_idempotency:
+    description: "Same update_id processed only once"
+    test: "duplicate_update_id"
+    expected: "second_request_ignored"
+    
+  S7_no_crash:
+    description: "Exception does not kill process"
+    test: "inject_exception_in_handler"
+    expected: "process_continues_running"
+    
+  S8_cold_start:
+    description: "Service starts within 60 seconds"
+    max_startup_time_sec: 60
+    checks: ["lock_acquisition", "db_migration", "webhook_setup"]
+
+release_checklist:
+  - "scripts/verify.py PASS"
+  - "scripts/smoke.py PASS (S0-S8)"
+  - "pytest (lock mechanism tests) 11/11 PASS"
+  - "Git commit with PROOF tag"
+  - "Render deploy triggered"
+  - "Wait 2-3 minutes for build"
+  - "smoke.py --url https://five656.onrender.com PASS"
+  - "Wait 10 minutes, check logs for 0 ERROR"
+  - "Tag stable-firebreak-N if all green"
+
+definition_of_done:
+  - "product/truth.yaml exists and describes all contracts"
+  - "scripts/verify.py and scripts/smoke.py GREEN in CI"
+  - "5 consecutive deploys without ERROR/Traceback loops"
+  - "/health shows correct state (ACTIVE/PASSIVE, queue, db, version)"
+  - "PASSIVE mode: fast responses + clear unsafe operation blocks"
+  - "ACTIVE mode: end-to-end user journey works (start → generate → result)"

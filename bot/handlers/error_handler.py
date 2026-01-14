@@ -34,8 +34,43 @@ async def global_error_handler(event: ErrorEvent):
     exception = event.exception
     update = event.update
     
-    # Log error for debugging (with full stacktrace)
-    logger.error(f"Error in update {update.update_id}: {exception}", exc_info=exception)
+    # Детальное логирование для диагностики
+    user_id = None
+    username = None
+    error_context = {}
+    
+    if update.message:
+        user_id = update.message.from_user.id
+        username = update.message.from_user.username
+        error_context = {
+            "message_id": update.message.message_id,
+            "text": update.message.text[:100] if update.message.text else None,
+            "chat_id": update.message.chat.id
+        }
+    elif update.callback_query:
+        user_id = update.callback_query.from_user.id
+        username = update.callback_query.from_user.username
+        error_context = {
+            "callback_data": update.callback_query.data,
+            "message_id": update.callback_query.message.message_id if update.callback_query.message else None
+        }
+    
+    # Расширенное логирование с контекстом
+    logger.error(
+        f"🔴 ERROR | Update {update.update_id} | "
+        f"User {user_id} (@{username}) | "
+        f"Type: {type(exception).__name__} | "
+        f"Message: {str(exception)[:200]} | "
+        f"Context: {error_context}",
+        exc_info=exception,
+        extra={
+            "update_id": update.update_id,
+            "user_id": user_id,
+            "username": username,
+            "error_type": type(exception).__name__,
+            "context": error_context
+        }
+    )
     
     # User-friendly error message (no stacktrace)
     # Определяем тип ошибки для более понятного сообщения
@@ -55,9 +90,9 @@ async def global_error_handler(event: ErrorEvent):
         )
     else:
         error_message = (
-            "⚠️ <b>Что-то пошло не так</b>\n\n"
-            "Мы уже знаем об этой проблеме и работаем над исправлением.\n\n"
-            "💡 Попробуйте:\n"
+            "⚠️ <b>Произошла ошибка</b>\n\n"
+            "Мы уже работаем над исправлением.\n\n"
+            "💡 <b>Попробуйте:</b>\n"
             "• Повторить действие\n"
             "• Нажать /start для главного меню\n"
             "• Обратиться в поддержку, если проблема повторяется"

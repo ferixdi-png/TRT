@@ -1,0 +1,1266 @@
+{
+  "total_models": 72,
+  "categories": {
+    "image": [
+      "bytedance/seedream",
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/seedream-v4-edit",
+      "z-image",
+      "google/imagen4-fast",
+      "google/imagen4-ultra",
+      "google/imagen4",
+      "nano-banana-pro",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "flux-2/flex-image-to-image",
+      "flux-2/flex-text-to-image",
+      "grok-imagine/text-to-image",
+      "qwen/text-to-image",
+      "qwen/image-to-image",
+      "qwen/image-edit",
+      "grok-imagine/image-to-video",
+      "kling-2.6/image-to-video",
+      "kling/v2-1-master-image-to-video",
+      "bytedance/v1-pro-fast-image-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "bytedance/v1-lite-image-to-video",
+      "sora-2-image-to-video",
+      "sora-2-pro-image-to-video",
+      "wan/2-6-image-to-video",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "kling/v2-5-turbo-image-to-video-pro"
+    ],
+    "other": [
+      "google/nano-banana-edit",
+      "google/nano-banana",
+      "ideogram/v3-reframe",
+      "ideogram/character-edit",
+      "ideogram/character-remix",
+      "ideogram/character",
+      "sora-2-pro-storyboard/index",
+      "sora-2-characters"
+    ],
+    "enhance": [
+      "grok-imagine/upscale",
+      "topaz/image-upscale",
+      "recraft/remove-background",
+      "recraft/crisp-upscale",
+      "sora-watermark-remover",
+      "topaz/video-upscale"
+    ],
+    "video": [
+      "grok-imagine/text-to-video",
+      "kling-2.6/text-to-video",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-standard",
+      "bytedance/v1-pro-text-to-video",
+      "bytedance/v1-lite-text-to-video",
+      "hailuo/2-3-image-to-video-pro",
+      "hailuo/2-3-image-to-video-standard",
+      "hailuo/02-text-to-video-pro",
+      "hailuo/02-text-to-video-standard",
+      "hailuo/02-image-to-video-pro",
+      "hailuo/02-image-to-video-standard",
+      "sora-2-text-to-video",
+      "sora-2-pro-text-to-video",
+      "wan/2-6-text-to-video",
+      "wan/2-6-video-to-video",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "wan/2-2-animate-move",
+      "wan/2-2-animate-replace",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "veo3_fast"
+    ],
+    "avatar": [
+      "kling/ai-avatar-v1-pro",
+      "kling/v1-avatar-standard"
+    ],
+    "music": [
+      "infinitalk/from-audio",
+      "elevenlabs/audio-isolation"
+    ],
+    "audio": [
+      "elevenlabs/text-to-speech-turbo-2-5",
+      "elevenlabs/speech-to-text",
+      "elevenlabs/sound-effect-v2",
+      "V4"
+    ]
+  },
+  "free_models": [
+    "z-image",
+    "qwen/text-to-image",
+    "qwen/image-to-image",
+    "qwen/image-edit"
+  ],
+  "paid_models": [
+    "bytedance/seedream",
+    "bytedance/seedream-v4-text-to-image",
+    "bytedance/seedream-v4-edit",
+    "google/imagen4-fast",
+    "google/imagen4-ultra",
+    "google/imagen4",
+    "google/nano-banana-edit",
+    "google/nano-banana",
+    "nano-banana-pro",
+    "flux-2/pro-image-to-image",
+    "flux-2/pro-text-to-image",
+    "flux-2/flex-image-to-image",
+    "flux-2/flex-text-to-image",
+    "grok-imagine/text-to-image",
+    "grok-imagine/upscale",
+    "topaz/image-upscale",
+    "recraft/remove-background",
+    "recraft/crisp-upscale",
+    "ideogram/v3-reframe",
+    "ideogram/character-edit",
+    "ideogram/character-remix",
+    "ideogram/character",
+    "grok-imagine/text-to-video",
+    "grok-imagine/image-to-video",
+    "kling-2.6/text-to-video",
+    "kling-2.6/image-to-video",
+    "kling/ai-avatar-v1-pro",
+    "kling/v1-avatar-standard",
+    "kling/v2-1-master-image-to-video",
+    "kling/v2-1-master-text-to-video",
+    "kling/v2-1-pro",
+    "kling/v2-1-standard",
+    "bytedance/v1-pro-fast-image-to-video",
+    "bytedance/v1-pro-image-to-video",
+    "bytedance/v1-pro-text-to-video",
+    "bytedance/v1-lite-image-to-video",
+    "bytedance/v1-lite-text-to-video",
+    "hailuo/2-3-image-to-video-pro",
+    "hailuo/2-3-image-to-video-standard",
+    "hailuo/02-text-to-video-pro",
+    "hailuo/02-text-to-video-standard",
+    "hailuo/02-image-to-video-pro",
+    "hailuo/02-image-to-video-standard",
+    "sora-2-image-to-video",
+    "sora-2-text-to-video",
+    "sora-2-pro-image-to-video",
+    "sora-2-pro-text-to-video",
+    "sora-watermark-remover",
+    "sora-2-pro-storyboard/index",
+    "sora-2-characters",
+    "wan/2-6-image-to-video",
+    "wan/2-6-text-to-video",
+    "wan/2-6-video-to-video",
+    "wan/2-2-a14b-image-to-video-turbo",
+    "wan/2-2-a14b-text-to-video-turbo",
+    "wan/2-2-animate-move",
+    "wan/2-2-animate-replace",
+    "wan/2-2-a14b-speech-to-video-turbo",
+    "topaz/video-upscale",
+    "infinitalk/from-audio",
+    "elevenlabs/text-to-speech-turbo-2-5",
+    "elevenlabs/speech-to-text",
+    "elevenlabs/sound-effect-v2",
+    "elevenlabs/audio-isolation",
+    "kling/v2-5-turbo-image-to-video-pro",
+    "kling/v2-5-turbo-text-to-video-pro",
+    "veo3_fast",
+    "V4"
+  ],
+  "models_by_provider": {
+    "seedream": [
+      "bytedance/seedream",
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/seedream-v4-edit"
+    ],
+    "z-image": [
+      "z-image"
+    ],
+    "google": [
+      "google/imagen4-fast",
+      "google/imagen4-ultra",
+      "google/imagen4",
+      "google/nano-banana-edit",
+      "google/nano-banana",
+      "nano-banana-pro",
+      "veo3_fast"
+    ],
+    "flux2": [
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "flux-2/flex-image-to-image",
+      "flux-2/flex-text-to-image"
+    ],
+    "grok-imagine": [
+      "grok-imagine/text-to-image",
+      "grok-imagine/upscale",
+      "grok-imagine/text-to-video",
+      "grok-imagine/image-to-video"
+    ],
+    "topaz": [
+      "topaz/image-upscale",
+      "topaz/video-upscale"
+    ],
+    "recraft": [
+      "recraft/remove-background",
+      "recraft/crisp-upscale"
+    ],
+    "ideogram": [
+      "ideogram/v3-reframe",
+      "ideogram/character-edit",
+      "ideogram/character-remix",
+      "ideogram/character"
+    ],
+    "qwen": [
+      "qwen/text-to-image",
+      "qwen/image-to-image",
+      "qwen/image-edit"
+    ],
+    "kling": [
+      "kling-2.6/text-to-video",
+      "kling-2.6/image-to-video",
+      "kling/ai-avatar-v1-pro",
+      "kling/v1-avatar-standard",
+      "kling/v2-1-master-image-to-video",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-standard",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/v2-5-turbo-text-to-video-pro"
+    ],
+    "bytedance": [
+      "bytedance/v1-pro-fast-image-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "bytedance/v1-pro-text-to-video",
+      "bytedance/v1-lite-image-to-video",
+      "bytedance/v1-lite-text-to-video"
+    ],
+    "hailuo": [
+      "hailuo/2-3-image-to-video-pro",
+      "hailuo/2-3-image-to-video-standard",
+      "hailuo/02-text-to-video-pro",
+      "hailuo/02-text-to-video-standard",
+      "hailuo/02-image-to-video-pro",
+      "hailuo/02-image-to-video-standard"
+    ],
+    "sora2": [
+      "sora-2-image-to-video",
+      "sora-2-text-to-video",
+      "sora-2-pro-image-to-video",
+      "sora-2-pro-text-to-video",
+      "sora-watermark-remover",
+      "sora-2-characters"
+    ],
+    "sora-2-pro-storyboard": [
+      "sora-2-pro-storyboard/index"
+    ],
+    "wan": [
+      "wan/2-6-image-to-video",
+      "wan/2-6-text-to-video",
+      "wan/2-6-video-to-video",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "wan/2-2-animate-move",
+      "wan/2-2-animate-replace",
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "infinitalk": [
+      "infinitalk/from-audio"
+    ],
+    "elevenlabs": [
+      "elevenlabs/text-to-speech-turbo-2-5",
+      "elevenlabs/speech-to-text",
+      "elevenlabs/sound-effect-v2",
+      "elevenlabs/audio-isolation"
+    ],
+    "suno": [
+      "V4"
+    ]
+  },
+  "input_patterns": {
+    "prompt": [
+      "hailuo/02-image-to-video-standard",
+      "bytedance/v1-pro-fast-image-to-video",
+      "kling/v2-1-standard",
+      "flux-2/flex-text-to-image",
+      "sora-2-text-to-video",
+      "hailuo/02-text-to-video-standard",
+      "flux-2/flex-image-to-image",
+      "google/nano-banana-edit",
+      "kling/v1-avatar-standard",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "qwen/text-to-image",
+      "kling-2.6/image-to-video",
+      "grok-imagine/text-to-video",
+      "nano-banana-pro",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "google/imagen4-ultra",
+      "google/imagen4",
+      "ideogram/character",
+      "sora-2-pro-text-to-video",
+      "wan/2-6-video-to-video",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "grok-imagine/image-to-video",
+      "kling-2.6/text-to-video",
+      "google/nano-banana",
+      "qwen/image-to-image",
+      "bytedance/v1-lite-image-to-video",
+      "z-image",
+      "bytedance/seedream-v4-text-to-image",
+      "hailuo/2-3-image-to-video-pro",
+      "hailuo/2-3-image-to-video-standard",
+      "bytedance/seedream",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "sora-2-pro-image-to-video",
+      "wan/2-6-image-to-video",
+      "kling/ai-avatar-v1-pro",
+      "ideogram/character-remix",
+      "bytedance/v1-pro-image-to-video",
+      "kling/v2-1-master-image-to-video",
+      "ideogram/character-edit",
+      "google/imagen4-fast",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "hailuo/02-image-to-video-pro",
+      "bytedance/v1-lite-text-to-video",
+      "wan/2-6-text-to-video",
+      "qwen/image-edit",
+      "grok-imagine/text-to-image",
+      "sora-2-image-to-video",
+      "bytedance/v1-pro-text-to-video",
+      "bytedance/seedream-v4-edit",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "infinitalk/from-audio",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "hailuo/02-text-to-video-pro"
+    ],
+    "image_size": [
+      "qwen/text-to-image",
+      "bytedance/seedream-v4-text-to-image",
+      "qwen/image-edit",
+      "ideogram/v3-reframe",
+      "bytedance/seedream",
+      "ideogram/character",
+      "ideogram/character-remix",
+      "bytedance/seedream-v4-edit",
+      "google/nano-banana-edit",
+      "google/nano-banana"
+    ],
+    "guidance_scale": [
+      "qwen/text-to-image",
+      "qwen/image-edit",
+      "bytedance/seedream",
+      "qwen/image-to-image",
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "enable_safety_checker": [
+      "qwen/text-to-image",
+      "bytedance/v1-lite-text-to-video",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "qwen/image-edit",
+      "bytedance/seedream",
+      "bytedance/v1-pro-text-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "qwen/image-to-image",
+      "bytedance/v1-lite-image-to-video"
+    ],
+    "image_resolution": [
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/seedream-v4-edit"
+    ],
+    "max_images": [
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/seedream-v4-edit"
+    ],
+    "image_urls": [
+      "kling-2.6/image-to-video",
+      "sora-2-pro-image-to-video",
+      "sora-2-image-to-video",
+      "wan/2-6-image-to-video",
+      "ideogram/character-remix",
+      "bytedance/seedream-v4-edit",
+      "google/nano-banana-edit",
+      "grok-imagine/image-to-video"
+    ],
+    "aspect_ratio": [
+      "flux-2/flex-text-to-image",
+      "sora-2-text-to-video",
+      "flux-2/flex-image-to-image",
+      "grok-imagine/text-to-video",
+      "nano-banana-pro",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "google/imagen4-ultra",
+      "google/imagen4",
+      "sora-2-pro-text-to-video",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "kling-2.6/text-to-video",
+      "z-image",
+      "sora-2-pro-image-to-video",
+      "google/imagen4-fast",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "bytedance/v1-lite-text-to-video",
+      "grok-imagine/text-to-image",
+      "sora-2-image-to-video",
+      "bytedance/v1-pro-text-to-video",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-5-turbo-text-to-video-pro"
+    ],
+    "negative_prompt": [
+      "google/imagen4-fast",
+      "qwen/text-to-image",
+      "qwen/image-edit",
+      "kling/v2-1-standard",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "google/imagen4-ultra",
+      "ideogram/character",
+      "ideogram/character-remix",
+      "google/imagen4",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-master-image-to-video",
+      "qwen/image-to-image",
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "num_images": [
+      "google/imagen4-fast",
+      "ideogram/v3-reframe",
+      "google/imagen4",
+      "ideogram/character",
+      "ideogram/character-remix",
+      "ideogram/character-edit"
+    ],
+    "seed": [
+      "ideogram/v3-reframe",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "google/imagen4-ultra",
+      "google/imagen4",
+      "bytedance/v1-pro-text-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "bytedance/v1-lite-image-to-video"
+    ],
+    "output_format": [
+      "qwen/text-to-image",
+      "qwen/image-edit",
+      "nano-banana-pro",
+      "google/nano-banana-edit",
+      "elevenlabs/sound-effect-v2",
+      "google/nano-banana",
+      "qwen/image-to-image"
+    ],
+    "image_input": [
+      "nano-banana-pro"
+    ],
+    "resolution": [
+      "hailuo/02-image-to-video-standard",
+      "bytedance/v1-pro-fast-image-to-video",
+      "wan/2-2-animate-replace",
+      "flux-2/flex-text-to-image",
+      "flux-2/flex-image-to-image",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "wan/2-2-animate-move",
+      "nano-banana-pro",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "wan/2-6-video-to-video",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "bytedance/v1-lite-image-to-video",
+      "hailuo/2-3-image-to-video-pro",
+      "hailuo/2-3-image-to-video-standard",
+      "wan/2-6-image-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "bytedance/v1-lite-text-to-video",
+      "wan/2-6-text-to-video",
+      "bytedance/v1-pro-text-to-video",
+      "infinitalk/from-audio"
+    ],
+    "input_urls": [
+      "flux-2/pro-image-to-image",
+      "flux-2/flex-image-to-image"
+    ],
+    "task_id": [
+      "grok-imagine/upscale"
+    ],
+    "image_url": [
+      "hailuo/02-image-to-video-standard",
+      "bytedance/v1-pro-fast-image-to-video",
+      "kling/v2-1-standard",
+      "wan/2-2-animate-replace",
+      "kling/v1-avatar-standard",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "wan/2-2-animate-move",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "qwen/image-to-image",
+      "bytedance/v1-lite-image-to-video",
+      "hailuo/2-3-image-to-video-pro",
+      "hailuo/2-3-image-to-video-standard",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/ai-avatar-v1-pro",
+      "ideogram/character-remix",
+      "bytedance/v1-pro-image-to-video",
+      "kling/v2-1-master-image-to-video",
+      "ideogram/character-edit",
+      "hailuo/02-image-to-video-pro",
+      "qwen/image-edit",
+      "ideogram/v3-reframe",
+      "kling/v2-1-pro",
+      "topaz/image-upscale",
+      "infinitalk/from-audio"
+    ],
+    "upscale_factor": [
+      "topaz/video-upscale",
+      "topaz/image-upscale"
+    ],
+    "image": [
+      "recraft/crisp-upscale",
+      "recraft/remove-background"
+    ],
+    "rendering_speed": [
+      "ideogram/character",
+      "ideogram/v3-reframe",
+      "ideogram/character-edit",
+      "ideogram/character-remix"
+    ],
+    "style": [
+      "elevenlabs/text-to-speech-turbo-2-5",
+      "ideogram/v3-reframe",
+      "ideogram/character",
+      "ideogram/character-remix",
+      "ideogram/character-edit"
+    ],
+    "mask_url": [
+      "ideogram/character-edit"
+    ],
+    "reference_image_urls": [
+      "ideogram/character",
+      "ideogram/character-remix",
+      "ideogram/character-edit"
+    ],
+    "expand_prompt": [
+      "ideogram/character",
+      "ideogram/character-remix",
+      "ideogram/character-edit"
+    ],
+    "strength": [
+      "ideogram/character-remix",
+      "qwen/image-to-image"
+    ],
+    "reference_mask_urls": [
+      "ideogram/character-remix"
+    ],
+    "num_inference_steps": [
+      "qwen/image-edit",
+      "qwen/text-to-image",
+      "qwen/image-to-image",
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "acceleration": [
+      "qwen/text-to-image",
+      "qwen/image-edit",
+      "wan/2-2-a14b-image-to-video-turbo",
+      "wan/2-2-a14b-text-to-video-turbo",
+      "qwen/image-to-image"
+    ],
+    "sync_mode": [
+      "qwen/image-edit"
+    ],
+    "mode": [
+      "grok-imagine/image-to-video",
+      "grok-imagine/text-to-video"
+    ],
+    "sound": [
+      "kling-2.6/text-to-video",
+      "kling-2.6/image-to-video"
+    ],
+    "duration": [
+      "hailuo/02-image-to-video-standard",
+      "bytedance/v1-pro-fast-image-to-video",
+      "kling/v2-1-standard",
+      "hailuo/02-text-to-video-standard",
+      "kling-2.6/image-to-video",
+      "wan/2-6-video-to-video",
+      "kling-2.6/text-to-video",
+      "bytedance/v1-lite-image-to-video",
+      "hailuo/2-3-image-to-video-pro",
+      "hailuo/2-3-image-to-video-standard",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "wan/2-6-image-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "kling/v2-1-master-image-to-video",
+      "bytedance/v1-lite-text-to-video",
+      "wan/2-6-text-to-video",
+      "bytedance/v1-pro-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-5-turbo-text-to-video-pro"
+    ],
+    "audio_url": [
+      "elevenlabs/audio-isolation",
+      "kling/ai-avatar-v1-pro",
+      "elevenlabs/speech-to-text",
+      "infinitalk/from-audio",
+      "kling/v1-avatar-standard",
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "cfg_scale": [
+      "kling/v2-1-standard",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "kling/v2-1-pro",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-master-image-to-video"
+    ],
+    "tail_image_url": [
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/v2-1-pro"
+    ],
+    "camera_fixed": [
+      "bytedance/v1-lite-text-to-video",
+      "bytedance/v1-pro-text-to-video",
+      "bytedance/v1-pro-image-to-video",
+      "bytedance/v1-lite-image-to-video"
+    ],
+    "end_image_url": [
+      "hailuo/02-image-to-video-standard",
+      "hailuo/02-image-to-video-pro",
+      "bytedance/v1-lite-image-to-video"
+    ],
+    "prompt_optimizer": [
+      "hailuo/02-image-to-video-standard",
+      "hailuo/02-text-to-video-standard",
+      "hailuo/02-text-to-video-pro",
+      "hailuo/02-image-to-video-pro"
+    ],
+    "n_frames": [
+      "sora-2-image-to-video",
+      "sora-2-pro-text-to-video",
+      "sora-2-text-to-video",
+      "sora-2-pro-image-to-video"
+    ],
+    "remove_watermark": [
+      "sora-2-image-to-video",
+      "sora-2-pro-text-to-video",
+      "sora-2-text-to-video",
+      "sora-2-pro-image-to-video"
+    ],
+    "character_id_list": [
+      "sora-2-image-to-video",
+      "sora-2-pro-text-to-video",
+      "sora-2-text-to-video",
+      "sora-2-pro-image-to-video"
+    ],
+    "size": [
+      "sora-2-pro-text-to-video",
+      "sora-2-pro-image-to-video"
+    ],
+    "video_url": [
+      "topaz/video-upscale",
+      "sora-watermark-remover",
+      "wan/2-2-animate-replace",
+      "wan/2-2-animate-move"
+    ],
+    "character_file_url": [
+      "sora-2-characters"
+    ],
+    "character_prompt": [
+      "sora-2-characters"
+    ],
+    "safety_instruction": [
+      "sora-2-characters"
+    ],
+    "video_urls": [
+      "wan/2-6-video-to-video"
+    ],
+    "enable_prompt_expansion": [
+      "wan/2-2-a14b-image-to-video-turbo",
+      "wan/2-2-a14b-text-to-video-turbo"
+    ],
+    "num_frames": [
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "frames_per_second": [
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "shift": [
+      "wan/2-2-a14b-speech-to-video-turbo"
+    ],
+    "text": [
+      "elevenlabs/text-to-speech-turbo-2-5",
+      "elevenlabs/sound-effect-v2"
+    ],
+    "voice": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "stability": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "similarity_boost": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "speed": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "timestamps": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "previous_text": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "next_text": [
+      "elevenlabs/text-to-speech-turbo-2-5"
+    ],
+    "language_code": [
+      "elevenlabs/text-to-speech-turbo-2-5",
+      "elevenlabs/speech-to-text"
+    ],
+    "tag_audio_events": [
+      "elevenlabs/speech-to-text"
+    ],
+    "diarize": [
+      "elevenlabs/speech-to-text"
+    ],
+    "loop": [
+      "elevenlabs/sound-effect-v2"
+    ],
+    "prompt_influence": [
+      "elevenlabs/sound-effect-v2"
+    ]
+  },
+  "required_inputs_by_model": {
+    "bytedance/seedream": [
+      "prompt",
+      "image_size",
+      "guidance_scale",
+      "enable_safety_checker"
+    ],
+    "bytedance/seedream-v4-text-to-image": [
+      "prompt",
+      "image_size",
+      "image_resolution",
+      "max_images"
+    ],
+    "bytedance/seedream-v4-edit": [
+      "prompt",
+      "image_urls",
+      "image_size",
+      "image_resolution",
+      "max_images"
+    ],
+    "z-image": [
+      "prompt",
+      "aspect_ratio"
+    ],
+    "google/imagen4-fast": [
+      "prompt",
+      "negative_prompt",
+      "aspect_ratio",
+      "num_images"
+    ],
+    "google/imagen4-ultra": [
+      "prompt",
+      "negative_prompt",
+      "aspect_ratio",
+      "seed"
+    ],
+    "google/imagen4": [
+      "prompt",
+      "negative_prompt",
+      "aspect_ratio",
+      "num_images",
+      "seed"
+    ],
+    "google/nano-banana-edit": [
+      "prompt",
+      "image_urls",
+      "output_format",
+      "image_size"
+    ],
+    "google/nano-banana": [
+      "prompt",
+      "output_format",
+      "image_size"
+    ],
+    "nano-banana-pro": [
+      "prompt",
+      "image_input",
+      "aspect_ratio",
+      "resolution",
+      "output_format"
+    ],
+    "flux-2/pro-image-to-image": [
+      "input_urls",
+      "prompt",
+      "aspect_ratio",
+      "resolution"
+    ],
+    "flux-2/pro-text-to-image": [
+      "prompt",
+      "aspect_ratio",
+      "resolution"
+    ],
+    "flux-2/flex-image-to-image": [
+      "input_urls",
+      "prompt",
+      "aspect_ratio",
+      "resolution"
+    ],
+    "flux-2/flex-text-to-image": [
+      "prompt",
+      "aspect_ratio",
+      "resolution"
+    ],
+    "grok-imagine/text-to-image": [
+      "prompt",
+      "aspect_ratio"
+    ],
+    "grok-imagine/upscale": [
+      "task_id"
+    ],
+    "topaz/image-upscale": [
+      "image_url",
+      "upscale_factor"
+    ],
+    "recraft/remove-background": [
+      "image"
+    ],
+    "recraft/crisp-upscale": [
+      "image"
+    ],
+    "ideogram/v3-reframe": [
+      "image_url",
+      "image_size",
+      "rendering_speed",
+      "style",
+      "num_images",
+      "seed"
+    ],
+    "ideogram/character-edit": [
+      "prompt",
+      "image_url",
+      "mask_url",
+      "reference_image_urls",
+      "rendering_speed",
+      "style",
+      "expand_prompt",
+      "num_images"
+    ],
+    "ideogram/character-remix": [
+      "prompt",
+      "image_url",
+      "reference_image_urls",
+      "rendering_speed",
+      "style",
+      "expand_prompt",
+      "image_size",
+      "num_images",
+      "strength",
+      "negative_prompt",
+      "image_urls",
+      "reference_mask_urls"
+    ],
+    "ideogram/character": [
+      "prompt",
+      "reference_image_urls",
+      "rendering_speed",
+      "style",
+      "expand_prompt",
+      "num_images",
+      "image_size",
+      "negative_prompt"
+    ],
+    "qwen/text-to-image": [
+      "prompt",
+      "image_size",
+      "num_inference_steps",
+      "guidance_scale",
+      "enable_safety_checker",
+      "output_format",
+      "negative_prompt",
+      "acceleration"
+    ],
+    "qwen/image-to-image": [
+      "prompt",
+      "image_url",
+      "strength",
+      "output_format",
+      "acceleration",
+      "negative_prompt",
+      "num_inference_steps",
+      "guidance_scale",
+      "enable_safety_checker"
+    ],
+    "qwen/image-edit": [
+      "prompt",
+      "image_url",
+      "acceleration",
+      "image_size",
+      "num_inference_steps",
+      "guidance_scale",
+      "sync_mode",
+      "enable_safety_checker",
+      "output_format",
+      "negative_prompt"
+    ],
+    "grok-imagine/text-to-video": [
+      "prompt",
+      "aspect_ratio",
+      "mode"
+    ],
+    "grok-imagine/image-to-video": [
+      "image_urls",
+      "prompt",
+      "mode"
+    ],
+    "kling-2.6/text-to-video": [
+      "prompt",
+      "sound",
+      "aspect_ratio",
+      "duration"
+    ],
+    "kling-2.6/image-to-video": [
+      "prompt",
+      "image_urls",
+      "sound",
+      "duration"
+    ],
+    "kling/ai-avatar-v1-pro": [
+      "image_url",
+      "audio_url",
+      "prompt"
+    ],
+    "kling/v1-avatar-standard": [
+      "image_url",
+      "audio_url",
+      "prompt"
+    ],
+    "kling/v2-1-master-image-to-video": [
+      "prompt",
+      "image_url",
+      "duration",
+      "negative_prompt",
+      "cfg_scale"
+    ],
+    "kling/v2-1-master-text-to-video": [
+      "prompt",
+      "duration",
+      "aspect_ratio",
+      "negative_prompt",
+      "cfg_scale"
+    ],
+    "kling/v2-1-pro": [
+      "prompt",
+      "image_url",
+      "duration",
+      "negative_prompt",
+      "cfg_scale",
+      "tail_image_url"
+    ],
+    "kling/v2-1-standard": [
+      "prompt",
+      "image_url",
+      "duration",
+      "negative_prompt",
+      "cfg_scale"
+    ],
+    "bytedance/v1-pro-fast-image-to-video": [
+      "prompt",
+      "image_url",
+      "resolution",
+      "duration"
+    ],
+    "bytedance/v1-pro-image-to-video": [
+      "prompt",
+      "image_url",
+      "resolution",
+      "duration",
+      "camera_fixed",
+      "seed",
+      "enable_safety_checker"
+    ],
+    "bytedance/v1-pro-text-to-video": [
+      "prompt",
+      "aspect_ratio",
+      "resolution",
+      "duration",
+      "camera_fixed",
+      "seed",
+      "enable_safety_checker"
+    ],
+    "bytedance/v1-lite-image-to-video": [
+      "prompt",
+      "image_url",
+      "resolution",
+      "duration",
+      "camera_fixed",
+      "seed",
+      "enable_safety_checker",
+      "end_image_url"
+    ],
+    "bytedance/v1-lite-text-to-video": [
+      "prompt",
+      "aspect_ratio",
+      "resolution",
+      "duration",
+      "camera_fixed",
+      "enable_safety_checker"
+    ],
+    "hailuo/2-3-image-to-video-pro": [
+      "prompt",
+      "image_url",
+      "duration",
+      "resolution"
+    ],
+    "hailuo/2-3-image-to-video-standard": [
+      "prompt",
+      "image_url",
+      "duration",
+      "resolution"
+    ],
+    "hailuo/02-text-to-video-pro": [
+      "prompt",
+      "prompt_optimizer"
+    ],
+    "hailuo/02-text-to-video-standard": [
+      "prompt",
+      "duration",
+      "prompt_optimizer"
+    ],
+    "hailuo/02-image-to-video-pro": [
+      "prompt",
+      "image_url",
+      "end_image_url",
+      "prompt_optimizer"
+    ],
+    "hailuo/02-image-to-video-standard": [
+      "prompt",
+      "image_url",
+      "end_image_url",
+      "duration",
+      "resolution",
+      "prompt_optimizer"
+    ],
+    "sora-2-image-to-video": [
+      "prompt",
+      "image_urls",
+      "aspect_ratio",
+      "n_frames",
+      "remove_watermark",
+      "character_id_list"
+    ],
+    "sora-2-text-to-video": [
+      "prompt",
+      "aspect_ratio",
+      "n_frames",
+      "remove_watermark",
+      "character_id_list"
+    ],
+    "sora-2-pro-image-to-video": [
+      "prompt",
+      "image_urls",
+      "aspect_ratio",
+      "n_frames",
+      "size",
+      "remove_watermark",
+      "character_id_list"
+    ],
+    "sora-2-pro-text-to-video": [
+      "prompt",
+      "aspect_ratio",
+      "n_frames",
+      "size",
+      "remove_watermark",
+      "character_id_list"
+    ],
+    "sora-watermark-remover": [
+      "video_url"
+    ],
+    "sora-2-characters": [
+      "character_file_url",
+      "character_prompt",
+      "safety_instruction"
+    ],
+    "wan/2-6-image-to-video": [
+      "prompt",
+      "image_urls",
+      "duration",
+      "resolution"
+    ],
+    "wan/2-6-text-to-video": [
+      "prompt",
+      "duration",
+      "resolution"
+    ],
+    "wan/2-6-video-to-video": [
+      "prompt",
+      "video_urls",
+      "duration",
+      "resolution"
+    ],
+    "wan/2-2-a14b-image-to-video-turbo": [
+      "image_url",
+      "prompt",
+      "resolution",
+      "aspect_ratio",
+      "enable_prompt_expansion",
+      "seed",
+      "acceleration"
+    ],
+    "wan/2-2-a14b-text-to-video-turbo": [
+      "prompt",
+      "resolution",
+      "aspect_ratio",
+      "enable_prompt_expansion",
+      "seed",
+      "acceleration"
+    ],
+    "wan/2-2-animate-move": [
+      "video_url",
+      "image_url",
+      "resolution"
+    ],
+    "wan/2-2-animate-replace": [
+      "video_url",
+      "image_url",
+      "resolution"
+    ],
+    "wan/2-2-a14b-speech-to-video-turbo": [
+      "prompt",
+      "image_url",
+      "audio_url",
+      "num_frames",
+      "frames_per_second",
+      "resolution",
+      "negative_prompt",
+      "num_inference_steps",
+      "guidance_scale",
+      "shift",
+      "enable_safety_checker"
+    ],
+    "topaz/video-upscale": [
+      "video_url",
+      "upscale_factor"
+    ],
+    "infinitalk/from-audio": [
+      "image_url",
+      "audio_url",
+      "prompt",
+      "resolution"
+    ],
+    "elevenlabs/text-to-speech-turbo-2-5": [
+      "text",
+      "voice",
+      "stability",
+      "similarity_boost",
+      "style",
+      "speed",
+      "timestamps",
+      "previous_text",
+      "next_text",
+      "language_code"
+    ],
+    "elevenlabs/speech-to-text": [
+      "audio_url",
+      "language_code",
+      "tag_audio_events",
+      "diarize"
+    ],
+    "elevenlabs/sound-effect-v2": [
+      "text",
+      "loop",
+      "prompt_influence",
+      "output_format"
+    ],
+    "elevenlabs/audio-isolation": [
+      "audio_url"
+    ],
+    "kling/v2-5-turbo-image-to-video-pro": [
+      "prompt",
+      "image_url",
+      "tail_image_url",
+      "duration",
+      "negative_prompt",
+      "cfg_scale"
+    ],
+    "kling/v2-5-turbo-text-to-video-pro": [
+      "prompt",
+      "duration",
+      "aspect_ratio",
+      "negative_prompt",
+      "cfg_scale"
+    ]
+  },
+  "optional_inputs_by_model": {
+    "bytedance/seedream": [],
+    "bytedance/seedream-v4-text-to-image": [],
+    "bytedance/seedream-v4-edit": [],
+    "z-image": [],
+    "google/imagen4-fast": [],
+    "google/imagen4-ultra": [],
+    "google/imagen4": [],
+    "google/nano-banana-edit": [],
+    "google/nano-banana": [],
+    "nano-banana-pro": [],
+    "flux-2/pro-image-to-image": [],
+    "flux-2/pro-text-to-image": [],
+    "flux-2/flex-image-to-image": [],
+    "flux-2/flex-text-to-image": [],
+    "grok-imagine/text-to-image": [],
+    "grok-imagine/upscale": [],
+    "topaz/image-upscale": [],
+    "recraft/remove-background": [],
+    "recraft/crisp-upscale": [],
+    "ideogram/v3-reframe": [],
+    "ideogram/character-edit": [],
+    "ideogram/character-remix": [],
+    "ideogram/character": [],
+    "qwen/text-to-image": [],
+    "qwen/image-to-image": [],
+    "qwen/image-edit": [],
+    "grok-imagine/text-to-video": [],
+    "grok-imagine/image-to-video": [],
+    "kling-2.6/text-to-video": [],
+    "kling-2.6/image-to-video": [],
+    "kling/ai-avatar-v1-pro": [],
+    "kling/v1-avatar-standard": [],
+    "kling/v2-1-master-image-to-video": [],
+    "kling/v2-1-master-text-to-video": [],
+    "kling/v2-1-pro": [],
+    "kling/v2-1-standard": [],
+    "bytedance/v1-pro-fast-image-to-video": [],
+    "bytedance/v1-pro-image-to-video": [],
+    "bytedance/v1-pro-text-to-video": [],
+    "bytedance/v1-lite-image-to-video": [],
+    "bytedance/v1-lite-text-to-video": [],
+    "hailuo/2-3-image-to-video-pro": [],
+    "hailuo/2-3-image-to-video-standard": [],
+    "hailuo/02-text-to-video-pro": [],
+    "hailuo/02-text-to-video-standard": [],
+    "hailuo/02-image-to-video-pro": [],
+    "hailuo/02-image-to-video-standard": [],
+    "sora-2-image-to-video": [],
+    "sora-2-text-to-video": [],
+    "sora-2-pro-image-to-video": [],
+    "sora-2-pro-text-to-video": [],
+    "sora-watermark-remover": [],
+    "sora-2-characters": [],
+    "wan/2-6-image-to-video": [],
+    "wan/2-6-text-to-video": [],
+    "wan/2-6-video-to-video": [],
+    "wan/2-2-a14b-image-to-video-turbo": [],
+    "wan/2-2-a14b-text-to-video-turbo": [],
+    "wan/2-2-animate-move": [],
+    "wan/2-2-animate-replace": [],
+    "wan/2-2-a14b-speech-to-video-turbo": [],
+    "topaz/video-upscale": [],
+    "infinitalk/from-audio": [],
+    "elevenlabs/text-to-speech-turbo-2-5": [],
+    "elevenlabs/speech-to-text": [],
+    "elevenlabs/sound-effect-v2": [],
+    "elevenlabs/audio-isolation": [],
+    "kling/v2-5-turbo-image-to-video-pro": [],
+    "kling/v2-5-turbo-text-to-video-pro": []
+  },
+  "ui_models": [],
+  "coverage": "TODO: implement UI parsing"
+}

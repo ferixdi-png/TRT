@@ -25,9 +25,9 @@ class Analytics:
                 SELECT 
                     model_id,
                     COUNT(*) as total_uses,
-                    COUNT(*) FILTER (WHERE status = 'succeeded') as success_count,
+                    COUNT(*) FILTER (WHERE status = 'done') as success_count,
                     COUNT(*) FILTER (WHERE status = 'failed') as fail_count,
-                    COALESCE(SUM(price_rub) FILTER (WHERE status = 'succeeded'), 0) as revenue
+                    COALESCE(SUM(price_rub) FILTER (WHERE status = 'done'), 0) as revenue
                 FROM jobs
                 WHERE created_at >= $1
                 GROUP BY model_id
@@ -71,7 +71,7 @@ class Analytics:
                 WHERE EXISTS (
                     SELECT 1 FROM jobs j
                     WHERE j.user_id = fu.user_id
-                    AND j.status = 'succeeded'
+                    AND j.status = 'done'
                     AND j.price_rub > 0
                 )
                 """
@@ -122,7 +122,7 @@ class Analytics:
                 """
                 SELECT COALESCE(SUM(price_rub), 0)
                 FROM jobs
-                WHERE status = 'succeeded' AND created_at >= $1
+                WHERE status = 'done' AND created_at >= $1
                 """,
                 cutoff
             ) or Decimal("0.00")
@@ -152,7 +152,7 @@ class Analytics:
                 """
                 SELECT COUNT(DISTINCT user_id)
                 FROM jobs
-                WHERE status = 'succeeded' AND price_rub > 0 AND created_at >= $1
+                WHERE status = 'done' AND price_rub > 0 AND created_at >= $1
                 """,
                 cutoff
             ) or 0

@@ -1,0 +1,260 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TRT Architecture Truth Contract",
+  "version": "1.0.0",
+  "last_updated": "2026-01-13",
+  "status": "FIREBREAK",
+  
+  "entrypoint": {
+    "production": "main_render.py",
+    "allowed_alternative_entrypoints": [],
+    "forbidden_entrypoints": [
+      "bot_kie.py",
+      "main.py",
+      "run_bot.py"
+    ],
+    "start_command": "python main_render.py",
+    "runtime": "aiohttp + aiogram"
+  },
+  
+  "required_env_vars": [
+    "TELEGRAM_BOT_TOKEN",
+    "DATABASE_URL",
+    "RENDER_EXTERNAL_URL"
+  ],
+  
+  "optional_env_vars": {
+    "BOT_MODE": "webhook",
+    "LOCK_WAIT_SECONDS": "60",
+    "LOCK_MODE": "wait_then_passive",
+    "PASSIVE_MODE": "REJECT"
+  },
+  
+  "forbidden_env_vars": [
+    "USE_PTB",
+    "POLLING_MODE",
+    "LOCAL_LOCK_FILE"
+  ],
+  
+  "required_endpoints": {
+    "/": {
+      "method": "GET",
+      "expected_status": 200,
+      "response_type": "application/json",
+      "required_fields": ["status", "uptime", "active", "lock_state"]
+    },
+    "/health": {
+      "method": "GET",
+      "expected_status": 200,
+      "response_type": "application/json",
+      "required_fields": ["status", "uptime", "active", "lock_state", "queue"],
+      "json_serializable": true
+    },
+    "/webhook": {
+      "method": "POST",
+      "expected_status": 200,
+      "max_response_time_ms": 500,
+      "fast_ack": true
+    }
+  },
+  
+  "invariants": [
+    "main_render.py is the ONLY production entrypoint",
+    "All PostgreSQL advisory lock parameters are signed int32 (-2^31 to 2^31-1)",
+    "All callback_query updates receive answer_callback_query within 1 second",
+    "Webhook handler returns 200 OK within 500ms (fast-ack pattern)",
+    "PASSIVE mode never modifies database/webhook/external APIs",
+    "All EXTRACT(EPOCH) results from PostgreSQL converted to float before JSON serialization",
+    "UpdateQueueManager is singleton (only one instance per process)",
+    "DatabaseService connection pool managed by app lifecycle (no manual pool creation in handlers)",
+    "All DDL migrations use IF NOT EXISTS for idempotency",
+    "No wildcard imports (from module import *) in production code"
+  ],
+  
+  "forbidden_patterns": {
+    "code": [
+      {
+        "pattern": "from .* import \\*",
+        "reason": "Wildcard imports prohibited",
+        "severity": "P1"
+      },
+      {
+        "pattern": "if __name__ == [\"']__main__[\"']:(?!.*main_render\\.py)",
+        "reason": "Duplicate entrypoint detected",
+        "severity": "P0",
+        "exclude_files": ["tests/", "scripts/", "quarantine/"]
+      },
+      {
+        "pattern": "time\\.sleep\\(",
+        "reason": "Blocking sleep in async context",
+        "severity": "P1",
+        "context": "async def"
+      },
+      {
+        "pattern": "import psycopg2",
+        "reason": "Direct DB access bypasses DatabaseService",
+        "severity": "P1",
+        "exclude_files": ["app/database/", "render_singleton_lock.py", "scripts/"]
+      }
+    ],
+    "logs": [
+      {
+        "pattern": "TypeError.*Decimal.*not JSON serializable",
+        "severity": "P0",
+        "description": "PostgreSQL EXTRACT(EPOCH) not converted to float"
+      },
+      {
+        "pattern": "function pg_try_advisory_lock\\(integer, bigint\\) does not exist",
+        "severity": "P0",
+        "description": "Advisory lock parameter type mismatch"
+      },
+      {
+        "pattern": "OID out of range",
+        "severity": "P0",
+        "description": "Unsigned int overflow in PostgreSQL OID field"
+      },
+      {
+        "pattern": "Error handling request",
+        "severity": "P0",
+        "description": "Unhandled exception in aiohttp handler",
+        "max_occurrences_per_10min": 0
+      }
+    ]
+  },
+  
+  "expected_log_patterns": {
+    "active_startup": [
+      "\\[LOCK_CONTROLLER\\] Attempting to acquire lock",
+      "\\[LOCK_CONTROLLER\\] ✅ Lock acquired",
+      "\\[WEBHOOK_ACTIVE\\] ✅ Webhook ensured",
+      "\\[DB\\] ✅ DatabaseService initialized"
+    ],
+    "passive_operation": [
+      "\\[LOCK_CONTROLLER\\] Lock held by another instance, entering PASSIVE mode",
+      "\\[PASSIVE_REJECT\\] ⏸️ Rejecting update"
+    ],
+    "lock_takeover": [
+      "\\[LOCK\\] 🔴 Detected STALE lock",
+      "\\[LOCK\\] ✅ Successfully TOOK OVER stale lock"
+    ]
+  },
+  
+  "health_check_schema": {
+    "type": "object",
+    "required": ["status", "uptime", "active", "lock_state", "queue"],
+    "properties": {
+      "status": {"type": "string", "enum": ["ok"]},
+      "uptime": {"type": "integer", "minimum": 0},
+      "active": {"type": "boolean"},
+      "lock_state": {"type": "string", "enum": ["ACTIVE", "PASSIVE"]},
+      "webhook_mode": {"type": "boolean"},
+      "lock_acquired": {"type": "boolean"},
+      "lock_holder_pid": {"type": ["integer", "null"]},
+      "lock_idle_duration": {"type": ["number", "null"]},
+      "lock_takeover_event": {"type": ["object", "null"]},
+      "db_schema_ready": {"type": "boolean"},
+      "queue_depth": {"type": "integer", "minimum": 0},
+      "queue": {
+        "type": "object",
+        "required": ["total_received", "total_processed", "queue_depth"],
+        "properties": {
+          "total_received": {"type": "integer"},
+          "total_processed": {"type": "integer"},
+          "queue_depth": {"type": "integer"},
+          "drop_rate": {"type": "number"}
+        }
+      }
+    }
+  },
+  
+  "smoke_scenarios": {
+    "S0": {
+      "name": "Health Check",
+      "endpoint": "/health",
+      "expected_status": 200,
+      "json_valid": true
+    },
+    "S1": {
+      "name": "Bot Responsive",
+      "method": "telegram_api",
+      "commands": ["/start"],
+      "max_response_time_sec": 3
+    },
+    "S2": {
+      "name": "Storage Accessible",
+      "check": "database_connection",
+      "operations": ["read", "write"]
+    },
+    "S3": {
+      "name": "PASSIVE Graceful",
+      "condition": "lock_state=PASSIVE",
+      "whitelist_commands": ["/start"],
+      "reject_response": "⏸️ Сервис обновляется",
+      "max_response_time_sec": 1
+    }
+  },
+  
+  "quality_gates": {
+    "verify_truth": {
+      "description": "Validates architecture invariants",
+      "script": "verify_truth.py",
+      "checks": [
+        "single_entrypoint",
+        "no_forbidden_imports",
+        "no_duplicate_routes",
+        "required_env_vars_documented"
+      ]
+    },
+    "smoke_test": {
+      "description": "Validates runtime behavior",
+      "script": "smoke_test.py",
+      "scenarios": ["S0", "S1", "S2"]
+    },
+    "log_analysis": {
+      "description": "Validates production logs",
+      "script": "check_render_logs.py",
+      "forbidden_patterns": ["ERROR", "Traceback", "OID out of range"],
+      "time_window_minutes": 10
+    }
+  },
+  
+  "deployment_checklist": [
+    "Run verify_truth.py (must PASS)",
+    "Run pytest tests/test_render_singleton_lock.py (11/11 PASS)",
+    "Git commit with PROOF tag",
+    "Git push origin main",
+    "Wait 2-3 minutes for Render deploy",
+    "Run smoke_test.py --url https://five656.onrender.com (S0+S1+S2 PASS)",
+    "Wait 10 minutes",
+    "Run check_render_logs.py --minutes 10 (0 ERROR)",
+    "Tag stable-firebreak-N (only if all green)"
+  ],
+  
+  "quarantine_policy": {
+    "directory": "quarantine/",
+    "naming_convention": "legacy-YYYYMMDD-<description>",
+    "criteria_for_quarantine": [
+      "Duplicate entrypoint implementations",
+      "Dead code (unreferenced by main_render.py call graph)",
+      "Deprecated APIs (e.g., python-telegram-bot imports not used in production)",
+      "Experimental features not in DOD"
+    ],
+    "move_command": "git mv <file> quarantine/legacy-$(date +%Y%m%d)-<file>",
+    "documentation_required": "Add entry to quarantine/README.md with reason and date"
+  },
+  
+  "metrics": {
+    "chaos_reduction": {
+      "baseline_total_python_files": null,
+      "target_active_entrypoints": 1,
+      "target_duplicate_routes": 0,
+      "target_wildcard_imports": 0
+    },
+    "stability": {
+      "target_uptime_percent": 99.5,
+      "target_p50_response_time_ms": 300,
+      "target_p95_response_time_ms": 800,
+      "target_error_rate_per_10min": 0
+    }
+  }
+}

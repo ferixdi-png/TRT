@@ -12,6 +12,7 @@ Marketing-focused UI structure for bot.
 """
 from typing import Dict, List
 import json
+import logging
 import os
 
 
@@ -67,6 +68,48 @@ MARKETING_CATEGORIES = {
     }
 }
 
+logger = logging.getLogger(__name__)
+
+_ALLOWED_KIE_CATEGORIES = {
+    "video",
+    "image",
+    "avatar",
+    "audio",
+    "music",
+    "enhance",
+    "other",
+}
+
+
+def _validate_registry_models(models_dict: Dict[str, Dict]) -> List[Dict]:
+    """Validate registry models and skip invalid entries with warnings."""
+    validated: List[Dict] = []
+    seen_ids = set()
+    for model_id_key, model_data in models_dict.items():
+        if not isinstance(model_data, dict):
+            logger.warning(
+                "Invalid model entry for %s: expected dict, got %s",
+                model_id_key,
+                type(model_data),
+            )
+            continue
+        model_id = model_data.get("model_id") or model_id_key
+        category = model_data.get("category")
+        if not model_id or not isinstance(model_id, str):
+            logger.warning("Model missing valid model_id: %s", model_id_key)
+            continue
+        if model_id in seen_ids:
+            logger.warning("Duplicate model_id in registry: %s", model_id)
+            continue
+        if not category or category not in _ALLOWED_KIE_CATEGORIES:
+            logger.warning("Model %s has invalid category: %s", model_id, category)
+            continue
+        model_data = dict(model_data)
+        model_data["model_id"] = model_id
+        validated.append(model_data)
+        seen_ids.add(model_id)
+    return validated
+
 
 def load_registry() -> List[Dict]:
     """Load KIE models registry from SOURCE OF TRUTH."""
@@ -82,7 +125,7 @@ def load_registry() -> List[Dict]:
         data = json.load(f)
         # Конвертируем из dict в list
         models_dict = data.get("models", {})
-        return list(models_dict.values())
+        return _validate_registry_models(models_dict)
 
 
 def map_model_to_marketing_category(model: Dict) -> str:

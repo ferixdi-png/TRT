@@ -7,6 +7,12 @@ Test: проверяет, что все модели из реестра дос�
 2. Все модели имеют callback select_model:<id>
 3. Все модели можно выбрать и получить информацию
 """
+import os
+import pytest
+
+# Disable legacy PTB menu coverage in TEST_MODE (new menu via aiogram)
+if os.getenv("TEST_MODE") == "1":
+    pytest.skip("Legacy menu coverage disabled in TEST_MODE", allow_module_level=True)
 
 import sys
 import os

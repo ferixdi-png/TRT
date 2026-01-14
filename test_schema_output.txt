@@ -1,0 +1,121 @@
+🧪 Testing Input Schema Parser
+================================================================================
+
+📦 z-image
+--------------------------------------------------------------------------------
+  Category: image
+  Required fields: 2
+    - prompt: file
+    - aspect_ratio: enum (enum: ['1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '9:21'])
+  Optional fields: 0
+  Validation test:
+    ✅ Valid inputs accepted
+    ✅ Missing required field detected: Missing required field: prompt
+
+📦 qwen/text-to-image
+--------------------------------------------------------------------------------
+  Category: image
+  Required fields: 8
+    - prompt: string
+    - image_size: enum (enum: ['square', 'portrait', 'landscape', 'square_hd', 'portrait_hd', 'landscape_hd', '1024x1024', '512x512'])
+    - num_inference_steps: number
+    - guidance_scale: number
+    - enable_safety_checker: boolean
+    - output_format: enum (enum: ['png', 'jpg', 'jpeg', 'webp'])
+    - negative_prompt: string
+    - acceleration: enum (enum: ['standard', 'fast', 'ultra_fast'])
+  Optional fields: 0
+  Validation test:
+    ✅ Valid inputs accepted
+    ✅ Missing required field detected: Missing required field: prompt
+
+📦 qwen/image-to-image
+--------------------------------------------------------------------------------
+  Category: image
+  Required fields: 9
+    - prompt: string
+    - image_url: file
+    - strength: number
+    - output_format: enum (enum: ['png', 'jpg', 'jpeg', 'webp'])
+    - acceleration: enum (enum: ['standard', 'fast', 'ultra_fast'])
+    - negative_prompt: string
+    - num_inference_steps: number
+    - guidance_scale: number
+    - enable_safety_checker: boolean
+  Optional fields: 0
+  Validation test:
+    ✅ Valid inputs accepted
+    ✅ Missing required field detected: Missing required field: prompt
+
+📦 qwen/image-edit
+--------------------------------------------------------------------------------
+  Category: image
+  Required fields: 10
+    - prompt: string
+    - image_url: file
+    - acceleration: enum (enum: ['standard', 'fast', 'ultra_fast'])
+    - image_size: enum (enum: ['square', 'portrait', 'landscape', 'square_hd', 'portrait_hd', 'landscape_hd', '1024x1024', '512x512'])
+    - num_inference_steps: number
+    - guidance_scale: number
+    - sync_mode: boolean
+    - enable_safety_checker: boolean
+    - output_format: enum (enum: ['png', 'jpg', 'jpeg', 'webp'])
+    - negative_prompt: string
+  Optional fields: 0
+  Validation test:
+    ✅ Valid inputs accepted
+    ✅ Missing required field detected: Missing required field: prompt
+
+
+🎯 Enum Fields Detection
+================================================================================
+
+Found 7 unique enum fields:
+
+  acceleration:
+    Used in 5 models
+    Values: fast, standard, ultra_fast
+
+  aspect_ratio:
+    Used in 22 models
+    Values: 16:9, 1:1, 21:9, 3:4, 4:3, 9:16, 9:21
+
+  duration:
+    Used in 20 models
+    Values: 10, 15, 30, 5
+
+  image_size:
+    Used in 10 models
+    Values: 1024x1024, 512x512, landscape, landscape_hd, portrait, portrait_hd, square, square_hd
+
+  output_format:
+    Used in 7 models
+    Values: jpeg, jpg, png, webp
+
+  resolution:
+    Used in 22 models
+    Values: 1080p, 480p, 4k, 720p
+
+  style:
+    Used in 5 models
+    Values: 3d, anime, cartoon, oil_painting, realistic, watercolor
+
+
+✅ Validation Tests
+================================================================================
+
+Test 1 (valid inputs): ✅ PASS
+
+Test 2 (missing required): ✅ PASS
+  Expected error: ['Missing required field: prompt']
+
+Test 3 (invalid enum): ✅ PASS
+  Expected error: ['Invalid value for aspect_ratio: invalid_ratio. Must be one of: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 9:21']
+
+Test 4 (unknown model): ✅ PASS
+  Expected error: ['Unknown model: unknown-model']
+
+
+================================================================================
+✅ ALL TESTS COMPLETE
+================================================================================

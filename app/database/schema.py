@@ -110,8 +110,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     input_json JSONB NOT NULL,
     price_rub NUMERIC(12, 2) NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN (
-        'draft', 'await_confirm', 'queued', 'running', 
-        'succeeded', 'failed', 'refunded', 'cancelled'
+        'draft', 'await_confirm', 'queued', 'running',
+        'done', 'failed', 'canceled'
     )),
     kie_task_id TEXT,
     kie_status TEXT,
