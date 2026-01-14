@@ -1,6 +1,8 @@
 # Environment variables (NEVER commit .env files!)
 .env
 .env.*
+TRT_RENDER.env
+*TRT_RENDER*.env
 *.pem
 *.key
 *.p12

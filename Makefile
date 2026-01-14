@@ -49,6 +49,16 @@ smoke-webhook:
 	@echo "🧪 Smoke test: Webhook Production Readiness..."
 	python3 scripts/smoke_webhook.py
 
+# Render log watcher (last 30 minutes)
+render-logs:
+	@echo "📊 Fetching Render logs (last 30 minutes)..."
+	python scripts/render_watch.py --minutes 30
+
+# Render log watcher (last 10 minutes)
+render-logs-10:
+	@echo "📊 Fetching Render logs (last 10 minutes)..."
+	python scripts/render_watch.py --minutes 10
+
 # Smoke test (alias для удобства)
 smoke: smoke-webhook
 	@echo "✅ Smoke tests complete"
