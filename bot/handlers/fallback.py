@@ -8,7 +8,7 @@ import logging
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
-from app.telemetry.telemetry_helpers import log_callback_received, log_callback_rejected
+from app.telemetry.telemetry_helpers import log_callback_received, log_callback_rejected, get_update_id
 from app.telemetry.logging_contract import ReasonCode
 
 logger = logging.getLogger(__name__)
@@ -17,20 +17,30 @@ router = Router(name="fallback")
 
 
 @router.callback_query(F.data)
-async def fallback_unknown_callback(callback: CallbackQuery, cid=None, bot_state=None):
+async def fallback_unknown_callback(callback: CallbackQuery, cid=None, bot_state=None, data: dict = None):
     """
     Global fallback for unknown/unhandled callbacks.
     
     This handler catches ANY callback that wasn't matched by other routers.
     Logs UNKNOWN_CALLBACK and responds to user with actionable message.
     """
-    user_id = callback.from_user.id
-    chat_id = callback.message.chat.id if callback.message else None
+    user_id = callback.from_user.id if callback.from_user else None
+    chat_id = callback.message.chat.id if (callback.message and callback.message.chat) else None
     callback_data = callback.data
+    
+    # Safely get update_id using helper
+    update_id = get_update_id(callback, data or {})
     
     # Log telemetry
     if cid:
-        log_callback_received(cid, callback.id, user_id, chat_id or 0, callback_data, bot_state)
+        log_callback_received(
+            callback_data=callback_data,
+            query_id=callback.id,
+            user_id=user_id,
+            chat_id=chat_id or 0,
+            update_id=update_id,
+            cid=cid
+        )
         log_callback_rejected(
             cid=cid,
             user_id=user_id,

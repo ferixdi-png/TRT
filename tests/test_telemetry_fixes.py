@@ -32,6 +32,8 @@ def test_get_update_id_safe():
     # Create a mock CallbackQuery (which doesn't have update_id)
     callback = Mock(spec=CallbackQuery)
     callback.id = "test_callback_id"
+    # CRITICAL: CallbackQuery should NOT have update_id attribute
+    assert not hasattr(callback, 'update_id'), "CallbackQuery should not have update_id"
     
     # Create mock Update with update_id
     update = Mock(spec=Update)
@@ -40,11 +42,20 @@ def test_get_update_id_safe():
     # Test with data containing event_update
     data = {"event_update": update}
     result = get_update_id(callback, data)
-    assert result == 12345
+    assert result == 12345, "Should extract update_id from event_update in data"
     
-    # Test without data (should return None safely)
+    # Test without data (should return None safely, not raise AttributeError)
     result = get_update_id(callback, {})
-    assert result is None  # Should not raise AttributeError
+    assert result is None, "Should return None safely when update_id not available"
+    
+    # Test with legacy "update" key
+    data_legacy = {"update": update}
+    result = get_update_id(callback, data_legacy)
+    assert result == 12345, "Should extract update_id from legacy 'update' key"
+    
+    # Test with Update event directly
+    result = get_update_id(update, {})
+    assert result == 12345, "Should extract update_id from Update event directly"
 
 
 def test_get_event_ids_comprehensive():

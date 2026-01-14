@@ -11,7 +11,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update, CallbackQuery, Message
 
 from app.telemetry.logging_contract import ReasonCode
-from app.telemetry.telemetry_helpers import log_callback_rejected
+from app.telemetry.telemetry_helpers import log_callback_rejected, get_update_id
 
 logger = logging.getLogger(__name__)
 
@@ -42,26 +42,28 @@ class ExceptionMiddleware(BaseMiddleware):
             return await handler(event, data)
         
         except Exception as exc:
-            # Extract context
+            # Extract context (use safe helpers to avoid AttributeError)
             user_id = None
             chat_id = None
             update_id = None
             event_type = type(event).__name__
             
+            # Safely get update_id using helper (works for Update, CallbackQuery, Message)
+            update_id = get_update_id(event, data)
+            
             if isinstance(event, Update):
-                update_id = event.update_id
                 if event.callback_query:
-                    user_id = event.callback_query.from_user.id
-                    chat_id = event.callback_query.message.chat.id if event.callback_query.message else None
+                    user_id = event.callback_query.from_user.id if event.callback_query.from_user else None
+                    chat_id = event.callback_query.message.chat.id if (event.callback_query.message and event.callback_query.message.chat) else None
                 elif event.message:
-                    user_id = event.message.from_user.id
-                    chat_id = event.message.chat.id
+                    user_id = event.message.from_user.id if event.message.from_user else None
+                    chat_id = event.message.chat.id if event.message.chat else None
             elif isinstance(event, CallbackQuery):
-                user_id = event.from_user.id
-                chat_id = event.message.chat.id if event.message else None
+                user_id = event.from_user.id if event.from_user else None
+                chat_id = event.message.chat.id if (event.message and event.message.chat) else None
             elif isinstance(event, Message):
-                user_id = event.from_user.id
-                chat_id = event.chat.id
+                user_id = event.from_user.id if event.from_user else None
+                chat_id = event.chat.id if event.chat else None
             
             # Log with full context
             logger.error(
