@@ -878,6 +878,54 @@
         "input": {
           "type": "dict",
           "required": true,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "required": true,
+              "max_length": 20000,
+              "description": "Текстовое описание изображения",
+              "label_ru": "Промпт",
+              "hint_ru": "Опишите что вы хотите создать (макс. 20000 символов)"
+            },
+            "image_input": {
+              "type": "array",
+              "required": false,
+              "item_type": "string",
+              "max_items": 8,
+              "description": "Входные изображения для трансформации или использования как референс (до 8 изображений, jpeg/png/webp, макс. 30MB каждое)",
+              "label_ru": "Входные изображения",
+              "hint_ru": "Загрузите до 8 изображений (jpeg/png/webp, макс. 30MB каждое)"
+            },
+            "aspect_ratio": {
+              "type": "enum",
+              "required": false,
+              "default": "1:1",
+              "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"],
+              "description": "Соотношение сторон изображения",
+              "label_ru": "Соотношение сторон",
+              "hint_ru": "Выберите соотношение сторон для изображения"
+            },
+            "resolution": {
+              "type": "enum",
+              "required": false,
+              "default": "1K",
+              "enum": ["1K", "2K", "4K"],
+              "description": "Разрешение изображения (1K/2K = 18 кредитов, 4K = 24 кредита)",
+              "label_ru": "Разрешение",
+              "hint_ru": "1K/2K: 18 кредитов, 4K: 24 кредита"
+            },
+            "output_format": {
+              "type": "enum",
+              "required": false,
+              "default": "png",
+              "enum": ["png", "jpg"],
+              "description": "Формат выходного изображения",
+              "label_ru": "Формат",
+              "hint_ru": "PNG или JPG"
+            }
+          },
+          "required": ["prompt"],
+          "optional": ["image_input", "aspect_ratio", "resolution", "output_format"],
           "examples": [
             {
               "prompt": "Comic poster: cool banana hero in shades leaps from sci-fi pad. Six panels: 1) 4K mountain landscape, 2) banana holds page of long multilingual text with auto translation, 3) Gemini 3 hologram for search/knowledge/reasoning, 4) camera UI sliders for angle focus color, 5) frame trio 1:1-9:16, 6) consistent banana poses. Footer shows Google icons. Tagline: Nano Banana Pro now on Kie AI.",
@@ -920,7 +968,15 @@
         "credits_per_gen": 18.0,
         "is_free": false,
         "rank": 16,
-        "source": "mapped_from_google/nano-banana-pro"
+        "source": "mapped_from_google/nano-banana-pro",
+        "pricing_rules": {
+          "resolution": {
+            "1K": 18,
+            "2K": 18,
+            "4K": 24
+          },
+          "strategy": "by_resolution"
+        }
       },
       "_metadata": {
         "source": "copy_page",
