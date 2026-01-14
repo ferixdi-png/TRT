@@ -1,7 +1,7 @@
 # TRT Reliability + Growth Report
 
-**Last Updated**: 2026-01-14T08:00:00Z  
-**Commit Hash (main)**: `a83b1cd`  
+**Last Updated**: 2026-01-14T08:30:00Z  
+**Commit Hash (main)**: `7e56896` (latest: T-001 queue metrics)  
 **Build/Deploy**: Render auto-deploy (pending verification)  
 **Report Mirror**: `C:\Users\User\Desktop\TRT_REPORT.md` ✅
 
@@ -12,8 +12,9 @@
 **Status**: 🟡 AMBER  
 **Reasons**:
 - Deploy verification pending (smoke tests not run yet)
-- Potential queue drop risk under high load (no metrics exposed)
-- KIE callback correlation IDs may not propagate fully through job lifecycle
+- ✅ T-001 completed: Queue metrics now exposed in /health
+- ⚠️ KIE callback correlation IDs may not propagate fully through job lifecycle (T-002 pending)
+- ⚠️ Payment idempotency not validated (T-003 pending)
 
 ---
 
