@@ -14,11 +14,168 @@ Key features:
 
 import asyncio
 import logging
+import os
 import time
+import uuid
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Dict, Any
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
+
+
+async def _send_passive_ack(
+    update: Any,
+    update_id: int,
+    worker_id: int
+) -> tuple[bool, Optional[str]]:
+    """
+    Send user feedback for PASSIVE mode update using direct Telegram API.
+    
+    This function uses direct HTTP calls to Telegram API (not aiogram) to ensure
+    user always gets feedback even if aiogram dispatcher is broken.
+    
+    Args:
+        update: Telegram Update object (dict or aiogram Update)
+        update_id: Update ID for logging
+        worker_id: Worker ID for logging
+        
+    Returns:
+        (success: bool, cid: Optional[str])
+    """
+    # Generate CID
+    cid = f"cid_{uuid.uuid4().hex[:12]}"
+    
+    # Get bot token
+    bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    if not bot_token:
+        logger.error("[WORKER_%d] ❌ PASSIVE_ACK_FAIL: TELEGRAM_BOT_TOKEN not set", worker_id)
+        return False, cid
+    
+    # Parse update (support both dict and aiogram Update)
+    update_dict = None
+    if isinstance(update, dict):
+        update_dict = update
+    elif hasattr(update, '__dict__'):
+        # Try to convert aiogram Update to dict-like access
+        update_dict = update
+    else:
+        logger.warning("[WORKER_%d] ⚠️ PASSIVE_UNKNOWN_UPDATE type=%s update_id=%s", 
+                      worker_id, type(update).__name__, update_id)
+        return False, cid
+    
+    # Extract callback_query or message
+    callback_query = None
+    message = None
+    
+    if isinstance(update_dict, dict):
+        callback_query = update_dict.get('callback_query')
+        message = update_dict.get('message')
+    else:
+        # aiogram Update object
+        callback_query = getattr(update_dict, 'callback_query', None)
+        message = getattr(update_dict, 'message', None)
+    
+    # Prepare message text
+    passive_msg = "⏸️ Сервис перезапускается… попробуйте через 10–20 секунд"
+    
+    # Send response based on update type
+    try:
+        timeout = aiohttp.ClientTimeout(total=3.0)  # Short timeout
+        
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            if callback_query:
+                # Extract callback_query_id
+                if isinstance(callback_query, dict):
+                    callback_query_id = callback_query.get('id')
+                    callback_data = callback_query.get('data', '')
+                else:
+                    callback_query_id = getattr(callback_query, 'id', None)
+                    callback_data = getattr(callback_query, 'data', '') or ''
+                
+                if not callback_query_id:
+                    logger.warning("[WORKER_%d] ⚠️ PASSIVE_UNKNOWN_UPDATE: callback_query without id", worker_id)
+                    return False, cid
+                
+                # Call answerCallbackQuery
+                url = f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery"
+                payload = {
+                    "callback_query_id": str(callback_query_id),
+                    "text": passive_msg,
+                    "show_alert": False
+                }
+                
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        logger.info(
+                            "[WORKER_%d] ✅ PASSIVE_ACK_SENT type=callback_query update_id=%s cid=%s data=%s",
+                            worker_id, update_id, cid, callback_data[:50]
+                        )
+                        return True, cid
+                    else:
+                        error_text = await resp.text()
+                        logger.warning(
+                            "[WORKER_%d] ❌ PASSIVE_ACK_FAIL type=callback_query update_id=%s status=%d error=%s",
+                            worker_id, update_id, resp.status, error_text[:200]
+                        )
+                        return False, cid
+            
+            elif message:
+                # Extract chat_id
+                if isinstance(message, dict):
+                    chat_id = message.get('chat', {}).get('id')
+                    message_text = message.get('text', '')
+                else:
+                    chat = getattr(message, 'chat', None)
+                    chat_id = getattr(chat, 'id', None) if chat else None
+                    message_text = getattr(message, 'text', '') or ''
+                
+                if not chat_id:
+                    logger.warning("[WORKER_%d] ⚠️ PASSIVE_UNKNOWN_UPDATE: message without chat.id", worker_id)
+                    return False, cid
+                
+                # Call sendMessage
+                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                payload = {
+                    "chat_id": chat_id,
+                    "text": passive_msg,
+                    "disable_web_page_preview": True
+                }
+                
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        logger.info(
+                            "[WORKER_%d] ✅ PASSIVE_ACK_SENT type=message update_id=%s cid=%s text=%s",
+                            worker_id, update_id, cid, message_text[:50] if message_text else "(no text)"
+                        )
+                        return True, cid
+                    else:
+                        error_text = await resp.text()
+                        logger.warning(
+                            "[WORKER_%d] ❌ PASSIVE_ACK_FAIL type=message update_id=%s status=%d error=%s",
+                            worker_id, update_id, resp.status, error_text[:200]
+                        )
+                        return False, cid
+            else:
+                logger.warning(
+                    "[WORKER_%d] ⚠️ PASSIVE_UNKNOWN_UPDATE: update_id=%s (no callback_query or message)",
+                    worker_id, update_id
+                )
+                return False, cid
+                
+    except asyncio.TimeoutError:
+        logger.warning(
+            "[WORKER_%d] ❌ PASSIVE_ACK_FAIL: timeout update_id=%s cid=%s",
+            worker_id, update_id, cid
+        )
+        return False, cid
+    except Exception as e:
+        logger.warning(
+            "[WORKER_%d] ❌ PASSIVE_ACK_FAIL: exception update_id=%s cid=%s error=%s",
+            worker_id, update_id, cid, str(e)
+        )
+        return False, cid
 
 
 def _is_allowed_in_passive(update) -> bool:
@@ -234,42 +391,33 @@ class UpdateQueueManager:
                 # 🔒 PASSIVE CHECK: Reject forbidden updates immediately with user feedback
                 if self._active_state and not self._active_state.active:
                     if not _is_allowed_in_passive(update):
-                        # Запрещенный update в PASSIVE режиме - отвечаем пользователю
-                        try:
-                            passive_msg = "⏸️ Сервис обновляется, попробуй через минуту"
-                            
-                            # callback_query - answer немедленно
-                            if hasattr(update, 'callback_query') and update.callback_query:
-                                await self._bot.answer_callback_query(
-                                    update.callback_query.id,
-                                    text=passive_msg,
-                                    show_alert=False
-                                )
-                                logger.info(
-                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT callback_query data=%s",
-                                    worker_id, update.callback_query.data
-                                )
-                            
-                            # message - отправляем сообщение
-                            elif hasattr(update, 'message') and update.message:
-                                await self._bot.send_message(
-                                    chat_id=update.message.chat.id,
-                                    text=passive_msg
-                                )
-                                logger.info(
-                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT message text=%s",
-                                    worker_id, update.message.text[:50] if update.message.text else "(no text)"
-                                )
-                            
-                            self._metrics.total_held += 1
-                        except Exception as notify_err:
+                        # Запрещенный update в PASSIVE режиме - отвечаем пользователю через прямой API
+                        callback_data = None
+                        if hasattr(update, 'callback_query') and update.callback_query:
+                            callback_data = getattr(update.callback_query, 'data', None) or ''
+                        elif isinstance(update, dict) and update.get('callback_query'):
+                            callback_data = update['callback_query'].get('data', '')
+                        
+                        logger.info(
+                            "[WORKER_%d] ⏸️ PASSIVE_REJECT %s data=%s",
+                            worker_id,
+                            "callback_query" if callback_data else "message",
+                            callback_data[:50] if callback_data else "(no data)"
+                        )
+                        
+                        # Send passive ack using direct Telegram API
+                        ack_success, cid = await _send_passive_ack(update, update_id, worker_id)
+                        
+                        if not ack_success:
                             logger.warning(
-                                "[WORKER_%d] ⚠️ PASSIVE_REJECT failed to notify user: %s",
-                                worker_id, notify_err
+                                "[WORKER_%d] ⚠️ PASSIVE_ACK_FAIL update_id=%s cid=%s",
+                                worker_id, update_id, cid
                             )
-                        finally:
-                            # Помечаем как обработанный (не оставляем в очереди)
-                            self._queue.task_done()
+                        
+                        self._metrics.total_held += 1
+                        
+                        # Помечаем как обработанный (не оставляем в очереди)
+                        self._queue.task_done()
                         continue  # Переходим к следующему update
                     else:
                         # Разрешенный update (menu/start) - обрабатываем
