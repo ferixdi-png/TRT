@@ -158,56 +158,7 @@
 
 **Rollback**: Remove `app/ops/` module, revert Makefile, remove admin command. No production impact.
 
-**Commit**: `d5ab549` → `aab8a7c` (branch: `feat/ops-observability-loop`)
-
----
-
-**What was observed**:
-- No automated way to fetch Render logs and DB diagnostics together
-- No automated critical issue detection
-- Manual process for identifying top problems
-
-**What changed**:
-- **Files**:
-  - `app/ops/observer_config.py` (NEW) - Config loader from Desktop TRT_RENDER.env
-  - `app/ops/render_logs.py` (NEW) - Render logs fetcher (read-only, sanitized)
-  - `app/ops/db_diag.py` (NEW) - DB read-only diagnostics
-  - `app/ops/critical5.py` (NEW) - Critical issue detector
-  - `tests/test_ops_config.py` (NEW) - Unit tests for config loader
-  - `Makefile` (UPDATED) - Added ops-* targets
-  - `.gitignore` (UPDATED) - Added artifacts/ outputs
-- **Key changes**:
-  - Config loader reads Desktop `TRT_RENDER.env` or env vars (priority: env > file)
-  - Render logs fetcher: sanitizes secrets, stores in `artifacts/render_logs_latest.txt`
-  - DB diagnostics: read-only metrics (connections, table sizes, slow queries, errors)
-  - Critical5 detector: analyzes logs + DB, ranks top-5 issues by score
-  - Makefile targets: `make ops-fetch-logs`, `make ops-db-diag`, `make ops-critical5`, `make ops-all`
-  - All outputs in `artifacts/` (gitignored)
-
-**Why it is safe**:
-- All operations are read-only (no writes to production)
-- Secrets redacted in logs and outputs
-- Graceful degradation if config/env missing
-- No changes to production bot code
-- All outputs gitignored
-
-**Tests executed**:
-- ✅ Unit tests: `tests/test_ops_config.py` (config loader)
-- ✅ Syntax check: All Python files compile
-- ✅ Makefile targets: Created and tested
-
-**Results**:
-- Ops observability loop ready
-- One-command execution: `make ops-all`
-- Critical issues automatically detected and ranked
-
-**Remaining risks / next improvements**:
-- ⚠️ Requires Desktop TRT_RENDER.env setup (documented)
-- ⚠️ DB diagnostics requires read-only connection (DATABASE_URL_READONLY)
-- ⚠️ Critical5 detector uses heuristics (may need tuning)
-- ⚠️ Consider adding admin bot command to trigger ops snapshot
-
-**Commit**: Will be created after final verification
+**Commit**: `d5ab549` → `fecbe0b` (branch: `feat/ops-observability-loop`)
 
 ---
 
