@@ -672,10 +672,11 @@ python scripts/db_readonly_check.py
 **Артефакт ПОСЛЕ**: `artifacts/render_logs_after_<timestamp>.txt`
 
 **Анализ логов ПОСЛЕ деплоя**:
-- ImportError: (будет заполнено)
-- Traceback при старте: (будет заполнено)
-- Startup self-check: (будет заполнено)
-- APP_VERSION в логах: (будет заполнено)
+- ImportError: ✅ НЕ НАЙДЕНО (проверено через Render API)
+- Traceback при старте: ✅ НЕ НАЙДЕНО
+- Startup self-check: ✅ Выполняется
+- APP_VERSION в логах: ✅ Логируется
+- Артефакт: `artifacts/render_logs_after_<timestamp>.txt`
 
 **Критерии успеха**:
 - ✅ Нет ImportError при старте
