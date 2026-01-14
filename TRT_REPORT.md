@@ -86,7 +86,81 @@
 
 ## CHANGELOG ENTRIES
 
-### Entry 5: 2026-01-14T11:00:00Z - Ops Observability Loop (COMPLETED)
+### Entry 5: 2026-01-14T11:00:00Z - Ops Observability Loop (COMPLETED) ✅
+
+**What was observed**:
+- No automated way to fetch Render logs and DB diagnostics together
+- No automated critical issue detection
+- Manual process for identifying top problems
+
+**What changed**:
+- **Files**:
+  - `app/ops/observer_config.py` (NEW) - Config loader from Desktop TRT_RENDER.env
+  - `app/ops/render_logs.py` (NEW) - Render logs fetcher (read-only, sanitized)
+  - `app/ops/db_diag.py` (NEW) - DB read-only diagnostics
+  - `app/ops/critical5.py` (NEW) - Critical issue detector
+  - `app/ops/snapshot.py` (NEW) - Snapshot summary generator for admin
+  - `tests/test_ops_config.py` (NEW) - Unit tests for config loader
+  - `tests/test_ops_smoke.py` (NEW) - Smoke tests for CLI commands
+  - `bot/handlers/admin.py` (UPDATED) - Added `/admin_ops_snapshot` command
+  - `Makefile` (UPDATED) - Added ops-* targets
+  - `.gitignore` (UPDATED) - Added artifacts/ outputs
+- **Key changes**:
+  - Config loader reads Desktop `TRT_RENDER.env` or env vars (priority: env > file)
+  - Render logs fetcher: sanitizes secrets, stores in `artifacts/render_logs_latest.txt`
+  - DB diagnostics: read-only metrics (connections, table sizes, slow queries, errors)
+  - Critical5 detector: analyzes logs + DB, ranks top-5 issues by score
+  - Admin command: `/admin_ops_snapshot` triggers ops checks and sends summary
+  - Makefile targets: `make ops-fetch-logs`, `make ops-db-diag`, `make ops-critical5`, `make ops-all`
+  - All outputs in `artifacts/` (gitignored)
+
+**Why it is safe**:
+- All operations are read-only (no writes to production)
+- Secrets redacted in logs and outputs
+- Graceful degradation if config/env missing
+- No changes to production bot code (except admin command, strictly gated)
+- All outputs gitignored
+
+**Tests executed**:
+- ✅ Unit tests: `tests/test_ops_config.py` (config loader)
+- ✅ Smoke tests: `tests/test_ops_smoke.py` (CLI soft-fail behavior)
+- ✅ Syntax check: All Python files compile
+- ✅ Makefile targets: Created and tested
+
+**Results**:
+- Ops observability loop ready
+- One-command execution: `make ops-all`
+- Critical issues automatically detected and ranked
+- Admin can trigger snapshot via `/admin_ops_snapshot`
+
+**Remaining risks / next improvements**:
+- ⚠️ Requires Desktop TRT_RENDER.env setup (documented)
+- ⚠️ DB diagnostics requires read-only connection (DATABASE_URL_READONLY)
+- ⚠️ Critical5 detector uses heuristics (may need tuning)
+- ⚠️ Admin snapshot command runs subprocess (may timeout on slow ops)
+- ⚠️ Consider adding scheduled ops checks (cron/periodic task)
+
+**How to use**:
+1. Setup Desktop `TRT_RENDER.env`:
+   ```
+   RENDER_API_KEY=your_key
+   RENDER_SERVICE_ID=srv-xxx
+   DATABASE_URL_READONLY=postgresql://...
+   ```
+2. Run ops checks:
+   ```bash
+   make ops-all
+   ```
+3. Or trigger from bot (admin only):
+   ```
+   /admin_ops_snapshot
+   ```
+
+**Rollback**: Remove `app/ops/` module, revert Makefile, remove admin command. No production impact.
+
+**Commit**: `d5ab549` → `aab8a7c` (branch: `feat/ops-observability-loop`)
+
+---
 
 **What was observed**:
 - No automated way to fetch Render logs and DB diagnostics together

@@ -172,6 +172,68 @@ async def cmd_admin_user(message: Message):
     )
 
 
+@router.message(Command("admin_ops_snapshot"))
+async def cmd_admin_ops_snapshot(message: Message):
+    """Generate ops snapshot and send summary to admin."""
+    if not await _ensure_strict_admin(message):
+        return
+    
+    await message.answer("⏳ Генерация ops snapshot...")
+    
+    try:
+        import subprocess
+        import asyncio
+        from pathlib import Path
+        from app.ops.snapshot import generate_snapshot_summary, get_snapshot_files
+        
+        # Run ops checks (non-blocking, best-effort)
+        try:
+            # Try to run ops-all (may fail if config missing, that's OK)
+            process = await asyncio.create_subprocess_exec(
+                "python", "-m", "app.ops.render_logs", "--minutes", "60",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(process.communicate(), timeout=30.0)
+        except (asyncio.TimeoutError, FileNotFoundError, Exception) as e:
+            logger.warning(f"Ops fetch-logs failed (non-critical): {e}")
+        
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "python", "-m", "app.ops.db_diag",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(process.communicate(), timeout=30.0)
+        except (asyncio.TimeoutError, FileNotFoundError, Exception) as e:
+            logger.warning(f"Ops db-diag failed (non-critical): {e}")
+        
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "python", "-m", "app.ops.critical5",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(process.communicate(), timeout=30.0)
+        except (asyncio.TimeoutError, FileNotFoundError, Exception) as e:
+            logger.warning(f"Ops critical5 failed (non-critical): {e}")
+        
+        # Generate summary from available files
+        render_logs, db_diag = get_snapshot_files()
+        summary = generate_snapshot_summary(render_logs, db_diag)
+        
+        await message.answer(summary, parse_mode="HTML")
+        logger.info("Admin %s requested ops snapshot", message.from_user.id)
+    
+    except Exception as e:
+        logger.exception("Ops snapshot generation failed")
+        await message.answer(
+            f"❌ <b>Ошибка генерации snapshot</b>\n\n"
+            f"<code>{str(e)[:200]}</code>\n\n"
+            f"Проверьте логи для деталей."
+        )
+
+
 @router.message(Command("admin_toggle_model"))
 async def cmd_admin_toggle_model(message: Message):
     """Enable/disable model by model_id."""
