@@ -2,10 +2,34 @@
 
 **Last updated**: 2026-01-14T07:05:30Z  
 **Cycle**: 11 (KIE Registry Sync + Telemetry Fixes)  
-**Commit(s)**: `711f054`, `3064326`, `a1d06e0`, `355901e`, `0bb3caa`, `4015c14`  
+**Commit(s)**: `95163fd` (merge), `711f054`, `3064326`, `a1d06e0`, `355901e`, `0bb3caa`, `4015c14`  
 **Render deploy**: `kie-bot-production` (https://kie-bot-production.onrender.com)  
-**Ветка**: `fix/production-readiness`  
-**Статус**: ✅ ЗАВЕРШЕНО  
+**Ветка**: `fix/production-readiness` → **MERGED to main**  
+**Статус**: ✅ ЗАВЕРШЕНО + MERGED + DEPLOY PENDING
+
+---
+
+## DEPLOYMENT STATUS
+
+**Merged to main**: ✅ YES (commit `95163fd`)  
+**Render deploy**: ⏳ PENDING (auto-deploy triggered, wait 3-5 min)  
+**Smoke**: ⏳ PENDING (will run after deploy)  
+**Branches cleaned**: ✅ YES (local and remote `fix/production-readiness` deleted)
+
+### Merge Details:
+- **Merge commit**: `95163fd` - "Merge fix/production-readiness: KIE sync tool + telemetry fixes + validators"
+- **Files changed**: 31 files, +3992 insertions, -1070 deletions
+- **Merge strategy**: `--no-ff` (merge commit created)
+- **Pushed to**: `origin/main` ✅
+
+### Smoke Test Plan (after deploy):
+1. `GET /health` → 200 OK
+2. `POST /webhook/<secret>` → 200 OK (fast-ack)
+3. Telegram: `/start` → click `cat:image` → verify no PASSIVE_REJECT (if ACTIVE)
+4. Check logs: no `AttributeError: 'CallbackQuery' object has no attribute 'update_id'`
+5. Check logs: no `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
+
+---  
 
 ---
 
