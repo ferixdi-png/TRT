@@ -11,7 +11,8 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update, CallbackQuery, Message
 
 from app.telemetry.logging_contract import ReasonCode
-from app.telemetry.telemetry_helpers import log_callback_rejected, get_update_id
+from app.telemetry.events import log_callback_rejected
+from app.telemetry.telemetry_helpers import get_update_id
 
 logger = logging.getLogger(__name__)
 

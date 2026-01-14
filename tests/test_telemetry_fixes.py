@@ -16,14 +16,55 @@ from unittest.mock import Mock
 
 
 def test_log_callback_rejected_signature():
-    """Test that log_callback_rejected accepts reason_detail parameter."""
-    # Should not raise TypeError
+    """Test that log_callback_rejected accepts all parameter variants."""
+    # Test 1: Basic call with reason_code and reason_detail
     log_callback_rejected(
         callback_data="test:data",
         reason_code="TEST",
         reason_detail="Test detail",
         cid="test_cid"
     )
+    
+    # Test 2: Call with user_id, chat_id, bot_state (via **extra)
+    log_callback_rejected(
+        callback_data="test:data",
+        reason_code="TEST",
+        reason_detail="Test detail",
+        cid="test_cid",
+        user_id=12345,
+        chat_id=67890,
+        bot_state="ACTIVE"
+    )
+    
+    # Test 3: Call with deprecated reason parameter
+    log_callback_rejected(
+        callback_data="test:data",
+        reason="TEST",
+        reason_detail="Test detail",
+        cid="test_cid"
+    )
+    
+    # Test 4: Call with error_type and error_message
+    log_callback_rejected(
+        callback_data="test:data",
+        reason_code="TEST",
+        reason_detail="Test detail",
+        error_type="ValueError",
+        error_message="Test error",
+        cid="test_cid"
+    )
+    
+    # Test 5: Call with reason_detail in extra (backward compatibility)
+    log_callback_rejected(
+        callback_data="test:data",
+        reason_code="TEST",
+        cid="test_cid",
+        reason_detail="Test detail in extra"
+    )
+    
+    # Test 6: Minimal call (all optional)
+    log_callback_rejected()
+    
     assert True
 
 
