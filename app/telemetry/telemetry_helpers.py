@@ -5,29 +5,33 @@ NOTE: TelemetryMiddleware class is in app/telemetry/middleware.py
 """
 
 # Backward compatibility: re-export TelemetryMiddleware from middleware module
-try:
+# NOTE: Import is deferred to avoid circular dependency (middleware imports from telemetry_helpers)
+# We use TYPE_CHECKING to avoid runtime circular import
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
     from app.telemetry.middleware import TelemetryMiddleware
-    __all__ = [
-        "get_update_id",
-        "get_callback_id",
-        "get_user_id",
-        "get_chat_id",
-        "get_message_id",
-        "safe_answer_callback",
-        "TelemetryMiddleware",  # Re-export for backward compatibility
-    ]
-except ImportError:
-    # If middleware module is not available, TelemetryMiddleware will be None
-    # This allows fail-open behavior
+else:
+    # Lazy import at runtime to break circular dependency
     TelemetryMiddleware = None
-    __all__ = [
-        "get_update_id",
-        "get_callback_id",
-        "get_user_id",
-        "get_chat_id",
-        "get_message_id",
-        "safe_answer_callback",
-    ]
+    try:
+        import importlib
+        middleware_module = importlib.import_module("app.telemetry.middleware")
+        TelemetryMiddleware = getattr(middleware_module, "TelemetryMiddleware", None)
+    except (ImportError, AttributeError):
+        # If middleware module is not available, TelemetryMiddleware will be None
+        # This allows fail-open behavior
+        TelemetryMiddleware = None
+
+__all__ = [
+    "get_update_id",
+    "get_callback_id",
+    "get_user_id",
+    "get_chat_id",
+    "get_message_id",
+    "safe_answer_callback",
+    "TelemetryMiddleware",  # Re-export for backward compatibility
+]
 
 from typing import Optional, Any, Dict
 from aiogram.types import TelegramObject, Update, CallbackQuery, Message
