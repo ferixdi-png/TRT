@@ -45,6 +45,11 @@
   - Post-commit hook: `.git/hooks/post-commit` (runs automatically after successful commit)
   - Manual sync: `make sync-report` or `python scripts/sync_desktop_report.py`
   - Quiet mode: `--quiet` flag for non-interactive use (hooks)
+- **Render logs check with secret redaction**: `make render:logs-10`
+  - Fetches last 10 minutes of logs via Render API
+  - Automatically redacts secrets (tokens, API keys, passwords, DB URLs)
+  - Detailed summary: errors, warnings, startup events, exception types
+  - Saves sanitized logs to `artifacts/render_logs_sanitized_*.txt`
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
