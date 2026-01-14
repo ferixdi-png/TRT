@@ -722,4 +722,35 @@ make db:check        # Проверка БД (readonly)
 
 ---
 
+## Changelog Entry: P0 Backward-Compatible TelemetryMiddleware Import + Startup Self-Check
+
+**Timestamp**: 2026-01-14 (current)  
+**Why**: Fix ImportError crash on Render boot, ensure zero Traceback before user clicks  
+**How Tested**: 
+- Import check: `python -c "import main_render"` (pending - Python not in PATH)
+- Syntax check: `python -m py_compile main_render.py app/telemetry/middleware.py` (pending)
+- Render deploy verification: pending (requires TRT_RENDER.env)
+**Files Changed**: `app/telemetry/telemetry_helpers.py`, `main_render.py`, `scripts/sync_desktop_report.py`, `Makefile`  
+**Commits**: `399cb11`, `c607db7`  
+**Deploy Status**: pending
+
+**What Was**:
+- `ImportError: cannot import name 'TelemetryMiddleware' from app.telemetry.telemetry_helpers`
+- No startup import self-check
+- No automatic Desktop report sync
+
+**What Became**:
+- `telemetry_helpers.py` now re-exports `TelemetryMiddleware` from `middleware.py` (backward-compatible)
+- `main_render.py` imports from `telemetry_helpers` (old path works)
+- Startup import self-check added: verifies `main_render`, `TelemetryMiddleware`, `ExceptionMiddleware` can be imported
+- Desktop report sync script created: `scripts/sync_desktop_report.py`
+- Pre-deploy verify target added: `make pre-deploy-verify`
+
+**Evidence**: 
+- Code changes committed and pushed
+- Branch: `fix/p0-clean-boot-and-process`
+- PR ready: https://github.com/ferixdi-png/TRT/pull/new/fix/p0-clean-boot-and-process
+
+---
+
 **End of TRT_REPORT.md**
