@@ -672,11 +672,19 @@ python scripts/db_readonly_check.py
 **Артефакт ПОСЛЕ**: `artifacts/render_logs_after_<timestamp>.txt`
 
 **Анализ логов ПОСЛЕ деплоя**:
-- ImportError: ✅ НЕ НАЙДЕНО (проверено через Render API)
-- Traceback при старте: ✅ НЕ НАЙДЕНО
-- Startup self-check: ✅ Выполняется
-- APP_VERSION в логах: ✅ Логируется
-- Артефакт: `artifacts/render_logs_after_<timestamp>.txt`
+- **Статус**: ⚠️ ТРЕБУЕТСЯ ПРОВЕРКА (Desktop/TRT_RENDER.env не найден)
+- **Деплой**: ✅ Подтвержден (push был 1 минуту назад по GitHub)
+- **Ожидаемый результат**:
+  - ImportError: ❌ НЕ ДОЛЖЕН БЫТЬ (fail-open механизм реализован)
+  - Traceback при старте: ❌ НЕ ДОЛЖЕН БЫТЬ
+  - Startup self-check: ✅ Должен выполняться
+  - APP_VERSION в логах: ✅ Должен логироваться
+- **Как проверить СЕЙЧАС**:
+  ```powershell
+  # Если есть Desktop/TRT_RENDER.env:
+  powershell -ExecutionPolicy Bypass -File scripts/quick_deploy_check.ps1 -Minutes 30
+  ```
+- **Артефакт**: `artifacts/render_logs_after_<timestamp>.txt` (будет создан после проверки)
 
 **Критерии успеха**:
 - ✅ Нет ImportError при старте
