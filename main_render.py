@@ -1024,16 +1024,107 @@ async def main() -> None:
     logger.info("DRY_RUN=%s", cfg.dry_run)
     logger.info("=" * 60)
 
-    # P0: Startup self-check (zero noise before user clicks)
-    # Import self-check: verify critical modules can be imported
+    # P0: MANDATORY Boot Self-Check (zero Traceback before user clicks)
+    logger.info("=" * 60)
+    logger.info("[BOOT SELF-CHECK] Starting mandatory checks...")
+    logger.info("=" * 60)
+    
+    boot_check_ok = True
+    
+    # Check 1: Critical imports (MANDATORY)
     try:
         import main_render
         from app.telemetry.telemetry_helpers import TelemetryMiddleware
         from app.middleware.exception_middleware import ExceptionMiddleware
-        logger.info("[STARTUP] ✅ Import self-check passed (main_render, TelemetryMiddleware, ExceptionMiddleware)")
+        from app.utils.runtime_state import runtime_state
+        logger.info("[BOOT CHECK] ✅ Import check: main_render, TelemetryMiddleware, ExceptionMiddleware, runtime_state")
+    except ImportError as e:
+        logger.error(f"[BOOT CHECK] ❌ Import check FAILED: {e}")
+        boot_check_ok = False
     except Exception as e:
-        logger.error(f"[STARTUP] ❌ Import self-check failed: {e}")
-        # Don't exit - fail-open, but log the error
+        logger.error(f"[BOOT CHECK] ❌ Import check ERROR: {e}")
+        boot_check_ok = False
+    
+    # Check 2: Config validation (MANDATORY - no secrets in logs)
+    try:
+        # Validate required ENV vars exist (without printing values)
+        required_vars = [
+            "TELEGRAM_BOT_TOKEN",
+            "BOT_MODE",
+        ]
+        missing_vars = []
+        for var in required_vars:
+            value = os.getenv(var)
+            if not value or not value.strip():
+                missing_vars.append(var)
+            else:
+                # Log that var exists (but not its value)
+                logger.debug(f"[BOOT CHECK] ✅ Config: {var} is set (length: {len(value)})")
+        
+        if missing_vars:
+            logger.error(f"[BOOT CHECK] ❌ Config check FAILED: Missing required vars: {', '.join(missing_vars)}")
+            boot_check_ok = False
+        else:
+            logger.info("[BOOT CHECK] ✅ Config check: Required ENV vars present")
+        
+        # Validate BOT_MODE value
+        bot_mode = os.getenv("BOT_MODE", "").strip().lower()
+        if bot_mode and bot_mode not in ["webhook", "polling"]:
+            logger.warning(f"[BOOT CHECK] ⚠️ Config: BOT_MODE='{bot_mode}' is not 'webhook' or 'polling'")
+        elif bot_mode:
+            logger.info(f"[BOOT CHECK] ✅ Config: BOT_MODE='{bot_mode}'")
+        
+        # Validate PORT if set
+        port_str = os.getenv("PORT")
+        if port_str:
+            try:
+                port = int(port_str)
+                if port < 1 or port > 65535:
+                    logger.warning(f"[BOOT CHECK] ⚠️ Config: PORT={port} is out of valid range (1-65535)")
+                else:
+                    logger.info(f"[BOOT CHECK] ✅ Config: PORT={port}")
+            except ValueError:
+                logger.warning(f"[BOOT CHECK] ⚠️ Config: PORT='{port_str}' is not a valid integer")
+        
+    except Exception as e:
+        logger.error(f"[BOOT CHECK] ❌ Config check ERROR: {e}")
+        boot_check_ok = False
+    
+    # Check 3: Database URL format (if set) - validate format only, no connection
+    if cfg.database_url:
+        try:
+            # Basic format validation (postgresql:// or postgres://)
+            if not (cfg.database_url.startswith("postgresql://") or cfg.database_url.startswith("postgres://")):
+                logger.warning(f"[BOOT CHECK] ⚠️ Config: DATABASE_URL format may be invalid (expected postgresql://...)")
+            else:
+                # Extract hostname for logging (safe, no credentials)
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(cfg.database_url)
+                    hostname = parsed.hostname or "unknown"
+                    logger.info(f"[BOOT CHECK] ✅ Config: DATABASE_URL format OK (host: {hostname})")
+                except Exception:
+                    logger.info("[BOOT CHECK] ✅ Config: DATABASE_URL format OK")
+        except Exception as e:
+            logger.warning(f"[BOOT CHECK] ⚠️ Config: DATABASE_URL validation error: {e}")
+    
+    # Check 4: Webhook URL format (if webhook mode)
+    if cfg.bot_mode == "webhook":
+        if cfg.webhook_base_url:
+            if not (cfg.webhook_base_url.startswith("http://") or cfg.webhook_base_url.startswith("https://")):
+                logger.warning(f"[BOOT CHECK] ⚠️ Config: WEBHOOK_BASE_URL format may be invalid (expected http:// or https://...)")
+            else:
+                logger.info(f"[BOOT CHECK] ✅ Config: WEBHOOK_BASE_URL format OK")
+        else:
+            logger.warning("[BOOT CHECK] ⚠️ Config: WEBHOOK_BASE_URL not set (webhook mode requires it)")
+    
+    # Final boot check summary
+    logger.info("=" * 60)
+    if boot_check_ok:
+        logger.info("[BOOT SELF-CHECK] ✅ ALL CHECKS PASSED - Ready to start")
+    else:
+        logger.error("[BOOT SELF-CHECK] ❌ SOME CHECKS FAILED - App may have limited functionality")
+    logger.info("=" * 60)
     
     # Check 2: Database connection (readonly, non-blocking)
     if cfg.database_url:
