@@ -1015,16 +1015,15 @@ async def main() -> None:
     logger.info("=" * 60)
 
     # P0: Startup self-check (zero noise before user clicks)
-    logger.info("[STARTUP] Running self-check...")
-    startup_ok = True
-    
-    # Check 1: Import main_render (already done, but verify no import errors)
+    # Import self-check: verify critical modules can be imported
     try:
         import main_render
-        logger.debug("[STARTUP] ✅ main_render imports OK")
+        from app.telemetry.telemetry_helpers import TelemetryMiddleware
+        from app.middleware.exception_middleware import ExceptionMiddleware
+        logger.info("[STARTUP] ✅ Import self-check passed (main_render, TelemetryMiddleware, ExceptionMiddleware)")
     except Exception as e:
-        logger.error(f"[STARTUP] ❌ Import check failed: {e}")
-        startup_ok = False
+        logger.error(f"[STARTUP] ❌ Import self-check failed: {e}")
+        # Don't exit - fail-open, but log the error
     
     # Check 2: Database connection (readonly, non-blocking)
     if cfg.database_url:

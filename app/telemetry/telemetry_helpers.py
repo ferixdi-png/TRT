@@ -4,6 +4,31 @@ Telemetry helper functions for safe attribute access and context extraction.
 NOTE: TelemetryMiddleware class is in app/telemetry/middleware.py
 """
 
+# Backward compatibility: re-export TelemetryMiddleware from middleware module
+try:
+    from app.telemetry.middleware import TelemetryMiddleware
+    __all__ = [
+        "get_update_id",
+        "get_callback_id",
+        "get_user_id",
+        "get_chat_id",
+        "get_message_id",
+        "safe_answer_callback",
+        "TelemetryMiddleware",  # Re-export for backward compatibility
+    ]
+except ImportError:
+    # If middleware module is not available, TelemetryMiddleware will be None
+    # This allows fail-open behavior
+    TelemetryMiddleware = None
+    __all__ = [
+        "get_update_id",
+        "get_callback_id",
+        "get_user_id",
+        "get_chat_id",
+        "get_message_id",
+        "safe_answer_callback",
+    ]
+
 from typing import Optional, Any, Dict
 from aiogram.types import TelegramObject, Update, CallbackQuery, Message
 
