@@ -25,6 +25,8 @@
 
 **What Became**:
 - `telemetry_helpers.py` now re-exports `TelemetryMiddleware` from `middleware.py` (backward-compatible)
+  - Uses lazy import (importlib) to break circular dependency
+  - `app/telemetry/__init__.py` also exports TelemetryMiddleware for convenience
 - `main_render.py` imports from `telemetry_helpers` (old path works, no breaking changes)
 - Startup import self-check added: verifies `main_render`, `TelemetryMiddleware`, `ExceptionMiddleware` can be imported
 - Desktop report sync script created: `scripts/sync_desktop_report.py`
