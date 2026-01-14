@@ -6,6 +6,95 @@
 
 ---
 
+## Nano-Banana-Pro Model Integration (Contract-Driven)
+
+**Date**: 2026-01-XX  
+**Model**: `nano-banana-pro`  
+**Status**: ✅ COMPLETED
+
+### Summary
+
+Added nano-banana-pro model using contract-driven SSOT approach with:
+- Full input schema with properties, required flags, enums, defaults, and constraints
+- Resolution-based pricing rules (1K/2K = 18 credits, 4K = 24 credits)
+- Vendor doc comparison tooling
+- Smoke tests for payload building and pricing calculation
+
+### Changes
+
+#### 1. Vendor Documentation
+- Created `kb/vendor_docs/nano-banana-pro.md` with raw vendor API documentation (verbatim)
+
+#### 2. SSOT Update
+- Updated `models/KIE_SOURCE_OF_TRUTH.json` for nano-banana-pro:
+  - Added `properties` structure to `input_schema.input`:
+    - `prompt` (required, string, max_length: 20000)
+    - `image_input` (optional, array, max_items: 8)
+    - `aspect_ratio` (optional, enum, default: "1:1")
+    - `resolution` (optional, enum, default: "1K")
+    - `output_format` (optional, enum, default: "png")
+  - Added `pricing_rules`:
+    ```json
+    "pricing_rules": {
+      "resolution": {"1K": 18, "2K": 18, "4K": 24},
+      "strategy": "by_resolution"
+    }
+    ```
+
+#### 3. Pricing Engine Update
+- Updated `app/payments/pricing.py`:
+  - Added support for `pricing_rules` in `calculate_kie_cost()`:
+    - `strategy: "by_resolution"` - resolution-based pricing
+    - `strategy: "by_duration"` - duration-based pricing (future)
+  - Backward compatible: falls back to `pricing.credits_per_gen` if no pricing_rules
+
+#### 4. Vendor Doc Comparison Tool
+- Created `tools/compare_vendor_doc_to_ssot.py`:
+  - Parses vendor docs from `kb/vendor_docs/*.md`
+  - Compares against SSOT (endpoints, schema fields, enums, defaults, pricing_rules)
+  - Outputs diff report (does NOT auto-mutate SSOT)
+
+#### 5. Smoke Tests
+- Created `tools/smoke_model_pipeline.py`:
+  - Test 1: Defaults (1K resolution) → 18 credits
+  - Test 2: Custom resolution (4K) → 24 credits
+  - Test 3: Image input validation (max_items: 8)
+
+### Verification Steps
+
+1. **Run vendor doc comparison**:
+   ```bash
+   python tools/compare_vendor_doc_to_ssot.py
+   ```
+   Expected: ✅ MATCH - No differences found
+
+2. **Run smoke tests**:
+   ```bash
+   python tools/smoke_model_pipeline.py
+   ```
+   Expected: ✅ All smoke tests passed
+
+3. **Manual verification in bot**:
+   - `/start` → choose "image" category → choose "nano-banana-pro"
+   - Run with defaults → confirm 18 credits shown in preflight
+   - Run with resolution 4K → confirm 24 credits shown in preflight
+   - Check Render logs for correct credit deduction
+
+### Files Changed
+
+- `kb/vendor_docs/nano-banana-pro.md` (new)
+- `models/KIE_SOURCE_OF_TRUTH.json` (updated)
+- `app/payments/pricing.py` (updated)
+- `tools/compare_vendor_doc_to_ssot.py` (new)
+- `tools/smoke_model_pipeline.py` (new)
+- `TRT_REPORT.md` (updated)
+
+---
+
+## Original Cycle 10 Report
+
+---
+
 ## Executive Summary
 
 Production hardening cycle focused on:
