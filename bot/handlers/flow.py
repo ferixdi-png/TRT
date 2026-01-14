@@ -117,7 +117,7 @@ CATEGORY_LABELS = {
     "watermark_remove": "✂️ Убрать водяной знак",
 }
 
-WELCOME_BALANCE_RUB = float(os.getenv("WELCOME_BALANCE_RUB", "200"))
+# Removed WELCOME_BALANCE_RUB - no longer used in premium copy
 
 
 def _source_of_truth() -> Dict[str, Any]:
@@ -733,13 +733,14 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
     models_list = _get_models_list()
     total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
     
-    # Premium welcome message - short and elegant
+    # Premium welcome message - elegant and confident
     await message.answer(
-        f"👋 Привет, <b>{first_name}</b>!\n\n"
+        f"👋 Добро пожаловать, <b>{first_name}</b>!\n\n"
         f"<b>Telegram AI Studio</b>\n"
-        f"Профессиональная генерация контента через KIE.ai\n\n"
-        f"✨ <b>{total_models}+ моделей</b> • ⚡ Быстро • 🎯 Качественно\n\n"
-        f"Выберите категорию 👇",
+        f"Профессиональная платформа для генерации контента\n\n"
+        f"✨ <b>{total_models}+ AI-моделей</b> от ведущих разработчиков\n"
+        f"⚡ Мгновенная генерация • 🎯 Высокое качество\n\n"
+        f"Выберите категорию:",
         reply_markup=_main_menu_keyboard(),
     )
 
