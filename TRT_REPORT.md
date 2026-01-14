@@ -50,6 +50,12 @@
   - Automatically redacts secrets (tokens, API keys, passwords, DB URLs)
   - Detailed summary: errors, warnings, startup events, exception types
   - Saves sanitized logs to `artifacts/render_logs_sanitized_*.txt`
+- **Database readonly check**: `make db:check`
+  - Uses `DATABASE_URL_READONLY` (only SELECT queries, no DDL/writes)
+  - Connection statistics: active/max connections, usage percentage
+  - Table list: all tables in public schema with row counts (if accessible)
+  - Recent errors: last 24h errors from `app_events` table (if exists)
+  - Migrations check: verifies Alembic migrations table exists
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
