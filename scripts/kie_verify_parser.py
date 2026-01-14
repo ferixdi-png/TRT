@@ -140,9 +140,20 @@ def parse_kie_docs_html(html_content: str, model_id: str) -> Optional[UpstreamMo
 
 def compare_with_local(
     upstream_info: UpstreamModelInfo,
-    local_registry: Dict[str, Any]
-) -> ModelDiff:
-    """Сравнивает upstream информацию с локальным реестром."""
+    local_registry: Dict[str, Any],
+    verify_only: bool = True
+) -> Optional[ModelDiff]:
+    """
+    Сравнивает upstream информацию с локальным реестром.
+    
+    Args:
+        upstream_info: Информация о модели из upstream
+        local_registry: Локальный реестр моделей
+        verify_only: Если True, только сверяет существующие модели, новые помечает как candidates
+    
+    Returns:
+        ModelDiff если модель существует локально или verify_only=False, None если новая модель и verify_only=True
+    """
     model_id = upstream_info.model_id
     
     # Ищем модель в локальном реестре
@@ -154,6 +165,10 @@ def compare_with_local(
                 break
     
     exists_locally = local_model is not None
+    
+    # В режиме verify-only пропускаем новые модели (они будут помечены как candidates отдельно)
+    if verify_only and not exists_locally:
+        return None  # Новая модель, не сравниваем
     
     schema_changes = []
     price_changes = None
@@ -188,7 +203,7 @@ def compare_with_local(
                         "difference": calculated_rub - local_price
                     }
     else:
-        # Новая модель
+        # Новая модель (только если verify_only=False)
         schema_changes.append("NEW MODEL - not in local registry")
     
     return ModelDiff(
@@ -221,7 +236,10 @@ def main():
     parser.add_argument("--model-id", help="Specific model ID to check")
     parser.add_argument("--docs-url", help="URL to Kie.ai docs page")
     parser.add_argument("--html-file", help="Local HTML file instead of URL")
-    parser.add_argument("--verify-only", action="store_true", help="Only verify, don't fetch")
+    parser.add_argument("--verify-only", action="store_true", 
+                       help="Verify-only mode: only check existing models, mark new ones as candidates")
+    parser.add_argument("--allow-new", action="store_true",
+                       help="Allow processing new models (default: verify-only mode)")
     
     args = parser.parse_args()
     
@@ -233,8 +251,24 @@ def main():
     local_registry = load_local_registry()
     print(f"✅ Loaded local registry ({len(local_registry.get('models', []))} models)")
     
-    if args.verify_only:
-        print("ℹ️  Verify-only mode: no upstream fetch")
+    # Определяем режим: verify_only по умолчанию, если не указан --allow-new
+    verify_only_mode = not args.allow_new
+    
+    if args.verify_only and not args.docs_url and not args.html_file:
+        print("ℹ️  Verify-only mode: no upstream fetch (use --docs-url or --html-file to fetch)")
+        print("   Loading existing candidates...")
+        
+        # Показываем существующие candidates
+        artifacts_dir = project_root / "artifacts"
+        candidates_file = artifacts_dir / "kie_model_candidates.json"
+        if candidates_file.exists():
+            with open(candidates_file, 'r', encoding='utf-8') as f:
+                candidates = json.load(f)
+            print(f"   Found {len(candidates)} candidate models:")
+            for c in candidates:
+                print(f"     - {c.get('model_id')} (added: {c.get('added_at', 'unknown')})")
+        else:
+            print("   No candidates found")
         return 0
     
     # Если указан HTML файл, используем его
@@ -260,10 +294,44 @@ def main():
     
     print(f"✅ Parsed upstream info for {upstream_info.model_id}")
     
-    # Сравниваем
-    diff = compare_with_local(upstream_info, local_registry)
+    # Сравниваем (verify_only_mode по умолчанию - только существующие модели)
+    diff = compare_with_local(upstream_info, local_registry, verify_only=verify_only_mode)
     
-    # Выводим diff
+    # Если verify_only_mode и модель новая - помечаем как candidate
+    if verify_only_mode and diff is None:
+        # Новая модель - добавляем в candidates
+        artifacts_dir = project_root / "artifacts"
+        artifacts_dir.mkdir(exist_ok=True)
+        
+        candidates_file = artifacts_dir / "kie_model_candidates.json"
+        candidates = []
+        if candidates_file.exists():
+            with open(candidates_file, 'r', encoding='utf-8') as f:
+                candidates = json.load(f)
+        
+        # Проверяем, нет ли уже такой модели в candidates
+        if not any(c.get("model_id") == upstream_info.model_id for c in candidates):
+            candidate = {
+                "model_id": upstream_info.model_id,
+                "upstream_info": asdict(upstream_info),
+                "added_at": datetime.now().isoformat(),
+                "status": "candidate",
+                "note": "New model from upstream, requires manual review"
+            }
+            candidates.append(candidate)
+            
+            with open(candidates_file, 'w', encoding='utf-8') as f:
+                json.dump(candidates, f, indent=2, ensure_ascii=False)
+            
+            print(f"\n✅ New model marked as CANDIDATE: {upstream_info.model_id}")
+            print(f"💾 Candidates saved to {candidates_file}")
+            return 0
+    
+    if diff is None:
+        print("⚠️  Model not found locally and verify_only mode enabled (skipped, marked as candidate)")
+        return 0
+    
+    # Выводим diff для существующих моделей
     print("\n" + "="*60)
     print("  DIFF REPORT")
     print("="*60)
@@ -291,7 +359,8 @@ def main():
         "fetched_at": datetime.now().isoformat(),
         "model_id": upstream_info.model_id,
         "upstream_info": asdict(upstream_info),
-        "diff": asdict(diff)
+        "diff": asdict(diff),
+        "verify_only": verify_only_mode
     }
     
     snapshot_file = artifacts_dir / f"kie_upstream_snapshot_{upstream_info.model_id.replace('/', '_')}.json"
