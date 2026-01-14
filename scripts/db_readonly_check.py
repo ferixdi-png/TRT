@@ -8,8 +8,9 @@ Database Readonly Check - безопасная проверка БД для heal
 
 import sys
 import os
+import asyncio
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
