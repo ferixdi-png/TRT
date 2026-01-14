@@ -29,14 +29,23 @@ def get_desktop_path() -> Path:
     return desktop
 
 
-def sync_report():
-    """Sync TRT_REPORT.md from repo to Desktop."""
+def sync_report(quiet: bool = False) -> int:
+    """
+    Sync TRT_REPORT.md from repo to Desktop.
+    
+    Args:
+        quiet: If True, suppress output (for post-commit hook)
+    
+    Returns:
+        0 on success, 1 on error
+    """
     repo_report = project_root / 'TRT_REPORT.md'
     desktop = get_desktop_path()
     desktop_report = desktop / 'TRT_REPORT.md'
     
     if not repo_report.exists():
-        print(f"❌ Repo report not found: {repo_report}")
+        if not quiet:
+            print(f"❌ Repo report not found: {repo_report}")
         return 1
     
     try:
@@ -48,10 +57,12 @@ def sync_report():
         with open(desktop_report, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        print(f"✅ Synced TRT_REPORT.md to {desktop_report}")
+        if not quiet:
+            print(f"✅ Synced TRT_REPORT.md to {desktop_report}")
         return 0
     except Exception as e:
-        print(f"❌ Failed to sync report: {e}")
+        if not quiet:
+            print(f"❌ Failed to sync report: {e}")
         return 1
 
 
@@ -109,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument("--files", nargs="+", help="Files changed")
     parser.add_argument("--commits", nargs="+", help="Commit hashes")
     parser.add_argument("--deploy-status", default="pending", help="Deploy status")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Quiet mode (for hooks)")
     
     args = parser.parse_args()
     
@@ -124,8 +136,11 @@ if __name__ == "__main__":
             args.commits,
             args.deploy_status
         )
+        # After appending, sync to Desktop
+        if exit_code == 0:
+            sync_report(quiet=args.quiet)
     else:
-        exit_code = sync_report()
+        exit_code = sync_report(quiet=args.quiet)
     
     sys.exit(exit_code)
 

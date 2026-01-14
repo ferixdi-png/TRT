@@ -103,7 +103,12 @@ db:check:
 # Sync TRT_REPORT.md to Desktop
 sync-report:
 	@echo "📄 Syncing TRT_REPORT.md to Desktop..."
-	@python scripts/sync_desktop_report.py
+	@python scripts/sync_desktop_report.py || echo "⚠️  Sync failed (non-critical)"
+
+# Auto-sync report after cycle (called automatically by post-commit hook)
+auto-sync-report:
+	@echo "🔄 Auto-syncing TRT_REPORT.md to Desktop..."
+	@python scripts/sync_desktop_report.py || echo "⚠️  Auto-sync failed (non-critical)"
 
 # Pre-deploy verify: local tests + smoke
 pre-deploy-verify:
@@ -115,22 +120,34 @@ pre-commit-check:
 	@echo "🔍 Running pre-commit check (TRT_REPORT.md)..."
 	@python scripts/pre_commit_check_report.py
 
-# Install pre-commit hook
+# Install git hooks (pre-commit + post-commit)
 install-hooks:
-	@echo "📎 Installing pre-commit hook..."
-	@chmod +x .git/hooks/pre-commit || echo "⚠️  .git/hooks/pre-commit not found, creating..."
+	@echo "📎 Installing git hooks..."
 	@mkdir -p .git/hooks
 	@if [ ! -f .git/hooks/pre-commit ]; then \
 		echo '#!/bin/sh' > .git/hooks/pre-commit; \
 		echo 'HOOK_DIR="$$(cd "$$(dirname "$$0")" && pwd)"' >> .git/hooks/pre-commit; \
 		echo 'REPO_ROOT="$$(cd "$$HOOK_DIR/../.." && pwd)"' >> .git/hooks/pre-commit; \
-		echo 'python3 "$$REPO_ROOT/scripts/pre_commit_check_report.py"' >> .git/hooks/pre-commit; \
+		echo 'if command -v python3 >/dev/null 2>&1; then PYTHON_CMD="python3"; elif command -v python >/dev/null 2>&1; then PYTHON_CMD="python"; else exit 0; fi' >> .git/hooks/pre-commit; \
+		echo '$$PYTHON_CMD "$$REPO_ROOT/scripts/pre_commit_check_report.py"' >> .git/hooks/pre-commit; \
 		echo 'EXIT_CODE=$$?' >> .git/hooks/pre-commit; \
 		echo 'if [ $$EXIT_CODE -ne 0 ]; then exit 1; fi' >> .git/hooks/pre-commit; \
 		chmod +x .git/hooks/pre-commit; \
 		echo "✅ Pre-commit hook installed"; \
 	else \
 		echo "✅ Pre-commit hook already exists"; \
+	fi
+	@if [ ! -f .git/hooks/post-commit ]; then \
+		echo '#!/bin/sh' > .git/hooks/post-commit; \
+		echo 'HOOK_DIR="$$(cd "$$(dirname "$$0")" && pwd)"' >> .git/hooks/post-commit; \
+		echo 'REPO_ROOT="$$(cd "$$HOOK_DIR/../.." && pwd)"' >> .git/hooks/post-commit; \
+		echo 'if command -v python3 >/dev/null 2>&1; then PYTHON_CMD="python3"; elif command -v python >/dev/null 2>&1; then PYTHON_CMD="python"; else exit 0; fi' >> .git/hooks/post-commit; \
+		echo 'if [ ! -f "$$REPO_ROOT/TRT_REPORT.md" ]; then exit 0; fi' >> .git/hooks/post-commit; \
+		echo '$$PYTHON_CMD "$$REPO_ROOT/scripts/sync_desktop_report.py" 2>/dev/null || true' >> .git/hooks/post-commit; \
+		chmod +x .git/hooks/post-commit; \
+		echo "✅ Post-commit hook installed (auto-sync to Desktop)"; \
+	else \
+		echo "✅ Post-commit hook already exists"; \
 	fi
 
 # Smoke test (alias для удобства)
