@@ -59,6 +59,22 @@ render-logs-10:
 	@echo "📊 Fetching Render logs (last 10 minutes)..."
 	python scripts/render_watch.py --minutes 10
 
+# Ops observability targets
+ops-fetch-logs:
+	@echo "📊 Fetching Render logs..."
+	python -m app.ops.render_logs --minutes 60
+
+ops-db-diag:
+	@echo "🔍 Running DB diagnostics..."
+	python -m app.ops.db_diag
+
+ops-critical5:
+	@echo "🚨 Detecting critical issues..."
+	python -m app.ops.critical5
+
+ops-all: ops-fetch-logs ops-db-diag ops-critical5
+	@echo "✅ Ops observability complete"
+
 # Smoke test (alias для удобства)
 smoke: smoke-webhook
 	@echo "✅ Smoke tests complete"
