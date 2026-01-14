@@ -86,6 +86,54 @@
 
 ## CHANGELOG ENTRIES
 
+### Entry 3: 2026-01-14T09:00:00Z - Render Log Watcher + Desktop Report (COMPLETED)
+
+**What was observed**:
+- No automated way to monitor Render logs and update Desktop report
+- Manual log checking required for production debugging
+- No aggregation of errors/events for quick health assessment
+
+**What changed**:
+- **Files**: `scripts/render_watch.py` (NEW, 450+ lines), `tests/test_render_watch.py` (NEW, 12 test cases), `docs/RENDER_LOG_WATCH.md` (NEW), `Makefile` (UPDATED), `.gitignore` (UPDATED)
+- **Key changes**:
+  - Created `scripts/render_watch.py`: Fetches logs from Render API, analyzes for errors/events, saves to Desktop
+  - Reads credentials from `~/Desktop/TRT_RENDER.env` (Windows: `%USERPROFILE%/Desktop/TRT_RENDER.env`)
+  - Filters and aggregates: ERROR/Exception, UNKNOWN_CALLBACK, DISPATCH_OK/FAIL, PASSIVE_REJECT, LOCK events
+  - Outputs: `TRT_RENDER_LAST_LOGS.txt` (raw), updates `TRT_REPORT.md` with summary
+  - Detects changes since previous run (hash-based comparison)
+  - Added Makefile targets: `make render-logs` (30 min), `make render-logs-10` (10 min)
+  - Added unit tests: `tests/test_render_watch.py` (log parsing, statistics, change detection)
+  - Added documentation: `docs/RENDER_LOG_WATCH.md` (setup guide, troubleshooting)
+  - Updated `.gitignore`: Added `TRT_RENDER.env` to prevent credential commits
+
+**Why it is safe**:
+- Additive changes only (new script, no bot code changes)
+- Script doesn't import bot modules (verified: no `import bot` or `import main_render`)
+- Credentials stored only on Desktop (not in repo, `.gitignore` updated)
+- Idempotent: repeated runs don't break, only append new data
+- No changes to Render configuration or bot runtime
+
+**Tests executed**:
+- ✅ Syntax check: `python -m py_compile scripts/render_watch.py` (no errors)
+- ✅ Linter: No errors
+- ✅ Unit tests: `tests/test_render_watch.py` (12 test cases covering parsing, statistics, change detection)
+- ✅ No bot imports: Verified grep search (no matches)
+
+**Results**:
+- Render log watcher ready for use
+- Desktop report auto-updates with log summaries
+- Makefile targets added for convenience
+- Documentation complete
+
+**Remaining risks / next improvements**:
+- ⚠️ Requires manual setup of `TRT_RENDER.env` on Desktop (documented in `docs/RENDER_LOG_WATCH.md`)
+- ⚠️ Render API rate limits may apply (not tested under high load)
+- ⚠️ No alerting integration (metrics available but not connected to alerting)
+
+**Commit**: `b5a7b81` → merged to `main`
+
+---
+
 ### Entry 1: 2026-01-14T08:00:00Z - Baseline Audit + TOP-5 Identification
 
 **What was observed**:
