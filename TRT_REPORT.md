@@ -56,6 +56,12 @@
   - Table list: all tables in public schema with row counts (if accessible)
   - Recent errors: last 24h errors from `app_events` table (if exists)
   - Migrations check: verifies Alembic migrations table exists
+- **Comprehensive ops check**: `make ops-all`
+  - Runs Render logs check (last 30 minutes) + DB check + Critical 5 analysis
+  - Analyzes top 5 critical issues with severity ranking (CRITICAL > WARNING > INFO)
+  - Generates unified report: `artifacts/ops_report_<timestamp>.md` and `.json`
+  - Creates latest symlinks: `artifacts/ops_report_latest.*`
+  - Categories: Startup (ImportError/Traceback), Database (connection/usage), Application (errors/exceptions)
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
