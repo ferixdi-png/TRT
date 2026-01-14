@@ -1118,19 +1118,12 @@ async def main() -> None:
         else:
             logger.warning("[BOOT CHECK] ⚠️ Config: WEBHOOK_BASE_URL not set (webhook mode requires it)")
     
-    # Final boot check summary
-    logger.info("=" * 60)
-    if boot_check_ok:
-        logger.info("[BOOT SELF-CHECK] ✅ ALL CHECKS PASSED - Ready to start")
-    else:
-        logger.error("[BOOT SELF-CHECK] ❌ SOME CHECKS FAILED - App may have limited functionality")
-    logger.info("=" * 60)
-    
-    # Check 2: Database connection (readonly, non-blocking)
+    # Check 3: Database connection (readonly, non-blocking, optional)
+    # This is optional - if DB is unavailable, app can still start (fail-open)
     if cfg.database_url:
         try:
             import asyncpg
-            # Quick connection test (timeout 3s)
+            # Quick connection test (timeout 3s, non-blocking)
             try:
                 conn = await asyncio.wait_for(
                     asyncpg.connect(cfg.database_url, timeout=3),
@@ -1138,23 +1131,25 @@ async def main() -> None:
                 )
                 await conn.fetchval("SELECT 1")
                 await conn.close()
-                logger.info("[STARTUP] ✅ Database connection OK")
+                logger.info("[BOOT CHECK] ✅ Database connection: OK (read-only test)")
             except asyncio.TimeoutError:
-                logger.warning("[STARTUP] ⚠️ Database connection timeout (non-critical, continuing)")
+                logger.warning("[BOOT CHECK] ⚠️ Database connection: TIMEOUT (non-critical, app continues)")
             except Exception as db_err:
-                logger.warning(f"[STARTUP] ⚠️ Database check failed (non-critical): {db_err}")
+                logger.warning(f"[BOOT CHECK] ⚠️ Database connection: FAILED (non-critical): {db_err}")
         except ImportError:
-            logger.debug("[STARTUP] asyncpg not available, skipping DB check")
+            logger.debug("[BOOT CHECK] ℹ️ Database check: asyncpg not available, skipping")
         except Exception as e:
-            logger.warning(f"[STARTUP] ⚠️ Database check error (non-critical): {e}")
+            logger.warning(f"[BOOT CHECK] ⚠️ Database check: ERROR (non-critical): {e}")
+    else:
+        logger.info("[BOOT CHECK] ℹ️ Database: Not configured (JSON storage mode)")
     
-    # Check 3: Basic routes (/health will be available after server starts)
-    logger.debug("[STARTUP] ✅ Route checks will be available after server start")
-    
-    if not startup_ok:
-        logger.error("[STARTUP] ❌ Self-check failed, but continuing (fail-open)")
-    
-    logger.info("[STARTUP] ✅ Self-check complete")
+    # Final boot check summary
+    logger.info("=" * 60)
+    if boot_check_ok:
+        logger.info("[BOOT SELF-CHECK] ✅ ALL CHECKS PASSED - Ready to start")
+    else:
+        logger.error("[BOOT SELF-CHECK] ❌ SOME CHECKS FAILED - App may have limited functionality (fail-open)")
+    logger.info("=" * 60)
     
     dp, bot = create_bot_application()
     
