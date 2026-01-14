@@ -315,13 +315,30 @@ def main():
     
     print(f"  ✅ Fetched {len(logs)} log lines")
     
-    # Analyze
-    print("  🔍 Analyzing...")
-    analysis = analyze_logs(logs)
-    
+    # Analyze (with secret redaction)
+    print("  🔍 Analyzing logs (secrets will be redacted)...")
+    analysis = analyze_logs(logs, redact_secrets=True)
+
     # Print report
-    exit_code = print_report(analysis, args.minutes)
+    exit_code = print_report(analysis, args.minutes, redact_secrets=True)
     
+    # Save sanitized logs to artifacts (optional)
+    if logs:
+        artifacts_dir = project_root / "artifacts"
+        artifacts_dir.mkdir(exist_ok=True)
+        
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        sanitized_file = artifacts_dir / f"render_logs_sanitized_{timestamp}.txt"
+        
+        # Write redacted logs
+        with open(sanitized_file, 'w', encoding='utf-8') as f:
+            for line in logs:
+                redacted_line = redact_secrets_in_log_line(line)
+                f.write(redacted_line + '\n')
+        
+        print(f"\n  💾 Sanitized logs saved to: {sanitized_file}")
+
     return exit_code
 
 
