@@ -14,13 +14,15 @@ def validate_bytedance_v1_pro_fast_image_to_video_input(data: dict) -> tuple[boo
     """
     errors = []
     
-    # 1. Проверка prompt (обязательный)
+    # 1. Проверка prompt (обязательный, max 10000 символов)
     if 'prompt' not in data or not data['prompt']:
         errors.append("[ERROR] Параметр 'prompt' обязателен и не может быть пустым")
     else:
         prompt = str(data['prompt'])
         if len(prompt) == 0:
             errors.append("[ERROR] Параметр 'prompt' не может быть пустым")
+        elif len(prompt) > 10000:
+            errors.append(f"[ERROR] Параметр 'prompt' слишком длинный: {len(prompt)} символов (максимум 10000)")
     
     # 2. Проверка image_input/image_url (обязательный)
     # Модель ожидает image_input как массив или image_url как строку
