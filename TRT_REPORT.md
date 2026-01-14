@@ -74,6 +74,11 @@
   - **No silent defaults**: raises `KIEConfigError` if USD_TO_RUB not configured
   - Price calculation: `calculate_rub_price(usd_price, markup_multiplier=2.0)`
   - All KIE sync scripts use centralized config (no hardcoded defaults)
+- **Premium UX copy**: Updated welcome message and main menu
+  - Removed all mentions of "Старт с 200₽" / "200 рублей"
+  - Premium, confident copy: "Профессиональная платформа", "премиум-класса"
+  - Clean, elegant messaging without price promises
+  - All callback_data preserved (no breaking changes)
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
