@@ -90,9 +90,11 @@ class ExceptionMiddleware(BaseMiddleware):
             try:
                 if isinstance(event, CallbackQuery) or (isinstance(event, Update) and event.callback_query):
                     callback = event if isinstance(event, CallbackQuery) else event.callback_query
-                    await callback.answer(
-                        "❌ Произошла ошибка. Попробуйте /start",
-                        show_alert=True
+                    await safe_answer_callback(
+                        callback,
+                        text="❌ Произошла ошибка. Попробуйте /start",
+                        show_alert=True,
+                        logger_instance=logger
                     )
                     
                     # Try to edit message with error UI
