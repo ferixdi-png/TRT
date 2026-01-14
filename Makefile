@@ -74,6 +74,15 @@ db:check:
 	@echo "🔍 Checking database connection (readonly)..."
 	python scripts/db_readonly_check.py
 
+# Ops All: Render logs + DB check + Critical 5 analysis
+ops-all:
+	@echo "🚀 Running comprehensive operational check..."
+	@echo "   - Render logs check (last 30 minutes)"
+	@echo "   - Database readonly check"
+	@echo "   - Critical 5 analysis"
+	@echo "   - Report generation"
+	python scripts/ops_all.py
+
 # Ops observability targets
 ops-fetch-logs:
 	@echo "📊 Fetching Render logs..."
