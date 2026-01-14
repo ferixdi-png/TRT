@@ -32,29 +32,32 @@ async def fallback_unknown_callback(callback: CallbackQuery, cid=None, bot_state
     # Safely get update_id using helper
     update_id = get_update_id(callback, data or {})
     
-    # Log telemetry
-    if cid:
-        log_callback_received(
-            callback_data=callback_data,
-            query_id=callback.id,
-            user_id=user_id,
-            chat_id=chat_id or 0,
-            update_id=update_id,
-            cid=cid
-        )
-        log_callback_rejected(
-            cid=cid,
-            user_id=user_id,
-            chat_id=chat_id or 0,
-            reason_code=ReasonCode.UNKNOWN_CALLBACK,
-            reason_detail=f"No handler for callback_data: {callback_data}",
-            bot_state=bot_state
-        )
+    # Generate cid if not provided (for telemetry)
+    from app.telemetry.events import generate_cid
+    final_cid = cid or generate_cid()
     
-    # Log for debugging
+    # Log telemetry (always log, even if cid was None)
+    log_callback_received(
+        callback_data=callback_data,
+        query_id=callback.id,
+        user_id=user_id,
+        chat_id=chat_id or 0,
+        update_id=update_id,
+        cid=final_cid
+    )
+    log_callback_rejected(
+        cid=final_cid,
+        user_id=user_id,
+        chat_id=chat_id or 0,
+        reason_code=ReasonCode.UNKNOWN_CALLBACK,
+        reason_detail=f"No handler for callback_data: {callback_data}",
+        bot_state=bot_state
+    )
+    
+    # Log for debugging (use final_cid)
     logger.warning(
         f"[FALLBACK] Unknown callback: data={callback_data} "
-        f"user_id={user_id} chat_id={chat_id} cid={cid}"
+        f"user_id={user_id} chat_id={chat_id} cid={final_cid}"
     )
     
     # CRITICAL: Always answer callback to prevent "loading" state in Telegram

@@ -131,11 +131,12 @@ async def test_simulate_callback_event():
 
 
 async def test_fallback_handler():
-    """Test 4: Fallback handler responds to UNKNOWN_CALLBACK."""
+    """Test 4: Fallback handler responds to UNKNOWN_CALLBACK with cid logging."""
     try:
         from bot.handlers.fallback import fallback_unknown_callback
         from aiogram.types import CallbackQuery, User, Chat, Message
-        from unittest.mock import AsyncMock, Mock
+        from unittest.mock import AsyncMock, Mock, patch
+        import logging
         
         # Create mock callback
         mock_user = Mock(spec=User)
@@ -152,21 +153,54 @@ async def test_fallback_handler():
         mock_callback.from_user = mock_user
         mock_callback.message = mock_message
         mock_callback.data = "unknown:test:123"
+        mock_callback.id = "test_query_456"
         mock_callback.answer = AsyncMock()
         
-        # Call fallback handler
-        await fallback_unknown_callback(mock_callback, cid="test_cid", bot_state="ACTIVE")
-        
-        # Check that callback was answered
-        if mock_callback.answer.called:
-            test_result("Fallback handler", True, "Callback answered")
+        # Mock telemetry functions to capture calls
+        with patch('bot.handlers.fallback.log_callback_received') as mock_log_received, \
+             patch('bot.handlers.fallback.log_callback_rejected') as mock_log_rejected:
+            
+            # Call fallback handler with cid
+            test_cid = "test_cid_789"
+            await fallback_unknown_callback(
+                mock_callback, 
+                cid=test_cid, 
+                bot_state="ACTIVE",
+                data={"event_update": Mock(update_id=99999)}
+            )
+            
+            # Check that callback was answered
+            if not mock_callback.answer.called:
+                test_result("Fallback handler", False, "Callback not answered")
+                return False
+            
+            # Check that log_callback_received was called with cid
+            if not mock_log_received.called:
+                test_result("Fallback handler", False, "log_callback_received not called")
+                return False
+            
+            # Check that log_callback_rejected was called with UNKNOWN_CALLBACK and cid
+            if not mock_log_rejected.called:
+                test_result("Fallback handler", False, "log_callback_rejected not called")
+                return False
+            
+            # Verify log_callback_rejected was called with correct parameters
+            call_kwargs = mock_log_rejected.call_args[1] if mock_log_rejected.call_args else {}
+            if call_kwargs.get("reason_code") != "UNKNOWN_CALLBACK":
+                test_result("Fallback handler", False, f"Wrong reason_code: {call_kwargs.get('reason_code')}")
+                return False
+            
+            if call_kwargs.get("cid") != test_cid:
+                test_result("Fallback handler", False, f"CID mismatch: expected {test_cid}, got {call_kwargs.get('cid')}")
+                return False
+            
+            test_result("Fallback handler", True, f"Callback answered + UNKNOWN_CALLBACK logged with cid={test_cid}")
             return True
-        else:
-            test_result("Fallback handler", False, "Callback not answered")
-            return False
             
     except Exception as e:
         test_result("Fallback handler", False, f"Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 
