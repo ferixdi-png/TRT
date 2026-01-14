@@ -149,13 +149,7 @@ grep -r "Старт с 200\|200₽" . --exclude-dir=.git
 
 ## NEXT ACTIONS
 
-1. **T-001: Fix queue drops under load** (P0)
-   - Add queue metrics to `/health` endpoint
-   - Expose `total_dropped`, `queue_depth_current`, `last_drop_time` in health response
-   - Add backpressure signaling (return 503 if queue >80% full)
-   - Create branch: `fix/top5-queue-metrics`
-
-2. **T-002: Add CID propagation to KIE job lifecycle** (P0)
+1. **T-002: Add CID propagation to KIE job lifecycle** (P0)
    - Pass `cid` from telemetry to `app/kie/` modules
    - Add `cid` to job creation, polling, callback handlers
    - Update job storage to include `cid` field
