@@ -922,6 +922,18 @@ def _make_web_app(
     app.router.add_get("/diag/webhook", diag_webhook)
     app.router.add_get("/diag/webhookinfo", diag_webhookinfo)
     app.router.add_get("/diag/lock", diag_lock)
+    
+    # Admin DB diagnostics routes
+    try:
+        from app.admin.db_diagnostics import setup_admin_routes
+        db_pool = app.get("db_pool")
+        if db_pool:
+            setup_admin_routes(app, db_pool)
+        else:
+            logger.warning("[ADMIN_DB] DB pool not available, admin routes not registered")
+    except Exception as e:
+        logger.warning(f"[ADMIN_DB] Failed to register admin routes: {e}")
+    
     # aiohttp auto-registers HEAD for GET; explicit add_head causes duplicate route
     app.router.add_post(callback_route, kie_callback)
     app.router.add_post("/webhook/{secret}", webhook)
