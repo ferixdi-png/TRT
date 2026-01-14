@@ -327,6 +327,89 @@ grep -r "Старт с 200\|200₽" . --exclude-dir=.git
 
 ---
 
+## INPUT DEFAULTS VS REQUIRED: VALIDATION REPORT
+
+### Top 5 Popular Models Analysis
+
+| Model | Parameter | Required | Has Default | Default Value | Source | Notes |
+|-------|-----------|----------|-------------|---------------|--------|-------|
+| **z-image** | `prompt` | ✅ | ❌ | - | asked | Always asked from user |
+| | `aspect_ratio` | ❌ | ✅ | `"1:1"` | default | From examples in SOURCE_OF_TRUTH |
+| **flux-2/pro-text-to-image** | `prompt` | ✅ | ❌ | - | asked | Always asked from user |
+| | `aspect_ratio` | ❌ | ✅ | `"1:1"` | default | From model_defaults.py |
+| | `resolution` | ❌ | ✅ | `"1K"` | default | From model_defaults.py |
+| **google/imagen4-fast** | `prompt` | ✅ | ❌ | - | asked | Always asked from user |
+| | `negative_prompt` | ❌ | ✅ | `""` | default | From model_defaults.py |
+| | `aspect_ratio` | ❌ | ✅ | `"16:9"` | default | From model_defaults.py |
+| | `num_images` | ❌ | ✅ | `"1"` | default | From model_defaults.py |
+| **kling/v2-1-standard** | `prompt` | ✅ | ❌ | - | asked | Always asked from user |
+| | *other params* | ❌ | ⚠️ | - | asked | Optional params shown in menu, user can configure or skip |
+| **bytedance/v1-pro-fast-image-to-video** | `prompt` | ✅ | ❌ | - | asked | Always asked from user |
+| | `image_url` | ✅ | ❌ | - | asked | Required for image-to-video, asked from user |
+| | `resolution` | ❌ | ✅ | `"720p"` | default | From model_defaults.py |
+| | `duration` | ❌ | ✅ | `"5"` | default | From model_defaults.py |
+
+### Legend
+
+- **Source**: 
+  - `asked` = parameter is asked from user via UI (required fields or optional fields user chooses to configure)
+  - `default` = has default value applied automatically (from schema default or model_defaults.py)
+  - `missing` = required but no default (should be asked, but may cause issues if not)
+- **Required**: ✅ = required, ❌ = optional
+- **Has Default**: ✅ = has default in schema or model_defaults.py, ❌ = no default
+
+### Summary
+
+- **Total parameters analyzed**: 15+ across 5 models
+- **Parameters asked from user**: 
+  - `prompt` - always asked (all 5 models)
+  - `image_url` - asked for image-to-video models (bytedance/v1-pro-fast-image-to-video)
+  - Optional parameters - shown in menu, user can configure or skip (uses defaults)
+- **Parameters with defaults**: 
+  - `aspect_ratio`, `resolution`, `duration`, `negative_prompt`, `num_images` - have defaults from model_defaults.py or schema
+- **Missing defaults (issues)**: 
+  - ⚠️ `kling/v2-1-standard` - optional parameters may not have defaults defined (needs verification)
+
+### UX Flow Verification
+
+**How parameters are handled:**
+
+1. **Required fields** (except prompt):
+   - Sequentially asked from user via `InputFlow.waiting_input`
+   - Example: `image_url` for image-to-video models
+
+2. **Optional fields**:
+   - After required fields are collected, user sees menu: "Дополнительные параметры"
+   - User can:
+     - Click parameter to configure it → asked via UI
+     - Click "Пропустить все" → defaults applied from `model_defaults.py` or schema
+   - Defaults shown in menu: `○ parameter (default: value)`
+
+3. **Defaults application**:
+   - In `_show_confirmation()`: optional fields not collected show as `○ parameter: default (default)`
+   - In `app/kie/generator.py`: `apply_defaults()` applies model_defaults before validation
+   - In `bot/handlers/flow.py`: `_ask_optional_params()` shows defaults in button text
+
+### Issues Found
+
+1. **kling/v2-1-standard**: 
+   - ⚠️ Need to verify if all optional parameters have defaults
+   - If not, user must configure manually or may fail validation
+
+2. **bytedance/v1-pro-fast-image-to-video**:
+   - ✅ `image_url` is required and asked from user (correct)
+   - ✅ `resolution` and `duration` have defaults (correct)
+
+### Recommendations
+
+1. ✅ **z-image**: Only `prompt` required, `aspect_ratio` has default - **PASS**
+2. ✅ **flux-2/pro-text-to-image**: Only `prompt` required, all optional have defaults - **PASS**
+3. ✅ **google/imagen4-fast**: Only `prompt` required, all optional have defaults - **PASS**
+4. ⚠️ **kling/v2-1-standard**: Verify optional parameters have defaults - **NEEDS VERIFICATION**
+5. ✅ **bytedance/v1-pro-fast-image-to-video**: Required `prompt` and `image_url` asked, optional have defaults - **PASS**
+
+---
+
 ## NEXT ACTIONS
 
 1. **T-002: Add CID propagation to KIE job lifecycle** (P0)
