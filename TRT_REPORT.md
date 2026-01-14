@@ -317,6 +317,101 @@ Production readiness hardening focused on:
 
 ---
 
+## Kie Sync Parser (Latest)
+
+**Date**: 2026-01-XX  
+**Branch**: `feat/kie-sync-parser`  
+**Status**: ✅ COMPLETED
+
+### Summary
+
+Created safe Kie.ai documentation sync module for syncing upstream documentation with local SOURCE_OF_TRUTH without breaking existing contracts.
+
+### Features
+
+1. **Safe Parser** (`app/kie_sync/parser.py`):
+   - Extracts model_id from JSON/cURL examples
+   - Extracts endpoints (standard or overrides)
+   - Extracts input schema from tables/JSON
+   - Extracts pricing (USD/credits)
+   - Caching with checksums (no re-fetch if unchanged)
+   - Rate limiting (1 rps, retries, timeout)
+
+2. **Safe Reconciler** (`app/kie_sync/reconciler.py`):
+   - NEVER deletes existing fields
+   - NEVER changes required→optional automatically
+   - Adds new fields as `experimental=true` and optional
+   - Adds new models as `disabled=true`
+   - Pricing: `RUB = USD * 78 * 2` (fixed formula)
+
+3. **CLI** (`scripts/kie_sync.py`):
+   - `pull` - Fetch pages and cache HTML
+   - `build` - Build normalized upstream JSON
+   - `reconcile` - Merge upstream into local registry
+   - `--no-write` - Dry run mode
+
+4. **Tests** (`tests/test_kie_parser.py`):
+   - Unit tests for parser functions
+   - Fixtures: nano-banana-pro, flux-2/pro-image-to-image, bytedance/v1-pro-fast-image-to-video
+   - Golden-file test for stable output
+
+### Files Changed
+
+- `app/kie_sync/__init__.py` - Module initialization
+- `app/kie_sync/config.py` - Configuration (paths, pricing constants, network settings)
+- `app/kie_sync/parser.py` - HTML parser with BeautifulSoup
+- `app/kie_sync/reconciler.py` - Safe merge logic
+- `app/kie_sync/cli.py` - CLI commands
+- `scripts/kie_sync.py` - CLI wrapper script
+- `tests/test_kie_parser.py` - Unit tests
+- `tests/fixtures/kie_pages/*.html` - Test fixtures (3 pages)
+- `generated/kie_upstream.json.example` - Example output
+- `Makefile` - Added `kie-sync`, `kie-sync-pull`, `kie-sync-build`, `kie-sync-reconcile` targets
+- `requirements.txt` - Added `beautifulsoup4>=4.12.0`, `lxml>=4.9.0`
+- `README.md` - Added "Обновление моделей/параметров/цен" section
+- `TRT_REPORT.md` - Updated with Kie Sync section
+
+### Usage
+
+```bash
+# Pull fresh data (with network)
+make kie-sync-pull
+
+# Build upstream JSON (from cache or network)
+make kie-sync-build
+
+# Reconcile with local registry (dry-run)
+make kie-sync-reconcile
+
+# Apply changes (after reviewing diff)
+python scripts/kie_sync.py reconcile
+```
+
+### Safety Guarantees
+
+- ✅ No deletions of existing fields
+- ✅ No automatic required/optional changes
+- ✅ New fields marked as experimental
+- ✅ New models disabled by default
+- ✅ Pricing formula: `RUB = USD * 78 * 2` (fixed)
+- ✅ Dry-run mode for safe testing
+- ✅ Checksum-based caching (no re-fetch if unchanged)
+
+### Verification
+
+```bash
+# Run parser tests
+python -m pytest tests/test_kie_parser.py -v
+
+# Run sync on fixtures (no network)
+make kie-sync
+
+# Check diff (dry-run)
+python scripts/kie_sync.py reconcile --no-write
+```
+
+---
+
 ## Original Cycle 10 Report
 
 ---

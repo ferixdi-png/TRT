@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flux 2 Pro Image to Image - Kie.ai</title>
+</head>
+<body>
+    <h1>Flux 2 Pro Image to Image</h1>
+    
+    <h2>API Request</h2>
+    <pre>
+curl --request POST \\
+  --url https://api.kie.ai/api/v1/jobs/createTask \\
+  --header 'Authorization: Bearer &lt;token&gt;' \\
+  --header 'Content-Type: application/json' \\
+  --data '{
+    "model": "flux-2/pro-image-to-image",
+    "callBackUrl": "https://your-domain.com/api/callback",
+    "input": {
+      "prompt": "Transform this image into a painting",
+      "image_url": "https://example.com/image.jpg",
+      "strength": 0.7,
+      "guidance_scale": 7.5
+    }
+  }'
+    </pre>
+    
+    <h2>Request Parameters</h2>
+    <table>
+        <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Default</th>
+        </tr>
+        <tr>
+            <td>prompt</td>
+            <td>string</td>
+            <td>Yes</td>
+            <td>-</td>
+        </tr>
+        <tr>
+            <td>image_url</td>
+            <td>string</td>
+            <td>Yes</td>
+            <td>-</td>
+        </tr>
+        <tr>
+            <td>strength</td>
+            <td>number</td>
+            <td>No</td>
+            <td>0.7</td>
+        </tr>
+        <tr>
+            <td>guidance_scale</td>
+            <td>number</td>
+            <td>No</td>
+            <td>7.5</td>
+        </tr>
+    </table>
+    
+    <h2>Pricing</h2>
+    <p>Price: $0.015 USD per generation</p>
+</body>
+</html>
+

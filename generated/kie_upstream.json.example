@@ -1,0 +1,55 @@
+{
+  "version": "1.0.0",
+  "source": "kie_upstream",
+  "models": {
+    "nano-banana-pro": {
+      "model_id": "nano-banana-pro",
+      "docs_url": "https://docs.kie.ai/market/nano-banana-pro",
+      "endpoints": {
+        "create": "https://api.kie.ai/api/v1/jobs/createTask",
+        "record": "https://api.kie.ai/api/v1/jobs/recordInfo"
+      },
+      "input_schema": {
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "max_length": 20000
+        },
+        "image_input": {
+          "type": "array",
+          "required": false,
+          "max_items": 8
+        },
+        "aspect_ratio": {
+          "type": "enum",
+          "required": false,
+          "default": "1:1",
+          "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "1K",
+          "enum": ["1K", "2K", "4K"]
+        },
+        "output_format": {
+          "type": "enum",
+          "required": false,
+          "default": "png",
+          "enum": ["png", "jpg"]
+        }
+      },
+      "pricing": {
+        "usd": 0.018,
+        "credits": 18
+      },
+      "checksum": "abc123...",
+      "fetched_at": "2026-01-XX 12:00:00"
+    }
+  },
+  "_metadata": {
+    "built_at": "2026-01-XX 12:00:00",
+    "total_models": 1
+  }
+}
+

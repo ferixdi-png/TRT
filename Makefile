@@ -53,6 +53,24 @@ smoke-webhook:
 smoke: smoke-webhook
 	@echo "✅ Smoke tests complete"
 
+# Kie sync commands
+kie-sync:
+	@echo "🔄 Running kie-sync (build + reconcile on fixtures)..."
+	python3 scripts/kie_sync.py build --no-cache
+	python3 scripts/kie_sync.py reconcile --no-write
+
+kie-sync-pull:
+	@echo "📥 Pulling Kie.ai documentation..."
+	python3 scripts/kie_sync.py pull
+
+kie-sync-build:
+	@echo "🔨 Building upstream JSON..."
+	python3 scripts/kie_sync.py build
+
+kie-sync-reconcile:
+	@echo "🔄 Reconciling with local registry..."
+	python3 scripts/kie_sync.py reconcile --no-write
+
 # Проверка логов Render после деплоя (ждем 2 минуты)
 deploy-check:
 	@echo "🔍 Проверка Render логов..."

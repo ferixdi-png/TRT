@@ -11,6 +11,10 @@ requests>=2.31.0
 httpx>=0.24.0
 GitPython>=3.1.40
 
+# HTML Parsing (for Kie sync)
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
 # Retry logic
 tenacity>=8.2.0
 
