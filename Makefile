@@ -87,8 +87,18 @@ ops-critical5:
 	@echo "🚨 Detecting critical issues..."
 	python -m app.ops.critical5
 
-ops-all: ops-fetch-logs ops-db-diag ops-critical5
-	@echo "✅ Ops observability complete"
+ops-all: render:logs db:check
+	@echo "✅ Ops observability complete (Render logs + DB check)"
+
+# Render logs check (using render_logs_check.py)
+render:logs:
+	@echo "📊 Checking Render logs for errors..."
+	@python scripts/render_logs_check.py --minutes 30 || echo "⚠️  Render logs check failed (may need TRT_RENDER.env)"
+
+# Database readonly check
+db:check:
+	@echo "🔍 Checking database (readonly)..."
+	@python scripts/db_readonly_check.py || echo "⚠️  DB check failed (may need DATABASE_URL_READONLY)"
 
 # Sync TRT_REPORT.md to Desktop
 sync-report:
@@ -98,13 +108,7 @@ sync-report:
 # Pre-deploy verify: local tests + smoke
 pre-deploy-verify:
 	@echo "🔍 Pre-deploy verification..."
-	@echo "1️⃣ Import check..."
-	@python -c "import main_render; print('✅ Import OK')" || (echo "❌ Import failed" && exit 1)
-	@echo "2️⃣ Syntax check..."
-	@python -m py_compile main_render.py app/telemetry/middleware.py || (echo "❌ Syntax error" && exit 1)
-	@echo "3️⃣ Sync report..."
-	@python scripts/sync_desktop_report.py
-	@echo "✅ Pre-deploy verify complete"
+	@python scripts/pre_deploy_verify.py
 
 # Smoke test (alias для удобства)
 smoke: smoke-webhook
