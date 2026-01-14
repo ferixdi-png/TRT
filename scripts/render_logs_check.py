@@ -179,26 +179,38 @@ def fetch_render_logs(api_key: str, service_id: str, minutes: int = 30) -> List[
             return []
 
 
-def analyze_logs(logs: List[str]) -> Dict[str, Any]:
+def analyze_logs(logs: List[str], redact_secrets: bool = True) -> Dict[str, Any]:
     """
     Analyze logs for errors, exceptions, and critical issues.
-    
+
+    Args:
+        logs: List of log lines
+        redact_secrets: If True, redact secrets in log lines before analysis
+
     Returns:
-        Dict with counts and top errors
+        Dict with counts and top errors (with redacted secrets)
     """
     errors = []
     exceptions = []
     import_errors = []
     tracebacks = []
     warnings = []
-    
+    info_lines = []
+    startup_lines = []
+
     # Patterns to detect
     error_pattern = re.compile(r'(?i)(error|failed|failure|exception|traceback|import.*error)')
     traceback_pattern = re.compile(r'(?i)(traceback|file ".*", line \d+)')
     import_error_pattern = re.compile(r'(?i)(import.*error|cannot import)')
     warning_pattern = re.compile(r'(?i)(warning|warn)')
-    
+    info_pattern = re.compile(r'(?i)(info|✅|ℹ️)')
+    startup_pattern = re.compile(r'(?i)(startup|boot|self-check|initialization)')
+
     for i, line in enumerate(logs):
+        # Redact secrets if requested
+        if redact_secrets:
+            line = redact_secrets_in_log_line(line)
+        
         if error_pattern.search(line):
             errors.append((i, line))
         if traceback_pattern.search(line):
@@ -207,7 +219,11 @@ def analyze_logs(logs: List[str]) -> Dict[str, Any]:
             import_errors.append((i, line))
         if warning_pattern.search(line) and not error_pattern.search(line):
             warnings.append((i, line))
-    
+        if info_pattern.search(line) and not error_pattern.search(line):
+            info_lines.append((i, line))
+        if startup_pattern.search(line):
+            startup_lines.append((i, line))
+
     # Extract exception types
     exception_types = {}
     for _, line in errors:
@@ -216,7 +232,7 @@ def analyze_logs(logs: List[str]) -> Dict[str, Any]:
         if match:
             exc_type = match.group(1)
             exception_types[exc_type] = exception_types.get(exc_type, 0) + 1
-    
+
     return {
         "total_lines": len(logs),
         "error_count": len(errors),
@@ -224,49 +240,91 @@ def analyze_logs(logs: List[str]) -> Dict[str, Any]:
         "import_error_count": len(import_errors),
         "traceback_count": len(tracebacks),
         "warning_count": len(warnings),
+        "info_count": len(info_lines),
+        "startup_count": len(startup_lines),
         "top_errors": errors[:10],  # Top 10 errors
         "top_import_errors": import_errors[:5],
+        "top_warnings": warnings[:5],
+        "top_startup_lines": startup_lines[:5],
         "exception_types": exception_types,
     }
 
 
-def print_report(analysis: Dict[str, Any], minutes: int):
-    """Print diagnostic report."""
-    print("\n" + "=" * 60)
-    print(f"  RENDER LOGS CHECK (last {minutes} minutes)")
-    print("=" * 60)
-    print(f"\n  Total log lines: {analysis['total_lines']}")
-    print(f"  Errors: {analysis['error_count']}")
-    print(f"  Import Errors: {analysis['import_error_count']}")
-    print(f"  Tracebacks: {analysis['traceback_count']}")
-    print(f"  Warnings: {analysis['warning_count']}")
+def print_report(analysis: Dict[str, Any], minutes: int, redact_secrets: bool = True):
+    """
+    Print diagnostic report with summary.
     
+    Args:
+        analysis: Analysis results from analyze_logs()
+        minutes: Number of minutes of logs checked
+        redact_secrets: Whether secrets were redacted (for display)
+    """
+    print("\n" + "=" * 70)
+    print(f"  RENDER LOGS CHECK - SUMMARY (last {minutes} minutes)")
+    print("=" * 70)
+    
+    # Overall statistics
+    print(f"\n  📊 STATISTICS:")
+    print(f"     Total log lines: {analysis['total_lines']}")
+    print(f"     Errors: {analysis['error_count']}")
+    print(f"     Import Errors: {analysis['import_error_count']}")
+    print(f"     Tracebacks: {analysis['traceback_count']}")
+    print(f"     Warnings: {analysis['warning_count']}")
+    print(f"     Info messages: {analysis.get('info_count', 0)}")
+    print(f"     Startup events: {analysis.get('startup_count', 0)}")
+    
+    if redact_secrets:
+        print(f"\n  🔒 Secrets redacted in output")
+
+    # Exception types breakdown
     if analysis['exception_types']:
-        print(f"\n  Exception Types:")
+        print(f"\n  🔍 EXCEPTION TYPES:")
         for exc_type, count in sorted(analysis['exception_types'].items(), key=lambda x: -x[1]):
-            print(f"    - {exc_type}: {count}")
-    
+            print(f"     - {exc_type}: {count}")
+
+    # Top import errors (critical)
     if analysis['top_import_errors']:
-        print(f"\n  ⚠️  TOP IMPORT ERRORS:")
+        print(f"\n  ⚠️  TOP IMPORT ERRORS (CRITICAL):")
         for idx, (line_num, line) in enumerate(analysis['top_import_errors'], 1):
-            print(f"    {idx}. Line {line_num}: {line[:100]}")
-    
+            # Truncate long lines, preserve context
+            display_line = line[:120] + "..." if len(line) > 120 else line
+            print(f"     {idx}. Line {line_num}: {display_line}")
+
+    # Top errors
     if analysis['top_errors']:
         print(f"\n  ⚠️  TOP ERRORS:")
         for idx, (line_num, line) in enumerate(analysis['top_errors'][:5], 1):
-            print(f"    {idx}. Line {line_num}: {line[:100]}")
+            display_line = line[:120] + "..." if len(line) > 120 else line
+            print(f"     {idx}. Line {line_num}: {display_line}")
+
+    # Top warnings
+    if analysis.get('top_warnings'):
+        print(f"\n  ⚠️  TOP WARNINGS:")
+        for idx, (line_num, line) in enumerate(analysis['top_warnings'][:3], 1):
+            display_line = line[:120] + "..." if len(line) > 120 else line
+            print(f"     {idx}. Line {line_num}: {display_line}")
+
+    # Startup events (if any)
+    if analysis.get('top_startup_lines'):
+        print(f"\n  🚀 STARTUP EVENTS:")
+        for idx, (line_num, line) in enumerate(analysis['top_startup_lines'][:3], 1):
+            display_line = line[:100] + "..." if len(line) > 100 else line
+            print(f"     {idx}. Line {line_num}: {display_line}")
+
+    print("\n" + "=" * 70)
     
-    print("\n" + "=" * 60)
-    
-    # Return exit code
+    # Final verdict
     if analysis['import_error_count'] > 0 or analysis['traceback_count'] > 0:
         print("  ❌ CRITICAL ISSUES FOUND")
+        print("     Action: Review logs above and fix ImportError/Traceback issues")
         return 1
     elif analysis['error_count'] > 0:
         print("  ⚠️  ERRORS FOUND (non-critical)")
+        print("     Action: Review errors above, may need attention")
         return 0
     else:
         print("  ✅ NO CRITICAL ERRORS")
+        print("     Status: Logs look clean")
         return 0
 
 
