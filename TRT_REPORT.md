@@ -9,6 +9,26 @@
 
 ---
 
+## SYSTEM BASELINE
+
+**Commit Hash (main)**: `4474f1b` (latest: docs update)  
+**Active Feature Flags**:
+- `BOT_MODE=webhook` (production)
+- `SINGLE_MODEL_ONLY=0` (all models enabled)
+- `LOCK_MODE=wait_then_passive` (default)
+- `DRY_RUN=0` (real generation enabled)
+- `TEST_MODE=0` (production mode)
+
+**Active Model Registry Version**: `1.2.10-FINAL` (from `models/KIE_SOURCE_OF_TRUTH.json`)  
+**Pricing Map Version**: `1.2.10-FINAL` (embedded in registry)  
+**Last Successful Smoke Timestamp**: ⏳ PENDING (will update after deploy verification)
+
+**System Documentation**:
+- `TRT_SYSTEM.md`: ✅ Created (architecture, runtime modes, invariants, data storage, integrations, UI/UX, config, smoke checks, failure modes, ADRs)
+- `TRT_RUNBOOK.md`: ✅ Created (quickstart, verification, log reading, recovery, release checklist)
+
+---
+
 ## DEPLOYMENT STATUS
 
 **Merged to main**: ✅ YES (commit `95163fd`)  
@@ -30,6 +50,30 @@
 5. Check logs: no `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
 
 ---  
+
+---
+
+## WHAT CHANGED
+
+**Files Modified**:
+- `TRT_SYSTEM.md` (NEW) - Canonical system specification
+- `TRT_RUNBOOK.md` (NEW) - Operational runbook
+- `TRT_REPORT.md` (UPDATED) - Added SYSTEM BASELINE section
+
+**Why**:
+- Stabilize architecture documentation for future iterations
+- Prevent context loss and ensure deterministic behavior
+- Provide operational guide for deploy/debug/smoke steps
+
+## WHAT DID NOT CHANGE (GUARANTEES)
+
+- ✅ Fast-ack webhook behavior (<200ms response)
+- ✅ Lock semantics (PostgreSQL advisory lock, ACTIVE/PASSIVE mode)
+- ✅ Canonical model/pricing sources (`models/KIE_SOURCE_OF_TRUTH.json`)
+- ✅ Pricing formula (`RUB = KIE_USD * 2.0 * FX_RATE`)
+- ✅ Database schema (no migrations)
+- ✅ Handler contracts (callback_data, FSM states)
+- ✅ Telemetry event chain (RECEIVED → ROUTED → ACCEPTED/REJECTED → UI_RENDER → DISPATCH_OK/FAIL)
 
 ---
 
