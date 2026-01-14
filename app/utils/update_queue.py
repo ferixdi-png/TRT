@@ -249,6 +249,19 @@ class UpdateQueueManager:
                                     "[WORKER_%d] ⏸️ PASSIVE_REJECT callback_query data=%s",
                                     worker_id, update.callback_query.data
                                 )
+                                
+                                # Log to DB (best-effort, non-blocking)
+                                try:
+                                    from app.observability.events_db import log_passive_reject
+                                    from app.telemetry.telemetry_helpers import get_event_ids
+                                    event_ids = get_event_ids(update, {})
+                                    await log_passive_reject(
+                                        cid=event_ids.get("cid", ""),
+                                        update_id=event_ids.get("update_id"),
+                                        update_type="callback_query"
+                                    )
+                                except Exception:
+                                    pass  # Swallow errors
                             
                             # message - отправляем сообщение
                             elif hasattr(update, 'message') and update.message:
@@ -369,6 +382,19 @@ class UpdateQueueManager:
                         "[WORKER_%d] ✅ DISPATCH_OK update_id=%s in %.2fs → DONE",
                         worker_id, update_id, elapsed
                     )
+                    
+                    # Log to DB (best-effort, non-blocking)
+                    try:
+                        from app.observability.events_db import log_dispatch_ok
+                        from app.telemetry.telemetry_helpers import get_event_ids
+                        event_ids = get_event_ids(update, {})
+                        await log_dispatch_ok(
+                            cid=event_ids.get("cid", ""),
+                            handler="update_queue_worker",
+                            user_id=event_ids.get("user_id")
+                        )
+                    except Exception:
+                        pass  # Swallow errors
                 
                 except asyncio.TimeoutError:
                     logger.error(
@@ -383,6 +409,20 @@ class UpdateQueueManager:
                         worker_id, update_id, exc
                     )
                     self._metrics.total_errors += 1
+                    
+                    # Log to DB (best-effort, non-blocking)
+                    try:
+                        from app.observability.events_db import log_dispatch_fail
+                        from app.telemetry.telemetry_helpers import get_event_ids
+                        event_ids = get_event_ids(update, {})
+                        await log_dispatch_fail(
+                            cid=event_ids.get("cid", ""),
+                            handler="update_queue_worker",
+                            error=exc,
+                            user_id=event_ids.get("user_id")
+                        )
+                    except Exception:
+                        pass  # Swallow errors
                 
                 finally:
                     self._metrics.workers_active -= 1

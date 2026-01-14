@@ -86,6 +86,62 @@
 
 ## CHANGELOG ENTRIES
 
+### Entry 4: 2026-01-14T10:00:00Z - DB-driven Observability + Admin Diagnostics (COMPLETED)
+
+**What was observed**:
+- No structured event logging in database (only file logs)
+- No admin endpoints for quick health/diagnostics checks
+- No SQL reports for production debugging
+- Events scattered across logs, hard to correlate
+
+**What changed**:
+- **Files**: 
+  - `migrations/013_app_events_observability.sql` (NEW) - app_events table
+  - `app/observability/events_db.py` (NEW) - Best-effort event logging
+  - `app/admin/db_diagnostics.py` (NEW) - Admin endpoints
+  - `scripts/sql/diagnostics.sql` (NEW) - SQL reports
+  - `tests/test_observability_events.py` (NEW) - Unit tests
+  - `tests/test_admin_db_diagnostics.py` (NEW) - Admin endpoint tests
+  - `main_render.py` (UPDATED) - Events DB init + admin routes
+  - `app/utils/update_queue.py` (UPDATED) - Integrated event logging
+- **Key changes**:
+  - Created `app_events` table: structured event log with cid, user_id, task_id, model, payload_json, err_stack
+  - Added indexes: (ts DESC), (event), (user_id), (task_id), (cid), (level), (model)
+  - Implemented best-effort async logging: errors swallowed to prevent breaking user flows
+  - Added admin endpoints: `/admin/db/health` (metrics), `/admin/db/recent` (filtered events)
+  - Integrated event logging in `update_queue.py`: PASSIVE_REJECT, DISPATCH_OK, DISPATCH_FAIL
+  - Created 10 SQL diagnostic queries: errors by hour, top events, stuck jobs, etc.
+  - Added unit tests for events DB and admin endpoints
+
+**Why it is safe**:
+- Additive changes only (new table, new endpoints, new logging calls)
+- Best-effort logging: all DB write errors are swallowed (no breaking user flows)
+- Admin endpoints protected by ADMIN_ID/ADMIN_SECRET
+- No changes to existing user flows or handlers
+- Migration is forward-only, idempotent (CREATE TABLE IF NOT EXISTS)
+
+**Tests executed**:
+- ✅ Unit tests: `tests/test_observability_events.py` (10 test cases)
+- ✅ Unit tests: `tests/test_admin_db_diagnostics.py` (auth + endpoints)
+- ✅ Syntax check: All Python files compile
+- ✅ Migration SQL: Validated syntax
+
+**Results**:
+- Structured event logging ready (app_events table)
+- Admin diagnostics endpoints available
+- SQL reports available for production debugging
+- Event logging integrated in update_queue
+
+**Remaining risks / next improvements**:
+- ⚠️ Events DB logging is best-effort (may miss events if DB is down)
+- ⚠️ Admin endpoints require ADMIN_ID/ADMIN_SECRET setup
+- ⚠️ Need to integrate event logging in more places (telemetry middleware, exception middleware, KIE handlers)
+- ⚠️ Consider adding retention policy for app_events (auto-cleanup old events)
+
+**Commit**: Will be created after final verification
+
+---
+
 ### Entry 3: 2026-01-14T09:00:00Z - Render Log Watcher + Desktop Report (COMPLETED)
 
 **What was observed**:

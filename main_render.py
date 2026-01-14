@@ -1151,6 +1151,16 @@ async def main() -> None:
                     set_marketing_db(db_service)
                     set_free_manager(free_manager)
 
+                    # Initialize observability events DB
+                    from app.observability.events_db import init_events_db
+                    if hasattr(db_service, '_pool') and db_service._pool:
+                        init_events_db(db_service._pool)
+                        logger.info("[OBSERVABILITY] ✅ Events DB initialized")
+                    
+                    # Store pool in app context for admin endpoints
+                    if hasattr(db_service, '_pool'):
+                        app["db_pool"] = db_service._pool
+
                     logger.info("[DB] ✅ DatabaseService initialized and injected into handlers")
                 except Exception as e:
                     logger.exception("[DB] ❌ Database init failed: %s", e)
