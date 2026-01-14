@@ -61,6 +61,45 @@ def redact_secret(value: str, show_chars: int = 4) -> str:
     return "*" * (len(value) - show_chars) + value[-show_chars:]
 
 
+def redact_secrets_in_log_line(line: str) -> str:
+    """
+    Redact secrets in a log line (tokens, passwords, API keys, etc.).
+    
+    Patterns to redact:
+    - Bearer tokens: Bearer <token>
+    - API keys: api_key=<value>, API_KEY=<value>
+    - Passwords: password=<value>, pwd=<value>
+    - Tokens: token=<value>, TOKEN=<value>
+    - Database URLs: postgresql://, postgres:// (keep hostname, redact credentials)
+    - Telegram tokens: TELEGRAM_BOT_TOKEN=<value>
+    """
+    import re
+    
+    # Redact Bearer tokens
+    line = re.sub(r'Bearer\s+([A-Za-z0-9_-]{20,})', r'Bearer ***REDACTED***', line)
+    
+    # Redact API keys and tokens in KEY=VALUE format
+    line = re.sub(
+        r'((?:api[_-]?key|API[_-]?KEY|token|TOKEN|password|PASSWORD|pwd|PWD|secret|SECRET)\s*[=:]\s*)([A-Za-z0-9_-]{10,})',
+        r'\1***REDACTED***',
+        line,
+        flags=re.IGNORECASE
+    )
+    
+    # Redact database URLs (keep protocol and hostname, redact credentials)
+    line = re.sub(
+        r'(postgresql?://)([^:]+):([^@]+)@',
+        r'\1***USER***:***PASSWORD***@',
+        line,
+        flags=re.IGNORECASE
+    )
+    
+    # Redact long hex strings (likely tokens)
+    line = re.sub(r'\b([A-Fa-f0-9]{32,})\b', lambda m: '*' * min(len(m.group(1)), 20) + '...' if len(m.group(1)) > 20 else '***REDACTED***', line)
+    
+    return line
+
+
 def fetch_render_logs(api_key: str, service_id: str, minutes: int = 30) -> List[str]:
     """
     Fetch logs from Render API for last N minutes.
