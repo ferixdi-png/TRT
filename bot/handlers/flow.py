@@ -184,37 +184,37 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     # Build dynamic menu
     buttons = []
     
-    # Priority mapping: category -> user-friendly label
-    # Based on real categories from SOURCE_OF_TRUTH
+    # Premium category labels with microcopy (1 line benefit)
+    # Format: Emoji + Short name + Benefit
     priority_map = [
-        ('image', '🎨 Картинки и дизайн'),
-        ('video', '🎬 Видео'),
-        ('audio', '🎵 Аудио'),
-        ('enhance', '✨ Улучшение качества'),
-        ('avatar', '🧑‍🎤 Аватары'),
-        ('music', '🎵 Музыка'),
+        ('image', '🎨 Картинки', 'Создание и редактирование изображений'),
+        ('video', '🎬 Видео', 'Генерация видео для соцсетей'),
+        ('audio', '🎵 Аудио', 'Озвучка и обработка звука'),
+        ('enhance', '✨ Улучшение', 'Повышение качества контента'),
+        ('avatar', '🧑‍🎤 Аватары', 'Создание персонажей и аватаров'),
+        ('music', '🎵 Музыка', 'Генерация музыкальных композиций'),
     ]
     
     # Add buttons for existing categories
-    for cat_id, label in priority_map:
+    for cat_id, label, _ in priority_map:
         if cat_id in grouped and len(grouped[cat_id]) > 0:
             buttons.append([InlineKeyboardButton(text=label, callback_data=f"cat:{cat_id}")])
     
-    # MASTER PROMPT: "Лучшие модели (curated)" + "Поиск модели"
+    # Premium features with microcopy
     buttons.append([
-        InlineKeyboardButton(text="⭐ Лучшие модели", callback_data="menu:best"),
-        InlineKeyboardButton(text="🔍 Поиск модели", callback_data="menu:search"),
+        InlineKeyboardButton(text="⭐ Лучшие", callback_data="menu:best"),
+        InlineKeyboardButton(text="🔍 Поиск", callback_data="menu:search"),
     ])
     
-    # NEW: Quick actions row - Instagram, TikTok, YouTube
+    # Quick actions - premium feature
     buttons.append([
         InlineKeyboardButton(text="⚡ Быстрые действия", callback_data="quick:menu"),
     ])
     
-    # NEW: Gallery row - Trending, Free
+    # Trending & Free - discoverability
     buttons.append([
         InlineKeyboardButton(text="🔥 Trending", callback_data="gallery:trending"),
-        InlineKeyboardButton(text="🆓 Free", callback_data="gallery:free"),
+        InlineKeyboardButton(text="🆓 Бесплатно", callback_data="gallery:free"),
     ])
     
     # Browse all categories (if needed)
@@ -654,24 +654,13 @@ async def start_cmd(message: Message, state: FSMContext) -> None:
     models_list = _get_models_list()
     total_models = len([m for m in models_list if _is_valid_model(m) and m.get("enabled", True)])
     
-    # Welcome message with quick-start guide (premium copywriting)
+    # Premium welcome message - short and elegant
     await message.answer(
         f"👋 Привет, <b>{first_name}</b>!\n\n"
-        f"🤖 <b>Telegram AI Studio</b> — лучший интегратор KIE.ai\n\n"
-        f"✨ <b>{total_models}+ моделей</b> для создания контента\n"
-        f"⚡ Быстро • Качественно • Стабильно\n\n"
-        f"<b>Возможности:</b>\n"
-        f"🎨 Картинки и дизайн — от 0₽\n"
-        f"🎬 Видео для TikTok/Reels — от 7.90₽\n"
-        f"✨ Улучшение качества — от 0.20₽\n"
-        f"🎵 Аудио и озвучка — от 0.08₽\n\n"
-        f"💡 <b>Как начать:</b>\n"
-        f"1️⃣ Выберите категорию или модель\n"
-        f"2️⃣ Введите параметры\n"
-        f"3️⃣ Получите результат!\n\n"
-        f"🆓 <b>Бесплатные модели</b> доступны всем\n"
-        f"📜 История генераций • 💰 Управление балансом\n\n"
-        f"Выберите задачу 👇",
+        f"<b>Telegram AI Studio</b>\n"
+        f"Профессиональная генерация контента через KIE.ai\n\n"
+        f"✨ <b>{total_models}+ моделей</b> • ⚡ Быстро • 🎯 Качественно\n\n"
+        f"Выберите категорию 👇",
         reply_markup=_main_menu_keyboard(),
     )
 
