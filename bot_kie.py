@@ -25057,6 +25057,13 @@ async def create_bot_application(settings) -> Application:
     no_silence_guard = get_no_silence_guard()
     logger.info("✅ NO-SILENCE GUARD: Integrated in button_callback, input_parameters, error_handler")
     
+    # ==================== EXCEPTION MIDDLEWARE ====================
+    # Add exception middleware FIRST (before handlers) to catch all unhandled exceptions
+    from bot.middleware.exception_middleware import ExceptionMiddleware
+    exception_middleware = ExceptionMiddleware()
+    application.middleware.setup(exception_middleware)
+    logger.info("✅ EXCEPTION MIDDLEWARE: Registered to catch all unhandled exceptions")
+    
     # Вызываем внутреннюю функцию для регистрации handlers
     # (см. _register_all_handlers_internal ниже в main())
     await _register_all_handlers_internal(application)

@@ -1348,29 +1348,70 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("cat:"))
 async def category_cb(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    category = callback.data.split(":", 1)[1]
-    grouped = _models_by_category()
-    models = grouped.get(category, [])
-
-    if not models:
-        category_label = _category_label(category)
-        await callback.message.edit_text(
-            f"⚠️ {category_label}\n\n"
-            f"В этой категории пока нет доступных моделей.\n"
-            f"Попробуйте другую категорию или вернитесь в меню.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")],
-                [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
-            ])
-        )
-        return
-
-    await state.update_data(category=category, category_models=models)
-    await callback.message.edit_text(
-        f"Категория: {_category_label(category)}\n\nВыберите модель:",
-        reply_markup=_model_keyboard(models, f"cat:{category}", page=0),
+    """Handle category selection callback (cat:image, cat:enhance, etc.)."""
+    # Telemetry: log callback received
+    from app.telemetry import log_callback_received, log_callback_routed, log_callback_accepted, log_ui_render, log_dispatch_ok, generate_cid
+    
+    cid = generate_cid()
+    user_id = callback.from_user.id if callback.from_user else None
+    message_id = callback.message.message_id if callback.message else None
+    query_id = callback.id if callback else None
+    
+    log_callback_received(
+        callback_data=callback.data,
+        query_id=query_id,
+        message_id=message_id,
+        user_id=user_id,
+        cid=cid
     )
+    
+    log_callback_routed(
+        callback_data=callback.data,
+        handler="category_cb",
+        cid=cid
+    )
+    
+    try:
+        await callback.answer()
+        category = callback.data.split(":", 1)[1]
+        grouped = _models_by_category()
+        models = grouped.get(category, [])
+
+        if not models:
+            category_label = _category_label(category)
+            await callback.message.edit_text(
+                f"⚠️ {category_label}\n\n"
+                f"В этой категории пока нет доступных моделей.\n"
+                f"Попробуйте другую категорию или вернитесь в меню.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📂 Все категории", callback_data="menu:categories")],
+                    [InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")]
+                ])
+            )
+            log_callback_accepted(callback_data=callback.data, handler="category_cb", cid=cid)
+            log_ui_render(screen_id="category_empty", cid=cid)
+            log_dispatch_ok(cid=cid)
+            return
+
+        await state.update_data(category=category, category_models=models)
+        await callback.message.edit_text(
+            f"Категория: {_category_label(category)}\n\nВыберите модель:",
+            reply_markup=_model_keyboard(models, f"cat:{category}", page=0),
+        )
+        log_callback_accepted(callback_data=callback.data, handler="category_cb", cid=cid)
+        log_ui_render(screen_id=f"category_{category}", cid=cid)
+        log_dispatch_ok(cid=cid)
+    except Exception as e:
+        from app.telemetry import log_callback_rejected
+        log_callback_rejected(
+            callback_data=callback.data,
+            reason="EXCEPTION",
+            reason_detail=str(e),
+            cid=cid
+        )
+        logger.error(f"Error in category_cb: {e}", exc_info=True)
+        # Re-raise to let exception middleware handle it
+        raise
 
 
 @router.callback_query(F.data.startswith("page:"))
