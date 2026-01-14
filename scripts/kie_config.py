@@ -4,6 +4,15 @@ KIE Configuration - единый источник конфигурации дл�
 
 Загружает конфигурацию из environment variables или config файла.
 Запрещает "тихие" дефолты - требует явного указания критических параметров.
+
+ИСПОЛЬЗОВАНИЕ:
+    from scripts.kie_config import get_usd_to_rub_rate, calculate_rub_price, KIEConfigError
+    
+    try:
+        rate = get_usd_to_rub_rate()  # Raises KIEConfigError if not set
+        rub_price = calculate_rub_price(0.05, markup_multiplier=2.0)
+    except KIEConfigError as e:
+        print(f"Configuration error: {e}")
 """
 
 import os
