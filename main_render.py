@@ -613,6 +613,15 @@ def _make_web_app(
         # This returns immediately - worker processes in background
         from app.utils.update_queue import get_queue_manager
         queue_manager = get_queue_manager()
+        
+        # Check backpressure (for monitoring, but still enqueue - fast-ack must return 200)
+        if queue_manager.should_reject_for_backpressure():
+            logger.warning(
+                "[WEBHOOK] ⚠️ BACKPRESSURE: queue utilization >80% (depth=%d/%d) - enqueueing anyway (fast-ack)",
+                queue_manager.get_metrics()["queue_depth"],
+                queue_manager.get_metrics()["queue_max"]
+            )
+        
         enqueued = queue_manager.enqueue(update, update_id)
         
         if enqueued:

@@ -75,7 +75,7 @@
 
 | ID | Task | Status | Assigned | Notes |
 |----|------|--------|----------|-------|
-| T-001 | Fix queue drops under load (metrics + backpressure) | Planned | - | P0: Add queue metrics to /health, expose drop rate, add backpressure signaling |
+| T-001 | Fix queue drops under load (metrics + backpressure) | Done | - | ✅ Added queue_utilization_percent, drop_rate_percent, last_drop_time, backpressure_active to /health |
 | T-002 | Add CID propagation to KIE job lifecycle | Planned | - | P0: Pass cid from telemetry to job creation, polling, callback handlers |
 | T-003 | Add payment idempotency validation | Planned | - | P1: Validate `ref` uniqueness before processing payment |
 | T-004 | Improve PASSIVE mode UX (premium message) | Planned | - | P2: Replace hardcoded message with premium styling, add "Refresh" button |
