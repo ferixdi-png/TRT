@@ -17,21 +17,37 @@ from typing import Dict, List, Any, Optional
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import existing scripts
-from scripts.render_logs_check import (
-    load_render_config,
-    fetch_render_logs,
-    analyze_logs,
-    redact_secrets_in_log_line
+# Import existing scripts (using importlib to avoid circular imports)
+import importlib.util
+
+def import_module_from_file(file_path: Path, module_name: str):
+    """Import module from file path."""
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+# Import render_logs_check module
+render_logs_module = import_module_from_file(
+    project_root / "scripts" / "render_logs_check.py",
+    "render_logs_check"
 )
-from scripts.db_readonly_check import (
-    load_db_config,
-    check_database_connection,
-    get_connection_stats,
-    get_table_list,
-    check_recent_errors,
-    check_migrations_table
+load_render_config = render_logs_module.load_render_config
+fetch_render_logs = render_logs_module.fetch_render_logs
+analyze_logs = render_logs_module.analyze_logs
+redact_secrets_in_log_line = render_logs_module.redact_secrets_in_log_line
+
+# Import db_readonly_check module
+db_check_module = import_module_from_file(
+    project_root / "scripts" / "db_readonly_check.py",
+    "db_readonly_check"
 )
+load_db_config = db_check_module.load_db_config
+check_database_connection = db_check_module.check_database_connection
+get_connection_stats = db_check_module.get_connection_stats
+get_table_list = db_check_module.get_table_list
+check_recent_errors = db_check_module.check_recent_errors
+check_migrations_table = db_check_module.check_migrations_table
 
 
 def run_render_logs_check(minutes: int = 30) -> Dict[str, Any]:
