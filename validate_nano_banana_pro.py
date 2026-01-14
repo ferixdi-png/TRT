@@ -19,8 +19,8 @@ def validate_nano_banana_pro_input(data: dict) -> tuple[bool, list[str]]:
         errors.append("[ERROR] Параметр 'prompt' обязателен и не может быть пустым")
     else:
         prompt = str(data['prompt'])
-        if len(prompt) > 10000:
-            errors.append(f"[ERROR] Параметр 'prompt' слишком длинный: {len(prompt)} символов (максимум 10000)")
+        if len(prompt) > 20000:
+            errors.append(f"[ERROR] Параметр 'prompt' слишком длинный: {len(prompt)} символов (максимум 20000)")
         elif len(prompt) == 0:
             errors.append("[ERROR] Параметр 'prompt' не может быть пустым")
     
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         print("[OK] ВСЕ ДАННЫЕ КОРРЕКТНЫ!")
         print()
         print("[DETAILS] Детали:")
-        print(f"  - prompt: {len(test_data['prompt'])} символов (лимит: 10000) [OK]")
+        print(f"  - prompt: {len(test_data['prompt'])} символов (лимит: 20000) [OK]")
         if test_data.get('image_input'):
             if isinstance(test_data['image_input'], list):
                 print(f"  - image_input: {len(test_data['image_input'])} изображение(й) (максимум 8) [OK]")
@@ -138,7 +138,7 @@ if __name__ == "__main__":
             print(f"  - output_format: опциональный, не указан - будет использован default 'png' [OK]")
         print()
         print("[NOTE] Особенности модели:")
-        print("  - Требуется prompt (текстовое описание изображения, макс. 10000 символов)")
+        print("  - Требуется prompt (текстовое описание изображения, макс. 20000 символов)")
         print("  - image_input - опциональный, входные изображения для трансформации или использования как референс (до 8 изображений)")
         print("  - aspect_ratio определяет соотношение сторон изображения (default: 1:1)")
         print("  - resolution влияет на цену: 1K/2K (18 кредитов), 4K (24 кредита), default: 1K")

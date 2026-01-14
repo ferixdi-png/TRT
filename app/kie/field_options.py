@@ -132,7 +132,6 @@ FIELD_OPTIONS = {
     "nano-banana-pro.output_format": [
         "png",      # Default
         "jpg",
-        "webp",
     ],
     
     # google/nano-banana - TEXT2IMAGE
