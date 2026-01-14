@@ -40,6 +40,10 @@ class ModelSpecFromRegistry:
     states: List[str]
     title_ru: Optional[str] = None
     description: Optional[str] = None
+    # Menu display fields (with defaults)
+    menu_title: Optional[str] = None  # Short title for button
+    menu_subtitle: Optional[str] = None  # Subtitle/description for button
+    menu_badge: Optional[str] = None  # Badge (e.g., "2K", "Видео", "Upscale")
 
 
 class KIERegistry:
@@ -85,6 +89,10 @@ class KIERegistry:
                 states=model_data.get("states", ["waiting", "success", "fail"]),
                 title_ru=model_data.get("title_ru"),
                 description=model_data.get("description"),
+                # Menu display fields (with defaults)
+                menu_title=model_data.get("menu_title"),
+                menu_subtitle=model_data.get("menu_subtitle"),
+                menu_badge=model_data.get("menu_badge"),
             )
             
             self._models[model_id] = spec

@@ -31,6 +31,46 @@ class FlowStates(StatesGroup):
     search_query = State()  # Waiting for model search query
 
 
+# Category metadata with title, subtitle, badge
+CATEGORY_METADATA = {
+    "image": {
+        "title": "🎨 Картинки",
+        "subtitle": "Создание и редактирование изображений",
+        "badge": None,
+    },
+    "video": {
+        "title": "🎬 Видео",
+        "subtitle": "Генерация видео для соцсетей",
+        "badge": "Видео",
+    },
+    "audio": {
+        "title": "🎵 Аудио",
+        "subtitle": "Озвучка и обработка звука",
+        "badge": None,
+    },
+    "music": {
+        "title": "🎵 Музыка",
+        "subtitle": "Генерация музыкальных композиций",
+        "badge": None,
+    },
+    "enhance": {
+        "title": "✨ Улучшение",
+        "subtitle": "Повышение качества контента",
+        "badge": "Upscale",
+    },
+    "avatar": {
+        "title": "🧑‍🎤 Аватары",
+        "subtitle": "Создание персонажей и аватаров",
+        "badge": None,
+    },
+    "other": {
+        "title": "⭐ Другое",
+        "subtitle": "Прочие модели",
+        "badge": None,
+    },
+}
+
+# Legacy category labels (backward compatibility)
 CATEGORY_LABELS = {
     # Real categories from SOURCE_OF_TRUTH (v1.2.6)
     "image": "🎨 Картинки и дизайн",
@@ -150,7 +190,18 @@ def _models_by_category() -> Dict[str, List[Dict[str, Any]]]:
 
 
 def _category_label(category: str) -> str:
+    """Get category label (backward compatibility)."""
     return CATEGORY_LABELS.get(category, category.replace("_", " ").title())
+
+
+def _category_metadata(category: str) -> Dict[str, Optional[str]]:
+    """Get category metadata (title, subtitle, badge) with defaults."""
+    metadata = CATEGORY_METADATA.get(category, {})
+    return {
+        "title": metadata.get("title") or _category_label(category),
+        "subtitle": metadata.get("subtitle"),
+        "badge": metadata.get("badge"),
+    }
 
 
 def _categories_from_registry() -> List[Tuple[str, str]]:
@@ -184,21 +235,23 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
     # Build dynamic menu
     buttons = []
     
-    # Premium category labels with microcopy (1 line benefit)
-    # Format: Emoji + Short name + Benefit
-    priority_map = [
-        ('image', '🎨 Картинки', 'Создание и редактирование изображений'),
-        ('video', '🎬 Видео', 'Генерация видео для соцсетей'),
-        ('audio', '🎵 Аудио', 'Озвучка и обработка звука'),
-        ('enhance', '✨ Улучшение', 'Повышение качества контента'),
-        ('avatar', '🧑‍🎤 Аватары', 'Создание персонажей и аватаров'),
-        ('music', '🎵 Музыка', 'Генерация музыкальных композиций'),
-    ]
+    # Premium category labels with metadata (title, subtitle, badge)
+    priority_map = ['image', 'video', 'audio', 'enhance', 'avatar', 'music']
     
-    # Add buttons for existing categories
-    for cat_id, label, _ in priority_map:
+    # Add buttons for existing categories with metadata
+    for cat_id in priority_map:
         if cat_id in grouped and len(grouped[cat_id]) > 0:
-            buttons.append([InlineKeyboardButton(text=label, callback_data=f"cat:{cat_id}")])
+            meta = _category_metadata(cat_id)
+            title = meta["title"]
+            badge = meta.get("badge")
+            
+            # Add badge if present
+            if badge:
+                button_text = f"{title} • {badge}"
+            else:
+                button_text = title
+            
+            buttons.append([InlineKeyboardButton(text=button_text, callback_data=f"cat:{cat_id}")])
     
     # Premium features with microcopy
     buttons.append([
@@ -282,10 +335,15 @@ def _model_keyboard(models: List[Dict[str, Any]], back_cb: str, page: int = 0, p
     page_models = models[start:end]
     total_pages = (len(models) + per_page - 1) // per_page
     
-    # Model buttons with PRICE indicators (MASTER PROMPT requirement)
+    # Model buttons with PRICE indicators and metadata (title, subtitle, badge)
     for model in page_models:
         model_id = model.get("model_id", "unknown")
-        title = model.get("display_name") or model.get("name") or model_id
+        
+        # Get menu metadata with defaults
+        menu_title = model.get("menu_title") or model.get("display_name") or model.get("name") or model_id
+        menu_subtitle = model.get("menu_subtitle")
+        menu_badge = model.get("menu_badge")
+        
         price_rub = model.get("pricing", {}).get("rub_per_gen", 0)
         
         # Price tag
@@ -298,12 +356,33 @@ def _model_keyboard(models: List[Dict[str, Any]], back_cb: str, page: int = 0, p
         else:
             price_tag = f"{price_rub:.0f}₽"
         
-        # Truncate long names
-        max_name_len = 28
-        if len(title) > max_name_len:
-            title = title[:max_name_len-3] + "..."
+        # Build button text with badge if present
+        # Format: "Title • Badge • Price" or "Title • Price"
+        parts = [menu_title]
+        if menu_badge:
+            parts.append(menu_badge)
+        parts.append(price_tag)
         
-        button_text = f"{title} • {price_tag}"
+        button_text = " • ".join(parts)
+        
+        # Truncate if too long (max 64 chars for Telegram button)
+        max_len = 60
+        if len(button_text) > max_len:
+            # Try to keep title and price, truncate badge if needed
+            if menu_badge and len(menu_badge) > 10:
+                # Shorten badge
+                short_badge = menu_badge[:8] + ".."
+                button_text = f"{menu_title} • {short_badge} • {price_tag}"
+            if len(button_text) > max_len:
+                # Truncate title
+                title_max = max_len - len(f" • {menu_badge if menu_badge else ''} • {price_tag}")
+                if title_max > 10:
+                    menu_title = menu_title[:title_max-3] + "..."
+                    button_text = f"{menu_title} • {menu_badge if menu_badge else ''} • {price_tag}".replace(" •  • ", " • ")
+                else:
+                    # Fallback: just title and price
+                    button_text = f"{menu_title[:max_len-10]}... • {price_tag}"
+        
         rows.append([InlineKeyboardButton(text=button_text, callback_data=f"model:{model_id}")])
     
     # Pagination buttons
