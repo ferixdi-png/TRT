@@ -481,4 +481,118 @@ python scripts/smoke_e2e_buttons.py
 
 ---
 
+---
+
+## CYCLE: P0 Clean Start + Observability (2026-01-14)
+
+### P0-ИНЦИДЕНТ: TelemetryMiddleware ImportError
+
+**Проблема**: `ImportError: cannot import name 'TelemetryMiddleware' from app.telemetry.telemetry_helpers`  
+**Root Cause**: Класс `TelemetryMiddleware` отсутствовал в `telemetry_helpers.py` (там только helper функции)  
+**Решение**: 
+- Создан `app/telemetry/middleware.py` с классом `TelemetryMiddleware`
+- Добавлен fail-open механизм: если импорт не удается, приложение стартует с WARNING
+- Middleware регистрируется только если доступен, иначе приложение работает без телеметрии
+
+**Файлы изменены**:
+- `app/telemetry/middleware.py` (новый) - класс TelemetryMiddleware
+- `main_render.py` - fail-open импорт и регистрация
+- `app/telemetry/telemetry_helpers.py` - добавлен комментарий о расположении middleware
+
+**Проверка**:
+```bash
+python -c "import main_render; print('✅ Import successful')"
+```
+
+### Startup Self-Check (нулевой шум до кликов)
+
+**Цель**: Обеспечить отсутствие Traceback/Exception/Error в логах до первого апдейта от Telegram.
+
+**Реализовано**:
+1. **Import check**: Проверка импорта `main_render` без ошибок
+2. **Database check**: Быстрая проверка соединения с БД (readonly, timeout 3s, non-blocking)
+3. **Fail-open**: Все проверки не блокируют старт, только логируют WARNING
+
+**Файлы изменены**:
+- `main_render.py` - добавлен startup self-check блок
+
+### Render Logs Check
+
+**Утилита**: `scripts/render_logs_check.py`
+
+**Функциональность**:
+- Читает `Desktop/TRT_RENDER.env` (RENDER_API_KEY, RENDER_SERVICE_ID)
+- Вытягивает последние N минут логов через Render API
+- Анализирует на ERROR/Traceback/ImportError
+- Выводит диагностический отчет
+
+**Использование**:
+```bash
+make render:logs      # Последние 30 минут
+make render:logs-10   # Последние 10 минут
+python scripts/render_logs_check.py --minutes 60
+```
+
+**Безопасность**:
+- Секреты редиактятся (показываются только последние 4 символа)
+- Graceful skip если сеть недоступна
+- Не требует реальных API ключей для тестирования (--skip-network)
+
+### Database Readonly Check
+
+**Утилита**: `scripts/db_readonly_check.py`
+
+**Функциональность**:
+- Использует `DATABASE_URL_READONLY` из Desktop/TRT_RENDER.env или env
+- Выполняет только SELECT запросы (безопасно)
+- Проверяет: SELECT 1, наличие migrations таблицы, ключевые таблицы
+
+**Использование**:
+```bash
+make db:check
+python scripts/db_readonly_check.py
+```
+
+**Безопасность**:
+- Только readonly операции
+- Никаких миграций/DDL
+- Таймаут 5 секунд
+- Не блокирует основной процесс
+
+### Makefile Targets
+
+Добавлены новые цели:
+- `make render:logs` - проверка логов Render на ошибки (30 минут)
+- `make render:logs-10` - проверка логов (10 минут)
+- `make db:check` - проверка БД (readonly)
+
+### Что проверить дальше
+
+1. **Deploy на Render**:
+   - Проверить, что старт проходит без ImportError
+   - Убедиться, что в логах нет Traceback до первого клика
+   - Проверить, что APP_VERSION логируется
+
+2. **Smoke тесты**:
+   - `python -c "import main_render"` - должен проходить
+   - `/health` endpoint - должен возвращать 200
+   - `make render:logs` - должен работать (если есть Desktop/TRT_RENDER.env)
+
+3. **Логи после деплоя**:
+   - Нет ImportError
+   - Нет Traceback до первого UPDATE_RECEIVED
+   - APP_VERSION присутствует в startup логах
+
+### Коммиты
+
+```
+efe961b fix(P0): create TelemetryMiddleware class and make import fail-open to prevent startup crashes
+<latest> feat: add startup self-check, render logs check, and db readonly check utilities
+```
+
+### Ветка
+- `fix/callback-update-id-bug` (будет переименована в `fix/p0-clean-start-and-observability`)
+
+---
+
 **End of TRT_REPORT.md**
