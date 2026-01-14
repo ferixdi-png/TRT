@@ -1,0 +1,41 @@
+name: Check TRT_REPORT.md Update
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'bot/**'
+      - 'TRT_REPORT.md'
+  push:
+    branches:
+      - main
+      - 'fix/**'
+      - 'feat/**'
+    paths:
+      - 'app/**'
+      - 'bot/**'
+      - 'TRT_REPORT.md'
+
+jobs:
+  check-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit for diff
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check TRT_REPORT.md update
+        run: |
+          python3 scripts/pre_commit_check_report.py
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::TRT_REPORT.md must be updated when app/ or bot/ files change"
+            exit 1
+          fi
+

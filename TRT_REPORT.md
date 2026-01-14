@@ -37,6 +37,10 @@
   - Goal: ZERO Traceback/ImportError in logs before first user click
 - Desktop report sync script created: `scripts/sync_desktop_report.py`
 - Pre-deploy verify target added: `make pre-deploy-verify`
+- **Pre-commit + CI enforcement**: TRT_REPORT.md must be updated when app/ or bot/ files change
+  - Pre-commit hook: `scripts/pre_commit_check_report.py` (blocks commit locally)
+  - CI check: `.github/workflows/check_trt_report.yml` (blocks PR merge)
+  - Install hook: `make install-hooks`
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware

@@ -110,6 +110,29 @@ pre-deploy-verify:
 	@echo "🔍 Pre-deploy verification..."
 	@python scripts/pre_deploy_verify.py
 
+# Pre-commit check: ensure TRT_REPORT.md updated when app/bot changes
+pre-commit-check:
+	@echo "🔍 Running pre-commit check (TRT_REPORT.md)..."
+	@python scripts/pre_commit_check_report.py
+
+# Install pre-commit hook
+install-hooks:
+	@echo "📎 Installing pre-commit hook..."
+	@chmod +x .git/hooks/pre-commit || echo "⚠️  .git/hooks/pre-commit not found, creating..."
+	@mkdir -p .git/hooks
+	@if [ ! -f .git/hooks/pre-commit ]; then \
+		echo '#!/bin/sh' > .git/hooks/pre-commit; \
+		echo 'HOOK_DIR="$$(cd "$$(dirname "$$0")" && pwd)"' >> .git/hooks/pre-commit; \
+		echo 'REPO_ROOT="$$(cd "$$HOOK_DIR/../.." && pwd)"' >> .git/hooks/pre-commit; \
+		echo 'python3 "$$REPO_ROOT/scripts/pre_commit_check_report.py"' >> .git/hooks/pre-commit; \
+		echo 'EXIT_CODE=$$?' >> .git/hooks/pre-commit; \
+		echo 'if [ $$EXIT_CODE -ne 0 ]; then exit 1; fi' >> .git/hooks/pre-commit; \
+		chmod +x .git/hooks/pre-commit; \
+		echo "✅ Pre-commit hook installed"; \
+	else \
+		echo "✅ Pre-commit hook already exists"; \
+	fi
+
 # Smoke test (alias для удобства)
 smoke: smoke-webhook
 	@echo "✅ Smoke tests complete"
