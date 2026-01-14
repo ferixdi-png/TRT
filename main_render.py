@@ -255,13 +255,19 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
         zero_silence_router,
         z_image_router,
     )
-    from app.handlers.debug_handler import router as debug_router  # P0: Admin diagnostics
+    # from app.handlers.debug_handler import router as debug_router  # TODO: Needs router refactor
+    from bot.handlers.fallback import router as fallback_router  # P0: Global fallback
+    from app.middleware.exception_middleware import ExceptionMiddleware  # P0: Catch all exceptions
 
     # P0: Telemetry middleware FIRST (adds cid + bot_state to all updates)
     dp.update.middleware(TelemetryMiddleware())
     
+    # P0: Exception middleware SECOND (catches all unhandled exceptions)
+    dp.update.middleware(ExceptionMiddleware())
+    
+    # Note: debug_router temporarily disabled - needs router refactor
+    # dp.include_router(debug_router)
     dp.include_router(error_handler_router)
-    dp.include_router(debug_router)  # P0: Admin debug panel
     dp.include_router(diag_router)
     dp.include_router(admin_router)
     dp.include_router(z_image_router)  # Z-image (SINGLE_MODEL support)
@@ -272,6 +278,7 @@ def create_bot_application() -> tuple[Dispatcher, Bot]:
     dp.include_router(quick_actions_router)
     dp.include_router(flow_router)
     dp.include_router(zero_silence_router)
+    dp.include_router(fallback_router)  # P0: MUST BE LAST - catches unknown callbacks
 
     return dp, bot
 
