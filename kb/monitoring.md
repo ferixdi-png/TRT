@@ -87,6 +87,39 @@
 | `balance.py` | 🔄 TODO | CALLBACK_* chain |
 | `history.py` | 🔄 TODO | CALLBACK_* chain |
 
+### Telemetry Contract Checklist (Cycle 10)
+
+**Required Event Names:**
+- `UPDATE_RECEIVED` - every webhook/update
+- `CALLBACK_RECEIVED` - every callback query
+- `COMMAND_RECEIVED` - every command
+- `CALLBACK_ROUTED` - callback routed to handler
+- `CALLBACK_ACCEPTED` - callback processed successfully
+- `CALLBACK_REJECTED` - callback rejected (with reason_code)
+- `UI_RENDER` - screen rendered
+- `DISPATCH_OK` - successful dispatch
+- `TASK_CREATED` - generation task created
+- `TASK_COMPLETED` - generation task completed
+
+**Required Fields per Event:**
+- `cid` (correlation ID) - **MANDATORY** for all events
+- `update_id` - for UPDATE_RECEIVED (from Telegram)
+- `callback_id` - for CALLBACK_RECEIVED (from CallbackQuery.id)
+- `user_id` - user identifier (hashed in production)
+- `bot_state` - ACTIVE or PASSIVE
+- `screen_id` - for UI_RENDER events
+- `reason_code` - for CALLBACK_REJECTED (PASSIVE_REJECT, VALIDATION_FAIL, UNKNOWN_CALLBACK, etc.)
+- `handler` - for CALLBACK_ROUTED events
+
+**Standard Rejection Reasons:**
+- `PASSIVE_REJECT` - bot is in PASSIVE mode during deploy overlap
+- `VALIDATION_FAIL` - parameter validation failed
+- `UNKNOWN_CALLBACK` - no handler found for callback_data
+- `STATE_MISMATCH` - FSM state mismatch
+- `BALANCE_INSUFFICIENT` - user balance too low
+- `MODEL_DISABLED` - model is disabled
+- `RATE_LIMIT` - user rate limit exceeded
+
 ### 60-Second Diagnosis Workflow
 
 **Scenario**: "Кнопка не работает"

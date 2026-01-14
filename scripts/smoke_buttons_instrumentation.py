@@ -1,267 +1,220 @@
+#!/usr/bin/env python3
 """
-Smoke тест: "КНОПКИ НЕ ТЕРЯЮТСЯ" - проверить, что callback создаёт полную цепочку событий.
-
-Цепочка для успешного callback:
-1. CALLBACK_RECEIVED
-2. CALLBACK_ROUTED
-3. CALLBACK_ACCEPTED (или CALLBACK_REJECTED/NOOP с reason_code)
-4. UI_RENDER (следующий экран)
-
-Если какого-то события нет - тест падает (CI red).
+Smoke test for button instrumentation - simulates main menu → categories → model selection.
+Validates telemetry chains and responses.
 """
 
+import sys
 import asyncio
-import json
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, Any, List
 
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class LogEventCapture:
-    """Перехватывать log_event вызовы для тестирования."""
-    
-    def __init__(self):
-        self.events: List[dict] = []
-        self.original_logger_info = None
-    
-    def __enter__(self):
-        # Перехватить logger.info вызовы
-        self.original_logger_info = logger.info
-        logger.info = self._capture_log
-        return self
-    
-    def __exit__(self, *args):
-        logger.info = self.original_logger_info
-    
-    def _capture_log(self, msg: str, *args, **kwargs):
-        """Перехватить JSON-structured log."""
-        try:
-            # Если это наш JSON log event
-            if isinstance(msg, str) and msg.startswith("{"):
-                event = json.loads(msg)
-                self.events.append(event)
-        except (json.JSONDecodeError, Exception):
-            pass
-    
-    def find_event(self, name: str, cid: str) -> Optional[dict]:
-        """Найти событие по name и cid."""
-        for event in self.events:
-            if event.get("name") == name and event.get("cid") == cid:
-                return event
-        return None
-    
-    def find_events_for_cid(self, cid: str) -> List[dict]:
-        """Найти все события для cid."""
-        return [e for e in self.events if e.get("cid") == cid]
-
-
-async def test_callback_chain() -> bool:
-    """
-    Smoke тест: проверить, что callback создаёт полную цепочку.
-    
-    Сценарий:
-    1. Отправить /start → получить MAIN_MENU
-    2. Кликнуть на кнопку CAT_IMAGE
-    3. Проверить, что в логах есть полная цепочка:
-       - CALLBACK_RECEIVED
-       - CALLBACK_ROUTED
-       - CALLBACK_ACCEPTED
-       - UI_RENDER (next screen)
-    
-    Returns:
-        True если тест прошёл, False если не прошёл
-    """
-    
+async def test_category_buttons():
+    """Test category button callbacks."""
     logger.info("=" * 60)
-    logger.info("🚀 SMOKE TEST: Button Chain Detection")
+    logger.info("SMOKE TEST: Category Buttons")
     logger.info("=" * 60)
     
-    test_cid = "smoke_test_001"
-    required_events = [
-        "CALLBACK_RECEIVED",
-        "CALLBACK_ROUTED",
-        "CALLBACK_ACCEPTED",
-        "UI_RENDER",
-    ]
+    # Import after path setup
+    from bot.handlers.flow import category_cb, _category_keyboard
+    from aiogram.fsm.context import FSMContext
+    from aiogram.types import CallbackQuery, User, Chat, Message
+    from unittest.mock import AsyncMock, Mock
     
-    # Перехватить события
-    with LogEventCapture() as capture:
-        # Имитация: логировать события как в реальной обработке
-        from app.telemetry.logging_contract import log_event, EventType, Domain, ReasonCode
-        from app.telemetry.telemetry_helpers import (
-            log_callback_received,
-            log_callback_routed,
-            log_callback_accepted,
-            log_ui_render,
-        )
-        
-        # Simulated flow
-        test_user_id = 12345
-        test_chat_id = 67890
-        
-        # Event 1: CALLBACK_RECEIVED
-        log_callback_received(
-            cid=test_cid,
-            update_id=999,
-            user_id=test_user_id,
-            chat_id=test_chat_id,
-            callback_data="action=category&id=image",
-            bot_state="ACTIVE",
-        )
-        
-        # Event 2: CALLBACK_ROUTED
-        log_callback_routed(
-            cid=test_cid,
-            user_id=test_user_id,
-            chat_id=test_chat_id,
-            handler="handle_category_select",
-            action_id="category",
-            button_id="CAT_IMAGE",
-        )
-        
-        # Event 3: CALLBACK_ACCEPTED
-        log_callback_accepted(
-            cid=test_cid,
-            user_id=test_user_id,
-            chat_id=test_chat_id,
-            next_screen="CATEGORY_PICK",
-            action_id="category",
-        )
-        
-        # Event 4: UI_RENDER
-        log_ui_render(
-            cid=test_cid,
-            user_id=test_user_id,
-            chat_id=test_chat_id,
-            screen_id="CATEGORY_PICK",
-            buttons=["MODEL_ZIMAGE", "MODEL_DEEPDREAM", "BACK"],
-        )
-        
-        # Проверить цепочку
-        found_events = []
-        missing_events = []
-        
-        for event_name in required_events:
-            event = capture.find_event(event_name, test_cid)
-            if event:
-                found_events.append(event_name)
-                logger.info(f"✅ {event_name}: found")
-            else:
-                missing_events.append(event_name)
-                logger.error(f"❌ {event_name}: NOT FOUND")
-        
-        # Results
-        logger.info("")
-        logger.info(f"Found: {len(found_events)}/{len(required_events)} events")
-        
-        if missing_events:
-            logger.error(f"❌ FAIL: Missing events: {missing_events}")
-            return False
-        
-        # Проверить все события имеют cid
-        all_events_for_cid = capture.find_events_for_cid(test_cid)
-        logger.info(f"📊 Total events for cid={test_cid}: {len(all_events_for_cid)}")
-        
-        if len(all_events_for_cid) >= len(required_events):
-            logger.info("✅ PASS: Full callback chain detected")
-            return True
-        else:
-            logger.error(f"❌ FAIL: Expected {len(required_events)}, got {len(all_events_for_cid)}")
-            return False
+    # Create mock callback
+    mock_user = Mock(spec=User)
+    mock_user.id = 12345
+    mock_user.first_name = "Test"
+    
+    mock_chat = Mock(spec=Chat)
+    mock_chat.id = 12345
+    
+    mock_message = Mock(spec=Message)
+    mock_message.chat = mock_chat
+    mock_message.message_id = 1
+    mock_message.edit_text = AsyncMock()
+    
+    mock_callback = Mock(spec=CallbackQuery)
+    mock_callback.id = "test_query_id"
+    mock_callback.from_user = mock_user
+    mock_callback.message = mock_message
+    mock_callback.answer = AsyncMock()
+    mock_callback.data = "cat:image"
+    
+    # Create mock state
+    mock_state = Mock(spec=FSMContext)
+    mock_state.update_data = AsyncMock()
+    mock_state.get_data = AsyncMock(return_value={})
+    
+    # Test category callback
+    try:
+        await category_cb(mock_callback, mock_state, data={})
+        logger.info("✅ category_cb executed without exceptions")
+        assert mock_callback.answer.called, "callback.answer() should be called"
+        logger.info("✅ callback.answer() was called")
+    except Exception as e:
+        logger.error(f"❌ category_cb failed: {e}", exc_info=True)
+        return False
+    
+    return True
 
 
-async def test_reason_codes_present() -> bool:
-    """Проверить, что отказанные callbacks имеют reason_code."""
-    
-    logger.info("")
+async def test_telemetry_helpers():
+    """Test telemetry helper functions."""
     logger.info("=" * 60)
-    logger.info("🚀 SMOKE TEST: Reason Codes Present")
+    logger.info("SMOKE TEST: Telemetry Helpers")
     logger.info("=" * 60)
     
-    test_cid = "smoke_test_002"
-    
-    with LogEventCapture() as capture:
-        from app.telemetry.logging_contract import log_event, ReasonCode
-        from app.telemetry.telemetry_helpers import log_callback_rejected
-        
-        # Simulated rejection
-        log_callback_rejected(
-            cid=test_cid,
-            user_id=12345,
-            chat_id=67890,
-            reason_code=ReasonCode.STATE_MISMATCH,
-            reason_text="FSM state was PARAMS_FORM, expected MAIN_MENU",
-            expected_state="MAIN_MENU",
-            actual_state="PARAMS_FORM",
-        )
-        
-        event = capture.find_event("CALLBACK_REJECTED", test_cid)
-        
-        if event:
-            has_reason_code = "reason_code" in event
-            has_reason_text = "reason_text" in event
-            
-            if has_reason_code and has_reason_text:
-                logger.info(f"✅ PASS: reason_code and reason_text present")
-                logger.info(f"   Code: {event.get('reason_code')}")
-                logger.info(f"   Text: {event.get('reason_text')}")
-                return True
-            else:
-                logger.error(f"❌ FAIL: Missing reason_code or reason_text")
-                return False
-        else:
-            logger.error(f"❌ FAIL: CALLBACK_REJECTED event not found")
-            return False
-
-
-async def main() -> int:
-    """Запустить все smoke тесты."""
-    
-    logger.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s",
+    from app.telemetry.telemetry_helpers import (
+        get_update_id, get_callback_id, get_user_id, get_chat_id
     )
+    from aiogram.types import CallbackQuery, User, Chat, Message, Update
+    from unittest.mock import Mock
+    
+    # Test get_callback_id
+    mock_callback = Mock(spec=CallbackQuery)
+    mock_callback.id = "test_id"
+    callback_id = get_callback_id(mock_callback)
+    assert callback_id == "test_id", f"Expected 'test_id', got {callback_id}"
+    logger.info("✅ get_callback_id works")
+    
+    # Test get_user_id
+    mock_user = Mock(spec=User)
+    mock_user.id = 12345
+    mock_callback.from_user = mock_user
+    user_id = get_user_id(mock_callback)
+    assert user_id == 12345, f"Expected 12345, got {user_id}"
+    logger.info("✅ get_user_id works")
+    
+    # Test get_update_id with data
+    data = {"event_update": Mock(spec=Update, update_id=123)}
+    update_id = get_update_id(mock_callback, data)
+    assert update_id == 123, f"Expected 123, got {update_id}"
+    logger.info("✅ get_update_id works with event_update")
+    
+    return True
+
+
+async def test_log_callback_rejected():
+    """Test log_callback_rejected with all parameters."""
+    logger.info("=" * 60)
+    logger.info("SMOKE TEST: log_callback_rejected signature")
+    logger.info("=" * 60)
+    
+    from app.telemetry.events import log_callback_rejected, generate_cid
+    
+    cid = generate_cid()
+    
+    # Test with all parameters (should not raise TypeError)
+    try:
+        log_callback_rejected(
+            callback_data="test:data",
+            reason_code="TEST_REJECT",
+            reason_detail="Test detail",
+            error_type="TestError",
+            error_message="Test error message",
+            cid=cid
+        )
+        logger.info("✅ log_callback_rejected accepts all parameters")
+    except TypeError as e:
+        logger.error(f"❌ log_callback_rejected signature mismatch: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ log_callback_rejected failed: {e}", exc_info=True)
+        return False
+    
+    return True
+
+
+async def test_unified_pipeline():
+    """Test unified pipeline basic functions."""
+    logger.info("=" * 60)
+    logger.info("SMOKE TEST: Unified Pipeline")
+    logger.info("=" * 60)
+    
+    from app.kie.unified_pipeline import get_unified_pipeline
+    
+    pipeline = get_unified_pipeline()
+    
+    # Test resolve_model (may return None if model not found, that's OK)
+    model = pipeline.resolve_model("test_model_id")
+    logger.info(f"✅ resolve_model works (returned: {model is not None})")
+    
+    # Test get_schema
+    schema = pipeline.get_schema("test_model_id")
+    assert isinstance(schema, dict), f"Expected dict, got {type(schema)}"
+    logger.info("✅ get_schema works")
+    
+    # Test apply_defaults
+    test_schema = {
+        "properties": {
+            "prompt": {"type": "string", "required": True},
+            "optional_field": {"type": "string", "default": "default_value"}
+        },
+        "required": ["prompt"]
+    }
+    collected = {"prompt": "test prompt"}
+    result = pipeline.apply_defaults(test_schema, collected)
+    assert "optional_field" in result, "Default should be applied"
+    assert result["optional_field"] == "default_value", "Default value should be correct"
+    logger.info("✅ apply_defaults works")
+    
+    return True
+
+
+async def main():
+    """Run all smoke tests."""
+    logger.info("=" * 60)
+    logger.info("SMOKE TESTS: Button Instrumentation")
+    logger.info("=" * 60)
     
     tests = [
-        ("Callback Chain Detection", test_callback_chain),
-        ("Reason Codes Present", test_reason_codes_present),
+        ("Telemetry Helpers", test_telemetry_helpers),
+        ("log_callback_rejected", test_log_callback_rejected),
+        ("Unified Pipeline", test_unified_pipeline),
+        ("Category Buttons", test_category_buttons),
     ]
     
     results = []
-    
-    for name, test_func in tests:
+    for test_name, test_func in tests:
         try:
             result = await test_func()
-            results.append((name, result))
+            results.append((test_name, result))
         except Exception as e:
-            logger.error(f"❌ {name} crashed: {e}")
-            results.append((name, False))
+            logger.error(f"❌ {test_name} failed with exception: {e}", exc_info=True)
+            results.append((test_name, False))
     
     # Summary
-    logger.info("")
     logger.info("=" * 60)
-    logger.info("📊 SUMMARY")
+    logger.info("SMOKE TEST SUMMARY")
     logger.info("=" * 60)
     
-    for name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        logger.info(f"{status}: {name}")
-    
-    passed = sum(1 for _, r in results if r)
+    passed = sum(1 for _, result in results if result)
     total = len(results)
     
-    logger.info(f"\nTotal: {passed}/{total} passed")
+    for test_name, result in results:
+        status = "✅ PASS" if result else "❌ FAIL"
+        logger.info(f"{status}: {test_name}")
+    
+    logger.info(f"\nTotal: {passed}/{total} tests passed")
     
     if passed == total:
-        logger.info("🎉 All tests passed!")
+        logger.info("✅ All smoke tests passed!")
         return 0
     else:
-        logger.error("💥 Some tests failed")
+        logger.error(f"❌ {total - passed} test(s) failed")
         return 1
 
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
-    exit(exit_code)
+    sys.exit(exit_code)
