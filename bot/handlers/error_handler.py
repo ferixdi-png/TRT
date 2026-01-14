@@ -107,7 +107,13 @@ async def global_error_handler(event: ErrorEvent):
             await update.message.answer(error_message, reply_markup=keyboard)
         elif update.callback_query:
             callback = update.callback_query
-            await callback.answer("⚠️ Ошибка")
+            from app.telemetry.telemetry_helpers import safe_answer_callback
+            await safe_answer_callback(
+                callback,
+                text="⚠️ Ошибка",
+                show_alert=False,
+                logger_instance=logger
+            )
             try:
                 await callback.message.answer(error_message, reply_markup=keyboard)
             except Exception as msg_err:

@@ -12,7 +12,7 @@ from aiogram.types import TelegramObject, Update, CallbackQuery, Message
 
 from app.telemetry.logging_contract import ReasonCode
 from app.telemetry.events import log_callback_rejected
-from app.telemetry.telemetry_helpers import get_update_id
+from app.telemetry.telemetry_helpers import get_update_id, safe_answer_callback
 
 logger = logging.getLogger(__name__)
 

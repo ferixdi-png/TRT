@@ -20,6 +20,7 @@ from app.telemetry.telemetry_helpers import (
     get_user_id,
     get_chat_id,
     get_message_id,
+    safe_answer_callback,
 )
 
 __all__ = [
@@ -37,5 +38,6 @@ __all__ = [
     "get_user_id",
     "get_chat_id",
     "get_message_id",
+    "safe_answer_callback",
 ]
 

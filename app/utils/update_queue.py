@@ -248,17 +248,13 @@ class UpdateQueueManager:
                                 callback = update.callback_query
                                 
                                 # CRITICAL: Always answer callback first (no infinite spinner)
-                                try:
-                                    await self._bot.answer_callback_query(
-                                        callback.id,
-                                        text=passive_toast,
-                                        show_alert=False
-                                    )
-                                except Exception as answer_err:
-                                    logger.warning(
-                                        "[WORKER_%d] ⚠️ PASSIVE_REJECT answer_callback_query failed: %s",
-                                        worker_id, answer_err
-                                    )
+                                from app.telemetry.telemetry_helpers import safe_answer_callback
+                                await safe_answer_callback(
+                                    callback,
+                                    text=passive_toast,
+                                    show_alert=False,
+                                    logger_instance=logger
+                                )
                                 
                                 # Send/edit message with refresh button
                                 try:

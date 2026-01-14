@@ -127,14 +127,13 @@ class PassiveModeMiddleware(BaseMiddleware):
         """
         try:
             # CRITICAL: Always answer callback immediately (no infinite spinner)
-            try:
-                await callback.answer(
-                    "⏳ Сервис обновляется, повтори через пару секунд",
-                    show_alert=False
-                )
-            except Exception as answer_err:
-                logger.error(f"Failed to answer PASSIVE callback: {answer_err}", exc_info=True)
-                # Continue anyway - try to send message
+            from app.telemetry.telemetry_helpers import safe_answer_callback
+            await safe_answer_callback(
+                callback,
+                text="⏳ Сервис обновляется, повтори через пару секунд",
+                show_alert=False,
+                logger_instance=logger
+            )
             
             # Send user-friendly message with refresh button
             refresh_keyboard = InlineKeyboardMarkup(inline_keyboard=[

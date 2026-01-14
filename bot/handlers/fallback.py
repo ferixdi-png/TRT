@@ -8,7 +8,7 @@ import logging
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
-from app.telemetry.telemetry_helpers import get_update_id
+from app.telemetry.telemetry_helpers import get_update_id, safe_answer_callback
 from app.telemetry.events import log_callback_received, log_callback_rejected
 from app.telemetry.logging_contract import ReasonCode
 
@@ -61,9 +61,11 @@ async def fallback_unknown_callback(callback: CallbackQuery, cid=None, bot_state
     )
     
     # CRITICAL: Always answer callback to prevent "loading" state in Telegram
-    await callback.answer(
-        "⚠️ Эта кнопка устарела. Обновите меню: /start",
-        show_alert=False
+    await safe_answer_callback(
+        callback,
+        text="⚠️ Эта кнопка устарела. Обновите меню: /start",
+        show_alert=False,
+        logger_instance=logger
     )
     
     # Optionally send message with refresh button

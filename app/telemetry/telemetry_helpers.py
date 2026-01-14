@@ -136,3 +136,70 @@ def get_message_id(event: TelegramObject) -> Optional[int]:
         return None
     except Exception:
         return None
+
+
+async def safe_answer_callback(
+    callback: CallbackQuery,
+    text: Optional[str] = None,
+    show_alert: bool = False,
+    logger_instance: Optional[Any] = None
+) -> bool:
+    """
+    Safely answer a callback query, preventing infinite spinner.
+    
+    CRITICAL: This function MUST NOT raise exceptions.
+    It handles all errors gracefully to prevent "eternal loading" in Telegram.
+    
+    Args:
+        callback: CallbackQuery to answer
+        text: Optional text to show (toast or alert)
+        show_alert: If True, show as alert popup; if False, show as toast
+        logger_instance: Optional logger instance for error logging
+        
+    Returns:
+        True if answered successfully, False otherwise
+    """
+    import logging
+    
+    if logger_instance is None:
+        logger_instance = logging.getLogger(__name__)
+    
+    if callback is None:
+        logger_instance.debug("[SAFE_ANSWER] Callback is None, skipping")
+        return False
+    
+    try:
+        # Try to answer via callback.answer() method (aiogram 3.x)
+        if hasattr(callback, 'answer') and callable(callback.answer):
+            await callback.answer(text=text, show_alert=show_alert)
+            return True
+    except Exception as e:
+        # Log but don't fail - try alternative method
+        logger_instance.debug(f"[SAFE_ANSWER] callback.answer() failed: {e}")
+    
+    # Fallback: try via bot.answer_callback_query if callback has bot reference
+    try:
+        if hasattr(callback, 'bot') and callback.bot:
+            if hasattr(callback.bot, 'answer_callback_query'):
+                await callback.bot.answer_callback_query(
+                    callback_query_id=callback.id,
+                    text=text,
+                    show_alert=show_alert
+                )
+                return True
+    except Exception as e:
+        logger_instance.warning(f"[SAFE_ANSWER] bot.answer_callback_query() failed: {e}")
+    
+    # Ultimate fallback: if callback has id, try direct API call
+    try:
+        if hasattr(callback, 'id') and callback.id:
+            # This is a last resort - we don't have bot instance
+            # Log warning but don't crash
+            logger_instance.warning(
+                f"[SAFE_ANSWER] Could not answer callback {callback.id}: "
+                f"no working method available"
+            )
+    except Exception:
+        pass  # Even logging failed, just give up
+    
+    return False
