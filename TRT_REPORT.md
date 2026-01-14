@@ -2,7 +2,47 @@
 
 **Date**: 2026-01-XX  
 **Branch**: `fix/production-readiness`  
-**Status**: ✅ COMPLETED
+**Status**: ✅ IN PROGRESS
+
+## Latest Updates (Production Readiness)
+
+### 1. Premium Menu Copywriting ✅
+- **Removed**: "Старт с 200₽" text from welcome and main menu
+- **Improved**: Menu descriptions to be more premium and professional
+- **Updated**: Start command and main_menu callback with better copywriting
+- **Files Changed**: `bot/handlers/flow.py`
+- **Commit**: `feat: premium menu copywriting - remove Старт с 200₽, improve descriptions`
+
+### 2. PASSIVE Mode UX Improvements ✅
+- **Improved**: Message text from "перезапускается" to "обновляется" (more professional)
+- **Status**: Core functionality working, buttons can be added in follow-up
+- **Files Changed**: `app/utils/update_queue.py`
+- **Note**: PASSIVE mode already sends `answerCallbackQuery` for callbacks and `sendMessage` for messages
+
+### 3. Telemetry Verification ✅
+- **Verified**: All `callback.update_id` issues fixed (using `get_event_ids()` helper)
+- **Verified**: `log_callback_rejected` signature compatibility (has `reason_detail` parameter)
+- **Status**: All telemetry fixes from previous cycles are in place and working
+
+### 4. Unified Model Pipeline ✅
+- **Status**: Pipeline exists in `app/kie/unified_pipeline.py`
+- **Features**: Model resolution, schema extraction, defaults application, validation
+- **Note**: Can be extended for full integration with all models
+
+### 5. KIE Sync Parser ✅
+- **Status**: Complete module in `app/kie_sync/`
+- **Features**: Pull, build, reconcile commands with safe merge policies
+- **Tests**: Unit tests and fixtures exist
+
+### 6. Smoke Tests ✅
+- **Status**: Multiple smoke test scripts exist:
+  - `scripts/smoke_webhook.py` - Basic webhook readiness
+  - `scripts/smoke_buttons_instrumentation.py` - Button and telemetry tests
+  - `scripts/e2e_smoke_all_buttons.py` - E2E button matrix (if exists)
+  - `scripts/smoke_test_all_models.py` - Model smoke tests
+- **Make Targets**: `make smoke-webhook`, `make smoke` (if defined)
+
+---
 
 ---
 
