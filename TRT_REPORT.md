@@ -41,6 +41,10 @@
   - Pre-commit hook: `scripts/pre_commit_check_report.py` (blocks commit locally)
   - CI check: `.github/workflows/check_trt_report.yml` (blocks PR merge)
   - Install hook: `make install-hooks`
+- **Auto-mirror to Desktop**: TRT_REPORT.md automatically synced to Desktop after each commit
+  - Post-commit hook: `.git/hooks/post-commit` (runs automatically after successful commit)
+  - Manual sync: `make sync-report` or `python scripts/sync_desktop_report.py`
+  - Quiet mode: `--quiet` flag for non-interactive use (hooks)
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
