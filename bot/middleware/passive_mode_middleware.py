@@ -167,10 +167,13 @@ class PassiveModeMiddleware(BaseMiddleware):
             # Ultimate fail-safe: log error but don't crash
             logger.error(f"Failed to handle PASSIVE callback: {e}", exc_info=True)
             # Try one more time to at least answer the callback
-            try:
-                await callback.answer("⏳ Сервис обновляется", show_alert=False)
-            except Exception:
-                pass  # If even this fails, give up
+            from app.telemetry.telemetry_helpers import safe_answer_callback
+            await safe_answer_callback(
+                callback,
+                text="⏳ Сервис обновляется",
+                show_alert=False,
+                logger_instance=logger
+            )
     
     async def _handle_passive_message(self, message: Message, data: Dict[str, Any]) -> None:
         """
