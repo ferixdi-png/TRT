@@ -41,11 +41,21 @@ from app.utils.webhook import (
     get_webhook_secret_token,
 )  # noqa: E402
 # P0: Telemetry middleware (fail-open: if import fails, app still starts)
+# Backward compatibility: import from telemetry_helpers (which re-exports from middleware)
+import logging
+_startup_logger = logging.getLogger(__name__)
+
 try:
-    from app.telemetry.middleware import TelemetryMiddleware
-    TELEMETRY_AVAILABLE = True
+    from app.telemetry.telemetry_helpers import TelemetryMiddleware
+    TELEMETRY_AVAILABLE = TelemetryMiddleware is not None
+    if not TELEMETRY_AVAILABLE:
+        _startup_logger.warning("[STARTUP] TelemetryMiddleware is None (middleware module unavailable)")
 except ImportError as e:
-    logger.warning(f"[STARTUP] Telemetry disabled: {e}")
+    _startup_logger.warning(f"[STARTUP] Telemetry disabled: {e}")
+    TelemetryMiddleware = None
+    TELEMETRY_AVAILABLE = False
+except Exception as e:
+    _startup_logger.warning(f"[STARTUP] Telemetry unavailable (non-critical): {e}")
     TelemetryMiddleware = None
     TELEMETRY_AVAILABLE = False
 from app.telemetry.logging_config import configure_logging  # P0: JSON logs
