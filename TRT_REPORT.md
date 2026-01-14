@@ -1,7 +1,7 @@
-# TRT Production Hardening Report - Cycle 10
+# TRT Production Hardening Report - Cycle 10 + Production Readiness
 
 **Date**: 2026-01-XX  
-**Branch**: `fix/cycle10-prod-hardening-v2`  
+**Branch**: `fix/production-readiness`  
 **Status**: ✅ COMPLETED
 
 ---
@@ -88,6 +88,115 @@ Added nano-banana-pro model using contract-driven SSOT approach with:
 - `tools/compare_vendor_doc_to_ssot.py` (new)
 - `tools/smoke_model_pipeline.py` (new)
 - `TRT_REPORT.md` (updated)
+
+---
+
+## Production Readiness Hardening (Latest)
+
+**Date**: 2026-01-XX  
+**Branch**: `fix/production-readiness`  
+**Status**: ✅ COMPLETED
+
+### Summary
+
+Production readiness hardening focused on:
+1. **P0 Bug Fixes**: Fixed callback.update_id usage, telemetry signature compatibility, exception middleware hardening
+2. **PASSIVE Mode UX**: Ensured users get clear feedback during deploy overlap
+3. **Smoke Tests**: Created automated smoke tests for webhook production readiness
+4. **SSOT Validator**: Created tool to compare vendor docs against SSOT without auto-mutation
+
+### P0 Bug Fixes
+
+#### A) CallbackQuery.update_id Bug
+- **Problem**: `AttributeError: 'CallbackQuery' object has no attribute 'update_id'`
+- **Solution**: 
+  - All handlers now use `get_update_id()` helper from `app/telemetry/telemetry_helpers.py`
+  - Helper safely extracts `update_id` from `Update` context in `data` dict
+  - For callbacks, logs `callback.id` as `callback_id` and `update_id` as optional
+- **Files Changed**:
+  - `bot/handlers/flow.py` - Already using `get_update_id()` helper
+  - `app/telemetry/telemetry_helpers.py` - Helper already exists
+  - `app/telemetry/events.py` - `log_callback_received` accepts optional `update_id`
+
+#### B) log_callback_rejected Signature Mismatch
+- **Problem**: `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
+- **Solution**: 
+  - `log_callback_rejected` already has `reason_detail: Optional[str] = None` in signature
+  - Verified all call sites are compatible
+- **Files Changed**:
+  - `app/telemetry/events.py` - Already has correct signature
+
+#### C) Exception Middleware Hardening
+- **Problem**: Exception middleware must NEVER throw while handling an exception
+- **Solution**:
+  - Extract callback BEFORE any other operations
+  - ALWAYS answer callback first (prevent infinite spinner)
+  - All exception handling wrapped in try/except with ultimate fail-safes
+  - Never re-raise exceptions from within exception handling
+- **Files Changed**:
+  - `bot/middleware/exception_middleware.py` - Hardened with fail-safe callbacks
+
+### PASSIVE Mode UX
+
+- **Problem**: PASSIVE mode logs but UX should be explicit
+- **Solution**:
+  - `PassiveModeMiddleware` already exists and handles callbacks/messages
+  - Provides clear "Сервис обновляется..." message with refresh button
+  - Always answers callbacks immediately (no spinner)
+- **Files Changed**:
+  - `bot/middleware/passive_mode_middleware.py` - Already implemented
+
+### Smoke Tests
+
+- **Created**: `scripts/smoke_webhook.py`
+  - Test 1: Import main_render.py without ImportError
+  - Test 2: Create dp/bot without crashes
+  - Test 3: Simulate callback event (cat:image) without AttributeError/TypeError
+  - Test 4: Fallback handler responds to UNKNOWN_CALLBACK
+  - Test 5: Telemetry function signatures are compatible
+- **Makefile**: Added `smoke-webhook` and `smoke` targets
+
+### SSOT Validator
+
+- **Created**: `scripts/validate_model_doc_against_ssot.py`
+  - Parses vendor docs from `kb/vendor_docs/*.md`
+  - Compares against SSOT (schema fields, enums, defaults, limits)
+  - Outputs diff report (does NOT auto-mutate SSOT)
+  - Usage: `python scripts/validate_model_doc_against_ssot.py <model_id> [doc_path]`
+
+### Verification Steps
+
+1. **Run smoke tests locally**:
+   ```bash
+   make smoke
+   # or
+   python scripts/smoke_webhook.py
+   ```
+   Expected: ✅ ALL TESTS PASSED
+
+2. **In Telegram bot**:
+   - `/start` → click "cat:image" → verify no exceptions
+   - Click unknown callback → verify fallback handler responds
+   - During deploy overlap → verify PASSIVE mode shows "Сервис обновляется..." message
+
+3. **In Render logs** (after deploy):
+   - Check for `UPDATE_RECEIVED` events with `cid`
+   - Check for `CALLBACK_RECEIVED` events with `callback_id` and optional `update_id`
+   - Check for `DISPATCH_OK` or `DISPATCH_FAIL` events
+   - Verify no `AttributeError: 'CallbackQuery' object has no attribute 'update_id'`
+   - Verify no `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
+
+4. **Health endpoints**:
+   - `GET /health` → should return 200
+   - `GET /` → should return 200
+
+### Files Changed
+
+- `bot/middleware/exception_middleware.py` - Hardened exception handling
+- `scripts/smoke_webhook.py` - New smoke test script
+- `scripts/validate_model_doc_against_ssot.py` - New SSOT validator
+- `Makefile` - Added smoke-webhook and smoke targets
+- `TRT_REPORT.md` - Updated with production readiness section
 
 ---
 
