@@ -37,6 +37,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# Kie sync cache and generated files
+cache/
+generated/
+!generated/kie_upstream.json.example
+
 # Virtual environments
 venv/
 ENV/
