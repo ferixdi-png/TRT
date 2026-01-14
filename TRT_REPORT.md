@@ -410,6 +410,41 @@ grep -r "Старт с 200\|200₽" . --exclude-dir=.git
 
 ---
 
+## E2E SMOKE TEST: ALL BUTTONS CLICKABLE
+
+### Script: `scripts/smoke_e2e_buttons.py`
+
+**Purpose**: Minimal e2e smoke test that simulates user flow to catch "broken callback_data" - callbacks that don't have handlers or cause errors.
+
+**Flow tested**:
+1. `/start` → main menu
+2. Open category (`cat:image`)
+3. Select model (`model:z-image`)
+4. Open input (`gen:z-image`)
+5. Back button (`main_menu`)
+6. Open category again (`cat:image`)
+
+**Broken callbacks test**:
+- Tests known broken patterns: `unknown:callback`, `cat:nonexistent`, `model:invalid-model-id`, etc.
+- Verifies fallback handler catches all unknown callbacks (no crashes)
+
+**Usage**:
+```bash
+python scripts/smoke_e2e_buttons.py
+```
+
+**Output**:
+- ✅/❌ for each step
+- Summary: X/Y passed
+- Exit code: 0 if all passed, 1 if any failed
+
+**Integration**:
+- Can be added to CI/CD pipeline
+- Can be run before deployment
+- Fast execution (<5 seconds)
+
+---
+
 ## NEXT ACTIONS
 
 1. **T-002: Add CID propagation to KIE job lifecycle** (P0)
