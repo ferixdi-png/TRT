@@ -4,9 +4,43 @@
 **Branch**: `fix/production-readiness`  
 **Status**: ✅ IN PROGRESS
 
-## Latest Updates (Production Readiness)
+## Latest Updates (Production Readiness + KIE Registry Sync)
 
-### 1. Premium Menu Copywriting ✅
+### 1. Telemetry Fixes ✅
+- **Fixed**: `callback.update_id` AttributeError - all handlers use `get_event_ids()` helper
+- **Fixed**: `log_callback_rejected` signature - accepts `reason_detail` parameter
+- **Tests**: Added `tests/test_telemetry_fixes.py` to verify fixes
+- **Status**: All telemetry crashes resolved
+
+### 2. KIE Sync Tool (CHECK Mode) ✅
+- **Created**: `scripts/kie_sync.py` with CHECK mode
+- **Features**:
+  - Deterministic fingerprints for model schemas
+  - Lock mechanism (locked/override models are report-only)
+  - Cached snapshots support (fixtures/kie_docs/)
+  - Detailed diff report (KIE_SYNC_REPORT.md)
+  - Safe field detection (description, enums, defaults, constraints, pricing)
+  - Unsafe field protection (model_id, output_media_type, required fields, field types)
+- **Tests**: Added `tests/test_kie_sync_deterministic.py` for fingerprint determinism
+- **Status**: CHECK mode working, UPDATE mode placeholder (can be extended)
+
+### 3. Local Registry Validator ✅
+- **Created**: `scripts/validate_local_registry.py`
+- **Validates**:
+  - Required fields present
+  - Input schema consistency
+  - Defaults valid (in enum if enum exists)
+  - No duplicate model_ids
+  - Valid categories
+  - Pricing structure
+- **Status**: Fail-fast validation ready for DRY_RUN mode
+
+### 4. Smoke Tests ✅
+- **Created**: `scripts/smoke_model_selection.py`
+- **Tests**: Model selection flow without external API calls
+- **Status**: Validates category/model selection works
+
+### 5. Premium Menu Copywriting ✅
 - **Removed**: "Старт с 200₽" text from welcome and main menu
 - **Improved**: Menu descriptions to be more premium and professional
 - **Updated**: Start command and main_menu callback with better copywriting
