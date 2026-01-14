@@ -90,6 +90,22 @@ ops-critical5:
 ops-all: ops-fetch-logs ops-db-diag ops-critical5
 	@echo "✅ Ops observability complete"
 
+# Sync TRT_REPORT.md to Desktop
+sync-report:
+	@echo "📄 Syncing TRT_REPORT.md to Desktop..."
+	@python scripts/sync_desktop_report.py
+
+# Pre-deploy verify: local tests + smoke
+pre-deploy-verify:
+	@echo "🔍 Pre-deploy verification..."
+	@echo "1️⃣ Import check..."
+	@python -c "import main_render; print('✅ Import OK')" || (echo "❌ Import failed" && exit 1)
+	@echo "2️⃣ Syntax check..."
+	@python -m py_compile main_render.py app/telemetry/middleware.py || (echo "❌ Syntax error" && exit 1)
+	@echo "3️⃣ Sync report..."
+	@python scripts/sync_desktop_report.py
+	@echo "✅ Pre-deploy verify complete"
+
 # Smoke test (alias для удобства)
 smoke: smoke-webhook
 	@echo "✅ Smoke tests complete"
