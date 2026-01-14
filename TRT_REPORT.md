@@ -68,6 +68,12 @@
   - Does not automatically add new models to registry
   - Use `--allow-new` to process new models (default: verify-only mode)
   - Candidates require manual review before adding to registry
+- **KIE config centralization**: `scripts/kie_config.py`
+  - Single source of truth for USD_TO_RUB exchange rate
+  - Sources (priority order): ENV variable → Desktop/TRT_RENDER.env → .env file
+  - **No silent defaults**: raises `KIEConfigError` if USD_TO_RUB not configured
+  - Price calculation: `calculate_rub_price(usd_price, markup_multiplier=2.0)`
+  - All KIE sync scripts use centralized config (no hardcoded defaults)
 
 **Files Changed**:
 - `app/telemetry/telemetry_helpers.py` - re-export TelemetryMiddleware
