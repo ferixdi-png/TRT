@@ -236,18 +236,60 @@ class UpdateQueueManager:
                     if not _is_allowed_in_passive(update):
                         # Запрещенный update в PASSIVE режиме - отвечаем пользователю
                         try:
-                            passive_msg = "⏸️ Сервис обновляется, попробуй через минуту"
+                            passive_toast = "⏳ Сервис обновляется, повтори через пару секунд"
+                            passive_message = (
+                                "⏳ <b>Сервис обновляется</b>\n\n"
+                                "Идёт перезапуск. Повторите через 10–30 секунд.\n\n"
+                                "Нажмите 'Обновить' для повторной попытки."
+                            )
                             
-                            # callback_query - answer немедленно
+                            # callback_query - answer немедленно + кнопка "Обновить"
                             if hasattr(update, 'callback_query') and update.callback_query:
-                                await self._bot.answer_callback_query(
-                                    update.callback_query.id,
-                                    text=passive_msg,
-                                    show_alert=False
-                                )
+                                callback = update.callback_query
+                                
+                                # CRITICAL: Always answer callback first (no infinite spinner)
+                                try:
+                                    await self._bot.answer_callback_query(
+                                        callback.id,
+                                        text=passive_toast,
+                                        show_alert=False
+                                    )
+                                except Exception as answer_err:
+                                    logger.warning(
+                                        "[WORKER_%d] ⚠️ PASSIVE_REJECT answer_callback_query failed: %s",
+                                        worker_id, answer_err
+                                    )
+                                
+                                # Send/edit message with refresh button
+                                try:
+                                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                                    refresh_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                        [InlineKeyboardButton(text="🔄 Обновить", callback_data="main_menu")]
+                                    ])
+                                    
+                                    if callback.message:
+                                        try:
+                                            await callback.message.edit_text(
+                                                passive_message,
+                                                reply_markup=refresh_keyboard,
+                                                parse_mode="HTML"
+                                            )
+                                        except Exception:
+                                            # If edit fails, send new message
+                                            await callback.message.answer(
+                                                passive_message,
+                                                reply_markup=refresh_keyboard,
+                                                parse_mode="HTML"
+                                            )
+                                except Exception as msg_err:
+                                    logger.warning(
+                                        "[WORKER_%d] ⚠️ PASSIVE_REJECT message edit/send failed: %s",
+                                        worker_id, msg_err
+                                    )
+                                
                                 logger.info(
-                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT callback_query data=%s",
-                                    worker_id, update.callback_query.data
+                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT callback_query data=%s (answered + message sent)",
+                                    worker_id, callback.data
                                 )
                                 
                                 # Log to DB (best-effort, non-blocking)
@@ -265,20 +307,29 @@ class UpdateQueueManager:
                             
                             # message - отправляем сообщение
                             elif hasattr(update, 'message') and update.message:
-                                await self._bot.send_message(
-                                    chat_id=update.message.chat.id,
-                                    text=passive_msg
-                                )
+                                try:
+                                    await self._bot.send_message(
+                                        chat_id=update.message.chat.id,
+                                        text=passive_message,
+                                        parse_mode="HTML"
+                                    )
+                                except Exception as msg_err:
+                                    logger.warning(
+                                        "[WORKER_%d] ⚠️ PASSIVE_REJECT send_message failed: %s",
+                                        worker_id, msg_err
+                                    )
                                 logger.info(
-                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT message text=%s",
+                                    "[WORKER_%d] ⏸️ PASSIVE_REJECT message text=%s (message sent)",
                                     worker_id, update.message.text[:50] if update.message.text else "(no text)"
                                 )
                             
                             self._metrics.total_held += 1
                         except Exception as notify_err:
-                            logger.warning(
-                                "[WORKER_%d] ⚠️ PASSIVE_REJECT failed to notify user: %s",
-                                worker_id, notify_err
+                            # Ultimate fail-safe: at least log the error
+                            logger.error(
+                                "[WORKER_%d] ❌ PASSIVE_REJECT failed to notify user: %s",
+                                worker_id, notify_err,
+                                exc_info=True
                             )
                         finally:
                             # Помечаем как обработанный (не оставляем в очереди)

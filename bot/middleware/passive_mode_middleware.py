@@ -118,18 +118,27 @@ class PassiveModeMiddleware(BaseMiddleware):
         """
         Handle callback query in PASSIVE mode.
         
+        CRITICAL: Always answer callback to prevent infinite spinner.
+        Always send/edit message with refresh button.
+        
         Args:
             callback: CallbackQuery event
             data: Handler data
         """
         try:
-            # Always answer callback immediately (no spinner)
-            await callback.answer("⏳ Сервис обновляется...", show_alert=False)
+            # CRITICAL: Always answer callback immediately (no infinite spinner)
+            try:
+                await callback.answer(
+                    "⏳ Сервис обновляется, повтори через пару секунд",
+                    show_alert=False
+                )
+            except Exception as answer_err:
+                logger.error(f"Failed to answer PASSIVE callback: {answer_err}", exc_info=True)
+                # Continue anyway - try to send message
             
             # Send user-friendly message with refresh button
             refresh_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Обновить", callback_data="main_menu")],
-                [InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")]
+                [InlineKeyboardButton(text="🔄 Обновить", callback_data="main_menu")]
             ])
             
             message_text = (
@@ -153,10 +162,16 @@ class PassiveModeMiddleware(BaseMiddleware):
                             reply_markup=refresh_keyboard,
                             parse_mode="HTML"
                         )
-                    except Exception as e:
-                        logger.error(f"Failed to send PASSIVE message: {e}")
+                    except Exception as msg_err:
+                        logger.error(f"Failed to send PASSIVE message: {msg_err}", exc_info=True)
         except Exception as e:
+            # Ultimate fail-safe: log error but don't crash
             logger.error(f"Failed to handle PASSIVE callback: {e}", exc_info=True)
+            # Try one more time to at least answer the callback
+            try:
+                await callback.answer("⏳ Сервис обновляется", show_alert=False)
+            except Exception:
+                pass  # If even this fails, give up
     
     async def _handle_passive_message(self, message: Message, data: Dict[str, Any]) -> None:
         """
