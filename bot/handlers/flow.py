@@ -253,21 +253,21 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
             
             buttons.append([InlineKeyboardButton(text=button_text, callback_data=f"cat:{cat_id}")])
     
-    # Premium features with microcopy
+    # Premium features with microcopy (curated, confident)
     buttons.append([
-        InlineKeyboardButton(text="⭐ Лучшие", callback_data="menu:best"),
-        InlineKeyboardButton(text="🔍 Поиск", callback_data="menu:search"),
+        InlineKeyboardButton(text="⭐ Лучшие модели", callback_data="menu:best"),  # Топ по качеству
+        InlineKeyboardButton(text="🔍 Поиск", callback_data="menu:search"),  # Быстрый поиск
     ])
     
-    # Quick actions - premium feature
+    # Quick actions - premium curated presets
     buttons.append([
-        InlineKeyboardButton(text="⚡ Быстрые действия", callback_data="quick:menu"),
+        InlineKeyboardButton(text="⚡ Быстрые действия", callback_data="quick:menu"),  # Популярные пресеты
     ])
     
-    # Trending & Free - discoverability
+    # Trending & Free - discoverability (premium presentation)
     buttons.append([
-        InlineKeyboardButton(text="🔥 Trending", callback_data="gallery:trending"),
-        InlineKeyboardButton(text="🆓 Бесплатно", callback_data="gallery:free"),
+        InlineKeyboardButton(text="🔥 Популярное", callback_data="gallery:trending"),  # Часто выбирают
+        InlineKeyboardButton(text="🆓 Бесплатные", callback_data="gallery:free"),  # Доступные бесплатно
     ])
     
     # Browse all categories (if needed)
