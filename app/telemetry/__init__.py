@@ -21,6 +21,7 @@ from app.telemetry.telemetry_helpers import (
     get_chat_id,
     get_message_id,
     safe_answer_callback,
+    TelemetryMiddleware,  # Re-export for backward compatibility
 )
 
 __all__ = [
@@ -39,5 +40,6 @@ __all__ = [
     "get_chat_id",
     "get_message_id",
     "safe_answer_callback",
+    "TelemetryMiddleware",  # Re-export for backward compatibility
 ]
 
