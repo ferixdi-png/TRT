@@ -1347,21 +1347,28 @@ async def repeat_cb(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("cat:"))
-async def category_cb(callback: CallbackQuery, state: FSMContext) -> None:
+async def category_cb(callback: CallbackQuery, state: FSMContext, data: dict = None) -> None:
     """Handle category selection callback (cat:image, cat:enhance, etc.)."""
     # Telemetry: log callback received
-    from app.telemetry import log_callback_received, log_callback_routed, log_callback_accepted, log_ui_render, log_dispatch_ok, generate_cid
+    from app.telemetry import (
+        log_callback_received, log_callback_routed, log_callback_accepted, 
+        log_ui_render, log_dispatch_ok, generate_cid,
+        get_update_id, get_callback_id, get_user_id, get_message_id
+    )
     
     cid = generate_cid()
-    user_id = callback.from_user.id if callback.from_user else None
-    message_id = callback.message.message_id if callback.message else None
-    query_id = callback.id if callback else None
+    # Use safe helpers to extract context
+    update_id = get_update_id(callback, data or {})
+    callback_id = get_callback_id(callback)
+    user_id = get_user_id(callback)
+    message_id = get_message_id(callback)
     
     log_callback_received(
         callback_data=callback.data,
-        query_id=query_id,
+        query_id=callback_id,
         message_id=message_id,
         user_id=user_id,
+        update_id=update_id,
         cid=cid
     )
     
