@@ -403,6 +403,7 @@ class UpdateQueueManager:
     
     def get_metrics(self) -> dict:
         """Get current metrics for /health endpoint."""
+        queue_utilization = (self._metrics.queue_depth_current / max(self.max_size, 1)) * 100
         return {
             "total_received": self._metrics.total_received,
             "total_processed": self._metrics.total_processed,
@@ -414,10 +415,24 @@ class UpdateQueueManager:
             "workers_active": self._metrics.workers_active,
             "queue_depth": self._metrics.queue_depth_current,
             "queue_max": self.max_size,
-            "drop_rate": (
-                self._metrics.total_dropped / max(self._metrics.total_received, 1)
-            ) * 100,
+            "queue_utilization_percent": round(queue_utilization, 2),
+            "drop_rate_percent": round(
+                (self._metrics.total_dropped / max(self._metrics.total_received, 1)) * 100,
+                2
+            ),
+            "last_drop_time": self._metrics.last_drop_time,
+            "backpressure_active": queue_utilization > 80.0,
         }
+    
+    def should_reject_for_backpressure(self) -> bool:
+        """
+        Check if queue is under backpressure (should reject new updates).
+        
+        Returns:
+            True if queue utilization > 80% (backpressure threshold)
+        """
+        queue_utilization = (self._metrics.queue_depth_current / max(self.max_size, 1)) * 100
+        return queue_utilization > 80.0
 
 
 # Global singleton
