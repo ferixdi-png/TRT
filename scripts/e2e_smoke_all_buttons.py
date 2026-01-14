@@ -23,7 +23,17 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.kie.builder import load_source_of_truth, get_model_schema
-from app.kie.validator import validate_inputs, apply_defaults
+try:
+    from app.kie.validator import validate_inputs
+except ImportError:
+    # Fallback if validator module structure is different
+    validate_inputs = None
+
+try:
+    from app.kie.model_defaults import apply_defaults
+except ImportError:
+    # Fallback
+    apply_defaults = None
 
 logging = None
 try:
@@ -146,6 +156,15 @@ async def test_model_defaults(matrix: ModelTestMatrix) -> TestResult:
     Simulates: User selects model → bot applies defaults for optional fields.
     """
     try:
+        if not apply_defaults:
+            return TestResult(
+                model_id=matrix.model_id,
+                step="defaults",
+                passed=False,
+                message="apply_defaults function not available",
+                error="Import error"
+            )
+        
         # Build user inputs with only prompt (if required)
         user_inputs = {}
         if matrix.prompt_required:
@@ -196,6 +215,15 @@ async def test_model_validation(matrix: ModelTestMatrix) -> TestResult:
     Simulates: User provides inputs → bot validates → shows errors if invalid.
     """
     try:
+        if not apply_defaults or not validate_inputs:
+            return TestResult(
+                model_id=matrix.model_id,
+                step="validation",
+                passed=False,
+                message="validation functions not available",
+                error="Import error"
+            )
+        
         # Build valid inputs
         user_inputs = {}
         if matrix.prompt_required:
@@ -239,6 +267,15 @@ async def test_model_required_fields(matrix: ModelTestMatrix) -> TestResult:
     Simulates: User tries to generate without required fields → bot asks for them.
     """
     try:
+        if not apply_defaults or not validate_inputs:
+            return TestResult(
+                model_id=matrix.model_id,
+                step="required_fields",
+                passed=False,
+                message="validation functions not available",
+                error="Import error"
+            )
+        
         # Try with empty inputs (no required fields)
         user_inputs = {}
         

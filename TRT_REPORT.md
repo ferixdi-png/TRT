@@ -91,10 +91,10 @@ Added nano-banana-pro model using contract-driven SSOT approach with:
 
 ---
 
-## Production Readiness Hardening (Latest)
+## Production Readiness Hardening - Final (Latest)
 
 **Date**: 2026-01-XX  
-**Branch**: `fix/production-readiness`  
+**Branch**: `fix/p0-telemetry-safety`  
 **Status**: ✅ COMPLETED
 
 ### Summary
@@ -108,23 +108,38 @@ Production readiness hardening focused on:
 ### P0 Bug Fixes
 
 #### A) CallbackQuery.update_id Bug
-- **Problem**: `AttributeError: 'CallbackQuery' object has no attribute 'update_id'`
+- **Problem**: `AttributeError: 'CallbackQuery' object has no attribute 'update_id'` (bot/handlers/flow.py:1758)
 - **Solution**: 
-  - All handlers now use `get_update_id()` helper from `app/telemetry/telemetry_helpers.py`
-  - Helper safely extracts `update_id` from `Update` context in `data` dict
+  - Created unified `get_event_ids(event, data)` function to safely extract ALL IDs at once
+  - All handlers now use `get_event_ids()` instead of individual helpers
+  - Helper safely extracts `update_id` from `data["event_update"].update_id` or `data["update"].update_id`
   - For callbacks, logs `callback.id` as `callback_id` and `update_id` as optional
+  - **Guarantee**: Logging NEVER crashes even if fields are missing
 - **Files Changed**:
-  - `bot/handlers/flow.py` - Already using `get_update_id()` helper
-  - `app/telemetry/telemetry_helpers.py` - Helper already exists
-  - `app/telemetry/events.py` - `log_callback_received` accepts optional `update_id`
+  - `app/telemetry/telemetry_helpers.py` - Added `get_event_ids()` unified function
+  - `app/telemetry/__init__.py` - Exported `get_event_ids`
+  - `bot/handlers/flow.py` - Updated to use `get_event_ids()`
+  - `bot/handlers/fallback.py` - Updated to use `get_event_ids()`
+  - `bot/middleware/exception_middleware.py` - Updated to use `get_event_ids()`
+  - `app/middleware/exception_middleware.py` - Updated to use `get_event_ids()`
 
 #### B) log_callback_rejected Signature Mismatch
 - **Problem**: `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
 - **Solution**: 
-  - `log_callback_rejected` already has `reason_detail: Optional[str] = None` in signature
-  - Verified all call sites are compatible
+  - `log_callback_rejected` has `reason_detail: Optional[str] = None` in signature
+  - **All call sites updated** to use unified contract:
+    - `reason_code` (preferred) or `reason` (backward compatible)
+    - `reason_detail` (optional, for detailed error messages)
+    - `error_type`, `error_message` (optional, for exceptions)
+    - `cid` (correlation ID)
+  - Added unit test: `tests/test_telemetry_contract.py` to verify signature compatibility
 - **Files Changed**:
-  - `app/telemetry/events.py` - Already has correct signature
+  - `app/telemetry/events.py` - Has correct signature with `reason_detail`
+  - `bot/handlers/flow.py` - Updated to use unified contract
+  - `bot/handlers/fallback.py` - Updated to use unified contract
+  - `app/middleware/exception_middleware.py` - Updated to use unified contract
+  - `bot/middleware/passive_mode_middleware.py` - Already uses correct contract
+  - `tests/test_telemetry_contract.py` - New unit test
 
 #### C) Exception Middleware Hardening
 - **Problem**: Exception middleware must NEVER throw while handling an exception
@@ -138,13 +153,16 @@ Production readiness hardening focused on:
 
 ### PASSIVE Mode UX
 
-- **Problem**: PASSIVE mode logs but UX should be explicit
+- **Problem**: PASSIVE mode "silently eats" clicks (PASSIVE_REJECT) - user sees infinite spinner
 - **Solution**:
-  - `PassiveModeMiddleware` already exists and handles callbacks/messages
-  - Provides clear "Сервис обновляется..." message with refresh button
-  - Always answers callbacks immediately (no spinner)
+  - Implemented direct Telegram API calls in `update_queue.py` worker loop
+  - When PASSIVE: worker calls `answerCallbackQuery()` or `sendMessage()` directly via HTTP
+  - User ALWAYS gets feedback: "⏸️ Сервис перезапускается… попробуйте через 10–20 секунд"
+  - **Guarantee**: Works even if aiogram dispatcher is broken
+  - Logs: `PASSIVE_ACK_SENT` with `cid` and `update_id`
 - **Files Changed**:
-  - `bot/middleware/passive_mode_middleware.py` - Already implemented
+  - `app/utils/update_queue.py` - Added `_send_passive_ack()` function with direct Telegram API
+  - `scripts/smoke_passive_ack.py` - Smoke test for PASSIVE mode UX
 
 ### Smoke Tests
 
@@ -156,7 +174,16 @@ Production readiness hardening focused on:
   - Test 5: Telemetry function signatures are compatible
 - **Makefile**: Added `smoke-webhook` and `smoke` targets
 
-### SSOT Validator
+- **Created**: `scripts/e2e_smoke_all_buttons.py` (E2E "боевой" smoke)
+  - Generates test matrix from SOURCE_OF_TRUTH: `model_id → required_inputs → defaults → validators`
+  - Tests categories (cat:image, cat:enhance, etc.)
+  - Tests model defaults application
+  - Tests model validation
+  - Tests required fields enforcement
+  - **Guarantee**: One run gives "green/red" status for ALL buttons/models
+  - Usage: `python scripts/e2e_smoke_all_buttons.py`
+
+### SSOT Validator & Registry Diff Check
 
 - **Created**: `scripts/validate_model_doc_against_ssot.py`
   - Parses vendor docs from `kb/vendor_docs/*.md`
@@ -164,9 +191,23 @@ Production readiness hardening focused on:
   - Outputs diff report (does NOT auto-mutate SSOT)
   - Usage: `python scripts/validate_model_doc_against_ssot.py <model_id> [doc_path]`
 
+- **Created**: `scripts/registry_diff_check.py`
+  - Compares incoming vendor docs with current SOURCE_OF_TRUTH
+  - Checks all files in `kb/vendor_docs/*.md` by default
+  - Outputs diff report without mutating SSOT
+  - Usage: `python scripts/registry_diff_check.py [vendor_doc_path]`
+
 ### Verification Steps
 
-1. **Run smoke tests locally**:
+#### Local Verification
+
+1. **Run unit tests**:
+   ```bash
+   python -m pytest tests/test_telemetry_contract.py -v
+   ```
+   Expected: ✅ ALL TESTS PASSED
+
+2. **Run smoke tests**:
    ```bash
    make smoke
    # or
@@ -174,21 +215,78 @@ Production readiness hardening focused on:
    ```
    Expected: ✅ ALL TESTS PASSED
 
-2. **In Telegram bot**:
+3. **Run E2E smoke test** (all buttons/models):
+   ```bash
+   python scripts/e2e_smoke_all_buttons.py
+   ```
+   Expected: ✅ Matrix generated, all tests passed
+
+4. **Run registry diff check**:
+   ```bash
+   python scripts/registry_diff_check.py
+   ```
+   Expected: ✅ All vendor docs match SSOT
+
+#### Telegram Bot Verification
+
+1. **Test category buttons**:
    - `/start` → click "cat:image" → verify no exceptions
-   - Click unknown callback → verify fallback handler responds
-   - During deploy overlap → verify PASSIVE mode shows "Сервис обновляется..." message
+   - Click "cat:enhance" → verify models shown
+   - Verify no `AttributeError` in logs
 
-3. **In Render logs** (after deploy):
-   - Check for `UPDATE_RECEIVED` events with `cid`
-   - Check for `CALLBACK_RECEIVED` events with `callback_id` and optional `update_id`
-   - Check for `DISPATCH_OK` or `DISPATCH_FAIL` events
-   - Verify no `AttributeError: 'CallbackQuery' object has no attribute 'update_id'`
-   - Verify no `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
+2. **Test fallback handler**:
+   - Click unknown callback (e.g., `test:unknown`) → verify fallback responds
+   - Verify `UNKNOWN_CALLBACK` logged with `cid`
 
-4. **Health endpoints**:
-   - `GET /health` → should return 200
-   - `GET /` → should return 200
+3. **Test PASSIVE mode** (during deploy overlap):
+   - Deploy twice quickly to trigger PASSIVE mode
+   - Click any button → verify toast "⏸️ Сервис перезапускается…"
+   - Verify no infinite spinner
+   - Verify `PASSIVE_ACK_SENT` in logs
+
+#### Render Logs Verification (after deploy)
+
+**Look for these log patterns:**
+
+1. **UPDATE_RECEIVED** (every update):
+   ```
+   📥 UPDATE_RECEIVED cid=... update_id=... user_id=... type=callback_query
+   ```
+
+2. **CALLBACK_RECEIVED** (every callback):
+   ```
+   🔘 CALLBACK_RECEIVED cid=... data='cat:image' query_id=... update_id=...
+   ```
+
+3. **DISPATCH_OK** (successful processing):
+   ```
+   ✅ DISPATCH_OK update_id=... cid=...
+   ```
+
+4. **PASSIVE_ACK_SENT** (PASSIVE mode feedback):
+   ```
+   ✅ PASSIVE_ACK_SENT type=callback_query update_id=... cid=... data=cat:image
+   ```
+
+5. **UNKNOWN_CALLBACK** (fallback handler):
+   ```
+   ⚠️ CALLBACK_REJECTED cid=... reason=UNKNOWN_CALLBACK reason_detail=...
+   ```
+
+6. **EXCEPTION_MIDDLEWARE** (error handling):
+   ```
+   ❌ UNHANDLED EXCEPTION: ... cid=... update_id=...
+   ```
+
+**Verify NO errors:**
+- ❌ NO `AttributeError: 'CallbackQuery' object has no attribute 'update_id'`
+- ❌ NO `TypeError: log_callback_rejected() got unexpected keyword argument 'reason_detail'`
+- ❌ NO silent clicks (every callback should have `CALLBACK_RECEIVED` + `DISPATCH_OK` or `CALLBACK_REJECTED`)
+
+#### Health Endpoints
+
+- `GET /health` → should return 200
+- `GET /` → should return 200
 
 ### Files Changed
 
