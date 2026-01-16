@@ -160,9 +160,13 @@ def validate_webhook_requirements() -> None:
         )
     
     if missing:
-        raise ValueError(
-            f"Webhook mode requires the following environment variables: {', '.join(missing)}"
+        # CRITICAL: Don't raise error - let main_render.py handle fallback to polling
+        logger.warning(
+            f"[WEBHOOK] Missing required variables for webhook mode: {', '.join(missing)}. "
+            "Application will fallback to polling mode."
         )
+        # Return False to indicate webhook mode is not available, but don't fail startup
+        return False
 
 
 def startup_validation() -> bool:
