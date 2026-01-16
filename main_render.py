@@ -6356,7 +6356,6 @@ async def run(settings, application):
 
 
 
-        from app.utils.healthcheck import stop_health_server
 
 
 
@@ -6372,7 +6371,6 @@ async def run(settings, application):
 
 
 
-        await stop_health_server()
 
 
 
