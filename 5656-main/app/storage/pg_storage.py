@@ -501,8 +501,8 @@ class PostgresStorage(BaseStorage):
                 result = await conn.execute("""
                     DELETE FROM pending_updates
                     WHERE processed_at IS NOT NULL
-                    AND processed_at < NOW() - INTERVAL '%d days'
-                """ % days)
+                    AND processed_at < NOW() - INTERVAL '%s days'
+                """, str(days))
                 
                 # Extract number from result string like "DELETE 5"
                 deleted_count = int(result.split()[-1]) if result.split()[-1].isdigit() else 0
@@ -1940,7 +1940,7 @@ class PostgresStorage(BaseStorage):
                     WHERE status = 'pending'
                       AND created_at < NOW() - INTERVAL '%s hours'
                     FOR UPDATE
-                """, stale_hours)
+                """, str(stale_hours))
                 
                 if not stuck_payments:
                     return 0
