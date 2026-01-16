@@ -132,19 +132,24 @@ async def build_application(settings):
     try:
         # КРИТИЧНО: Импорт bot_kie с явным указанием пути
         create_bot_application = None
-        
-        # Метод 1: Прямой импорт из корня (если sys.path настроен правильно)
         try:
             from bot_kie import create_bot_application
-            logger.info("[BUILD] Successfully imported create_bot_application from bot_kie")
         except ImportError as e1:
-            logger.warning(f"[BUILD] Failed to import from bot_kie: {e1}")
-            
-            # Метод 2: Пробуем через importlib с явным путем
-            bot_kie_path = Path(__file__).parent / "bot_kie.py"
-            if bot_kie_path.exists():
-                logger.info(f"[BUILD] bot_kie.py exists at {bot_kie_path}, trying importlib")
-                try:
+            logger.warning(f"[BUILD] Failed to import from bot_kie: {e1}, trying app.bot_kie")
+            try:
+                # Пробуем импорт из app.bot_kie (если там есть функция)
+                from app.bootstrap import create_application as create_bot_application
+                logger.info("[BUILD] Using app.bootstrap.create_application")
+            except ImportError as e2:
+                logger.error(f"[BUILD] Failed to import from app.bootstrap: {e2}")
+                logger.error(f"[BUILD] sys.path: {sys.path}")
+                logger.error(f"[BUILD] Current dir: {os.getcwd()}")
+                logger.error(f"[BUILD] Script dir: {Path(__file__).parent}")
+                # Пробуем добавить путь явно
+                bot_kie_path = Path(__file__).parent / "bot_kie.py"
+                if bot_kie_path.exists():
+                    logger.info(f"[BUILD] bot_kie.py exists at {bot_kie_path}")
+                    # Пробуем прямой импорт через importlib
                     import importlib.util
                     spec = importlib.util.spec_from_file_location("bot_kie", bot_kie_path)
                     if spec and spec.loader:
@@ -153,18 +158,13 @@ async def build_application(settings):
                         create_bot_application = getattr(bot_kie_module, "create_bot_application", None)
                         if create_bot_application:
                             logger.info("[BUILD] Successfully loaded create_bot_application via importlib")
-                        else:
-                            logger.error("[BUILD] create_bot_application not found in bot_kie module")
-                except Exception as e2:
-                    logger.error(f"[BUILD] Failed to load via importlib: {e2}")
-            else:
-                logger.error(f"[BUILD] bot_kie.py NOT found at {bot_kie_path}")
-                logger.error(f"[BUILD] Current dir: {os.getcwd()}")
-                logger.error(f"[BUILD] Script dir: {Path(__file__).parent}")
-                logger.error(f"[BUILD] sys.path: {sys.path}")
+                else:
+                    logger.error(f"[BUILD] bot_kie.py NOT found at {bot_kie_path}")
+                if not create_bot_application:
+                    raise ImportError(f"Could not import create_bot_application: {e1}, {e2}")
         
         if not create_bot_application:
-            raise ImportError(f"Could not import create_bot_application from bot_kie. Check that bot_kie.py exists and contains create_bot_application function.")
+            raise ImportError("create_bot_application is None after import attempts")
         
         logger.info("[BUILD] Creating Telegram Application...")
         _application = await create_bot_application(settings)
@@ -203,28 +203,10 @@ async def run(settings, application):
     global _application
     
     # Singleton lock должен быть получен ДО любых async операций
-    from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock, is_lock_acquired
+    from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_lock
     
-    lock_acquired = await acquire_singleton_lock()
-    
-    if not lock_acquired:
-        # Passive mode: lock not acquired, run healthcheck only (no polling)
-        logger.info("[LOCK] Passive mode: lock not acquired, running healthcheck only")
-        
-        # Запускаем healthcheck сервер если PORT задан
-        if settings.port > 0:
-            logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (Passive mode)")
-            await start_health_server(port=settings.port)
-            
-            # Держим процесс живым для healthcheck
-            logger.info("[LOCK] Passive mode: keeping process alive for healthcheck")
-            try:
-                while True:
-                    await asyncio.sleep(60)  # Sleep indefinitely
-            except KeyboardInterrupt:
-                logger.info("[LOCK] Passive mode: shutdown requested")
-        else:
-            logger.info("[LOCK] Passive mode: no PORT set, exiting")
+    if not acquire_singleton_lock():
+        # acquire_singleton_lock уже вызвал exit(0) если lock не получен
         return
     
     try:
@@ -267,19 +249,6 @@ async def run(settings, application):
                 logger.info("[RUN] Webhook mode - bot is ready")
             else:
                 # Polling mode - безопасный запуск с обработкой конфликтов
-                # Проверяем что lock получен перед запуском polling
-                if not is_lock_acquired():
-                    logger.warning("[RUN] Lock not acquired, skipping polling (passive mode)")
-                    # Держим процесс живым для healthcheck
-                    if settings.port > 0:
-                        logger.info("[RUN] Keeping process alive for healthcheck")
-                        try:
-                            while True:
-                                await asyncio.sleep(60)
-                        except KeyboardInterrupt:
-                            logger.info("[RUN] Shutdown requested")
-                    return
-                
                 logger.info("[RUN] Starting polling...")
                 
                 # КРИТИЧНО: Задержка перед запуском polling для предотвращения конфликтов
@@ -432,7 +401,7 @@ async def run(settings, application):
         await stop_health_server()
         
         # Освобождаем singleton lock
-        await release_singleton_lock()
+        release_singleton_lock()
 
 
 async def main():
