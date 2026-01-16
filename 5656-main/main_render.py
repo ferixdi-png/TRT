@@ -2673,31 +2673,34 @@ async def main() -> None:
 
         await asyncio.Event().wait()
     finally:
+        # Cleanup resources in finally block
         try:
-            if runner is not None:
+            if 'runner' in locals() and runner is not None:
                 await runner.cleanup()
-        except Exception:
-            pass
+                logger.debug("[CLEANUP] ✅ Web server runner cleaned up")
+        except Exception as e:
+            logger.debug(f"[CLEANUP] Failed to cleanup runner: {e}")
         try:
-            await bot.session.close()
-        except Exception:
-            pass
+            if 'bot' in locals():
+                await bot.session.close()
+                logger.debug("[CLEANUP] ✅ Bot session closed")
+        except Exception as e:
+            logger.debug(f"[CLEANUP] Failed to close bot session: {e}")
         try:
             # db_service may not be initialized if we exited early
-            try:
-                if db_service is not None:
-                    await db_service.close()
-            except NameError:
-                pass  # db_service was never created
-        except Exception:
-            pass
+            if 'db_service' in locals() and db_service is not None:
+                await db_service.close()
+                logger.debug("[CLEANUP] ✅ Database service closed")
+        except NameError:
+            pass  # db_service was never created
+        except Exception as e:
+            logger.debug(f"[CLEANUP] Failed to close db_service: {e}")
         try:
-            await lock.release()
-        except Exception:
-            pass
-
-        # BATCH 48: NO DATABASE MODE - No connection pool to close
-        pass
+            if 'lock' in locals():
+                await lock.release()
+                logger.debug("[CLEANUP] ✅ Singleton lock released")
+        except Exception as e:
+            logger.debug(f"[CLEANUP] Failed to release lock: {e}")
 
 
 if __name__ == "__main__":
