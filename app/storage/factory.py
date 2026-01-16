@@ -50,12 +50,11 @@ def create_storage(
             try:
                 # Пробуем создать PostgreSQL storage
                 pg_storage = PostgresStorage(database_url)
-                if pg_storage.test_connection():
-                    logger.info("[OK] Using PostgreSQL storage (AUTO mode)")
-                    _storage_instance = pg_storage
-                    return _storage_instance
-                else:
-                    logger.warning("[WARN] PostgreSQL connection failed, falling back to JSON")
+                # P0 FIX: Don't call test_connection() here - it may use asyncio.run() which fails in async context
+                # Connection will be tested on first async use via _get_pool()
+                logger.info("[OK] Using PostgreSQL storage (AUTO mode, connection will be tested on first async use)")
+                _storage_instance = pg_storage
+                return _storage_instance
             except Exception as e:
                 logger.warning(f"[WARN] PostgreSQL initialization failed: {e}, falling back to JSON")
         
