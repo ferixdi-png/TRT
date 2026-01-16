@@ -26266,7 +26266,6 @@ async def main():
     # ==================== END PHASE 1: GLOBAL INPUT ROUTERS ====================
     
     # Add command handlers separately (not in conversation, as # D) per_message=True removed to avoid PTBUserWarning
-        requires only CallbackQueryHandler)
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
     application.add_handler(CommandHandler('cancel', cancel))
