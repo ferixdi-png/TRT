@@ -1235,8 +1235,13 @@ def _make_web_app(
         if not job:
             # BATCH 48.37: In FileStorage, orphan callbacks are expected (jobs in memory, may not be found yet)
             # Log at INFO level (not WARNING) as this is normal behavior
-            from app.storage.file_storage import FileStorage
-            is_file_storage = isinstance(storage, FileStorage)
+            is_file_storage = False
+            try:
+                from app.storage.file_storage import FileStorage
+                is_file_storage = isinstance(storage, FileStorage)
+            except ImportError:
+                # FileStorage not available - assume it's not FileStorage
+                pass
             log_level = logger.info if is_file_storage else logger.warning
             log_level(f"[{corr_id}] [CALLBACK_ORPHAN] task_id={task_id} - saving for reconciliation")
             runtime_state.callback_job_not_found_count += 1
@@ -1893,12 +1898,14 @@ async def main() -> None:
     
     # BATCH 48: NO DATABASE MODE - Always use FileStorage
     logger.info("[BATCH48] 🚫 NO DATABASE MODE - Using FileStorage for balances")
-    from app.storage.file_storage import init_file_storage
-    
     try:
+        from app.storage.file_storage import init_file_storage
         await init_file_storage()
         logger.info("[BATCH48] ✅ FileStorage initialized (balances in data/user_balances.json)")
         runtime_state.db_schema_ready = True  # No migrations needed
+    except ImportError as e:
+        logger.warning(f"[BATCH48] ⚠️ FileStorage module not available: {e} - storage will be initialized on first use")
+        runtime_state.db_schema_ready = True  # Continue anyway
     except Exception as e:
         logger.error(f"[BATCH48] ❌ Failed to initialize FileStorage: {e}")
         # Continue anyway - FileStorage will create file on first use

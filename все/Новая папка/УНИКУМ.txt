@@ -1,0 +1,254 @@
+CURSOR PROMPT — LOG-DRIVEN AUTOPILOT (Render + Kie.ai + Telegram) v3 FINAL
+
+Ты работаешь в этом репозитории. Твоя цель: сделать автопилот разработки, который сам:
+
+собирает/читает логи Render,
+
+извлекает ошибки/стектрейсы и симптомы (тишина на ввод, битые callback’и, проблемы моделей, БД, платежи),
+
+применяет исправления в коде,
+
+добавляет тесты/верификаторы, чтобы баг не вернулся,
+
+повторяет цикл до зелёного verify_project.py.
+
+ЖЁСТКИЕ ПРАВИЛА (FAIL если нарушишь)
+
+Нельзя говорить “готово/успешно”, пока не пройдёт python scripts/verify_project.py.
+
+Нельзя хардкодить секреты (Render/Kie.ai/Telegram токен, admin id, ref, keys). Только ENV/секреты.
+
+В тестах/verify запрещены реальные запросы в Kie.ai и любые реальные списания. Любой реальный HTTP к api.kie.ai в тестах = FAIL.
+
+Ничего из существующих кнопок/функций не удалять — только чинить/улучшать/расширять.
+
+Любой ввод пользователя (текст/кнопка/медиа) всегда должен давать ответ (никакой тишины).
+
+ВХОДНЫЕ ДАННЫЕ 
+
+Поддержи такие переменные окружения (если у меня другие имена — сделай совместимость алиасами):
+
+RENDER_API_KEY (или RND) — rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
+
+RENDER_SERVICE_ID (или SRV) — srv-d4s025er433s73bsf62g
+
+TELEGRAM_BOT_TOKEN — 8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
+
+KIE_API_KEY — 4d49a621bc589222a2769978cb725495
+
+FAKE_KIE_MODE=1 в тестах
+
+APP_ENV=prod|dev|test
+
+Секреты нигде не логируй целиком (маскируй).
+
+1) СДЕЛАЙ “LOG CONNECTOR” ДЛЯ RENDER (чтобы Cursor реально читал логи)
+
+Создай scripts/render_logs_tail.py:
+
+Режимы:
+
+--since 30m / --since 2h / --since 1d
+
+--grep "ERROR|Traceback|Exception|No open ports|Port scan timeout|Unhandled|KeyError|CallbackQuery" (regex)
+
+--json (сырой JSON) и --text (человекочитаемо)
+
+--follow (polling)
+
+Работает по Render API (по RENDER_API_KEY и RENDER_SERVICE_ID).
+
+Сохраняет результат в artifacts/render_logs/latest.log и latest.json.
+
+НИКОГДА не печатает в логах секреты (маскируй токены/ключи регулярками).
+
+Добавь scripts/read_logs.py (обёртка) чтобы просто:
+python scripts/read_logs.py --since 60m --grep "ERROR|Traceback"
+
+2) СДЕЛАЙ “LOG PARSER → BUG REPORT”
+
+Создай scripts/parse_logs.py:
+
+Читает artifacts/render_logs/latest.log/json
+
+Извлекает:
+
+stacktrace блоки
+
+частые ошибки (KeyError, AttributeError, Timeout, Telegram BadRequest, etc.)
+
+сигнатуры проблем: “тишина на ввод”, “unknown callback”, “model coming soon”, “db locked”, “missing env”
+
+Генерирует:
+
+artifacts/diagnostics/incident_report.md (кратко и по делу)
+
+artifacts/diagnostics/incidents.json (структурированно: type, file hints, stack, freq)
+
+3) СДЕЛАЙ “AUTO-FIX ENGINE” (чинит по логам + по тестам)
+
+Создай scripts/autofix.py:
+
+Вход: artifacts/diagnostics/incidents.json
+
+Для каждой проблемы применяет безопасные фикс-паттерны (whitelist), например:
+
+Unknown callback → fallback handler + refresh menu + registry validation
+
+Тишина на текст → гарантия “received/processing” + корректная state machine
+
+Missing translation key → добавить + fallback lang→ru→en→key
+
+Missing ENV → детект + user/admin friendly message + safe fallback
+
+Telegram BadRequest (message not modified / invalid markup) → safe wrappers
+
+Kie polling/timeouts → retry/backoff + proper status messages
+
+После каждого фикса:
+
+запускает python scripts/verify_project.py
+
+если не прошло — собирает новые логи/trace и продолжает
+
+ВАЖНО: autofix не должен “ломать продукт”. Любой фикс обязан сопровождаться тестом/verify.
+
+4) UI-FIRST PROOF (чтобы я видел реальный прогресс в меню)
+
+Сделай систему артефактов меню:
+
+scripts/snapshot_menu.py → artifacts/menu_snapshot.json + artifacts/menu_snapshot.md
+
+scripts/diff_menu_snapshot.py → artifacts/menu_diff.md
+Каждый прогон autopilot обязан обновлять snapshot и делать diff.
+
+5) 100% КНОПОК И 100% СЦЕНАРИЕВ (реальные тесты, не слова)
+
+Добавь pytest + фейки:
+
+5.1 Fake Telegram
+
+tests/fakes/fake_telegram.py:
+
+фиксирует все send/edit/media
+
+позволяет “кликнуть callback” и “отправить текст/медиа”
+
+5.2 Fake Kie.ai API
+
+tests/fakes/fake_kie_api.py:
+
+SUCCESS / PENDING→SUCCESS / FAIL / TIMEOUT
+
+Никаких реальных запросов наружу
+
+5.3 Тест клика всех кнопок
+
+tests/test_all_callbacks_clickable.py:
+
+собирает все callback_data из snapshot’а
+
+кликает каждую
+
+assert: нет исключений и есть ответ (send/edit)
+
+unknown callback → fallback работает
+
+5.4 E2E всех сценариев генерации
+
+tests/test_all_scenarios_e2e.py:
+
+авто-дискавери всех сценариев/типов/моделей
+
+3 кейса: success/fail/timeout
+
+assert: нет тишины, корректные статусы, корректный cleanup state
+
+5.5 Запрет реального интернета в тестах
+
+tests/test_no_real_network.py:
+
+блокирует любые внешние HTTP
+
+если попытка реального вызова (в т.ч. api.kie.ai) → FAIL
+
+6) KIE.AI ONLY + ALL MODELS VISIBLE
+
+Сделай:
+
+scripts/sync_kie_models.py — обновление/нормализация списка моделей (без “coming soon”)
+
+scripts/verify_models_kie_only.py — фейлит если:
+
+модель не Kie.ai
+
+coming soon
+
+модель не видна в меню “все модели”
+
+нет handler/route
+
+7) VERIFY PROJECT — единственная команда правды
+
+Создай/обнови scripts/verify_project.py, он запускает:
+
+python -m compileall .
+
+python scripts/snapshot_menu.py
+
+python scripts/diff_menu_snapshot.py
+
+python scripts/verify_repo_invariants.py (no secrets hardcode, no coming soon, no msg_* keys shown, no real network in tests)
+
+python scripts/verify_models_kie_only.py
+
+python scripts/verify_callbacks.py
+
+python scripts/verify_payments_balance.py (если есть баланс/платежи)
+
+pytest -q
+
+8) AUTOPILOT — главный цикл “смотрю логи → чиню → тестирую”
+
+Создай scripts/autopilot.py:
+Алгоритм:
+
+render_logs_tail.py --since 60m --grep "...ERROR...Traceback..." → сохранить артефакты
+
+parse_logs.py → incident_report + incidents.json
+
+autofix.py → применить фиксы (whitelist)
+
+verify_project.py
+
+Если FAIL → повторить цикл
+
+Если PASS → вывести краткий отчёт:
+
+что исправлено (по файлам)
+
+сколько кнопок/моделей в меню
+
+какие UI изменения видны в menu_diff.md
+
+9) ФИНАЛЬНЫЙ ОТЧЁТ (строго)
+
+В конце работы ты обязан вывести:
+
+artifacts/diagnostics/incident_report.md
+
+artifacts/menu_snapshot.md
+
+artifacts/menu_diff.md
+
+лог последнего PASS прогона python scripts/verify_project.py
+
+команды:
+
+python scripts/autopilot.py
+
+python scripts/verify_project.py
+
+python scripts/read_logs.py --since 60m --grep "ERROR|Traceback"
+
+НАЧИНАЙ ПРЯМО СЕЙЧАС: реализуй лог-коннектор Render, парсер, autofix-движок, snapshot/diff меню, тест-харнесс (клики + e2e), запрет реального Kie.ai в тестах, и замкни это в autopilot loop до зелёного результата.
