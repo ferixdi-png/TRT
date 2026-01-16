@@ -25782,7 +25782,6 @@ async def main():
     
     # Create conversation handler for generation
     # Note: # D) per_message=True removed to avoid PTBUserWarning
-        requires all entry points to be CallbackQueryHandler
     # So we handle commands separately and use only callbacks for conversation
     generation_handler = ConversationHandler(
         entry_points=[
