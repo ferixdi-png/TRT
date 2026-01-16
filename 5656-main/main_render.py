@@ -2302,6 +2302,13 @@ async def main() -> None:
         logger.info(f"[BOT_READY] Lock state: {'ACTIVE' if active_state.active else 'PASSIVE'}")
         logger.info(f"[BOT_READY] DB schema: {'✅ Ready' if runtime_state.db_schema_ready else '❌ Not ready'}")
         logger.info("=" * 60)
+        logger.info("Handlers registered and application started")
+        
+        # CRITICAL: Check webhook URL - if missing, fallback to polling (don't exit!)
+        if effective_bot_mode == "webhook" and not cfg.webhook_base_url:
+            logger.warning("[WEBHOOK] WEBHOOK_BASE_URL not set for webhook mode - falling back to polling")
+            effective_bot_mode = "polling"
+            runtime_state.bot_mode = "polling"
         
         # PHASE 6: Webhook setup moved to init_active_services (ONLY on ACTIVE)
         # PASSIVE instances must NOT set webhook - only ACTIVE should own it
