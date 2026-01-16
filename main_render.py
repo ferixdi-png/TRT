@@ -3310,7 +3310,7 @@ async def run(settings, application):
 
 
 
-    if not acquire_singleton_lock():
+    if not await acquire_singleton_lock():
 
 
 
@@ -3902,7 +3902,8 @@ async def run(settings, application):
 
 
 
-                    logger.error("[FAIL] WEBHOOK_URL not set for webhook mode")
+                    logger.warning("[WEBHOOK] WEBHOOK_URL not set for webhook mode - falling back to polling")
+                    settings.bot_mode = "polling"
 
 
 
@@ -6446,7 +6447,7 @@ async def run(settings, application):
 
 
 
-        release_singleton_lock()
+        await release_singleton_lock()
 
 
 
