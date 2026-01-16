@@ -269,13 +269,35 @@ async def use_quick_example(callback: CallbackQuery, state: FSMContext):
     
     await callback.answer("Готовим генерацию!")
     
-    parts = callback.data.split(":")
-    action_id = parts[2]
-    example_idx = int(parts[3])
+    # CRITICAL: Validate and parse callback data safely
+    try:
+        parts = callback.data.split(":")
+        if len(parts) < 4:
+            await callback.message.answer("⚠️ Неверный формат запроса")
+            return
+        
+        action_id = parts[2]
+        example_idx = int(parts[3])
+    except (ValueError, IndexError) as e:
+        logger.error(f"[QUICK_ACTIONS] Invalid callback data format: {callback.data}, error: {e}")
+        await callback.message.answer("⚠️ Ошибка обработки запроса")
+        return
     
     action = QUICK_ACTIONS.get(action_id)
-    if not action or example_idx >= len(action['prompt_examples']):
+    if not action:
+        await callback.message.answer("⚠️ Действие не найдено")
+        return
+    
+    # CRITICAL: Validate array bounds
+    if example_idx < 0 or example_idx >= len(action.get('prompt_examples', [])):
+        logger.error(f"[QUICK_ACTIONS] Invalid example_idx: {example_idx}, max: {len(action.get('prompt_examples', []))}")
         await callback.message.answer("⚠️ Пример не найден")
+        return
+    
+    # CRITICAL: Validate recommended_models exists and is not empty
+    if not action.get('recommended_models') or len(action['recommended_models']) == 0:
+        logger.error(f"[QUICK_ACTIONS] No recommended models for action: {action_id}")
+        await callback.message.answer("⚠️ Модели не найдены")
         return
     
     prompt = action['prompt_examples'][example_idx]
