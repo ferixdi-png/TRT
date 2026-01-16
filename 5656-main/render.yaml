@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -u main_render.py
+    plan: free
+    branch: main
+    autoDeploy: true
+    # Health check configuration for zero-downtime deployment
+    healthCheckPath: /health
+    # Graceful shutdown configuration
+    # Note: Database initialization happens automatically in main_render.py startup
