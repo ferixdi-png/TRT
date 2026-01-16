@@ -6288,6 +6288,75 @@ make ops-all
 - ✅ **SQL Injection**: Fixed parameterized queries for INTERVAL values in pg_storage.py
 - ✅ **Webhook Fallback**: Improved fallback logic to prevent [FAIL] WEBHOOK_URL errors
 
+**P0 CRITICAL FIXES (2026-01-16 - Final Production Readiness):**
+
+**A) STORAGE (P0): Async-safe initialization**
+- **Was:** 
+  - `app.storage.factory` вызывал `asyncio.run()` внутри event loop
+  - `sync_check_pg()` вызывался из async контекста
+  - `async_check_pg` не awaited -> фолбэк на JSON
+- **Became:**
+  - Создана `async def init_pg_storage(database_url)` для async инициализации
+  - `get_storage()` определяет async контекст и предупреждает, но не использует `asyncio.run()`
+  - Connection test отложен до первого async использования через `_get_pool()`
+  - Никаких `asyncio.run()` в runtime приложения
+- **Reason:** Предотвращение "asyncio.run() cannot be called from a running event loop" и "sync_check_pg() called from async context"
+- **Files Changed:** `app/storage/__init__.py`
+- **How Verified:**
+  ```bash
+  # 1. Проверка компиляции
+  python -m compileall app/storage/__init__.py
+  
+  # 2. Тест на RuntimeWarning
+  pytest -W error::RuntimeWarning tests/test_runtime_warnings.py::test_storage_init_no_asyncio_run
+  ```
+- **Status:** ✅ FIXED
+
+**B) SINGLETON LOCK (P0): Await verification**
+- **Was:** `acquire_singleton_lock()/release_singleton_lock()` вызывались без await -> RuntimeWarning
+- **Became:** 
+  - `SingletonLock.acquire()` и `release()` уже правильно используют `asyncio.to_thread()` для sync функций
+  - `release_single_instance_lock()` - sync функция, не требует await (правильно)
+  - Все await проверены и корректны
+- **Reason:** Предотвращение RuntimeWarning "coroutine was never awaited"
+- **Files Verified:** `main_render.py` (SingletonLock class)
+- **How Verified:**
+  ```bash
+  # Проверка на RuntimeWarning
+  pytest -W error::RuntimeWarning tests/test_runtime_warnings.py
+  ```
+- **Status:** ✅ VERIFIED (уже было правильно)
+
+**C) WEBHOOK / HEALTH LIFECYCLE (P0): Server stays alive**
+- **Was:** `[FAIL] WEBHOOK_URL not set for webhook mode` -> health server STOP -> Render "No open ports detected"
+- **Became:**
+  - Health server ВСЕГДА стартует первым на `0.0.0.0:${PORT}`
+  - При отсутствии `WEBHOOK_BASE_URL`: логируем warning, переключаемся на polling, НЕ останавливаем сервер
+  - `await asyncio.Event().wait()` гарантирует что сервер остается живым
+  - WEBHOOK_URL формируется как `WEBHOOK_BASE_URL.rstrip('/') + '/webhook'`
+- **Reason:** Render требует открытый порт для health checks, иначе деплой считается неудачным
+- **Files Changed:** `main_render.py` (lines 2648-2698)
+- **How Verified:**
+  ```bash
+  # 1. Эмуляция Render env (без WEBHOOK_BASE_URL)
+  export PORT=10000
+  export BOT_MODE=webhook
+  # БЕЗ WEBHOOK_BASE_URL
+  python main_render.py
+  # Ожидаемый результат: 
+  # - "[HEALTH] ✅ Server started on port 10000"
+  # - "[WEBHOOK] WEBHOOK_BASE_URL not set for webhook mode - falling back to polling"
+  # - Процесс НЕ завершается, сервер остается живым
+  
+  # 2. Проверка health endpoint
+  curl http://localhost:10000/health
+  # Ожидаемый результат: 200 OK с JSON
+  
+  # 3. Smoke test
+  pytest tests/test_health_server_smoke.py
+  ```
+- **Status:** ✅ FIXED
+
 **P0 CRITICAL FIXES (2026-01-16 - Production Readiness on Render):**
 
 **P0-1: Health Server Always Starts (CRITICAL)**

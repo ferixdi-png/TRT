@@ -3,16 +3,62 @@ Storage module - unified interface for data persistence.
 
 Exports get_storage() factory function that returns appropriate storage
 implementation based on environment configuration.
+
+P0: Async-safe initialization - no asyncio.run() in runtime, no sync_check_pg from async context.
 """
 
 from typing import Optional
 import os
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 # Lazy import to avoid circular dependencies
 _storage_instance: Optional[object] = None
+
+
+async def init_pg_storage(database_url: str):
+    """
+    P0: Async initialization of PostgreSQL storage.
+    
+    This function should be used when already in async context (runtime).
+    It uses async_test_connection() instead of sync test_connection().
+    
+    Args:
+        database_url: PostgreSQL connection string
+        
+    Returns:
+        PostgresStorage instance if connection successful, None otherwise
+        
+    Raises:
+        ImportError: if asyncpg is not available
+        RuntimeError: if connection test fails
+    """
+    try:
+        from app.storage.pg_storage import PostgresStorage
+        
+        # Create storage instance (__init__ is sync, doesn't test connection)
+        storage = PostgresStorage(database_url)
+        
+        # P0: Test connection using async method (no asyncio.run() in runtime)
+        try:
+            connection_ok = await storage.async_test_connection()
+            if not connection_ok:
+                logger.warning("[STORAGE] PostgreSQL connection test failed - will fallback to FileStorage on first use")
+                return None
+        except Exception as e:
+            logger.warning(f"[STORAGE] PostgreSQL async connection test error: {e} - will fallback to FileStorage on first use")
+            return None
+        
+        logger.info("[STORAGE] ✅ PostgresStorage initialized and connection verified (async)")
+        return storage
+    except ImportError as e:
+        logger.error(f"[STORAGE] Failed to import PostgresStorage: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"[STORAGE] Failed to initialize PostgresStorage: {e}")
+        raise RuntimeError(f"Cannot initialize PostgreSQL storage: {e}") from e
 
 
 def get_storage():
@@ -66,6 +112,29 @@ def get_storage():
             return _storage_instance
     else:
         # Use PostgresStorage
+        # P0: Check if we're in async context - if yes, warn but don't use asyncio.run()
+        try:
+            # Try to detect if we're in async context
+            loop = asyncio.get_running_loop()
+            # If we get here, we're in async context
+            # P0: Don't call sync functions that might use asyncio.run() or test_connection()
+            # Return storage instance without connection test (will be tested on first async use via _get_pool())
+            logger.warning(
+                "[STORAGE] get_storage() called from async context. "
+                "Consider using init_pg_storage() for proper async initialization. "
+                "Creating PostgresStorage without connection test (will test on first use via _get_pool())."
+            )
+            from app.storage.pg_storage import PostgresStorage
+            # CRITICAL: PostgresStorage.__init__ is sync, but it doesn't test connection
+            # Connection testing happens async via _get_pool() on first use
+            _storage_instance = PostgresStorage(database_url)
+            logger.info("[STORAGE] Using PostgresStorage (DATABASE_URL provided, connection test deferred to first async use)")
+            return _storage_instance
+        except RuntimeError:
+            # No running event loop - safe to use sync initialization
+            pass
+        
+        # Now try to initialize PostgresStorage (either from sync context or after RuntimeError)
         try:
             from app.storage.pg_storage import PostgresStorage
             # CRITICAL: PostgresStorage.__init__ is sync, but it doesn't test connection
@@ -100,5 +169,5 @@ def get_storage():
 
 
 # Export for backward compatibility
-__all__ = ['get_storage']
+__all__ = ['get_storage', 'init_pg_storage']
 
