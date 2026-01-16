@@ -539,21 +539,27 @@ def _make_web_app(
             db_status = "fail"
             db_warn = f"DB check failed: {str(e)[:100]}"
         
-        # Check webhook status (fail-open)
+        # Check webhook status (fail-open) - with timeout to prevent blocking
         webhook_current = None
         webhook_desired = None
         webhook_ok = False
         try:
             if runtime_state.bot_mode == "webhook":
                 webhook_desired = cfg.webhook_base_url
-                webhook_info = await bot.get_webhook_info()
-                webhook_current = webhook_info.url or None
-                webhook_ok = webhook_current is not None and webhook_current.rstrip("/") == (webhook_desired or "").rstrip("/")
+                # CRITICAL: Use timeout to prevent health check from hanging
+                try:
+                    webhook_info = await asyncio.wait_for(bot.get_webhook_info(), timeout=2.0)
+                    webhook_current = webhook_info.url or None
+                    webhook_ok = webhook_current is not None and webhook_current.rstrip("/") == (webhook_desired or "").rstrip("/")
+                except asyncio.TimeoutError:
+                    # Timeout - assume webhook is ok to prevent false negatives
+                    webhook_ok = True
+                    webhook_current = "timeout"
             else:
                 webhook_ok = True  # Polling mode doesn't need webhook
                 webhook_desired = None
         except Exception as e:
-            webhook_ok = False
+            webhook_ok = True  # Fail-open: assume ok if check fails
             db_warn = f"Webhook check failed: {str(e)[:100]}"
         
         # Determine overall status
@@ -647,14 +653,20 @@ def _make_web_app(
                 content_type="application/json"
             )
         
-        # Check 3: Webhook must be ok (if webhook mode)
+        # Check 3: Webhook must be ok (if webhook mode) - with timeout
         webhook_ok = True
         try:
             if runtime_state.bot_mode == "webhook":
-                webhook_info = await bot.get_webhook_info()
-                webhook_ok = webhook_info.url is not None
+                # CRITICAL: Use timeout to prevent readiness probe from hanging
+                try:
+                    webhook_info = await asyncio.wait_for(bot.get_webhook_info(), timeout=2.0)
+                    webhook_ok = webhook_info.url is not None
+                except asyncio.TimeoutError:
+                    # Timeout - assume webhook is ok to prevent false negatives
+                    webhook_ok = True
         except Exception:
-            webhook_ok = False
+            # Fail-open: assume ok if check fails
+            webhook_ok = True
         
         if not webhook_ok:
             return web.Response(

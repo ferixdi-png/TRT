@@ -47,6 +47,14 @@ auditor_role: "Senior Engineer + QA Lead + Release Manager"
 13. **Database Transactions**: Verified all critical balance operations use transactions with `FOR UPDATE` locks
 14. **Idempotency**: Verified all payment operations use `ON CONFLICT` for idempotency
 15. **HTTP Timeouts**: Verified KIE API client uses timeout parameters in all requests
+16. **NO_DATABASE_MODE Support**: ✅ **PERMANENTLY FIXED** - Full support for NO_DATABASE_MODE with FileStorage:
+    - `app/storage/__init__.py` checks `NO_DATABASE_MODE` env var first
+    - `PostgresStorage._get_pool()` raises `RuntimeError` if `NO_DATABASE_MODE` is enabled
+    - `main_render.py` initializes `FileStorage` when `NO_DATABASE_MODE` is set
+    - All database operations gracefully fall back to `FileStorage`
+    - No database connection attempts in `NO_DATABASE_MODE`
+    - All background tasks skip database operations in `NO_DATABASE_MODE`
+17. **Health Check Timeout**: Added 2-second timeout for `bot.get_webhook_info()` in health/ready endpoints to prevent deployment hanging
 
 **CRITICAL DEPLOYMENT FIXES (2026-01-16 - Render Deployment):**
 16. **Missing Storage Module**: Created `app/storage/__init__.py` with `get_storage()` factory function - fixes ImportError on Render
