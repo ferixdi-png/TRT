@@ -25503,8 +25503,7 @@ async def _register_all_handlers_internal(application: Application):
             ]
         },
         fallbacks=[CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                   CommandHandler('cancel', cancel)],
-        per_message=True
+                   CommandHandler('cancel', cancel)]
     )
     
     # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
@@ -25782,12 +25781,13 @@ async def main():
     # ==================== END NO-SILENCE GUARD ====================
     
     # Create conversation handler for generation
-    # Note: per_message=True requires all entry points to be CallbackQueryHandler
+    # Note: # D) per_message=True removed to avoid PTBUserWarning
+        requires all entry points to be CallbackQueryHandler
     # So we handle commands separately and use only callbacks for conversation
     generation_handler = ConversationHandler(
         entry_points=[
-            # Only CallbackQueryHandler for per_message=True
-            CallbackQueryHandler(button_callback, pattern='^show_models$'),
+            # Only CallbackQueryHandler for # D) per_message=True removed to avoid PTBUserWarning
+        CallbackQueryHandler(button_callback, pattern='^show_models$'),
             CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
             CallbackQueryHandler(button_callback, pattern='^category:'),
             CallbackQueryHandler(button_callback, pattern='^all_models$'),
@@ -26124,8 +26124,10 @@ async def main():
             CallbackQueryHandler(cancel, pattern='^cancel$'),
             CommandHandler('cancel', cancel)
         ]
-        # REMOVED per_message=True - it prevents MessageHandler from working!
-        # per_message=True requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
+        # REMOVED # D) per_message=True removed to avoid PTBUserWarning
+        - it prevents MessageHandler from working!
+        # # D) per_message=True removed to avoid PTBUserWarning
+        requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
     )
     
     # ==================== PHASE 1: GLOBAL INPUT ROUTERS (BEFORE ConversationHandler) ====================
@@ -26264,7 +26266,8 @@ async def main():
     application.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | (filters.Document.MimeType("audio/*")), global_audio_router), group=-1)
     # ==================== END PHASE 1: GLOBAL INPUT ROUTERS ====================
     
-    # Add command handlers separately (not in conversation, as per_message=True requires only CallbackQueryHandler)
+    # Add command handlers separately (not in conversation, as # D) per_message=True removed to avoid PTBUserWarning
+        requires only CallbackQueryHandler)
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
     application.add_handler(CommandHandler('cancel', cancel))
