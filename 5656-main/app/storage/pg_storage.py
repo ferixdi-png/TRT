@@ -480,10 +480,11 @@ class PostgresStorage(BaseStorage):
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             try:
+                # CRITICAL: Use parameterized query for INTERVAL to prevent SQL injection
                 result = await conn.execute("""
                     DELETE FROM pending_updates
                     WHERE processed_at IS NOT NULL
-                    AND processed_at < NOW() - INTERVAL '%s days'
+                    AND processed_at < NOW() - ($1 || ' days')::interval
                 """, str(days))
                 
                 # Extract number from result string like "DELETE 5"
@@ -1916,11 +1917,12 @@ class PostgresStorage(BaseStorage):
         async with pool.acquire() as conn:
             async with conn.transaction():
                 # Find stuck payments
+                # CRITICAL: Use parameterized query for INTERVAL to prevent SQL injection
                 stuck_payments = await conn.fetch("""
                     SELECT payment_id, user_id, amount, created_at
                     FROM payments
                     WHERE status = 'pending'
-                      AND created_at < NOW() - INTERVAL '%s hours'
+                      AND created_at < NOW() - ($1 || ' hours')::interval
                     FOR UPDATE
                 """, str(stale_hours))
                 
