@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Render-first entrypoint ╨┤╨╗╤П Telegram Bot
 ╨Х╨┤╨╕╨╜╨░╤П ╤В╨╛╤З╨║╨░ ╨▓╤Е╨╛╨┤╨░ ╨┤╨╗╤П ╨╖╨░╨┐╤Г╤Б╨║╨░ ╨╜╨░ Render.com (Web Service ╨╕╨╗╨╕ Worker)
