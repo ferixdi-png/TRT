@@ -1965,7 +1965,7 @@ async def main() -> None:
             Background worker that processes pending_updates from DB queue.
             Only runs when instance is ACTIVE.
             """
-            from app.storage.factory import get_storage
+            from app.storage import get_storage
             from app.utils.update_queue import get_queue_manager
             from app.utils.correlation import correlation_tag
             import json
