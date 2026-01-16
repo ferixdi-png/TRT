@@ -2619,6 +2619,16 @@ async def main() -> None:
             return
 
         # webhook mode - START HTTP SERVER IMMEDIATELY
+        # CRITICAL: Check if webhook_base_url is set, if not fallback to polling
+        if effective_bot_mode == "webhook" and not cfg.webhook_base_url:
+            logger.error("[FAIL] WEBHOOK_URL not set for webhook mode - falling back to polling")
+            effective_bot_mode = "polling"
+            runtime_state.bot_mode = "polling"
+            # Start polling instead
+            await preflight_webhook(bot)
+            await dp.start_polling(bot)
+            return
+        
         app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state, background_tasks=background_tasks)
         if cfg.port:
             runner = await _start_web_server(app, cfg.port)
