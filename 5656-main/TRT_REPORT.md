@@ -6214,7 +6214,7 @@ make ops-all
   - Все Python файлы компилируются без ошибок
   - `main_render.py`, `app/database/services.py`, `app/services/job_service_v2.py`, `app/delivery/coordinator.py` - все OK
 
-### 🎯 FINAL STATUS (2026-01-16 - Full Audit Complete)
+### 🎯 FINAL STATUS (2026-01-16 - Full Audit Complete + Deployment Fixes)
 **Все P0 и P1 проблемы решены и проверены. Бот готов к работе!**
 
 **Latest Audit Results:**
@@ -6224,6 +6224,15 @@ make ops-all
 - ✅ **HTTP Timeouts**: KIE API client verified to use timeout parameters
 - ✅ **Error Handling**: Critical paths have proper error handling
 - ✅ **Syntax**: All Python files compile without errors
+
+**CRITICAL DEPLOYMENT FIXES (2026-01-16):**
+- ✅ **Storage Module**: Created `app/storage/__init__.py` with `get_storage()` factory - fixes ImportError on Render
+- ✅ **Webhook Module**: Created `app/utils/webhook.py` with all webhook helpers - fixes get_webhook_base_url ImportError
+- ✅ **SQL Injection**: Fixed parameterized queries for INTERVAL values in pg_storage.py
+- ✅ **Webhook Fallback**: Improved fallback logic to prevent [FAIL] WEBHOOK_URL errors
+- ✅ **FileStorage Safety**: Made FileStorage imports safe with ImportError handling
+- ✅ **Render Config**: Removed problematic preDeployCommand from render.yaml
+- ✅ **Input Validation**: Added comprehensive validation to quick_actions handlers
 
 **Remaining Tasks (Non-Critical):**
 - Pricing integration implementation (documented, not blocking)
