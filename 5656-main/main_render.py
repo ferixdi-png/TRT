@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 import time
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,9 @@ from typing import Any, Optional
 import json
 
 from aiohttp import web
+
+# Suppress RuntimeWarning about coroutines never awaited (from legacy code)
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
 
 from app.storage import get_storage
 from app.utils.logging_config import setup_logging  # noqa: E402
