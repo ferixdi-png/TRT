@@ -216,16 +216,15 @@ def startup_validation() -> bool:
         logger.error("=" * 60)
         sys.exit(1)
 
-    # Проверка webhook requirements
+    # Проверка webhook requirements - non-blocking, allows fallback to polling
     try:
-        validate_webhook_requirements()
-    except ValueError as e:
-        logger.error("=" * 60)
-        logger.error("INVALID WEBHOOK CONFIGURATION")
-        logger.error("=" * 60)
-        logger.error(str(e))
-        logger.error("=" * 60)
-        sys.exit(1)
+        webhook_ok = validate_webhook_requirements()
+        if not webhook_ok:
+            # Webhook mode requested but not available - main_render.py will handle fallback
+            logger.warning("[WEBHOOK] Webhook mode not available, will fallback to polling")
+    except Exception as e:
+        # Don't fail startup - let main_render.py handle fallback
+        logger.warning(f"[WEBHOOK] Webhook validation error (will fallback to polling): {e}")
     
     # Логируем успех (без значений)
     logger.info("✅ All required environment variables are set")
