@@ -68,6 +68,8 @@ def get_storage():
         # Use PostgresStorage
         try:
             from app.storage.pg_storage import PostgresStorage
+            # CRITICAL: PostgresStorage.__init__ is sync, but it doesn't test connection
+            # Connection testing happens async via _get_pool() on first use
             _storage_instance = PostgresStorage(database_url)
             logger.info("[STORAGE] Using PostgresStorage (DATABASE_URL provided)")
             return _storage_instance
