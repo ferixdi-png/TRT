@@ -29,11 +29,16 @@ import json
 
 from aiohttp import web
 
-# Suppress RuntimeWarning about coroutines never awaited (from legacy code)
-warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
-# Suppress UserWarning from legacy bot_kie.py code
+# P0: DO NOT suppress RuntimeWarning - we want to catch "coroutine never awaited" errors
+# RuntimeWarning should fail the build in tests (see tests/test_runtime_warnings.py)
+# warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
+
+# Suppress UserWarning from legacy bot_kie.py code (app.config is legacy, not used in main_render.py)
 warnings.filterwarnings("ignore", category=UserWarning, message=".*app.config not found.*")
-warnings.filterwarnings("ignore", category=UserWarning, message=".*per_message=True.*")
+
+# P0: DO NOT suppress per_message warning - ConversationHandler should be fixed in legacy code (bot_kie.py)
+# If ConversationHandler is used, it should use per_chat=True (default) or proper handler types
+# warnings.filterwarnings("ignore", category=UserWarning, message=".*per_message=True.*")
 
 from app.storage import get_storage
 from app.utils.logging_config import setup_logging  # noqa: E402
@@ -381,11 +386,17 @@ async def verify_bot_identity(bot: Bot) -> None:
 
 
 def _build_webhook_url(cfg: RuntimeConfig) -> str:
-    """Build webhook URL from config. Returns empty string if webhook_base_url is not set."""
+    """
+    Build webhook URL from config.
+    
+    Format: WEBHOOK_BASE_URL.rstrip('/') + '/webhook'
+    Returns empty string if webhook_base_url is not set.
+    """
     if not cfg.webhook_base_url:
         return ""
     base = cfg.webhook_base_url.rstrip("/")
-    return f"{base}/webhook/{cfg.webhook_secret_path}" if base else ""
+    # P0: Simple format: base + '/webhook' (no secret_path in URL, use secret_token in header)
+    return f"{base}/webhook" if base else ""
 
 
 def _build_kie_callback_url(cfg: RuntimeConfig) -> str:
