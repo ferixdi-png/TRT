@@ -48,6 +48,15 @@ auditor_role: "Senior Engineer + QA Lead + Release Manager"
 14. **Idempotency**: Verified all payment operations use `ON CONFLICT` for idempotency
 15. **HTTP Timeouts**: Verified KIE API client uses timeout parameters in all requests
 
+**CRITICAL DEPLOYMENT FIXES (2026-01-16 - Render Deployment):**
+16. **Missing Storage Module**: Created `app/storage/__init__.py` with `get_storage()` factory function - fixes ImportError on Render
+17. **Missing Webhook Module**: Created `app/utils/webhook.py` with all webhook helper functions - fixes `get_webhook_base_url()` ImportError
+18. **SQL Injection Fix**: Fixed parameterized queries for INTERVAL values in `pg_storage.py` (cleanup_old_pending_updates, cleanup_stuck_payments)
+19. **Webhook Fallback Logic**: Improved webhook fallback to polling when WEBHOOK_BASE_URL not set - prevents [FAIL] errors
+20. **FileStorage Import Safety**: Made FileStorage imports safe with ImportError handling when module doesn't exist
+21. **Render PreDeploy Fix**: Removed problematic preDeployCommand from render.yaml - database init happens in main_render.py
+22. **Quick Actions Validation**: Added comprehensive input validation to prevent IndexError, ValueError, KeyError in quick_actions handlers
+
 **Files Modified:**
 - `bot/handlers/flow.py`: Validation, caching, error handling improvements
 - `app/kie/generator.py`: Better exception handling and logging
