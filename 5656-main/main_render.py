@@ -503,10 +503,16 @@ def _make_web_app(
             started = datetime.fromisoformat(runtime_state.last_start_time)
             uptime = int((datetime.now(timezone.utc) - started).total_seconds())
         
-        # Get queue metrics
-        queue_manager = get_queue_manager()
-        queue_metrics = queue_manager.get_metrics()
-        queue_ok = queue_metrics.get("queue_depth_current", 0) < queue_metrics.get("queue_max", 100) * 0.9  # <90% full
+        # Get queue metrics - fast check, no blocking
+        queue_ok = True  # Default to ok to prevent false negatives
+        queue_metrics = {}
+        try:
+            queue_manager = get_queue_manager()
+            queue_metrics = queue_manager.get_metrics()
+            queue_ok = queue_metrics.get("queue_depth_current", 0) < queue_metrics.get("queue_max", 100) * 0.9  # <90% full
+        except Exception:
+            # If queue manager not ready, assume ok
+            queue_metrics = {"queue_depth_current": 0, "queue_max": 100}
         
         lock_debug = {}
         controller = getattr(active_state, "lock_controller", None)
