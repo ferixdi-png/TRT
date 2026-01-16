@@ -2369,9 +2369,9 @@ async def main() -> None:
                     except Exception as e:
                         logger.exception("[WEBHOOK_ACTIVE] ❌ Exception: %s", e)
                 else:
-                    logger.error("[WEBHOOK_ACTIVE] ❌ Cannot build webhook URL! WEBHOOK_BASE_URL not set for webhook mode")
-                    # CRITICAL: This should not happen if fallback to polling worked correctly
-                    # But log as error to catch any edge cases
+                    # This should not happen - effective_bot_mode should be "polling" if webhook_base_url is missing
+                    # But if it does, just log warning and continue (webhook setup will be skipped)
+                    logger.warning("[WEBHOOK_ACTIVE] ⚠️ WEBHOOK_BASE_URL not set - webhook setup skipped (should have fallen back to polling)")
 
             # Step 2.5: Start anti-abuse system (CRITICAL for protection)
             try:
