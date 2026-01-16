@@ -2635,16 +2635,27 @@ async def main() -> None:
     asyncio.create_task(state_sync_loop())  # Sync active_state with controller
 
     try:
+        # P0-1 FIX: Health server MUST start ALWAYS, even if webhook fails
+        # Check webhook_base_url BEFORE mode selection, but don't block server startup
+        if effective_bot_mode == "webhook" and not cfg.webhook_base_url:
+            logger.warning("[WEBHOOK] WEBHOOK_BASE_URL not set for webhook mode - falling back to polling")
+            effective_bot_mode = "polling"
+            runtime_state.bot_mode = "polling"
+        
+        # CRITICAL: HTTP server MUST start for Render health checks, regardless of bot mode
+        # This ensures Render sees an open port even if webhook setup fails
+        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state, background_tasks=background_tasks)
+        if cfg.port:
+            runner = await _start_web_server(app, cfg.port)
+            logger.info("[HEALTH] ✅ Server started on port %s (health endpoint available, migrations/lock in background)", cfg.port)
+        else:
+            logger.warning("[HEALTH] ⚠️ PORT not set - health server will not start (Render may fail deployment)")
+
+        # Wait briefly for background init (but don't block)
+        await asyncio.sleep(0.5)
+
+        # Route to appropriate mode
         if effective_bot_mode == "polling":
-            # Create app and start HTTP server IMMEDIATELY
-            app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state, background_tasks=background_tasks)
-            if cfg.port:
-                runner = await _start_web_server(app, cfg.port)
-                logger.info("[HEALTH] ✅ Server started on port %s (migrations/lock in background)", cfg.port)
-
-            # Wait briefly for background init (but don't block)
-            await asyncio.sleep(0.5)
-
             # If passive mode, keep healthcheck running
             if not active_state.active:
                 logger.info("[PASSIVE MODE] HTTP server running, state_sync_loop monitors lock")
@@ -2656,25 +2667,6 @@ async def main() -> None:
             await preflight_webhook(bot)
             await dp.start_polling(bot)
             return
-
-        # webhook mode - START HTTP SERVER IMMEDIATELY
-        # CRITICAL: Check if webhook_base_url is set, if not fallback to polling
-        if effective_bot_mode == "webhook" and not cfg.webhook_base_url:
-            logger.warning("[WEBHOOK] WEBHOOK_BASE_URL not set for webhook mode - falling back to polling")
-            effective_bot_mode = "polling"
-            runtime_state.bot_mode = "polling"
-            # Start polling instead
-            await preflight_webhook(bot)
-            await dp.start_polling(bot)
-            return
-        
-        app = _make_web_app(dp=dp, bot=bot, cfg=cfg, active_state=active_state, background_tasks=background_tasks)
-        if cfg.port:
-            runner = await _start_web_server(app, cfg.port)
-            logger.info("[HEALTH] ✅ Server started on port %s (migrations/lock in background)", cfg.port)
-
-        # Wait briefly for background init (but don't block)
-        await asyncio.sleep(0.5)
 
         # Initialize active services if lock acquired
         # (init_active_services called by state_sync_loop on PASSIVE→ACTIVE)
