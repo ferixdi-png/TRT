@@ -66,27 +66,9 @@ class PostgresStorage(BaseStorage):
             raise RuntimeError("PostgresStorage cannot be used in NO DATABASE MODE. Use FileStorage instead.")
         
         # Check if database is actually available (DNS check)
-        try:
-            from database import get_connection_pool
-            pool = get_connection_pool()
-            if pool is None:
-                log_operation(
-                    "PG_STORAGE_POOL_SKIP",
-                    status="SKIPPED",
-                    error_code="DATABASE_UNAVAILABLE",
-                    fix_hint="Database connection pool is None - use FileStorage instead",
-                    check_list="DATABASE_URL | DNS resolution | get_connection_pool()"
-                )
-                raise RuntimeError("Database connection pool is None. Use FileStorage instead.")
-        except Exception as e:
-            log_error(
-                "PG_STORAGE_POOL_CHECK",
-                e,
-                error_code="POOL_CHECK_FAILED",
-                fix_hint="Cannot check database pool availability",
-                check_list="Database connection | NO_DATABASE_MODE"
-            )
-            raise RuntimeError(f"Cannot use PostgresStorage: {e}") from e
+        # NOTE: get_connection_pool() is not available in this module
+        # We'll create the pool directly using asyncpg
+        # The pool will be created below if it doesn't exist
         
         # Check if pool exists and is healthy
         if self._pool is not None:

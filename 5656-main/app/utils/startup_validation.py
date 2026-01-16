@@ -131,7 +131,7 @@ def validate_env_key_format(key: str) -> bool:
     return True
 
 
-def validate_webhook_requirements() -> None:
+def validate_webhook_requirements() -> bool:
     """
     Validate webhook-specific requirements.
 
@@ -142,7 +142,7 @@ def validate_webhook_requirements() -> None:
     """
     mode = os.getenv("BOT_MODE", "").lower().strip()
     if mode != "webhook":
-        return
+        return True  # Not webhook mode, validation passes
 
     # Check required webhook variables
     missing = []
