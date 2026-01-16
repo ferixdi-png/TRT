@@ -31,6 +31,9 @@ from aiohttp import web
 
 # Suppress RuntimeWarning about coroutines never awaited (from legacy code)
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
+# Suppress UserWarning from legacy bot_kie.py code
+warnings.filterwarnings("ignore", category=UserWarning, message=".*app.config not found.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*per_message=True.*")
 
 from app.storage import get_storage
 from app.utils.logging_config import setup_logging  # noqa: E402
