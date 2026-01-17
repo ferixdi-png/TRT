@@ -78,6 +78,15 @@ async def write_and_read_storage(user_id: int, payment_amount: float) -> Dict[st
 
     reset_storage()
     storage = get_storage()
+    connection_ok = await asyncio.to_thread(storage.test_connection)
+    if not connection_ok:
+        raise RuntimeError("GitHub storage test_connection failed")
+
+    smoke_payload = {"smoke": True, "ts": time.time()}
+    await storage._update_json("smoke.json", lambda data: {**data, **smoke_payload})
+    smoke_data, _ = await storage._read_json("smoke.json")
+    if not smoke_data.get("smoke"):
+        raise RuntimeError("Smoke write/read failed for smoke.json")
     await storage.set_user_balance(user_id, payment_amount)
     await storage.set_user_balance(user_id + 1, payment_amount + 10)
     payment_id = await storage.add_payment(
@@ -104,8 +113,8 @@ async def write_and_read_storage(user_id: int, payment_amount: float) -> Dict[st
     storage._write_json = flaky_write
     try:
         await storage._update_json(
-            storage.balances_file,
-            lambda data: {**data, str(user_id): payment_amount + 1},
+            "smoke.json",
+            lambda data: {**data, "conflict": True},
         )
     finally:
         storage._write_json = original_write
@@ -124,7 +133,8 @@ async def verify_storage(user_id: int, payment_id: str) -> Dict[str, Any]:
     storage = get_storage()
     balance = await storage.get_user_balance(user_id)
     payment = await storage.get_payment(payment_id)
-    return {"balance": balance, "payment": payment}
+    smoke_data, _ = await storage._read_json("smoke.json")
+    return {"balance": balance, "payment": payment, "smoke": smoke_data}
 
 
 def main() -> None:
@@ -165,6 +175,8 @@ def main() -> None:
         )
     if not read_result["payment"]:
         raise RuntimeError("Payment record missing after restart")
+    if not read_result["smoke"].get("smoke"):
+        raise RuntimeError("smoke.json missing after restart")
 
     print("Smoke test passed: GitHub storage persisted balance/payment with conflict retry.")
 
