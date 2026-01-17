@@ -7,8 +7,21 @@ import sys
 import logging
 import asyncio
 from typing import Optional
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_dsn_parts(dsn: Optional[str]) -> tuple[str, str]:
+    if not dsn:
+        return "unknown", "unknown"
+    try:
+        parsed = urlparse(dsn)
+        host = parsed.hostname or "unknown"
+        port = str(parsed.port or "unknown")
+        return host, port
+    except Exception:
+        return "unknown", "unknown"
 
 try:
     import asyncpg
@@ -101,22 +114,26 @@ class SingletonLock:
                 
                 # Check if we should exit or go to passive mode
                 if should_exit_on_lock_conflict():
-                    logger.info("SINGLETON_LOCK_STRICT=1: Exiting gracefully (exit code 0)")
+                    logger.info("SINGLETON_LOCK_STRICT=1: entering passive mode (no hard exit)")
                     await self.release()
-                    sys.exit(0)
-                else:
-                    logger.info(
-                        "[LOCK] Passive mode: telegram runner disabled, healthcheck only. "
-                        f"Safe mode: {get_safe_mode()}"
-                    )
                     return False
+                logger.info(
+                    "[LOCK] Passive mode: telegram runner disabled, healthcheck only. "
+                    f"Safe mode: {get_safe_mode()}"
+                )
+                return False
                     
         except asyncio.TimeoutError:
             logger.warning(f"Singleton lock acquisition timed out after {timeout}s")
             set_lock_acquired(False)
             return False
         except Exception as e:
+            host, port = _safe_dsn_parts(self.dsn)
             logger.error(f"Failed to acquire singleton lock: {e}")
+            logger.error(
+                f"[LOCK] passive_mode=true error_class={e.__class__.__name__} "
+                f"host={host} port={port} reason=lock_acquire_failed"
+            )
             set_lock_acquired(False)
             return False
     

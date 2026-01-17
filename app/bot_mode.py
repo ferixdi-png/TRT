@@ -15,6 +15,14 @@ logger = logging.getLogger(__name__)
 
 BotMode = Literal["polling", "webhook"]
 
+def get_webhook_url_from_env() -> str:
+    """Resolve webhook URL from WEBHOOK_URL or WEBHOOK_BASE_URL."""
+    webhook_url = os.getenv("WEBHOOK_URL", "").strip()
+    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
+    if not webhook_url and webhook_base_url:
+        return webhook_base_url.rstrip("/") + "/webhook"
+    return webhook_url
+
 
 def get_bot_mode() -> BotMode:
     """
@@ -26,7 +34,7 @@ def get_bot_mode() -> BotMode:
     # Автоопределение для Render
     if not mode:
         # Если есть PORT и WEBHOOK_URL - вероятно webhook режим
-        if os.getenv("PORT") and os.getenv("WEBHOOK_URL"):
+        if os.getenv("PORT") and get_webhook_url_from_env():
             mode = "webhook"
         else:
             mode = "polling"
@@ -83,6 +91,7 @@ async def ensure_webhook_mode(bot: Bot, webhook_url: str) -> bool:
     """
     if not webhook_url:
         logger.error("❌ WEBHOOK_URL not set for webhook mode")
+        logger.error("   Set WEBHOOK_URL or WEBHOOK_BASE_URL")
         return False
     
     try:
@@ -126,7 +135,6 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
 
 
 

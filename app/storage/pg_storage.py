@@ -5,8 +5,19 @@ import asyncio
 import logging
 from typing import Optional
 import os
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_dsn_parts(dsn: str) -> tuple[str, str]:
+    try:
+        parsed = urlparse(dsn)
+        host = parsed.hostname or "unknown"
+        port = str(parsed.port or "unknown")
+        return host, port
+    except Exception:
+        return "unknown", "unknown"
 
 try:
     import asyncpg
@@ -55,10 +66,19 @@ async def async_check_pg(dsn: str, timeout: float = 5.0) -> bool:
             logger.error("No async PostgreSQL driver available (asyncpg or psycopg)")
             return False
     except asyncio.TimeoutError:
+        host, port = _safe_dsn_parts(dsn)
         logger.warning(f"PostgreSQL connection test timed out after {timeout}s")
+        logger.warning(
+            f"[STORAGE] postgres_unavailable=true error_class=TimeoutError host={host} port={port} fallback=json"
+        )
         return False
     except Exception as e:
+        host, port = _safe_dsn_parts(dsn)
         logger.warning(f"PostgreSQL connection test failed: {e}")
+        logger.warning(
+            f"[STORAGE] postgres_unavailable=true error_class={e.__class__.__name__} "
+            f"host={host} port={port} fallback=json"
+        )
         return False
 
 
@@ -83,10 +103,20 @@ def sync_check_pg(dsn: str, timeout: float = 5.0) -> bool:
         if "asyncio.run() cannot be called from a running event loop" in str(e):
             logger.error("sync_check_pg() called from async context. Use async_check_pg() instead.")
             raise
+        host, port = _safe_dsn_parts(dsn)
         logger.warning(f"PostgreSQL connection test failed: {e}")
+        logger.warning(
+            f"[STORAGE] postgres_unavailable=true error_class={e.__class__.__name__} "
+            f"host={host} port={port} fallback=json"
+        )
         return False
     except Exception as e:
+        host, port = _safe_dsn_parts(dsn)
         logger.warning(f"PostgreSQL connection test failed: {e}")
+        logger.warning(
+            f"[STORAGE] postgres_unavailable=true error_class={e.__class__.__name__} "
+            f"host={host} port={port} fallback=json"
+        )
         return False
 
 
@@ -106,7 +136,12 @@ class PGStorage:
             
         # Use async_check_pg instead of sync check
         if not await async_check_pg(self.dsn):
+            host, port = _safe_dsn_parts(self.dsn)
             logger.error("PostgreSQL connection test failed")
+            logger.warning(
+                f"[STORAGE] passive_mode=true storage=json_fallback host={host} port={port} "
+                "reason=connection_test_failed"
+            )
             return False
             
         try:

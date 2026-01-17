@@ -90,3 +90,34 @@ python scripts/read_logs.py --since 5m
 
 
 
+
+---
+
+## 🚦 RELEASE GATES
+- P0 webhook fallback: was `sys.exit(1)` on missing WEBHOOK_URL → became polling fallback + health alive. Причина: пустая конфигурация должна деградировать. Files: `main_render.py`, `app/config.py`, `app/bot_mode.py`.
+- P0 DB/DNS resilience: was low-signal errors → became host/port + error_class + fallback markers. Files: `app/storage/pg_storage.py`, `app/locking/single_instance.py`.
+- P1 smoke: entrypoint render smoke check без WEBHOOK_URL. File: `tests/test_409_conflict_fix.py`.
+## 🧭 P0-P1 MAP
+- P0: webhook fallback + WEBHOOK_BASE_URL source-of-truth.
+- P0: DB DNS diagnostics + passive/json markers.
+- P1: smoke test entrypoint.
+
+## 🧾 FIX LOG (was → became)
+1) webhook fallback: exit(1) → polling fallback, marker `[WEBHOOK] fallback_to_polling=true`.
+2) WEBHOOK_BASE_URL support: base + `/webhook` → WEBHOOK_URL.
+3) bot mode auto-detect uses WEBHOOK_BASE_URL.
+4) health marker: `[HEALTH] server_listening=...`.
+5) polling marker: `[RUN] polling_started=true`.
+6) DB DNS diagnostics: host/port + error_class + fallback=json.
+7) storage passive marker: `passive_mode=true storage=json_fallback`.
+8) singleton lock diagnostics: host/port + error_class + passive marker.
+9) singleton strict: hard exit → passive mode.
+10) smoke test: entrypoint stays alive + health port listening.
+
+## 📡 OBSERVABILITY MAP
+`[WEBHOOK] fallback_to_polling=true ...`; `[RUN] polling_started=true ...`; `[HEALTH] server_listening=...`; `[STORAGE] postgres_unavailable=true ... fallback=json`; `[STORAGE] passive_mode=true storage=json_fallback ...`; `[LOCK] passive_mode=true ...`.
+
+## ✅ SMOKE CHECKLIST
+- Command: `pytest tests/test_409_conflict_fix.py -k render_webhook_fallback_starts_health_server -q`
+- Expect: no exit code 1, health PORT listening, fallback→polling marker in logs.
+
