@@ -4,6 +4,7 @@ Loads configuration from environment variables with validation
 """
 
 import os
+from urllib.parse import urlsplit, urlunsplit
 import sys
 import logging
 from typing import Optional
@@ -18,12 +19,25 @@ _settings: Optional['Settings'] = None
 __all__ = ['Settings', 'get_settings', 'reset_settings', 'BOT_TOKEN', 'DATABASE_URL', 'BOT_MODE', 'WEBHOOK_URL', 'WEBHOOK_BASE_URL', 'resolve_webhook_url']
 
 
+def _normalize_webhook_url(url: str) -> str:
+    if not url:
+        return ""
+    parts = urlsplit(url)
+    path = parts.path or ""
+    while "//" in path:
+        path = path.replace("//", "/")
+    if path.endswith("/") and path != "/":
+        path = path.rstrip("/")
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
+
 def resolve_webhook_url(webhook_url: str, webhook_base_url: str) -> str:
     """Resolve webhook URL from explicit WEBHOOK_URL or WEBHOOK_BASE_URL."""
     if webhook_url:
-        return webhook_url
+        return _normalize_webhook_url(webhook_url)
     if webhook_base_url:
-        return webhook_base_url.rstrip('/') + '/webhook'
+        normalized_base = _normalize_webhook_url(webhook_base_url.rstrip("/"))
+        return normalized_base.rstrip("/") + "/webhook"
     return ""
 
 

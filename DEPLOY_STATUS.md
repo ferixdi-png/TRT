@@ -162,3 +162,119 @@ python scripts/read_logs.py --since 5m
 3) Extend smoke script to cover referrals + generation history persistence.
 4) Add maintenance script to validate JSON files in `storage/{BOT_INSTANCE_ID}`.
 5) Document GitHub storage env vars in README_RENDER.md.
+
+---
+
+## 🧯 P0/P1 FIX REPORT (2025-02-11)
+
+Ниже — **минимум 10 реальных исправлений**, каждое с форматом: **было → стало**, причина, файлы, проверка, статус.
+
+1) **P0: Совместимость start_health_server (TypeError на webhook_handler)**
+   - Было → стало: `main_render.start_health_server(port)` не принимал `webhook_handler` → принимает `webhook_handler` + `**kwargs`, безопасно проксирует в `app.utils.healthcheck.start_health_server`.
+   - Причина: падение на старте `TypeError: ... unexpected keyword argument 'webhook_handler'`.
+   - Файлы: `main_render.py`.
+   - Проверка: `python -m compileall .`.
+   - Статус: ✅
+
+2) **P0: /webhook живёт на том же PORT, безопасная регистрация**
+   - Было → стало: health server не умел корректно регистрировать `/webhook` или падал → регистрирует `/webhook` при наличии handler, логирует `route_registered=true/false`, не падает при ошибке регистрации.
+   - Причина: 404 на /webhook и падения при старте.
+   - Файлы: `app/utils/healthcheck.py`.
+   - Проверка: `python scripts/smoke_webhook_route.py`.
+   - Статус: ⚠️ (требуются env переменные для smoke)
+
+3) **P0: Готовность PTB перед обработкой webhook**
+   - Было → стало: webhook мог принимать апдейты до готовности → отдаёт 503 и логирует `bot_ready`/`handler_ready`, пока PTB не готов.
+   - Причина: гонки старта и падения обработчика.
+   - Файлы: `main_render.py`.
+   - Проверка: `python scripts/smoke_webhook_route.py`.
+   - Статус: ⚠️ (env для smoke)
+
+4) **P0: Структурированные webhook логи (latency/correlation_id)**
+   - Было → стало: минимум логов → structured markers: method/path/status/latency_ms/content_length/correlation_id.
+   - Причина: слепые зоны при 404/403/5xx.
+   - Файлы: `main_render.py`.
+   - Проверка: `python scripts/smoke_webhook_route.py`.
+   - Статус: ⚠️ (env для smoke)
+
+5) **P0: Корректные статусы 200/401/403 для webhook секрета**
+   - Было → стало: отсутствующий секрет → 403 → теперь 401 (missing), 403 (invalid), 200 (ok).
+   - Причина: явная диагностика авторизации.
+   - Файлы: `main_render.py`.
+   - Проверка: `python scripts/smoke_webhook_route.py`.
+   - Статус: ⚠️ (env для smoke)
+
+6) **P1: Защита от двойного старта health server**
+   - Было → стало: возможен повторный старт → `server_already_running=true` и возврат без второго bind.
+   - Причина: дубли в логах и potential порт-конфликты.
+   - Файлы: `app/utils/healthcheck.py`.
+   - Проверка: `python -m compileall .`.
+   - Статус: ✅
+
+7) **P1: Нормализация WEBHOOK_BASE_URL/WEBHOOK_URL**
+   - Было → стало: двойные слэши/хвостовые `/` → нормализовано + лог `computed_webhook_url`.
+   - Причина: 404/невалидный URL при рендере.
+   - Файлы: `app/config.py`, `app/bot_mode.py`, `main_render.py`.
+   - Проверка: `python -m compileall .`.
+   - Статус: ✅
+
+8) **P1: Startup self-check + readiness matrix**
+   - Было → стало: нет единого readiness → лог `[RUN] readiness ...` (bot_ready/handler_ready/storage_ok/webhook_route).
+   - Причина: быстрая диагностика в логах.
+   - Файлы: `main_render.py`.
+   - Проверка: `python -m compileall .`.
+   - Статус: ✅
+
+9) **P1: Улучшенное GitHub storage логирование**
+   - Было → стало: только op=read/write → добавлены write_attempt/write_ok/write_backoff.
+   - Причина: слепые зоны при 409/timeout/бэкоффе.
+   - Файлы: `app/storage/github_storage.py`.
+   - Проверка: `python scripts/smoke_github_storage.py`.
+   - Статус: ⚠️ (env для smoke)
+
+10) **P1: Явные [FAIL] markers при конфиг/настройках**
+   - Было → стало: общие ошибки без actionable markers → `[FAIL] config_validation_failed` и `[FAIL] settings_load_failed`.
+   - Причина: понятный root-cause при рестартах.
+   - Файлы: `main_render.py`.
+   - Проверка: `python -m compileall .`.
+   - Статус: ✅
+
+11) **P1: Маркер успешной установки webhook**
+   - Было → стало: лог без флага → `[RUN] webhook_set_ok=true`.
+   - Причина: проверяем, что setWebhook действительно прошёл.
+   - Файлы: `main_render.py`.
+   - Проверка: `python scripts/smoke_webhook_route.py`.
+   - Статус: ⚠️ (env для smoke)
+
+---
+
+## ✅ ОБЯЗАТЕЛЬНЫЕ ENV (GitHub storage + webhook)
+- `STORAGE_MODE=github`
+- `BOT_INSTANCE_ID` (обязателен)
+- `STORAGE_PREFIX`
+- `GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_BRANCH`
+- `GITHUB_COMMITTER_NAME`, `GITHUB_COMMITTER_EMAIL`
+- `BOT_MODE=webhook`
+- `PORT` (Render порт)
+- `WEBHOOK_BASE_URL` (или `WEBHOOK_URL`)
+- `WEBHOOK_SECRET_TOKEN` (рекомендуется)
+
+## 🔎 ЗДОРОВЫЙ СТАРТ: обязательные маркеры
+- `[HEALTH] server_listening=true`
+- `[WEBHOOK] route_registered=true`
+- `[RUN] bot_ready=true`
+- `[WEBHOOK] handler_ready=true`
+- `[RUN] webhook_set_ok=true` (или `set_webhook_skipped=true` в smoke)
+- `[STORAGE] mode=github ...`
+
+## 🩺 ЧЕКЛИСТ ДИАГНОСТИКИ
+- **404 на /webhook** → ищи `[WEBHOOK] route_registered=false`, проверить `PORT`/`WEBHOOK_*` и health server.
+- **TypeError webhook_handler** → смотреть `main_render.start_health_server` и `app/utils/healthcheck.start_health_server`.
+- **Нет апдейтов** → ищи `[WEBHOOK] forwarded_to_ptb=true` и `secret_ok`.
+
+## ⚠️ РИСКИ / ОСТАЛОСЬ
+1) Dependence on GitHub API rate limits — следить за `[GITHUB] write_backoff`.
+2) Конфигурации Render могут переопределять `WEBHOOK_URL` — контролировать `computed_webhook_url`.
+3) При падении PTB обработка webhook вернёт 503 — нужно следить по логам readiness.
+
+**Current status:** ⚠️ (smoke-тесты требуют env и Render-подстановок).
