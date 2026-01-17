@@ -95,6 +95,8 @@ Fix #10: Concurrency limit normalization. Proof: `[KIE] Invalid KIE_CONCURRENCY_
 
 ### 📝 Latest Changes (2026-01-16)
 
+было: crash при старте на Render → стало: бот доходит до BOT READY без исключений
+
 **P0 CRITICAL FIXES (2026-01-16 - Production Readiness):**
 
 **P0-1: Webhook Configuration & Health Server (CRITICAL)**
