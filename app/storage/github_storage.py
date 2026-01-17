@@ -238,6 +238,11 @@ class GitHubStorage(BaseStorage):
         path = self._storage_path(filename)
         url = self._contents_url(path)
         payload_json = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
+        logger.info(
+            "[GITHUB] write_attempt path=%s size_bytes=%s",
+            path,
+            len(payload_json.encode("utf-8")),
+        )
         content = base64.b64encode(payload_json.encode("utf-8")).decode("utf-8")
         payload = {
             "message": f"storage update {path}",
@@ -263,6 +268,11 @@ class GitHubStorage(BaseStorage):
         )
         if response.status in (200, 201):
             await response.release()
+            logger.info(
+                "[GITHUB] write_ok path=%s status=%s",
+                path,
+                response.status,
+            )
             return
         if response.status == 409:
             await response.release()
@@ -325,6 +335,11 @@ class GitHubStorage(BaseStorage):
         if retry_after is not None:
             delay = max(delay, retry_after)
         jitter = random.uniform(0, self.config.backoff_base)
+        logger.info(
+            "[GITHUB] write_backoff attempt=%s delay_s=%.2f",
+            attempt,
+            delay + jitter,
+        )
         await asyncio.sleep(delay + jitter)
 
     async def initialize(self) -> bool:
