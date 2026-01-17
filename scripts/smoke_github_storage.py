@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import requests
 
@@ -30,7 +30,11 @@ REQUIRED_ENV = [
 def require_env() -> None:
     missing = [key for key in REQUIRED_ENV if not os.getenv(key)]
     if missing:
-        raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+        print(
+            f"[SMOKE] missing_required_envs={','.join(missing)}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 def wait_for_health(url: str, timeout_s: int = 30) -> None:
@@ -75,13 +79,41 @@ async def write_and_read_storage(user_id: int, payment_amount: float) -> Dict[st
     reset_storage()
     storage = get_storage()
     await storage.set_user_balance(user_id, payment_amount)
+    await storage.set_user_balance(user_id + 1, payment_amount + 10)
     payment_id = await storage.add_payment(
         user_id=user_id,
         amount=payment_amount,
         payment_method="smoke",
         status="approved",
     )
-    return {"payment_id": payment_id}
+    balances, _ = await storage._read_json(storage.balances_file)
+    if str(user_id) not in balances or str(user_id + 1) not in balances:
+        raise RuntimeError("Merge check failed: missing balance keys after write")
+
+    from app.storage.github_storage import GitHubConflictError
+
+    conflict_triggered = {"value": False}
+    original_write = storage._write_json
+
+    async def flaky_write(filename: str, data: Dict[str, Any], sha: Optional[str]) -> None:
+        if not conflict_triggered["value"]:
+            conflict_triggered["value"] = True
+            raise GitHubConflictError("forced conflict for smoke test")
+        await original_write(filename, data, sha)
+
+    storage._write_json = flaky_write
+    try:
+        await storage._update_json(
+            storage.balances_file,
+            lambda data: {**data, str(user_id): payment_amount + 1},
+        )
+    finally:
+        storage._write_json = original_write
+
+    if not conflict_triggered["value"]:
+        raise RuntimeError("Conflict simulation did not trigger")
+
+    return {"payment_id": payment_id, "balance_after_conflict": payment_amount + 1}
 
 
 async def verify_storage(user_id: int, payment_id: str) -> Dict[str, Any]:
@@ -127,12 +159,14 @@ def main() -> None:
     finally:
         stop_main(proc)
 
-    if abs(read_result["balance"] - payment_amount) > 0.001:
-        raise RuntimeError(f"Balance mismatch: {read_result['balance']} vs {payment_amount}")
+    if abs(read_result["balance"] - write_result["balance_after_conflict"]) > 0.001:
+        raise RuntimeError(
+            f"Balance mismatch: {read_result['balance']} vs {write_result['balance_after_conflict']}"
+        )
     if not read_result["payment"]:
         raise RuntimeError("Payment record missing after restart")
 
-    print("Smoke test passed: GitHub storage persisted balance/payment.")
+    print("Smoke test passed: GitHub storage persisted balance/payment with conflict retry.")
 
 
 if __name__ == "__main__":
