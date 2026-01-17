@@ -76,9 +76,20 @@ def get_storage():
     if _storage_instance is not None:
         return _storage_instance
     
-    # Check NO_DATABASE_MODE first
+    storage_mode = os.getenv("STORAGE_MODE", "").strip().lower()
     no_db_mode = os.getenv('NO_DATABASE_MODE', '').lower() in ('1', 'true', 'yes')
     database_url = os.getenv('DATABASE_URL', '').strip()
+
+    if storage_mode == "github":
+        try:
+            from app.storage.github_storage import GitHubStorage
+
+            _storage_instance = GitHubStorage()
+            logger.info("[STORAGE] Using GitHubStorage (STORAGE_MODE=github)")
+            return _storage_instance
+        except Exception as e:
+            logger.error(f"[STORAGE] Failed to initialize GitHubStorage: {e}")
+            raise
     
     if no_db_mode or not database_url:
         # In NO_DATABASE_MODE, main_render.py initializes FileStorage separately
@@ -170,4 +181,3 @@ def get_storage():
 
 # Export for backward compatibility
 __all__ = ['get_storage', 'init_pg_storage']
-
