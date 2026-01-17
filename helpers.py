@@ -95,149 +95,18 @@ async def build_main_menu_keyboard(
 ) -> List[List[InlineKeyboardButton]]:
     """
     Строит главное меню клавиатуры.
-    Убрано дублирование - используется в start() и language_select.
+    Убрано дублирование - используется в start().
     """
-    _init_imports()
-    keyboard = []
-    
-    # Получаем данные
-    generation_types = _get_generation_types()
-    total_models = len(_KIE_MODELS)
-    remaining_free = get_user_free_generations_remaining(user_id)
-    is_admin = get_is_admin(user_id)
-    
-    # Free generation button (ALWAYS prominent)
-    if remaining_free > 0:
-        button_text = _t('btn_generate_free', lang=user_lang,
-                      remaining=remaining_free,
-                      total=FREE_GENERATIONS_PER_DAY)
-    else:
-        button_text = _t('btn_generate_free_no_left', lang=user_lang,
-                      total=FREE_GENERATIONS_PER_DAY)
-    
-    keyboard.append([
-        InlineKeyboardButton(button_text, callback_data="select_model:z-image")
-    ])
-    
-    # Add referral button
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_invite_friend', lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS), callback_data="referral_info")
-    ])
-    keyboard.append([])  # Empty row for spacing
-    
-    # Generation types buttons (compact, 2 per row)
-    text_to_image_type = None
-    gen_type_rows = []
-    gen_type_index = 0
-    for gen_type in generation_types:
-        gen_info = _get_generation_type_info(gen_type)
-        models_count = len(_get_models_by_generation_type(gen_type))
-        
-        if models_count == 0:
-            continue
-        
-        # Identify text-to-image type
-        if gen_type == 'text-to-image':
-            text_to_image_type = gen_type
-            continue
-            
-        # Get translated name for generation type
-        gen_type_key = f'gen_type_{gen_type.replace("-", "_")}'
-        gen_type_name = _t(gen_type_key, lang=user_lang, default=gen_info.get('name', gen_type))
-        button_text = f"{gen_type_name} ({models_count})"
-        
-        if gen_type_index % 2 == 0:
-            gen_type_rows.append([InlineKeyboardButton(
-                button_text,
-                callback_data=f"gen_type:{gen_type}"
-            )])
-        else:
-            if gen_type_rows:
-                gen_type_rows[-1].append(InlineKeyboardButton(
-                    button_text,
-                    callback_data=f"gen_type:{gen_type}"
-                ))
-            else:
-                gen_type_rows.append([InlineKeyboardButton(
-                    button_text,
-                    callback_data=f"gen_type:{gen_type}"
-                )])
-        gen_type_index += 1
-    
-    # Add text-to-image button after free generation (if it exists)
-    if text_to_image_type:
-        gen_info = _get_generation_type_info(text_to_image_type)
-        models_count = len(_get_models_by_generation_type(text_to_image_type))
-        if models_count > 0:
-            gen_type_key = f'gen_type_{text_to_image_type.replace("-", "_")}'
-            gen_type_name = _t(gen_type_key, lang=user_lang, default=gen_info.get('name', text_to_image_type))
-            button_text = f"{gen_type_name} ({models_count})"
-            keyboard.append([
-                InlineKeyboardButton(button_text, callback_data=f"gen_type:{text_to_image_type}")
-            ])
-            keyboard.append([])  # Empty row for spacing
-    
-    keyboard.extend(gen_type_rows)
-    
-    # Add free tools button
-    keyboard.append([])  # Empty row for spacing
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_free_tools', lang=user_lang), callback_data="free_tools")
-    ])
-    
-    # Add "All Models" button
-    keyboard.append([])  # Empty row for spacing
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_all_models', lang=user_lang, count=total_models), callback_data="show_models")
-    ])
-    keyboard.append([])  # Empty row for spacing
-    
-    # Add "Claim Gift" button for users who haven't claimed yet
-    if not has_claimed_gift(user_id):
-        keyboard.append([
-            InlineKeyboardButton(_t('btn_claim_gift', lang=user_lang), callback_data="claim_gift")
-        ])
-        keyboard.append([])  # Empty row for spacing
-    
-    # Bottom action buttons
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_balance', lang=user_lang), callback_data="check_balance"),
-        InlineKeyboardButton(_t('btn_my_generations', lang=user_lang), callback_data="my_generations")
-    ])
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_top_up', lang=user_lang), callback_data="topup_balance"),
-        InlineKeyboardButton(_t('btn_invite_friend_short', lang=user_lang), callback_data="referral_info")
-    ])
-    
-    # Add tutorial button for new users
-    if is_new:
-        keyboard.append([
-            InlineKeyboardButton(_t('btn_how_it_works', lang=user_lang), callback_data="tutorial_start")
-        ])
-    
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_help', lang=user_lang), callback_data="help_menu"),
-        InlineKeyboardButton(_t('btn_support', lang=user_lang), callback_data="support_contact")
-    ])
-    
-    # Add "Copy This Bot" button (always visible)
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_copy_bot', lang=user_lang), callback_data="copy_bot")
-    ])
-    
-    # Add language selection button (always visible)
-    keyboard.append([
-        InlineKeyboardButton(_t('btn_language', lang=user_lang), callback_data="change_language")
-    ])
-    
-    # Add admin panel button ONLY for admin (at the end)
-    if is_admin:
-        keyboard.append([])  # Empty row for admin section
-        keyboard.append([
-            InlineKeyboardButton(_t('btn_admin_panel', lang=user_lang), callback_data="admin_stats")
-        ])
-    
-    return keyboard
+    return [
+        [InlineKeyboardButton("БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
+        [InlineKeyboardButton("Из текста в фото", callback_data="gen_type:text-to-image")],
+        [InlineKeyboardButton("Из фото в фото", callback_data="gen_type:image-to-image")],
+        [InlineKeyboardButton("Из текста в видео", callback_data="gen_type:text-to-video")],
+        [InlineKeyboardButton("Из фото в видео", callback_data="gen_type:image-to-video")],
+        [InlineKeyboardButton("Фото редактор", callback_data="gen_type:image-edit")],
+        [InlineKeyboardButton("Баланс", callback_data="check_balance")],
+        [InlineKeyboardButton("Партнерка", callback_data="referral_info")],
+    ]
 
 
 async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any]:
@@ -498,5 +367,3 @@ def build_model_keyboard(models: list = None, user_lang: str = 'ru') -> InlineKe
         keyboard.append([button])
     
     return InlineKeyboardMarkup(keyboard)
-
-
