@@ -157,7 +157,6 @@ def test_smoke_flow():
         "all_models",
         "help_menu",
         "support_contact",
-        "change_language",
         "admin_stats"
     ]
     
@@ -211,7 +210,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

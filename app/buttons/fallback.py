@@ -64,14 +64,7 @@ async def fallback_callback_handler(
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 # Редактируем сообщение с новым меню
-                menu_text = "Главное меню" if user_lang == 'ru' else "Main menu"
-                try:
-                    from translations import t
-                    menu_text = t('main_menu', lang=user_lang) or menu_text
-                except:
-                    pass
-                
-                await query.message.edit_text(menu_text, reply_markup=reply_markup)
+                await query.message.edit_text("Главное меню", reply_markup=reply_markup)
                 logger.info(f"✅ Меню восстановлено для user_id={user_id}")
                 
             except Exception as restore_error:
@@ -86,7 +79,6 @@ async def fallback_callback_handler(
                     
     except Exception as e:
         logger.error(f"❌ Ошибка в fallback handler: {e}", exc_info=True)
-
 
 
 
