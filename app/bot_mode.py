@@ -6,6 +6,7 @@ Bot Mode Manager - строгое разделение polling и webhook
 """
 
 import os
+from urllib.parse import urlsplit, urlunsplit
 import logging
 from typing import Literal
 from telegram import Bot
@@ -15,13 +16,26 @@ logger = logging.getLogger(__name__)
 
 BotMode = Literal["polling", "webhook"]
 
+def _normalize_webhook_url(url: str) -> str:
+    if not url:
+        return ""
+    parts = urlsplit(url)
+    path = parts.path or ""
+    while "//" in path:
+        path = path.replace("//", "/")
+    if path.endswith("/") and path != "/":
+        path = path.rstrip("/")
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
+
 def get_webhook_url_from_env() -> str:
     """Resolve webhook URL from WEBHOOK_URL or WEBHOOK_BASE_URL."""
     webhook_url = os.getenv("WEBHOOK_URL", "").strip()
     webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
     if not webhook_url and webhook_base_url:
-        return webhook_base_url.rstrip("/") + "/webhook"
-    return webhook_url
+        normalized_base = _normalize_webhook_url(webhook_base_url.rstrip("/"))
+        return normalized_base.rstrip("/") + "/webhook"
+    return _normalize_webhook_url(webhook_url)
 
 
 def get_bot_mode() -> BotMode:
@@ -135,7 +149,6 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
 
 
 

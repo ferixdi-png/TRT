@@ -368,6 +368,9 @@ setup_logging(level=logging.INFO)
 
 logger = get_logger(__name__)
 
+_bot_ready = False
+_handler_ready = False
+
 
 
 
@@ -1218,40 +1221,106 @@ def build_webhook_handler(application, settings):
     """Build aiohttp webhook handler for Telegram updates."""
     from aiohttp import web
     from telegram import Update
+    import uuid
 
     secret_token = os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
 
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
-        if secret_token:
-            incoming = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-            secret_ok = incoming == secret_token
-            logger.info("[WEBHOOK] secret_ok=%s", str(secret_ok).lower())
-            if not secret_ok:
-                return web.Response(status=403)
-        else:
-            logger.info("[WEBHOOK] secret_ok=true")
-
+        correlation_id = (
+            request.headers.get("X-Request-ID")
+            or request.headers.get("X-Correlation-ID")
+            or str(uuid.uuid4())
+        )
+        start_ts = time.monotonic()
+        status = 500
+        method = request.method
+        path = request.path
+        content_length = request.content_length or 0
         try:
-            payload = await request.json()
-        except Exception as exc:
-            logger.warning("[WEBHOOK] update_received=false reason=json_parse_error error=%s", exc)
-            return web.Response(status=400)
+            if not _bot_ready:
+                status = 503
+                logger.warning(
+                    "[WEBHOOK] handler_ready=%s bot_ready=%s status=%s correlation_id=%s",
+                    str(_handler_ready).lower(),
+                    str(_bot_ready).lower(),
+                    status,
+                    correlation_id,
+                )
+                return web.Response(status=status)
 
-        logger.info("[WEBHOOK] update_received=true")
-        try:
-            update = Update.de_json(payload, application.bot)
-        except Exception as exc:
-            logger.warning("[WEBHOOK] update_received=false reason=invalid_update error=%s", exc)
-            return web.Response(status=400)
+            if secret_token:
+                incoming = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                if not incoming:
+                    status = 401
+                    logger.warning(
+                        "[WEBHOOK] secret_ok=false reason=missing_token status=%s correlation_id=%s",
+                        status,
+                        correlation_id,
+                    )
+                    return web.Response(status=status)
+                secret_ok = incoming == secret_token
+                logger.info(
+                    "[WEBHOOK] secret_ok=%s correlation_id=%s",
+                    str(secret_ok).lower(),
+                    correlation_id,
+                )
+                if not secret_ok:
+                    status = 403
+                    return web.Response(status=status)
+            else:
+                logger.info("[WEBHOOK] secret_ok=true correlation_id=%s", correlation_id)
 
-        async def _process() -> None:
             try:
-                await application.process_update(update)
-            except Exception as exc:  # pragma: no cover - logging path
-                logger.exception("[WEBHOOK] update_process_failed error=%s", exc)
+                payload = await request.json()
+            except Exception as exc:
+                status = 400
+                logger.warning(
+                    "[WEBHOOK] update_received=false reason=json_parse_error error=%s correlation_id=%s",
+                    exc,
+                    correlation_id,
+                )
+                return web.Response(status=status)
 
-        asyncio.create_task(_process())
-        return web.Response(status=204)
+            logger.info("[WEBHOOK] update_received=true correlation_id=%s", correlation_id)
+            try:
+                update = Update.de_json(payload, application.bot)
+            except Exception as exc:
+                status = 400
+                logger.warning(
+                    "[WEBHOOK] update_received=false reason=invalid_update error=%s correlation_id=%s",
+                    exc,
+                    correlation_id,
+                )
+                return web.Response(status=status)
+
+            async def _process() -> None:
+                try:
+                    await application.process_update(update)
+                except Exception as exc:  # pragma: no cover - logging path
+                    logger.exception(
+                        "[WEBHOOK] update_process_failed error=%s correlation_id=%s",
+                        exc,
+                        correlation_id,
+                    )
+
+            asyncio.create_task(_process())
+            logger.info(
+                "[WEBHOOK] forwarded_to_ptb=true correlation_id=%s",
+                correlation_id,
+            )
+            status = 200
+            return web.Response(status=status)
+        finally:
+            latency_ms = int((time.monotonic() - start_ts) * 1000)
+            logger.info(
+                "[WEBHOOK] request method=%s path=%s status=%s latency_ms=%s content_length=%s correlation_id=%s",
+                method,
+                path,
+                status,
+                latency_ms,
+                content_length,
+                correlation_id,
+            )
 
     return webhook_handler
 
@@ -1657,6 +1726,10 @@ def load_and_validate_settings():
 
 
         logger.info(f"Bot mode: {settings.bot_mode}")
+        logger.info(
+            "[WEBHOOK] computed_webhook_url=%s",
+            settings.webhook_url if settings.webhook_url else "missing",
+        )
 
 
 
@@ -1928,6 +2001,8 @@ def load_and_validate_settings():
 
 
 
+        logger.error("[FAIL] config_validation_failed=true action=check_required_envs")
+
         sys.exit(1)
 
 
@@ -2023,6 +2098,8 @@ def load_and_validate_settings():
 
 
 
+
+        logger.error("[FAIL] settings_load_failed=true action=check_env_and_logs")
 
         sys.exit(1)
 
@@ -3016,7 +3093,11 @@ async def build_application(settings):
 
 
 
-async def start_health_server(port: int) -> bool:
+async def start_health_server(
+    port: int,
+    webhook_handler=None,
+    **kwargs,
+) -> bool:
 
 
 
@@ -3144,7 +3225,11 @@ async def start_health_server(port: int) -> bool:
 
 
 
-        return await start_health_server(port=port)
+        return await start_health_server(
+            port=port,
+            webhook_handler=webhook_handler,
+            **kwargs,
+        )
 
 
 
@@ -3272,7 +3357,7 @@ async def run(settings, application):
 
 
 
-    global _application
+    global _application, _bot_ready, _handler_ready
 
 
 
@@ -3654,21 +3739,67 @@ async def run(settings, application):
 
 
             await application.start()
+            _bot_ready = True
+            logger.info("[RUN] bot_ready=true")
 
             if settings.port > 0:
                 webhook_handler = None
                 if settings.bot_mode == "webhook":
                     webhook_handler = build_webhook_handler(application, settings)
+                    _handler_ready = True
+                    logger.info("[WEBHOOK] handler_ready=true")
+                else:
+                    _handler_ready = False
+                    logger.info("[WEBHOOK] handler_ready=false reason=mode_%s", settings.bot_mode)
                 logger.info("[HEALTH] Starting healthcheck server on port %s (web service mode)", settings.port)
                 health_started = await start_health_server(
                     port=settings.port,
                     webhook_handler=webhook_handler,
                 )
                 logger.info("[HEALTH] server_listening=%s port=%s", str(health_started).lower(), settings.port)
+                try:
+                    from app.utils.healthcheck import get_health_status
+
+                    health_status = get_health_status()
+                    logger.info(
+                        "[WEBHOOK] route_registered=%s",
+                        str(bool(health_status.get("webhook_route_registered"))).lower(),
+                    )
+                except Exception as exc:
+                    logger.warning("[WEBHOOK] route_registered=unknown error=%s", exc)
             else:
                 logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
                 logger.info("[HEALTH] server_listening=false reason=port_not_set")
 
+            storage_ok = None
+            try:
+                from app.storage import get_storage
+
+                storage = get_storage()
+                if hasattr(storage, "test_connection"):
+                    storage_ok = storage.test_connection()
+            except Exception as exc:
+                logger.warning("[STORAGE] test_connection_ok=false error=%s", exc)
+                storage_ok = False
+
+            try:
+                from app.utils.healthcheck import get_health_status
+
+                health_status = get_health_status()
+            except Exception:
+                health_status = {}
+
+            logger.info(
+                "[RUN] readiness bot_ready=%s handler_ready=%s storage_ok=%s webhook_route=%s",
+                str(_bot_ready).lower(),
+                str(_handler_ready).lower(),
+                str(storage_ok).lower() if storage_ok is not None else "unknown",
+                str(bool(health_status.get("webhook_route_registered"))).lower(),
+            )
+            if settings.bot_mode == "webhook" and not health_status.get("webhook_route_registered"):
+                logger.error(
+                    "[FAIL] webhook_route_not_registered=true action=check_health_server_handler"
+                )
 
 
 
@@ -3843,6 +3974,7 @@ async def run(settings, application):
                 else:
                     await application.bot.set_webhook(settings.webhook_url)
                     logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
+                    logger.info("[RUN] webhook_set_ok=true")
 
                 logger.info("[RUN] Webhook mode - bot is ready")
 
@@ -6890,18 +7022,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
