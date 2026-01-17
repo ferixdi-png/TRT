@@ -36,8 +36,6 @@ def get_all_known_callbacks():
         'gen_type:',
         'free_tools',
         'check_balance',
-        'language_select:',
-        'change_language',
         'copy_bot',
         'claim_gift',
         'help_menu',
@@ -153,4 +151,3 @@ async def test_unknown_callback_handled_gracefully(harness):
         # Должен быть ответ на callback
         assert len(result['outbox']['callback_answers']) > 0, \
             f"Should answer unknown callback {callback_data}"
-

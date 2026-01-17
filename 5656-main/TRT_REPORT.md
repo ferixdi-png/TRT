@@ -30,6 +30,16 @@ auditor_role: "Senior Engineer + QA Lead + Release Manager"
 - Smoke checklist: ⚠️ PARTIAL (commands listed; not run).  
 - Observability: ⚠️ PARTIAL (request_id/duration added in Fix #4-#6).  
 
+## UI regression: GOOD_SHA vs BAD_SHA
+- **GOOD_SHA:** `85c254` (Render Events: “RUSSIAN TEXT ONLY…” — baseline main menu UX).  
+- **BAD_SHA:** `3008ac2` (current).  
+- **Root cause:** language onboarding flow + language handlers registered in ConversationHandler entry points/states and global handler registration, allowing language selection to preempt the main menu.  
+- **Source of language flow:** `bot_kie.py` `/start` handler + `button_callback` branches for `language_select:` and `change_language` and their registration in ConversationHandler and global handlers; button registry listed `change_language` and `language_select:`.  
+- **Fix summary:** removed language selection handler registration and callbacks, centralized start/unknown/fallback entry points through `show_main_menu()` with Russian-only main menu buttons, and aligned fallback menu restore to the same menu.  
+- **Log marker:** `MAIN_MENU_SHOWN source=<entry> user_id=<id>`.  
+- **Files touched:** `bot_kie.py`, `helpers.py`, `app/buttons/fallback.py`, `app/buttons/integration.py`, `tests/test_main_menu.py`, `tests/test_callbacks_smoke.py`, `tests/test_buttons_smoke.py`.  
+- **Verification:** `pytest tests/test_main_menu.py`, `python -m compileall .`.  
+
 ## P0/P1 MAP (root-cause oriented)
 **RC-1 (P0): External dependency instability (DB/DNS)**  
 Symptoms: PostgreSQL connection test fails; singleton lock acquisition fails; storage init warns.  
