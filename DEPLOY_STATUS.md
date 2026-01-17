@@ -123,6 +123,17 @@ python scripts/read_logs.py --since 5m
 - Command: `python scripts/smoke_github_storage.py`
 - Expect: health PORT listening in SMOKE mode, balance/payment persisted via GitHub storage.
 
+## 🧩 GITHUB STORAGE ENV (REQUIRED)
+- `STORAGE_MODE=github`
+- `BOT_INSTANCE_ID=<partner-or-deploy-id>` (data isolation per instance)
+- `STORAGE_PREFIX=storage` (or custom prefix)
+- `GITHUB_REPO`, `GITHUB_BRANCH`, `GITHUB_TOKEN`
+- `GITHUB_COMMITTER_NAME`, `GITHUB_COMMITTER_EMAIL`
+
+## 🔎 EXPECTED LOG MARKERS
+- `[STORAGE] mode=github instance=... prefix=...`
+- `[GITHUB] op=read/write path=... ok=true/false status=... attempt=...`
+
 ## 🔜 NEXT STEPS (3-7)
 1) Add GitHub storage metrics (latency + retry counters) to logs/metrics.
 2) Add small per-file cache with TTL to reduce GitHub read volume.
