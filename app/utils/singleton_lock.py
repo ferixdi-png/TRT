@@ -23,6 +23,8 @@ _singleton_lock_instance = None
 
 def is_lock_acquired() -> bool:
     """Check if singleton lock was acquired."""
+    if _locks_disabled():
+        return True
     return _lock_acquired
 
 
@@ -49,7 +51,7 @@ def get_safe_mode() -> str:
     Returns:
         "active" if lock acquired, "passive" if not acquired
     """
-    if _lock_acquired:
+    if is_lock_acquired():
         return "active"
     return "passive"
 
@@ -68,8 +70,9 @@ async def acquire_singleton_lock(dsn=None) -> bool:
     global _singleton_lock_instance
     
     if _locks_disabled():
-        logger.info("[LOCK] singleton_disabled=true reason=db_disabled")
-        return False
+        set_lock_acquired(True)
+        logger.info("[LOCK] singleton_disabled=true reason=storage_mode_github")
+        return True
 
     try:
         from app.locking.single_instance import SingletonLock

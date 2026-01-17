@@ -9,6 +9,8 @@ import json
 import logging
 import os
 import random
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Callable, Tuple
@@ -58,12 +60,10 @@ class GitHubStorage(BaseStorage):
         self.jobs_file = "generation_jobs.json"
 
         logger.info(
-            "[STORAGE] mode=github repo=%s branch=%s prefix=%s bot_instance_id=%s "
-            "parallel=%s retries=%s timeout=%ss",
-            self.config.repo,
-            self.config.branch,
-            self.config.storage_prefix,
+            "[STORAGE] mode=github instance=%s prefix=%s branch=%s parallel=%s retries=%s timeout=%ss",
             self.config.bot_instance_id,
+            self.config.storage_prefix,
+            self.config.branch,
             self.config.max_parallel,
             self.config.max_retries,
             self.config.timeout_seconds,
@@ -90,7 +90,11 @@ class GitHubStorage(BaseStorage):
         if not bot_instance_id:
             missing.append("BOT_INSTANCE_ID")
         if missing:
-            raise ValueError(f"Missing required GitHub storage env vars: {', '.join(missing)}")
+            raise ValueError(
+                "[STORAGE][GITHUB] missing_required_envs="
+                + ",".join(missing)
+                + " (BOT_INSTANCE_ID required per deploy)"
+            )
 
         return GitHubConfig(
             repo=repo,
@@ -133,17 +137,89 @@ class GitHubStorage(BaseStorage):
             response = await session.request(method, url, **kwargs)
         return response
 
+    async def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        *,
+        op: str,
+        path: str,
+        ok_statuses: Tuple[int, ...],
+        **kwargs: Any,
+    ) -> aiohttp.ClientResponse:
+        last_response: Optional[aiohttp.ClientResponse] = None
+        for attempt in range(1, self.config.max_retries + 1):
+            response = await self._request(method, url, **kwargs)
+            last_response = response
+            status = response.status
+            ok = status in ok_statuses
+            logger.info(
+                "[GITHUB] op=%s path=%s ok=%s status=%s attempt=%s",
+                op,
+                path,
+                str(ok).lower(),
+                status,
+                attempt,
+            )
+            if ok:
+                return response
+
+            if self._should_retry(status, response.headers):
+                await response.release()
+                await self._backoff(attempt, response.headers)
+                continue
+
+            return response
+
+        if last_response is None:
+            raise RuntimeError("GitHub request failed without response")
+        return last_response
+
+    def _should_retry(self, status: int, headers: aiohttp.typedefs.LooseHeaders) -> bool:
+        retryable = status in {429, 500, 502, 503, 504}
+        if status == 403 and headers.get("X-RateLimit-Remaining") == "0":
+            return True
+        return retryable
+
+    def _retry_after_seconds(self, headers: aiohttp.typedefs.LooseHeaders) -> Optional[float]:
+        retry_after = headers.get("Retry-After")
+        if retry_after:
+            try:
+                return float(retry_after)
+            except ValueError:
+                return None
+        reset_header = headers.get("X-RateLimit-Reset")
+        if reset_header:
+            try:
+                reset_at = float(reset_header)
+                delay = max(0.0, reset_at - time.time())
+                return delay if delay > 0 else None
+            except ValueError:
+                return None
+        return None
+
     async def _read_json(self, filename: str) -> Tuple[Dict[str, Any], Optional[str]]:
         path = self._storage_path(filename)
         url = self._contents_url(path)
-        response = await self._request("GET", url, params={"ref": self.config.branch})
+        response = await self._request_with_retry(
+            "GET",
+            url,
+            op="read",
+            path=path,
+            ok_statuses=(200, 404),
+            params={"ref": self.config.branch},
+        )
         if response.status == 404:
-            logger.info("[GITHUB] read_ok path=%s status=404 empty=true", path)
             await response.release()
             return {}, None
         if response.status != 200:
             payload = await response.text()
             await response.release()
+            logger.error(
+                "[GITHUB] op=read path=%s ok=false status=%s error_class=GitHubReadError",
+                path,
+                response.status,
+            )
             raise RuntimeError(f"GitHub read failed {response.status}: {payload}")
         payload = await response.json()
         await response.release()
@@ -155,7 +231,6 @@ class GitHubStorage(BaseStorage):
         except json.JSONDecodeError:
             logger.error("[GITHUB] read_invalid_json path=%s", path)
             data = {}
-        logger.info("[GITHUB] read_ok path=%s status=200 sha_present=%s", path, bool(sha))
         return data, sha
 
     async def _write_json(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> None:
@@ -174,16 +249,26 @@ class GitHubStorage(BaseStorage):
         }
         if sha:
             payload["sha"] = sha
-        response = await self._request("PUT", url, json=payload)
+        response = await self._request_with_retry(
+            "PUT",
+            url,
+            op="write",
+            path=path,
+            ok_statuses=(200, 201, 409),
+        )
         if response.status in (200, 201):
             await response.release()
-            logger.info("[GITHUB] write_ok path=%s status=%s", path, response.status)
             return
         if response.status == 409:
             await response.release()
             raise GitHubConflictError(f"GitHub write conflict for {path}")
         payload_text = await response.text()
         await response.release()
+        logger.error(
+            "[GITHUB] op=write path=%s ok=false status=%s error_class=GitHubWriteError",
+            path,
+            response.status,
+        )
         raise RuntimeError(f"GitHub write failed {response.status}: {payload_text}")
 
     def _merge_json(self, base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
@@ -229,14 +314,62 @@ class GitHubStorage(BaseStorage):
         )
         raise RuntimeError("Exceeded GitHub write retries") from last_error
 
-    async def _backoff(self, attempt: int) -> None:
+    async def _backoff(self, attempt: int, headers: Optional[aiohttp.typedefs.LooseHeaders] = None) -> None:
         delay = (2 ** (attempt - 1)) * self.config.backoff_base
+        retry_after = self._retry_after_seconds(headers or {})
+        if retry_after is not None:
+            delay = max(delay, retry_after)
         jitter = random.uniform(0, self.config.backoff_base)
         await asyncio.sleep(delay + jitter)
 
     async def initialize(self) -> bool:
         """Optional initialization hook for factory."""
         return True
+
+    def test_connection(self) -> bool:
+        """Sync connection test for GitHub storage."""
+        async def _check() -> bool:
+            await self._read_json(self.balances_file)
+            return True
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            result: Dict[str, Optional[Exception]] = {"error": None}
+            success = {"value": False}
+
+            def runner() -> None:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    success["value"] = new_loop.run_until_complete(_check())
+                except Exception as exc:  # pragma: no cover - defensive
+                    result["error"] = exc
+                finally:
+                    new_loop.close()
+
+            thread = threading.Thread(target=runner, daemon=True)
+            thread.start()
+            thread.join()
+            if result["error"]:
+                logger.warning(
+                    "[STORAGE][GITHUB] test_connection_failed error_class=%s",
+                    result["error"].__class__.__name__,
+                )
+                return False
+            return bool(success["value"])
+
+        try:
+            return asyncio.run(_check())
+        except Exception as exc:
+            logger.warning(
+                "[STORAGE][GITHUB] test_connection_failed error_class=%s",
+                exc.__class__.__name__,
+            )
+            return False
 
     # ==================== USER OPERATIONS ====================
 
