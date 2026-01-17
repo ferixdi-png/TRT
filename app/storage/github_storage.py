@@ -48,6 +48,7 @@ class GitHubStorage(BaseStorage):
         self.config = self._load_config()
         self._session: Optional[aiohttp.ClientSession] = None
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
+        self._implicit_dirs_logged = False
 
         self.balances_file = "user_balances.json"
         self.languages_file = "user_languages.json"
@@ -249,12 +250,16 @@ class GitHubStorage(BaseStorage):
         }
         if sha:
             payload["sha"] = sha
+        if not self._implicit_dirs_logged:
+            logger.info("[GITHUB] implicit_dirs=true path=%s", path)
+            self._implicit_dirs_logged = True
         response = await self._request_with_retry(
             "PUT",
             url,
             op="write",
             path=path,
             ok_statuses=(200, 201, 409),
+            json=payload,
         )
         if response.status in (200, 201):
             await response.release()
@@ -356,17 +361,26 @@ class GitHubStorage(BaseStorage):
             thread.join()
             if result["error"]:
                 logger.warning(
-                    "[STORAGE][GITHUB] test_connection_failed error_class=%s",
+                    "[GITHUB] test_connection_ok=false error_class=%s",
                     result["error"].__class__.__name__,
                 )
                 return False
-            return bool(success["value"])
+            if success["value"]:
+                logger.info("[GITHUB] test_connection_ok=true")
+                return True
+            logger.warning("[GITHUB] test_connection_ok=false")
+            return False
 
         try:
-            return asyncio.run(_check())
+            result_ok = asyncio.run(_check())
+            if result_ok:
+                logger.info("[GITHUB] test_connection_ok=true")
+            else:
+                logger.warning("[GITHUB] test_connection_ok=false")
+            return result_ok
         except Exception as exc:
             logger.warning(
-                "[STORAGE][GITHUB] test_connection_failed error_class=%s",
+                "[GITHUB] test_connection_ok=false error_class=%s",
                 exc.__class__.__name__,
             )
             return False
