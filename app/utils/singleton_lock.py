@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 _lock_acquired = False
 _lock_strict_mode = os.getenv("SINGLETON_LOCK_STRICT", "0").lower() in ("1", "true", "yes")
 
+
+def _locks_disabled() -> bool:
+    storage_mode = os.getenv("STORAGE_MODE", "github").lower()
+    disabled = os.getenv("DISABLE_DB_LOCKS", "1").lower() in ("1", "true", "yes")
+    return disabled or storage_mode == "github"
+
 # Module-global SingletonLock instance
 _singleton_lock_instance = None
 
@@ -61,9 +67,13 @@ async def acquire_singleton_lock(dsn=None) -> bool:
     """
     global _singleton_lock_instance
     
+    if _locks_disabled():
+        logger.info("[LOCK] singleton_disabled=true reason=db_disabled")
+        return False
+
     try:
         from app.locking.single_instance import SingletonLock
-        
+
         _singleton_lock_instance = SingletonLock(dsn)
         result = await _singleton_lock_instance.acquire()
         return result
@@ -79,6 +89,9 @@ async def release_singleton_lock() -> None:
     """
     global _singleton_lock_instance
     
+    if _locks_disabled():
+        return
+
     if _singleton_lock_instance is not None:
         try:
             await _singleton_lock_instance.release()

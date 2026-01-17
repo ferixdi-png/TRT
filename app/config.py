@@ -65,7 +65,7 @@ class Settings:
         self.allow_real_generation = os.getenv('ALLOW_REAL_GENERATION', '1') != '0'
         
         # Storage configuration
-        self.storage_mode = os.getenv('STORAGE_MODE', 'auto').lower()
+        self.storage_mode = os.getenv('STORAGE_MODE', 'github').lower()
         self.data_dir = os.getenv('DATA_DIR', '/app/data')
         
         # Bot mode
@@ -122,26 +122,13 @@ class Settings:
     def get_storage_mode(self) -> str:
         """
         Определяет режим хранения данных.
-        
+
         Returns:
-            'postgres' если DATABASE_URL доступен, иначе 'json'
+            'github' (единственный режим хранения)
         """
-        if self.storage_mode == 'postgres':
-            return 'postgres'
-        elif self.storage_mode == 'json':
-            return 'json'
-        elif self.storage_mode == 'auto':
-            # AUTO режим: пробуем определить автоматически
-            if self.database_url:
-                return 'postgres'
-            else:
-                return 'json'
-        else:
-            # Неизвестный режим - используем auto логику
-            if self.database_url:
-                return 'postgres'
-            else:
-                return 'json'
+        if self.storage_mode == "github":
+            return "github"
+        return "github"
     
     def validate(self):
         """Валидирует обязательные настройки"""
