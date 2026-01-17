@@ -15,7 +15,16 @@ logger = logging.getLogger(__name__)
 _settings: Optional['Settings'] = None
 
 # Явный экспорт для импорта
-__all__ = ['Settings', 'get_settings', 'reset_settings']
+__all__ = ['Settings', 'get_settings', 'reset_settings', 'BOT_TOKEN', 'DATABASE_URL', 'BOT_MODE', 'WEBHOOK_URL', 'WEBHOOK_BASE_URL', 'resolve_webhook_url']
+
+
+def resolve_webhook_url(webhook_url: str, webhook_base_url: str) -> str:
+    """Resolve webhook URL from explicit WEBHOOK_URL or WEBHOOK_BASE_URL."""
+    if webhook_url:
+        return webhook_url
+    if webhook_base_url:
+        return webhook_base_url.rstrip('/') + '/webhook'
+    return ""
 
 
 class Settings:
@@ -61,7 +70,13 @@ class Settings:
         
         # Bot mode
         self.bot_mode = os.getenv('BOT_MODE', 'polling').lower()
-        self.webhook_url = os.getenv('WEBHOOK_URL', '').strip()
+        self.webhook_base_url = os.getenv('WEBHOOK_BASE_URL', '').strip()
+        self.webhook_url = resolve_webhook_url(
+            os.getenv('WEBHOOK_URL', '').strip(),
+            self.webhook_base_url
+        )
+        if self.webhook_base_url and not os.getenv('WEBHOOK_URL'):
+            os.environ['WEBHOOK_URL'] = self.webhook_url
         
         # Port for healthcheck
         port_str = os.getenv('PORT', '0')
@@ -172,3 +187,15 @@ def reset_settings():
     """Сбросить глобальный экземпляр settings (для тестов)"""
     global _settings
     _settings = None
+
+
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
+BOT_MODE = os.getenv('BOT_MODE', 'polling').lower()
+WEBHOOK_BASE_URL = os.getenv('WEBHOOK_BASE_URL', '').strip()
+WEBHOOK_URL = resolve_webhook_url(
+    os.getenv('WEBHOOK_URL', '').strip(),
+    WEBHOOK_BASE_URL
+)
+if WEBHOOK_BASE_URL and not os.getenv('WEBHOOK_URL'):
+    os.environ['WEBHOOK_URL'] = WEBHOOK_URL
