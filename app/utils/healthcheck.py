@@ -7,7 +7,7 @@ import time
 import logging
 import json
 from aiohttp import web
-from typing import Optional, Callable, Awaitable
+from typing import Optional, Callable, Awaitable, Dict
 
 from app.utils.logging_config import get_logger
 
@@ -16,12 +16,22 @@ logger = get_logger(__name__)
 _health_server: Optional[web.Application] = None
 _health_runner: Optional[web.AppRunner] = None
 _start_time: Optional[float] = None
+_health_server_running: bool = False
+_webhook_route_registered: bool = False
 
 
 def set_start_time():
     """Устанавливает время старта для расчета uptime"""
     global _start_time
     _start_time = time.time()
+
+
+def get_health_status() -> Dict[str, Optional[object]]:
+    return {
+        "health_server_running": _health_server_running,
+        "webhook_route_registered": _webhook_route_registered,
+        "start_time": _start_time,
+    }
 
 
 async def health_handler(request):
@@ -52,7 +62,8 @@ async def health_handler(request):
         "status": "ok",
         "uptime": uptime,
         "storage": storage_mode,
-        "kie_mode": kie_mode
+        "kie_mode": kie_mode,
+        "webhook_route_registered": _webhook_route_registered,
     }
     
     return web.Response(
@@ -65,13 +76,18 @@ async def health_handler(request):
 async def start_health_server(
     port: int = 8000,
     webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
+    **kwargs,
 ):
     """Запустить healthcheck сервер в том же event loop"""
-    global _health_server, _health_runner
+    global _health_server, _health_runner, _health_server_running, _webhook_route_registered
     
     if port == 0:
         logger.info("[HEALTH] PORT not set, skipping healthcheck server")
         return False
+
+    if _health_runner is not None:
+        logger.info("[HEALTH] server_already_running=true port=%s", port)
+        return True
     
     try:
         set_start_time()  # Устанавливаем время старта
@@ -80,8 +96,19 @@ async def start_health_server(
         app.router.add_get('/health', health_handler)
         app.router.add_get('/', health_handler)  # Для совместимости
         if webhook_handler is not None:
-            app.router.add_post('/webhook', webhook_handler)
-            logger.info("[WEBHOOK] route_registered=true path=/webhook")
+            try:
+                app.router.add_post('/webhook', webhook_handler)
+                _webhook_route_registered = True
+                logger.info("[WEBHOOK] route_registered=true path=/webhook")
+            except Exception as exc:
+                _webhook_route_registered = False
+                logger.warning(
+                    "[WEBHOOK] route_registered=false path=/webhook reason=registration_error error=%s",
+                    exc,
+                )
+        else:
+            _webhook_route_registered = False
+            logger.warning("[WEBHOOK] route_registered=false path=/webhook reason=handler_missing")
         
         runner = web.AppRunner(app)
         await runner.setup()
@@ -91,12 +118,14 @@ async def start_health_server(
         
         _health_server = app
         _health_runner = runner
+        _health_server_running = True
         
         logger.info(f"[HEALTH] Healthcheck server started on port {port}")
         logger.info(f"[HEALTH] Endpoints: /health, /")
         
         return True
     except Exception as e:
+        _health_server_running = False
         logger.warning(f"[HEALTH] Failed to start healthcheck server: {e}")
         logger.warning("[HEALTH] Continuing without healthcheck (Render may mark service as unhealthy)")
         return False
@@ -104,7 +133,7 @@ async def start_health_server(
 
 async def stop_health_server():
     """Остановить healthcheck сервер"""
-    global _health_server, _health_runner
+    global _health_server, _health_runner, _health_server_running, _webhook_route_registered
     
     if _health_runner:
         try:
@@ -115,3 +144,5 @@ async def stop_health_server():
         finally:
             _health_server = None
             _health_runner = None
+            _health_server_running = False
+            _webhook_route_registered = False
