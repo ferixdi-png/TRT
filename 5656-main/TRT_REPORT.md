@@ -18,6 +18,63 @@ auditor_role: "Senior Engineer + QA Lead + Release Manager"
 ```
 
 ---
+## RELEASE GATES
+- Stable startup: ⚠️ PARTIAL (health server ok; DB init failures observed; add fallback markers).  
+- Transport fallback: ✅ PASS (webhook → polling log seen).  
+- No uncaught exceptions: ⚠️ PARTIAL (global handlers ok; external errors need taxonomy).  
+- Input validation: ⚠️ PARTIAL (KIE client validated in Fix #7-#8; review handlers).  
+- Idempotency/dedup: ⚠️ PARTIAL (payments ok; verify webhook/job dedup).  
+- DB pool stability: ⚠️ PARTIAL (asyncpg pool ok; connection failures seen).  
+- External call control: ⚠️ PARTIAL (timeouts/retries ok; add concurrency + request_id).  
+- UX never silent: ⚠️ PARTIAL (fallbacks exist; enforce error messages).  
+- Smoke checklist: ⚠️ PARTIAL (commands listed; not run).  
+- Observability: ⚠️ PARTIAL (request_id/duration added in Fix #4-#6).  
+
+## P0/P1 MAP (root-cause oriented)
+**RC-1 (P0): External dependency instability (DB/DNS)**  
+Symptoms: PostgreSQL connection test fails; singleton lock acquisition fails; storage init warns.  
+Cause: DB unreachable + auto mode keeps Postgres without fallback.  
+Impact: Unstable startup + degraded data persistence.  
+Modules: `app/bootstrap.py`, `app/storage/factory.py`, `app/storage/pg_storage.py`.  
+Proof: Startup logs + fallback marker.
+**RC-2 (P1): External call control gaps**  
+Symptoms: KIE calls lack concurrency caps + request-scoped observability.  
+Cause: retries/backoff exist but no concurrency/request_id.  
+Impact: Rate-limit storms, weak traceability.  
+Modules: `app/integrations/kie_client.py`.  
+Proof: request_id + retry/duration markers.
+**RC-3 (P1): Input validation gaps in external API client**  
+Symptoms: KIE client accepts empty model/task IDs.  
+Cause: Missing validation.  
+Impact: Bad requests, unclear errors.  
+Modules: `app/integrations/kie_client.py`.  
+Proof: invalid_input markers.
+## NEXT ITERATIONS QUEUE
+1. Audit webhook handlers for idempotency keys + unknown callback fallback.  
+2. Verify graceful shutdown + DB pool close hooks.  
+3. Add smoke test script for P0 flows (startup/health/webhook).  
+4. Enforce timeouts/retries/concurrency for non-KIE HTTP calls.  
+5. Add structured error taxonomy (error_code/request_id/user_hash).  
+## FIX LOG (Fix #1..)
+Fix #1: Storage auto-fallback on Postgres init/test failure (AUTO mode). Proof: `[FALLBACK] Using JSON storage ... reason=connection_test_failed`.  
+Fix #2: Fallback logging with reason + storage_mode guard. Proof: `[WARN] Storage fallback skipped (storage_mode=...)`.  
+Fix #3: KIE concurrency limit (Semaphore, env `KIE_CONCURRENCY_LIMIT`, default 5). Proof: `[KIE] request_ok ... attempts=...`.  
+Fix #4: KIE request_id propagation + `X-Request-ID` header. Proof: `request_id=<hex>` markers.  
+Fix #5: KIE request duration + attempts logging. Proof: `[KIE] request_ok ... duration_ms=...`.  
+Fix #6: Retry/backoff visibility with error_class/backoff. Proof: `[KIE] request_retry ... backoff_s=...`.  
+Fix #7: KIE create_task input validation. Proof: `[KIE] invalid_input ...`.  
+Fix #8: KIE get_task_status input validation. Proof: `[KIE] invalid_input ... reason=missing_task_id`.  
+Fix #9: KIE request failure marker. Proof: `[KIE] request_failed ... error_class=...`.  
+Fix #10: Concurrency limit normalization. Proof: `[KIE] Invalid KIE_CONCURRENCY_LIMIT=...`.  
+## OBSERVABILITY MAP (correlation IDs + success markers)
+- Correlation IDs: `request_id` (KIE), `task_id` (KIE), `user_id` (Telegram numeric only).  
+- Success markers: `[KIE] request_ok ... duration_ms=...`, `[KIE] request_retry ... backoff_s=...`, `[FALLBACK] Using JSON storage ...`, `[HEALTH] Healthcheck server started ...`.  
+## SMOKE CHECKLIST (commands + expected outcomes)
+1. `python main_render.py` → `[RUN] Initializing application...` + `[HEALTH] Healthcheck server started`.  
+2. `curl -sf http://localhost:${PORT}/health` → `200 OK`.  
+3. `python -c "from app.storage.pg_storage import sync_check_pg; import os; print(sync_check_pg(os.getenv('DATABASE_URL')))"` → `True`.  
+4. Unset `WEBHOOK_URL` + start → `[WEBHOOK] ... falling back to polling`.  
+5. Trigger unknown callback → user sees fallback + `UNKNOWN_CALLBACK` log.  
 
 ## 🔍 AUTONOMOUS AUDIT REPORT (2026-01-16)
 
@@ -6422,4 +6479,3 @@ make ops-all
 ---
 
 **Full task list:** See `C:\Users\User\Desktop\TRT_TODO_FULL.md`
-

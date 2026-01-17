@@ -6,6 +6,8 @@ import os
 import asyncio
 import logging
 import random
+import time
+from uuid import uuid4
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
@@ -55,7 +57,8 @@ class KIEClient:
         timeout: int = 30,
         max_retries: int = 3,
         base_delay: float = 1.0,
-        max_delay: float = 60.0
+        max_delay: float = 60.0,
+        concurrency_limit: Optional[int] = None,
     ):
         if not AIOHTTP_AVAILABLE:
             raise ImportError("aiohttp is required for KIEClient")
@@ -66,10 +69,12 @@ class KIEClient:
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
+        self.concurrency_limit = self._normalize_concurrency_limit(concurrency_limit)
+        self._semaphore = asyncio.Semaphore(self.concurrency_limit)
         
         self._session: Optional[aiohttp.ClientSession] = None
     
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self, request_id: Optional[str] = None) -> Dict[str, str]:
         """Получить заголовки для запроса"""
         headers = {
             'Accept': 'application/json',
@@ -77,7 +82,32 @@ class KIEClient:
         }
         if self.api_key:
             headers['Authorization'] = f'Bearer {self.api_key}'
+        if request_id:
+            headers['X-Request-ID'] = request_id
         return headers
+
+    def _normalize_concurrency_limit(self, concurrency_limit: Optional[int]) -> int:
+        if concurrency_limit is None:
+            env_limit = os.getenv("KIE_CONCURRENCY_LIMIT")
+            if env_limit:
+                try:
+                    concurrency_limit = int(env_limit)
+                except ValueError:
+                    logger.warning("[KIE] Invalid KIE_CONCURRENCY_LIMIT=%s, using default=5", env_limit)
+                    concurrency_limit = 5
+            else:
+                concurrency_limit = 5
+        if concurrency_limit < 1:
+            logger.warning("[KIE] concurrency_limit=%s < 1, using 1", concurrency_limit)
+            return 1
+        return concurrency_limit
+
+    def _request_meta(self, method: str, path: str) -> Dict[str, str]:
+        return {
+            "request_id": uuid4().hex,
+            "method": method,
+            "path": path,
+        }
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Получить или создать сессию"""
@@ -111,13 +141,29 @@ class KIEClient:
         
         return False
     
-    async def _retry_with_backoff(self, func, *args, **kwargs):
+    async def _retry_with_backoff(self, func, *args, request_meta: Optional[Dict[str, str]] = None, **kwargs):
         """Retry с экспоненциальным backoff и jitter"""
         last_error = None
+        request_meta = request_meta or {}
+        request_id = request_meta.get("request_id", "unknown")
+        method = request_meta.get("method", "unknown")
+        path = request_meta.get("path", "unknown")
+        start_time = time.monotonic()
         
         for attempt in range(self.max_retries + 1):
             try:
-                return await func(*args, **kwargs)
+                async with self._semaphore:
+                    result = await func(*args, **kwargs)
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                logger.info(
+                    "[KIE] request_ok request_id=%s method=%s path=%s duration_ms=%s attempts=%s",
+                    request_id,
+                    method,
+                    path,
+                    duration_ms,
+                    attempt + 1,
+                )
+                return result
             except Exception as e:
                 last_error = e
                 
@@ -141,8 +187,14 @@ class KIEClient:
                         delay *= 2
                     
                     logger.warning(
-                        f"[RETRY] Attempt {attempt + 1}/{self.max_retries + 1} failed: {e}, "
-                        f"retrying in {delay:.2f}s"
+                        "[KIE] request_retry request_id=%s method=%s path=%s attempt=%s backoff_s=%.2f error_class=%s error=%s",
+                        request_id,
+                        method,
+                        path,
+                        attempt + 1,
+                        delay,
+                        e.__class__.__name__,
+                        e,
                     )
                     await asyncio.sleep(delay)
                 else:
@@ -150,6 +202,15 @@ class KIEClient:
                     break
         
         # Все попытки исчерпаны
+        logger.error(
+            "[KIE] request_failed request_id=%s method=%s path=%s attempts=%s error_class=%s error=%s",
+            request_id,
+            method,
+            path,
+            self.max_retries + 1,
+            last_error.__class__.__name__ if last_error else "unknown",
+            last_error,
+        )
         if isinstance(last_error, aiohttp.ClientResponseError):
             status = last_error.status
             if status == 429:
@@ -185,6 +246,18 @@ class KIEClient:
                 'error': str (если не ok)
             }
         """
+        request_meta = self._request_meta("POST", "/api/v1/jobs/createTask")
+        if not model_id or not isinstance(input_data, dict):
+            logger.warning(
+                "[KIE] invalid_input request_id=%s reason=%s",
+                request_meta["request_id"],
+                "missing_model_id" if not model_id else "input_data_not_dict",
+            )
+            return {
+                'ok': False,
+                'error': 'Invalid input parameters'
+            }
+
         if not self.api_key:
             return {
                 'ok': False,
@@ -201,7 +274,11 @@ class KIEClient:
         
         async def _make_request():
             session = await self._get_session()
-            async with session.post(url, headers=self._headers(), json=payload) as resp:
+            async with session.post(
+                url,
+                headers=self._headers(request_id=request_meta["request_id"]),
+                json=payload,
+            ) as resp:
                 status = resp.status
                 if status == 200:
                     data = await resp.json()
@@ -226,7 +303,7 @@ class KIEClient:
                     )
         
         try:
-            return await self._retry_with_backoff(_make_request)
+            return await self._retry_with_backoff(_make_request, request_meta=request_meta)
         except KIEClientError4xx as e:
             return {
                 'ok': False,
@@ -257,6 +334,18 @@ class KIEClient:
                 'error': str (если ok=False)
             }
         """
+        request_meta = self._request_meta("GET", "/api/v1/jobs/recordInfo")
+        if not task_id:
+            logger.warning(
+                "[KIE] invalid_input request_id=%s reason=missing_task_id",
+                request_meta["request_id"],
+            )
+            return {
+                'ok': False,
+                'state': 'failed',
+                'error': 'Task ID is required'
+            }
+
         if not self.api_key:
             return {
                 'ok': False,
@@ -268,7 +357,11 @@ class KIEClient:
         
         async def _make_request():
             session = await self._get_session()
-            async with session.get(url, headers=self._headers(), params=params) as resp:
+            async with session.get(
+                url,
+                headers=self._headers(request_id=request_meta["request_id"]),
+                params=params,
+            ) as resp:
                 status = resp.status
                 if status == 200:
                     data = await resp.json()
@@ -308,7 +401,7 @@ class KIEClient:
                     )
         
         try:
-            return await self._retry_with_backoff(_make_request)
+            return await self._retry_with_backoff(_make_request, request_meta=request_meta)
         except KIEClientError4xx as e:
             return {
                 'ok': False,
@@ -373,6 +466,7 @@ class KIEClient:
         Returns:
             List[Dict[str, Any]] - список моделей с информацией и ценами
         """
+        request_meta = self._request_meta("GET", "/v1/market/list")
         if not self.api_key:
             logger.warning("KIE_API_KEY not configured, cannot fetch models from API")
             return []
@@ -381,7 +475,10 @@ class KIEClient:
         
         async def _make_request():
             session = await self._get_session()
-            async with session.get(url, headers=self._headers()) as resp:
+            async with session.get(
+                url,
+                headers=self._headers(request_id=request_meta["request_id"]),
+            ) as resp:
                 status = resp.status
                 if status == 200:
                     data = await resp.json()
@@ -404,7 +501,7 @@ class KIEClient:
                     )
         
         try:
-            return await self._retry_with_backoff(_make_request)
+            return await self._retry_with_backoff(_make_request, request_meta=request_meta)
         except KIEClientError4xx as e:
             logger.error(f"[KIE] Failed to list models (client error): {e}")
             return []
@@ -417,5 +514,4 @@ def get_kie_client() -> KIEClient:
     """Получить KIE клиент (singleton)"""
     # TODO: можно добавить singleton если нужно
     return KIEClient()
-
 
