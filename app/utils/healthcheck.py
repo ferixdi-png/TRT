@@ -7,7 +7,7 @@ import time
 import logging
 import json
 from aiohttp import web
-from typing import Optional
+from typing import Optional, Callable, Awaitable
 
 from app.utils.logging_config import get_logger
 
@@ -62,7 +62,10 @@ async def health_handler(request):
     )
 
 
-async def start_health_server(port: int = 8000):
+async def start_health_server(
+    port: int = 8000,
+    webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
+):
     """Запустить healthcheck сервер в том же event loop"""
     global _health_server, _health_runner
     
@@ -76,6 +79,9 @@ async def start_health_server(port: int = 8000):
         app = web.Application()
         app.router.add_get('/health', health_handler)
         app.router.add_get('/', health_handler)  # Для совместимости
+        if webhook_handler is not None:
+            app.router.add_post('/webhook', webhook_handler)
+            logger.info("[WEBHOOK] route_registered=true path=/webhook")
         
         runner = web.AppRunner(app)
         await runner.setup()
@@ -109,4 +115,3 @@ async def stop_health_server():
         finally:
             _health_server = None
             _health_runner = None
-
