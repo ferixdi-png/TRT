@@ -5,6 +5,7 @@ Bootstrap - создание Application с dependency container
 
 import logging
 import asyncio
+import os
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from telegram import Bot
 
 from app.config import Settings, get_settings
 from app.storage import get_storage
+from app.storage.factory import create_storage, reset_storage
 from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -31,6 +33,28 @@ class DependencyContainer:
         self.active_generations: Dict[int, Dict[str, Any]] = {}
         self.active_generations_lock = asyncio.Lock()
         self.saved_generations: Dict[int, list] = {}
+
+    def _fallback_to_json_storage(self, reason: str) -> None:
+        storage_mode = os.getenv("STORAGE_MODE", "auto").lower()
+        if storage_mode != "auto":
+            logger.warning(
+                "[WARN] Storage fallback skipped (storage_mode=%s). reason=%s",
+                storage_mode,
+                reason,
+            )
+            return
+
+        data_dir = os.getenv("DATA_DIR", "./data")
+        try:
+            reset_storage()
+            self.storage = create_storage(storage_mode="json", data_dir=data_dir)
+            logger.warning(
+                "[FALLBACK] Using JSON storage (data_dir=%s). reason=%s",
+                data_dir,
+                reason,
+            )
+        except Exception as e:
+            logger.error("[ERROR] Failed to initialize JSON storage fallback: %s", e)
         
     async def initialize(self, settings: Settings):
         """Инициализирует все зависимости"""
@@ -39,22 +63,21 @@ class DependencyContainer:
         # Инициализация storage
         try:
             self.storage = get_storage()
+            storage_ok = True
             if hasattr(self.storage, "initialize") and asyncio.iscoroutinefunction(self.storage.initialize):
-                if await self.storage.initialize():
-                    logger.info("[OK] Storage initialized")
-                else:
-                    logger.warning("[WARN] Storage connection test failed")
+                storage_ok = await self.storage.initialize()
             elif hasattr(self.storage, "test_connection"):
-                if await asyncio.to_thread(self.storage.test_connection):
-                    logger.info("[OK] Storage initialized")
-                else:
-                    logger.warning("[WARN] Storage connection test failed")
-            else:
+                storage_ok = await asyncio.to_thread(self.storage.test_connection)
+
+            if storage_ok:
                 logger.info("[OK] Storage initialized")
+            else:
+                logger.warning("[WARN] Storage connection test failed")
+                self._fallback_to_json_storage("connection_test_failed")
         except Exception as e:
             logger.error(f"[ERROR] Failed to initialize storage: {e}")
             # Мягкая деградация - продолжаем без storage
-            self.storage = None
+            self._fallback_to_json_storage("storage_init_exception")
         
         # Инициализация KIE client (ленивая, при первом использовании)
         # Не инициализируем здесь, чтобы избежать side effects при импорте
@@ -150,4 +173,3 @@ async def build_application(settings: Optional[Settings] = None) -> Application:
         Application с инициализированными зависимостями
     """
     return await create_application(settings)
-
