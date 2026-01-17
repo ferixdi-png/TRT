@@ -1214,6 +1214,48 @@ def ensure_data_directory(data_dir: str) -> bool:
 
 
 
+def build_webhook_handler(application, settings):
+    """Build aiohttp webhook handler for Telegram updates."""
+    from aiohttp import web
+    from telegram import Update
+
+    secret_token = os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
+
+    async def webhook_handler(request: web.Request) -> web.StreamResponse:
+        if secret_token:
+            incoming = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            secret_ok = incoming == secret_token
+            logger.info("[WEBHOOK] secret_ok=%s", str(secret_ok).lower())
+            if not secret_ok:
+                return web.Response(status=403)
+        else:
+            logger.info("[WEBHOOK] secret_ok=true")
+
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            logger.warning("[WEBHOOK] update_received=false reason=json_parse_error error=%s", exc)
+            return web.Response(status=400)
+
+        logger.info("[WEBHOOK] update_received=true")
+        try:
+            update = Update.de_json(payload, application.bot)
+        except Exception as exc:
+            logger.warning("[WEBHOOK] update_received=false reason=invalid_update error=%s", exc)
+            return web.Response(status=400)
+
+        async def _process() -> None:
+            try:
+                await application.process_update(update)
+            except Exception as exc:  # pragma: no cover - logging path
+                logger.exception("[WEBHOOK] update_process_failed error=%s", exc)
+
+        asyncio.create_task(_process())
+        return web.Response(status=204)
+
+    return webhook_handler
+
+
 def load_and_validate_settings():
 
 
@@ -3363,123 +3405,15 @@ async def run(settings, application):
 
 
 
-        # ??????????????????????????????????????????????????? healthcheck ????????????????????????????????? (??????????????????????? PORT ?????????????????????????????? - Web Service ?????????????????????????????)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        if settings.port > 0:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (Web Service mode)")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            health_started = await start_health_server(port=settings.port)
-            logger.info(
-                f"[HEALTH] server_listening={str(health_started).lower()} port={settings.port}"
-            )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        else:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
-            logger.info("[HEALTH] server_listening=false reason=port_not_set")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         if application is None:
+            if settings.port > 0:
+                logger.info("[HEALTH] Starting healthcheck server on port %s (legacy mode)", settings.port)
+                health_started = await start_health_server(port=settings.port)
+                logger.info("[HEALTH] server_listening=%s port=%s", str(health_started).lower(), settings.port)
+            else:
+                logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
+                logger.info("[HEALTH] server_listening=false reason=port_not_set")
+
 
 
 
@@ -3721,6 +3655,20 @@ async def run(settings, application):
 
             await application.start()
 
+            if settings.port > 0:
+                webhook_handler = None
+                if settings.bot_mode == "webhook":
+                    webhook_handler = build_webhook_handler(application, settings)
+                logger.info("[HEALTH] Starting healthcheck server on port %s (web service mode)", settings.port)
+                health_started = await start_health_server(
+                    port=settings.port,
+                    webhook_handler=webhook_handler,
+                )
+                logger.info("[HEALTH] server_listening=%s port=%s", str(health_started).lower(), settings.port)
+            else:
+                logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
+                logger.info("[HEALTH] server_listening=false reason=port_not_set")
+
 
 
 
@@ -3889,67 +3837,12 @@ async def run(settings, application):
 
                     logger.warning("[WEBHOOK] WEBHOOK_URL not set for webhook mode - falling back to polling")
                     settings.bot_mode = "polling"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                await application.bot.set_webhook(settings.webhook_url)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                skip_set = os.getenv("WEBHOOK_SKIP_SET", "").lower() in ("1", "true", "yes")
+                if skip_set:
+                    logger.info("[WEBHOOK] set_webhook_skipped=true reason=env_override")
+                else:
+                    await application.bot.set_webhook(settings.webhook_url)
+                    logger.info(f"[RUN] Webhook set to {settings.webhook_url}")
 
                 logger.info("[RUN] Webhook mode - bot is ready")
 
@@ -6997,7 +6890,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
 
 
 
