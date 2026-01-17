@@ -6544,6 +6544,28 @@ async def main():
 
         settings = load_and_validate_settings()
 
+        if os.getenv("SMOKE_MODE", "0") in ("1", "true", "yes"):
+            logger.info("[SMOKE] mode=github_storage enabled=true")
+            try:
+                from app.storage import get_storage
+                storage = get_storage()
+                if hasattr(storage, "initialize") and asyncio.iscoroutinefunction(storage.initialize):
+                    await storage.initialize()
+            except Exception as e:
+                logger.error("[SMOKE] storage_init_failed error=%s", e)
+
+            if settings.port > 0:
+                logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (SMOKE mode)")
+                health_started = await start_health_server(port=settings.port)
+                logger.info(
+                    f"[HEALTH] server_listening={str(health_started).lower()} port={settings.port}"
+                )
+            else:
+                logger.info("[HEALTH] Port not set, running in Worker mode (SMOKE)")
+                logger.info("[HEALTH] server_listening=false reason=port_not_set")
+
+            await asyncio.Event().wait()
+
 
 
 
@@ -6975,7 +6997,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
 
 
 
