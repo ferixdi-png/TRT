@@ -26124,9 +26124,9 @@ async def main():
             CommandHandler('cancel', cancel)
         ]
         # REMOVED # D) per_message=True removed to avoid PTBUserWarning
-        - it prevents MessageHandler from working!
+        # - it prevents MessageHandler from working!
         # # D) per_message=True removed to avoid PTBUserWarning
-        requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
+        # requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
     )
     
     # ==================== PHASE 1: GLOBAL INPUT ROUTERS (BEFORE ConversationHandler) ====================
@@ -27153,5 +27153,4 @@ if __name__ == '__main__':
         logger.error(f"❌ Fatal error in main(): {e}", exc_info=True)
         logger.error("❌ Bot failed to start. Check logs above for details.")
         sys.exit(1)
-
 
