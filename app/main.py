@@ -1,5 +1,6 @@
 """
-Main application entry point with BOT_MODE logic and singleton lock handling.
+Main application entry point with BOT_MODE logic.
+DB locks and PostgreSQL are disabled (GitHub storage only).
 """
 import os
 import sys
@@ -9,9 +10,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-from app.locking.single_instance import SingletonLock
 from app.utils.singleton_lock import is_lock_acquired, get_safe_mode
-from app.storage.pg_storage import PGStorage, async_check_pg
+from app.storage import get_storage
 
 
 def setup_logging():
@@ -43,21 +43,14 @@ def get_bot_mode() -> str:
 
 
 async def initialize_storage() -> bool:
-    """Initialize PostgreSQL storage."""
-    dsn = os.getenv("DATABASE_URL")
-    if not dsn:
-        logger.info("DATABASE_URL not set, skipping storage initialization")
-        return False
-        
-    # Use async_check_pg (no nested event loop)
-    if not await async_check_pg(dsn):
-        logger.error("PostgreSQL connection test failed")
-        return False
-        
-    storage = PGStorage(dsn)
-    if await storage.initialize():
-        logger.info("PostgreSQL storage initialized")
-        return True
+    """Initialize GitHub storage."""
+    storage = get_storage()
+    if hasattr(storage, "initialize") and asyncio.iscoroutinefunction(storage.initialize):
+        storage_ok = await storage.initialize()
+        if storage_ok:
+            logger.info("[STORAGE] github_initialized=true")
+            return True
+        logger.warning("[STORAGE] github_initialized=false")
     return False
 
 
@@ -208,13 +201,6 @@ async def main():
     # Initialize storage
     await initialize_storage()
     
-    # Acquire singleton lock
-    lock = SingletonLock()
-    lock_acquired = await lock.acquire()
-    
-    if not lock_acquired and not is_lock_acquired():
-        logger.info("[LOCK] Passive mode: lock not acquired, running in safe mode")
-    
     # Determine bot mode
     bot_mode = get_bot_mode()
     logger.info(f"BOT_MODE: {bot_mode}, Safe mode: {get_safe_mode()}")
@@ -247,8 +233,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info("Shutdown requested")
     finally:
-        # Release lock on shutdown
-        await lock.release()
+        pass
 
 
 if __name__ == "__main__":
@@ -259,4 +244,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
         sys.exit(1)
-
