@@ -120,6 +120,31 @@ def _bool_env(name: str, default: bool = False) -> bool:
     return val.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _load_env_file() -> None:
+    """Load env vars from ENV_FILE or .env.render if present (fail-open)."""
+    env_path = os.getenv("ENV_FILE", "").strip()
+    if not env_path:
+        candidate = Path(__file__).resolve().parent / ".env.render"
+        if candidate.exists():
+            env_path = str(candidate)
+    if not env_path:
+        return
+    try:
+        data = Path(env_path).read_text(encoding="utf-8")
+    except Exception as exc:
+        logger.warning("[ENV] Failed to read env file %s: %s", env_path, exc)
+        return
+    for line in data.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"")
+        if key and key not in os.environ:
+            os.environ[key] = value
+    logger.info("[ENV] Loaded env file %s", env_path)
+
 def _derive_secret_path_from_token(token: str) -> str:
     """Derive a stable URL-safe secret path.
 
@@ -1709,6 +1734,7 @@ async def _start_web_server(app: web.Application, port: int) -> web.AppRunner:
 
 
 async def main() -> None:
+    _load_env_file()
     LOG_LEVEL_ENV = os.getenv("LOG_LEVEL", "").upper()
     setup_logging(level=(logging.DEBUG if LOG_LEVEL_ENV == "DEBUG" else logging.INFO))
 
@@ -1727,6 +1753,7 @@ async def main() -> None:
         effective_bot_mode = "polling"
 
     runtime_state.bot_mode = effective_bot_mode
+    runtime_state.storage_mode = os.getenv("STORAGE_MODE", "postgres" if cfg.database_url else "file")
     runtime_state.last_start_time = datetime.now(timezone.utc).isoformat()
 
     # Get app version (git SHA or build ID) - safe, no secrets
@@ -1938,20 +1965,34 @@ async def main() -> None:
     except Exception as e:
         logger.warning(f"[DEPLOY] Failed to create deploy marker: {e}")
     
-    # BATCH 48: NO DATABASE MODE - Always use FileStorage
-    logger.info("[BATCH48] 🚫 NO DATABASE MODE - Using FileStorage for balances")
-    try:
-        from app.storage.file_storage import init_file_storage
-        await init_file_storage()
-        logger.info("[BATCH48] ✅ FileStorage initialized (balances in data/user_balances.json)")
-        runtime_state.db_schema_ready = True  # No migrations needed
-    except ImportError as e:
-        logger.warning(f"[BATCH48] ⚠️ FileStorage module not available: {e} - storage will be initialized on first use")
-        runtime_state.db_schema_ready = True  # Continue anyway
-    except Exception as e:
-        logger.error(f"[BATCH48] ❌ Failed to initialize FileStorage: {e}")
-        # Continue anyway - FileStorage will create file on first use
-        runtime_state.db_schema_ready = True
+    storage_mode = os.getenv("STORAGE_MODE", "").strip().lower()
+    if storage_mode == "github":
+        logger.info("[STORAGE] 📦 Using GitHub storage (STORAGE_MODE=github)")
+        try:
+            from app.storage import get_storage
+            _ = get_storage()
+            runtime_state.storage_mode = "github"
+            runtime_state.db_schema_ready = True
+        except Exception as e:
+            logger.error(f"[STORAGE] ❌ Failed to initialize GitHub storage: {e}")
+            runtime_state.storage_mode = "github"
+            runtime_state.db_schema_ready = False
+    elif storage_mode in ("file", "json", ""):
+        logger.info("[STORAGE] 🚫 File storage mode for balances")
+        try:
+            from app.storage.file_storage import init_file_storage
+            await init_file_storage()
+            logger.info("[STORAGE] ✅ FileStorage initialized")
+            runtime_state.storage_mode = "file"
+            runtime_state.db_schema_ready = True
+        except ImportError as e:
+            logger.warning(f"[STORAGE] ⚠️ FileStorage module not available: {e} - storage will be initialized on first use")
+            runtime_state.storage_mode = "file"
+            runtime_state.db_schema_ready = True
+        except Exception as e:
+            logger.error(f"[STORAGE] ❌ Failed to initialize FileStorage: {e}")
+            runtime_state.storage_mode = "file"
+            runtime_state.db_schema_ready = True
 
     # Create lock object and state tracker
     lock = SingletonLock(cfg.database_url)
