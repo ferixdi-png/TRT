@@ -1,6 +1,6 @@
 """
-Storage factory - автоматический выбор storage (JSON или PostgreSQL)
-AUTO режим: если DATABASE_URL доступен и коннектится -> pg, иначе json
+Storage factory - выбор storage (GitHub).
+Единственный источник хранения: GitHub Contents API.
 """
 
 import logging
@@ -8,8 +8,7 @@ import os
 from typing import Optional
 
 from app.storage.base import BaseStorage
-from app.storage.json_storage import JsonStorage
-from app.storage.pg_storage import PostgresStorage
+from app.storage.github_storage import GitHubStorage
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +25,9 @@ def create_storage(
     Создает storage instance
     
     Args:
-        storage_mode: 'postgres', 'json', или 'auto' (default)
-        database_url: URL базы данных (если None, берется из env)
-        data_dir: Директория для JSON (если None, берется из env или './data')
+        storage_mode: 'github' (default) или 'auto' (для github)
+        database_url: игнорируется (БД отключены)
+        data_dir: игнорируется (БД отключены)
     
     Returns:
         BaseStorage instance
@@ -42,45 +41,14 @@ def create_storage(
     if storage_mode is None:
         storage_mode = os.getenv('STORAGE_MODE', 'auto').lower()
     
-    # AUTO режим: пробуем PostgreSQL, если не получается - JSON
-    if storage_mode == 'auto':
-        database_url = database_url or os.getenv('DATABASE_URL')
-        
-        if database_url:
-            try:
-                # Пробуем создать PostgreSQL storage
-                pg_storage = PostgresStorage(database_url)
-                # P0 FIX: Don't call test_connection() here - it may use asyncio.run() which fails in async context
-                # Connection will be tested on first async use via _get_pool()
-                logger.info("[OK] Using PostgreSQL storage (AUTO mode, connection will be tested on first async use)")
-                _storage_instance = pg_storage
-                return _storage_instance
-            except Exception as e:
-                logger.warning(f"[WARN] PostgreSQL initialization failed: {e}, falling back to JSON")
-        
-        # Fallback на JSON
-        data_dir = data_dir or os.getenv('DATA_DIR', './data')
-        logger.info(f"[OK] Using JSON storage (AUTO mode, data_dir={data_dir})")
-        _storage_instance = JsonStorage(data_dir)
-        return _storage_instance
-    
-    # Явный режим
-    if storage_mode == 'postgres':
-        database_url = database_url or os.getenv('DATABASE_URL')
-        if not database_url:
-            raise ValueError("DATABASE_URL is required for PostgreSQL storage")
-        _storage_instance = PostgresStorage(database_url)
-        logger.info("[OK] Using PostgreSQL storage (explicit mode)")
-        return _storage_instance
-    
-    elif storage_mode == 'json':
-        data_dir = data_dir or os.getenv('DATA_DIR', './data')
-        _storage_instance = JsonStorage(data_dir)
-        logger.info(f"[OK] Using JSON storage (explicit mode, data_dir={data_dir})")
-        return _storage_instance
-    
-    else:
-        raise ValueError(f"Invalid storage_mode: {storage_mode}. Use 'postgres', 'json', or 'auto'")
+    if storage_mode != "github":
+        logger.warning(
+            "[STORAGE] mode_override=true requested=%s using=github reason=db_disabled",
+            storage_mode,
+        )
+
+    _storage_instance = GitHubStorage()
+    return _storage_instance
 
 
 def get_storage() -> BaseStorage:
@@ -102,5 +70,4 @@ def reset_storage() -> None:
     """Сбросить storage instance (для тестов)"""
     global _storage_instance
     _storage_instance = None
-
 
