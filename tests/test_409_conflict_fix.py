@@ -8,6 +8,10 @@
 import pytest
 import os
 import sys
+import socket
+import subprocess
+import tempfile
+import time
 from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 
@@ -137,18 +141,59 @@ def test_no_real_telegram_network():
         content = test_file.read_text(encoding='utf-8', errors='ignore')
         # Проверяем что нет реальных запросов к api.telegram.org
         if 'api.telegram.org' in content.lower():
-            # Проверяем что это не просто проверка или комментарий
-            if 'fake' not in content.lower() and 'mock' not in content.lower():
-                # Проверяем контекст
-                if 'requests.get' in content or 'httpx.get' in content or 'aiohttp.get' in content:
-                    pytest.fail(f"Real HTTP request to api.telegram.org found in {test_file.name}")
+                # Проверяем что это не просто проверка или комментарий
+                if 'fake' not in content.lower() and 'mock' not in content.lower():
+                    # Проверяем контекст
+                    if 'requests.get' in content or 'httpx.get' in content or 'aiohttp.get' in content:
+                        pytest.fail(f"Real HTTP request to api.telegram.org found in {test_file.name}")
+
+
+def _wait_for_port(port: int, timeout: float = 5.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            try:
+                sock.connect(("127.0.0.1", port))
+                return True
+            except OSError:
+                time.sleep(0.1)
+    return False
+def test_render_webhook_fallback_starts_health_server():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        env = os.environ.copy()
+        env.update({
+            "BOT_MODE": "webhook",
+            "WEBHOOK_URL": "",
+            "WEBHOOK_BASE_URL": "",
+            "PORT": str(port),
+            "TELEGRAM_BOT_TOKEN": "test-token",
+            "DATA_DIR": temp_dir,
+            "RENDER": "true",
+            "TEST_MODE": "1",
+        })
+        process = subprocess.Popen(
+            [sys.executable, "-u", "main_render.py"],
+            cwd=str(project_root),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            time.sleep(1)
+            assert process.poll() is None
+            assert _wait_for_port(port, timeout=5.0)
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-
-
-
-
 

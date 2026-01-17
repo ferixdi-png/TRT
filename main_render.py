@@ -3411,7 +3411,10 @@ async def run(settings, application):
 
 
 
-            await start_health_server(port=settings.port)
+            health_started = await start_health_server(port=settings.port)
+            logger.info(
+                f"[HEALTH] server_listening={str(health_started).lower()} port={settings.port}"
+            )
 
 
 
@@ -3444,6 +3447,7 @@ async def run(settings, application):
 
 
             logger.info("[HEALTH] Port not set, running in Worker mode (no healthcheck)")
+            logger.info("[HEALTH] server_listening=false reason=port_not_set")
 
 
 
@@ -3828,6 +3832,14 @@ async def run(settings, application):
 
 
             # ??????????????????????????????????????????????????? polling ?????????????????? webhook
+            effective_mode = settings.bot_mode
+            if effective_mode == "webhook" and not settings.webhook_url:
+                logger.warning("[WEBHOOK] WEBHOOK_URL not set for webhook mode - falling back to polling")
+                logger.warning(
+                    "[WEBHOOK] fallback_to_polling=true reason=missing_webhook_url requested_mode=webhook"
+                )
+                effective_mode = "polling"
+                settings.bot_mode = "polling"
 
 
 
@@ -3843,7 +3855,7 @@ async def run(settings, application):
 
 
 
-            if settings.bot_mode == "webhook":
+            if effective_mode == "webhook":
 
 
 
@@ -3892,7 +3904,6 @@ async def run(settings, application):
 
 
 
-                    sys.exit(1)
 
 
 
@@ -3989,6 +4000,7 @@ async def run(settings, application):
 
 
                 logger.info("[RUN] Starting polling...")
+                logger.info("[RUN] polling_started=true mode=polling")
 
 
 
@@ -6963,11 +6975,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
-
-
-
-
 
 
 
