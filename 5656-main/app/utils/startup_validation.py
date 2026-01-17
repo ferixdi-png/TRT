@@ -29,8 +29,6 @@ except ImportError:
 REQUIRED_ENV_KEYS = [
     'ADMIN_ID',
     'BOT_MODE',
-    'DATABASE_URL',
-    'DB_MAXCONN',
     'KIE_API_KEY',
     'PAYMENT_BANK',
     'PAYMENT_CARD_HOLDER',
@@ -66,6 +64,18 @@ def validate_env_keys() -> Tuple[bool, List[str]]:
         value = os.getenv(key, '').strip()
         if not value:
             missing.append(key)
+
+    storage_mode = os.getenv("STORAGE_MODE", "").strip().lower()
+    if storage_mode not in ("github", "file", "json"):
+        storage_mode = ""
+
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if storage_mode not in ("github", "file", "json") and not database_url:
+        missing.append("DATABASE_URL")
+    if database_url:
+        db_maxconn = os.getenv("DB_MAXCONN", "").strip()
+        if not db_maxconn:
+            missing.append("DB_MAXCONN")
     
     return len(missing) == 0, missing
 
@@ -111,6 +121,8 @@ def validate_env_key_format(key: str) -> bool:
         return value.lower() in ('polling', 'webhook', 'auto', 'passive')
     
     if key == 'DATABASE_URL':
+        if not value:
+            return True
         # Validate PostgreSQL URL format
         if not value.startswith(('postgresql://', 'postgres://')):
             return False
