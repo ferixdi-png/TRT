@@ -2339,140 +2339,48 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
     return None
 
 
+MAIN_MENU_TEXT = "Главное меню"
+
+
+async def show_main_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    source: str = "unknown"
+) -> None:
+    """Показывает единое главное меню для всех входов."""
+    user_id = update.effective_user.id if update.effective_user else None
+    reply_markup = InlineKeyboardMarkup(
+        await build_main_menu_keyboard(user_id, user_lang='ru', is_new=False)
+    )
+    logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
+
+    if update.callback_query:
+        query = update.callback_query
+        try:
+            await query.edit_message_text(MAIN_MENU_TEXT, reply_markup=reply_markup)
+            return
+        except Exception:
+            try:
+                await query.message.reply_text(MAIN_MENU_TEXT, reply_markup=reply_markup)
+                return
+            except Exception:
+                pass
+
+    if update.message:
+        try:
+            await update.message.reply_text(MAIN_MENU_TEXT, reply_markup=reply_markup)
+            return
+        except Exception:
+            pass
+
+    if user_id:
+        await context.bot.send_message(chat_id=user_id, text=MAIN_MENU_TEXT, reply_markup=reply_markup)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a marketing welcome message with model selection."""
-    try:
-        logger.info(f"🔥 /start command received from user_id={update.effective_user.id if update.effective_user else 'None'}")
-        
-        user = update.effective_user
-        if not user:
-            logger.error("❌ No effective_user in update")
-            return
-        
-        user_id = user.id
-        
-        # Check if language is set, if not - show language selection
-        if not has_user_language_set(user_id):
-            keyboard = [
-                [
-                    InlineKeyboardButton("🇷🇺 Русский", callback_data="language_select:ru"),
-                    InlineKeyboardButton("🇬🇧 English", callback_data="language_select:en")
-                ]
-            ]
-            # Определяем язык пользователя по его Telegram языку или используем английский как более универсальный
-            user_lang_code = update.effective_user.language_code or 'en'
-            # Если язык не русский, показываем на английском
-            display_lang = 'ru' if user_lang_code.startswith('ru') else 'en'
-            
-            await update.message.reply_html(
-                t('select_language', lang=display_lang),
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            logger.info(f"✅ Language selection shown for user_id={user_id}")
-            return
-        
-        # Check if user is admin
-        is_admin = (user_id == ADMIN_ID)
-        
-        # Get user language
-        user_lang = get_user_language(user_id)
-        
-        # Get generation types and models count
-        generation_types = get_generation_types()
-        total_models = len(get_models_sync())
-        
-        # Both admin and regular users see the same menu, but admin gets additional "Admin Panel" button
-        # Common menu for both admin and regular users
-        remaining_free = get_user_free_generations_remaining(user_id)
-        is_new = is_new_user(user_id)
-        referral_link = get_user_referral_link(user_id)
-        referrals_count = len(get_user_referrals(user_id))
-        online_count = get_fake_online_count()
-        
-        # Use translations
-        if is_new:
-            welcome_text = t('welcome_new', lang=user_lang,
-                            name=user.mention_html(),
-                            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                            models=total_models,
-                            types=len(generation_types),
-                            online=online_count,
-                            ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                            ref_link=referral_link)
-        else:
-            referral_bonus_text = ""
-            if referrals_count > 0:
-                referral_bonus_text = t('msg_referral_bonus', lang=user_lang,
-                                        count=referrals_count,
-                                        bonus=referrals_count * REFERRAL_BONUS_GENERATIONS)
-            
-            welcome_text = t('welcome_returning', lang=user_lang,
-                            name=user.mention_html(),
-                            online=online_count,
-                            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                            models=total_models,
-                            types=len(generation_types))
-            welcome_text += referral_bonus_text
-            
-            # Add full functionality text using translations
-            welcome_text += t('msg_full_functionality', lang=user_lang,
-                            remaining=remaining_free,
-                            total=FREE_GENERATIONS_PER_DAY,
-                            ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                            ref_link=referral_link,
-                            models=total_models,
-                            types=len(generation_types))
-        
-        # Common keyboard for both admin and regular users
-        # Используем helpers для устранения дублирования
-        keyboard = await build_main_menu_keyboard(user_id, user_lang, is_new)
-        
-        await update.message.reply_html(
-            welcome_text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        
-        logger.info(f"✅ /start command completed successfully for user_id={user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌❌❌ ERROR in /start command: {e}", exc_info=True)
-        logger.error(f"   User ID: {update.effective_user.id if update.effective_user else 'None'}")
-        logger.error(f"   Error type: {type(e).__name__}")
-        
-        # Try to send error message to user
-        try:
-            user_lang = 'ru'
-            if update.effective_user:
-                try:
-                    user_lang = get_user_language(update.effective_user.id) if update.effective_user else 'ru'
-                except:
-                    pass
-            
-            error_msg = "❌ Произошла ошибка при запуске бота. Попробуйте еще раз."
-            await update.message.reply_text(error_msg)
-        except Exception as send_error:
-            logger.error(f"❌ Failed to send error message to user: {send_error}", exc_info=True)
-        
-        logger.info(f"✅ /start command completed successfully for user_id={user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌❌❌ ERROR in /start command: {e}", exc_info=True)
-        logger.error(f"   User ID: {update.effective_user.id if update.effective_user else 'None'}")
-        logger.error(f"   Error type: {type(e).__name__}")
-        
-        # Try to send error message to user
-        try:
-            user_lang = 'ru'
-            if update.effective_user:
-                try:
-                    user_lang = get_user_language(update.effective_user.id) if update.effective_user else 'ru'
-                except:
-                    pass
-            
-            error_msg = "❌ Произошла ошибка при запуске бота. Попробуйте еще раз."
-            await update.message.reply_text(error_msg)
-        except Exception as send_error:
-            logger.error(f"❌ Failed to send error message to user: {send_error}", exc_info=True)
+    """Единый стартовый UX: главное меню."""
+    logger.info(f"🔥 /start command received from user_id={update.effective_user.id if update.effective_user else 'None'}")
+    await show_main_menu(update, context, source="/start")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2832,86 +2740,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         broadcast_text = None
         stats_text = None
         
-        # Handle language selection
-        if data.startswith("language_select:"):
-            # Answer callback immediately
-            try:
-                await query.answer()
-            except:
-                pass
-            
-            parts = data.split(":", 1)
-            if len(parts) < 2:
-                user_lang = get_user_language(user_id)
-                await query.answer(t('error_invalid_language', lang=user_lang), show_alert=True)
-                return ConversationHandler.END
-            lang_code = parts[1]
-            if lang_code in ['ru', 'en']:
-                set_user_language(user_id, lang_code)
-                user_lang = get_user_language(user_id)
-                
-                # After language selection, show full welcome menu (same as /start)
-                # Get user info
-                user = update.effective_user
-                is_admin = (user_id == ADMIN_ID)
-                
-                # Get generation types and models count
-                generation_types = get_generation_types()
-                total_models = len(get_models_sync())
-                
-                # Common menu for both admin and regular users
-                remaining_free = get_user_free_generations_remaining(user_id)
-                is_new = is_new_user(user_id)
-                referral_link = get_user_referral_link(user_id)
-                referrals_count = len(get_user_referrals(user_id))
-                online_count = get_fake_online_count()
-                
-                # Use translations for welcome message
-                if is_new:
-                    welcome_text = t('welcome_new', lang=user_lang,
-                                    name=user.mention_html(),
-                                    free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                                    models=total_models,
-                                    types=len(generation_types),
-                                    online=online_count,
-                                    ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                                    ref_link=referral_link)
-                else:
-                    referral_bonus_text = ""
-                    if referrals_count > 0:
-                        referral_bonus_text = t('msg_referral_bonus', lang=user_lang,
-                                              count=referrals_count,
-                                              bonus=referrals_count * REFERRAL_BONUS_GENERATIONS)
-                    
-                    welcome_text = t('welcome_returning', lang=user_lang,
-                                    name=user.mention_html(),
-                                    online=online_count,
-                                    free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                                    models=total_models,
-                                    types=len(generation_types))
-                    welcome_text += referral_bonus_text
-                    welcome_text += t('msg_full_functionality', lang=user_lang,
-                                    remaining=remaining_free,
-                                    total=FREE_GENERATIONS_PER_DAY,
-                                    ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                                    ref_link=referral_link,
-                                    models=total_models,
-                                    types=len(generation_types))
-                
-                # Build full keyboard (используем helpers для устранения дублирования)
-                keyboard = await build_main_menu_keyboard(user_id, user_lang, is_new)
-                
-                await query.edit_message_text(
-                    welcome_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                return ConversationHandler.END
-            else:
-                user_lang = get_user_language(user_id)
-                await query.answer(t('error_invalid_language', lang=user_lang))
-                return ConversationHandler.END
-        
         # Handle claim gift
         if data == "claim_gift":
             if has_claimed_gift(user_id):
@@ -3264,300 +3092,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
-            
-            # Get user language before showing menu
-            user_id = update.effective_user.id
-            user_lang = get_user_language(user_id)
-            
-            # Return to start menu - show menu in correct language
-            try:
-                user = update.effective_user
-                user_id = user.id
-                is_admin = (user_id == ADMIN_ID)
-                
-                generation_types = get_generation_types()
-                total_models = len(get_models_sync())
-                remaining_free = get_user_free_generations_remaining(user_id)
-                is_new = is_new_user(user_id)
-                referral_link = get_user_referral_link(user_id)
-                referrals_count = len(get_user_referrals(user_id))
-                
-                # Use translations based on user language
-                if is_new:
-                    welcome_text = t('welcome_new', lang=user_lang,
-                                    name=user.mention_html(),
-                                    free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                                    models=total_models,
-                                    types=len(generation_types),
-                                    online=get_fake_online_count(),
-                                    ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                                    ref_link=referral_link)
-                else:
-                    referral_bonus_text = ""
-                    if referrals_count > 0:
-                        if user_lang == 'ru':
-                            referral_bonus_text = (
-                                f"\n🎁 <b>Отлично!</b> Ты пригласил <b>{referrals_count}</b> друзей\n"
-                                f"   → Получено <b>+{referrals_count * REFERRAL_BONUS_GENERATIONS} бесплатных генераций</b>! 🎉\n\n"
-                            )
-                        else:
-                            referral_bonus_text = (
-                                f"\n🎁 <b>Great!</b> You invited <b>{referrals_count}</b> friends\n"
-                                f"   → Received <b>+{referrals_count * REFERRAL_BONUS_GENERATIONS} free generations</b>! 🎉\n\n"
-                            )
-                    
-                    welcome_text = t('welcome_returning', lang=user_lang,
-                                    name=user.mention_html(),
-                                    online=get_fake_online_count(),
-                                    free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-                                    models=total_models,
-                                    types=len(generation_types))
-                    welcome_text += referral_bonus_text
-                    
-                    if user_lang == 'ru':
-                        welcome_text += (
-                            f'💎 <b>ПОЛНЫЙ ФУНКЦИОНАЛ:</b>\n\n'
-                            f'<b>📸 РАБОТА С ИЗОБРАЖЕНИЯМИ:</b>\n'
-                            f'• ✨ Текст в фото - создание изображений из текста\n'
-                            f'• 🎨 Фото в фото - трансформация и стилизация изображений\n'
-                            f'• 🖼️ Редактирование фото - улучшение, масштабирование, удаление фона\n'
-                            f'• 🎨 Рефрейминг - изменение кадра и соотношения сторон\n\n'
-                            f'<b>🎬 РАБОТА С ВИДЕО:</b>\n'
-                            f'• 🎬 Текст в видео - создание видео из текстового описания\n'
-                            f'• 📸 Фото в видео - превращение изображений в динамичные видео\n'
-                            f'• 🎙️ Речь в видео - создание видео из речи и аудио\n'
-                            f'• 👄 Синхронизация губ - аватары с синхронизацией губ\n'
-                            f'• ✂️ Редактирование видео - улучшение качества, удаление водяных знаков\n\n'
-                            f'<b>🎙️ РАБОТА С АУДИО:</b>\n'
-                            f'• 🎙️ Речь в текст - преобразование речи в текст с высокой точностью\n\n'
-                            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                            f'🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ:</b>\n'
-                            f'• <b>Recraft Remove Background</b> - удаление фона (бесплатно и безлимитно!)\n'
-                            f'• <b>Recraft Crisp Upscale</b> - улучшение качества изображений (бесплатно и безлимитно!)\n'
-                            f'• <b>Z-Image</b> - генерация изображений\n'
-                            f'   📊 <b>Бесплатно:</b> <b>{remaining_free}/{FREE_GENERATIONS_PER_DAY}</b> генераций сегодня\n\n'
-                            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                            f'📊 <b>СТАТИСТИКА:</b>\n'
-                            f'• {total_models} топовых нейросетей\n'
-                            f'• {len(generation_types)} типов генерации\n'
-                            f'• 🌐 Прямой доступ БЕЗ VPN\n'
-                            f'• ⚡ Мгновенная генерация\n\n'
-                            f'💰 <b>ЦЕНЫ:</b>\n'
-                            f'От 0.62 ₽ за изображение • От 3.86 ₽ за видео\n\n'
-                            f'🎯 <b>Выбери формат генерации ниже или начни с бесплатной!</b>'
-                        )
-                    else:
-                        welcome_text += (
-                            f'💎 <b>FULL FUNCTIONALITY:</b>\n\n'
-                            f'<b>📸 IMAGE GENERATION:</b>\n'
-                            f'• ✨ Text to Image - create images from text\n'
-                            f'• 🎨 Image to Image - transform and style images\n'
-                            f'• 🖼️ Image Editing - enhance, upscale, remove background\n'
-                            f'• 🎨 Reframing - change frame and aspect ratio\n\n'
-                            f'<b>🎬 VIDEO GENERATION:</b>\n'
-                            f'• 🎬 Text to Video - create videos from text descriptions\n'
-                            f'• 📸 Image to Video - turn images into dynamic videos\n'
-                            f'• 🎙️ Speech to Video - create videos from speech and audio\n'
-                            f'• 👄 Lip Sync - avatars with lip synchronization\n'
-                            f'• ✂️ Video Editing - quality enhancement, watermark removal\n\n'
-                            f'<b>🎙️ AUDIO PROCESSING:</b>\n'
-                            f'• 🎙️ Speech to Text - convert speech to text with high accuracy\n\n'
-                            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                            f'🆓 <b>FREE TOOLS:</b>\n'
-                            f'• <b>Recraft Remove Background</b> - remove background (free and unlimited!)\n'
-                            f'• <b>Recraft Crisp Upscale</b> - enhance image quality (free and unlimited!)\n'
-                            f'• <b>Z-Image</b> - image generation\n'
-                            f'   📊 <b>Free:</b> <b>{remaining_free}/{FREE_GENERATIONS_PER_DAY}</b> generations today\n\n'
-                            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                            f'📊 <b>STATISTICS:</b>\n'
-                            f'• {total_models} top AI models\n'
-                            f'• {len(generation_types)} generation types\n'
-                            f'• 🌐 Direct access WITHOUT VPN\n'
-                            f'• ⚡ Instant generation\n\n'
-                            f'💰 <b>PRICING:</b>\n'
-                            f'From 0.62 ₽ per image • From 3.86 ₽ per video\n\n'
-                            f'🎯 <b>Choose generation format below or start with free!</b>'
-                        )
-                
-                # Build keyboard (same as start function)
-                keyboard = []
-                
-                # Free generation button
-                if user_lang == 'ru':
-                    if remaining_free > 0:
-                        button_text = f"🎁 ГЕНЕРИРОВАТЬ БЕСПЛАТНО ({remaining_free}/{FREE_GENERATIONS_PER_DAY} осталось)"
-                    else:
-                        button_text = f"🎁 ГЕНЕРИРОВАТЬ БЕСПЛАТНО (0/{FREE_GENERATIONS_PER_DAY} осталось)"
-                else:
-                    if remaining_free > 0:
-                        button_text = f"🎁 GENERATE FREE ({remaining_free}/{FREE_GENERATIONS_PER_DAY} left)"
-                    else:
-                        button_text = f"🎁 GENERATE FREE (0/{FREE_GENERATIONS_PER_DAY} left)"
-                
-                keyboard.append([
-                    InlineKeyboardButton(button_text, callback_data="select_model:z-image")
-                ])
-                
-                # Add referral button
-                if user_lang == 'ru':
-                    keyboard.append([
-                        InlineKeyboardButton(f"🎁 Пригласи друга → получи +{REFERRAL_BONUS_GENERATIONS} бесплатных!", callback_data="referral_info")
-                    ])
-                else:
-                    keyboard.append([
-                        InlineKeyboardButton(f"🎁 Invite friend → get +{REFERRAL_BONUS_GENERATIONS} free!", callback_data="referral_info")
-                    ])
-                
-                keyboard.append([])
-                
-                # Add free tools button
-                if user_lang == 'ru':
-                    keyboard.append([
-                        InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ", callback_data="free_tools")
-                    ])
-                else:
-                    keyboard.append([
-                        InlineKeyboardButton("🆓 FREE TOOLS", callback_data="free_tools")
-                    ])
-                
-                keyboard.append([])
-                
-                # Generation types
-                text_to_image_type = None
-                gen_type_rows = []
-                gen_type_index = 0
-                
-                for gen_type in generation_types:
-                    gen_info = get_generation_type_info(gen_type)
-                    models_count = len(get_models_by_generation_type(gen_type))
-                    
-                    if models_count == 0:
-                        continue
-                    
-                    if gen_type == 'text-to-image':
-                        text_to_image_type = gen_type
-                        continue
-                        
-                    # Get translated name for generation type
-                    gen_type_key = f'gen_type_{gen_type.replace("-", "_")}'
-                    gen_type_name = t(gen_type_key, lang=user_lang, default=gen_info.get('name', gen_type))
-                    button_text = f"{gen_type_name} ({models_count})"
-                    
-                    if gen_type_index % 2 == 0:
-                        gen_type_rows.append([InlineKeyboardButton(button_text, callback_data=f"gen_type:{gen_type}")])
-                    else:
-                        if gen_type_rows:
-                            gen_type_rows[-1].append(InlineKeyboardButton(button_text, callback_data=f"gen_type:{gen_type}"))
-                        else:
-                            gen_type_rows.append([InlineKeyboardButton(button_text, callback_data=f"gen_type:{gen_type}")])
-                    
-                    gen_type_index += 1
-                
-                if text_to_image_type:
-                    gen_info = get_generation_type_info(text_to_image_type)
-                    models_count = len(get_models_by_generation_type(text_to_image_type))
-                    if models_count > 0:
-                        gen_type_key = f'gen_type_{text_to_image_type.replace("-", "_")}'
-                        gen_type_name = t(gen_type_key, lang=user_lang, default=gen_info.get('name', text_to_image_type))
-                        button_text = f"{gen_type_name} ({models_count})"
-                        keyboard.append([
-                            InlineKeyboardButton(button_text, callback_data=f"gen_type:{text_to_image_type}")
-                        ])
-                        keyboard.append([])
-                
-                keyboard.extend(gen_type_rows)
-                
-                keyboard.append([])
-                
-                # All models button
-                if user_lang == 'ru':
-                    keyboard.append([
-                        InlineKeyboardButton(f"🤖 Все модели ({total_models})", callback_data="show_models")
-                    ])
-                else:
-                    keyboard.append([
-                        InlineKeyboardButton(f"🤖 All Models ({total_models})", callback_data="show_models")
-                    ])
-                keyboard.append([])
-                
-                # Claim gift button
-                if not has_claimed_gift(user_id):
-                    keyboard.append([
-                        InlineKeyboardButton(t('btn_claim_gift', lang=user_lang), callback_data="claim_gift")
-                    ])
-                    keyboard.append([])
-                
-                # Bottom buttons
-                keyboard.append([
-                    InlineKeyboardButton(t('balance', lang=user_lang), callback_data="check_balance"),
-                    InlineKeyboardButton(t('my_generations', lang=user_lang), callback_data="my_generations")
-                ])
-                keyboard.append([
-                    InlineKeyboardButton("💳 " + (t('topup', lang=user_lang) if user_lang == 'ru' else "Top up"), callback_data="topup_balance"),
-                    InlineKeyboardButton(t('referral', lang=user_lang), callback_data="referral_info")
-                ])
-                
-                if is_new:
-                    if user_lang == 'ru':
-                        keyboard.append([
-                            InlineKeyboardButton("❓ Как это работает?", callback_data="tutorial_start")
-                        ])
-                    else:
-                        keyboard.append([
-                            InlineKeyboardButton("❓ How it works?", callback_data="tutorial_start")
-                        ])
-                
-                keyboard.append([
-                    InlineKeyboardButton(t('help', lang=user_lang), callback_data="help_menu"),
-                    InlineKeyboardButton(t('support', lang=user_lang), callback_data="support_contact")
-                ])
-                
-                # Add language selection button (always visible)
-                keyboard.append([
-                    InlineKeyboardButton("🌐 " + ("Язык / Language" if user_lang == 'ru' else "Language / Язык"), callback_data="change_language")
-                ])
-                
-                if is_admin:
-                    keyboard.append([])
-                    if user_lang == 'ru':
-                        keyboard.append([
-                            InlineKeyboardButton("👑 АДМИН ПАНЕЛЬ", callback_data="admin_stats")
-                        ])
-                    else:
-                        keyboard.append([
-                            InlineKeyboardButton("👑 ADMIN PANEL", callback_data="admin_stats")
-                        ])
-                
-                try:
-                    await query.edit_message_text(
-                        welcome_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                except Exception as edit_error:
-                    logger.warning(f"Could not edit message in back_to_menu: {edit_error}, sending new message")
-                    try:
-                        await query.message.reply_text(
-                            welcome_text,
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='HTML'
-                        )
-                        try:
-                            await query.message.delete()
-                        except:
-                            pass
-                    except Exception as send_error:
-                        logger.error(f"Could not send new message in back_to_menu: {send_error}", exc_info=True)
-                        await query.answer(t('error_try_start', lang=user_lang), show_alert=True)
-                
-                return ConversationHandler.END
-            except Exception as e:
-                logger.error(f"Error in back_to_menu: {e}", exc_info=True)
-                try:
-                    await query.answer(t('error_try_start', lang=user_lang), show_alert=True)
-                except:
-                    pass
-                return ConversationHandler.END
+            await show_main_menu(update, context, source="back_to_menu")
+            return ConversationHandler.END
         
     
         if data == "generate_again":
@@ -6114,7 +5650,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 settings_text += f'\n💱 <b>Курс валюты:</b>\n'
                 settings_text += f'1 USD = {current_rate:.2f} RUB\n\n'
                 keyboard = [
-                    [InlineKeyboardButton("🌐 Язык / Language", callback_data="change_language")],
                     [InlineKeyboardButton("💱 Установить курс валюты", callback_data="admin_set_currency_rate")],
                     [InlineKeyboardButton("📢 Рассылка", callback_data="admin_broadcast")],
                     [InlineKeyboardButton("🎁 Промокоды", callback_data="admin_promocodes")],
@@ -6124,7 +5659,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 settings_text += f'\n💱 <b>Exchange Rate:</b>\n'
                 settings_text += f'1 USD = {current_rate:.2f} RUB\n\n'
                 keyboard = [
-                    [InlineKeyboardButton("🌐 Language / Язык", callback_data="change_language")],
                     [InlineKeyboardButton("💱 Set Exchange Rate", callback_data="admin_set_currency_rate")],
                     [InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
                     [InlineKeyboardButton("🎁 Promocodes", callback_data="admin_promocodes")],
@@ -6924,9 +6458,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     keyboard.append([InlineKeyboardButton("❓ How it works?", callback_data="tutorial_start")])
             keyboard.append([
-                InlineKeyboardButton("🌐 " + ("Язык / Language" if user_lang == 'ru' else "Language / Язык"), callback_data="change_language")
-            ])
-            keyboard.append([
                 InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")
             ])
             
@@ -6970,7 +6501,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             
             keyboard = [
-                [InlineKeyboardButton("🌐 " + ("Язык / Language" if user_lang == 'ru' else "Language / Язык"), callback_data="change_language")],
                 [InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_menu")]
             ]
             
@@ -7043,49 +6573,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML',
                         disable_web_page_preview=False
-                    )
-                except:
-                    pass
-            return ConversationHandler.END
-        
-        # Handle language change request
-        if data == "change_language":
-            # Answer callback immediately to show button was pressed
-            try:
-                await query.answer()
-            except:
-                pass
-            
-            # Get current language to show appropriate text
-            current_lang = get_user_language(user_id)
-            
-            # Show language selection menu
-            if current_lang == 'ru':
-                text = "🌐 Выберите язык / Choose language:\n\nВыберите язык интерфейса бота."
-            else:
-                text = "🌐 Choose language / Выберите язык:\n\nSelect the bot interface language."
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("🇷🇺 Русский", callback_data="language_select:ru"),
-                    InlineKeyboardButton("🇬🇧 English", callback_data="language_select:en")
-                ],
-                [InlineKeyboardButton("◀️ Назад" if current_lang == 'ru' else "◀️ Back", callback_data="back_to_menu")]
-            ]
-            
-            try:
-                await query.edit_message_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except Exception as e:
-                logger.error(f"Error editing message in change_language: {e}", exc_info=True)
-                try:
-                    await query.message.reply_text(
-                        text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
                     )
                 except:
                     pass
@@ -8905,13 +8392,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Всегда отвечаем на callback, даже если не знаем что делать
     try:
-        user_lang = get_user_language(user_id) if user_id else 'ru'
-        error_msg = t('error_button_outdated', lang=user_lang) if 'error_button_outdated' in TRANSLATIONS.get(user_lang, {}) else (
-            "Кнопка устарела, откройте /start" if user_lang == 'ru' else "Button outdated, open /start"
-        )
-        await query.answer(error_msg, show_alert=True)
+        await query.answer("Обновляю меню…", show_alert=False)
     except Exception:
         pass
+    await show_main_menu(update, context, source="unknown_callback")
     return ConversationHandler.END
 
 
@@ -25327,8 +24811,6 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, pattern='^gen_type:'),
             CallbackQueryHandler(button_callback, pattern='^free_tools$'),
             CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-            CallbackQueryHandler(button_callback, pattern='^language_select:'),
-            CallbackQueryHandler(button_callback, pattern='^change_language$'),
             CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
             CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
             CallbackQueryHandler(button_callback, pattern='^help_menu$'),
@@ -25389,8 +24871,6 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -25428,8 +24908,6 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -25476,8 +24954,6 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -25534,59 +25010,17 @@ async def _register_all_handlers_internal(application: Application):
         query = update.callback_query
         if query:
             try:
-                await query.answer("❌ Неизвестная команда. Используйте /start для возврата в меню.", show_alert=True)
-                user_id = update.effective_user.id if update.effective_user else None
-                user_lang = get_user_language(user_id) if user_id else 'ru'
-                keyboard = build_main_menu_keyboard(user_id, user_lang)
-                try:
-                    await query.edit_message_text(
-                        "❌ <b>Неизвестная команда</b>\n\n"
-                        "Используйте /start для возврата в главное меню.",
-                        reply_markup=keyboard,
-                        parse_mode='HTML'
-                    )
-                except:
-                    try:
-                        await query.message.reply_text(
-                            "❌ Неизвестная команда. Используйте /start для возврата в меню.",
-                            reply_markup=keyboard
-                        )
-                    except:
-                        pass
+                await query.answer("Обновляю меню…", show_alert=False)
             except Exception as e:
                 logger.error(f"Error in unknown_callback_handler: {e}", exc_info=True)
+        await show_main_menu(update, context, source="unknown_callback_handler")
     
     # Fallback handler for non-text messages (photo/video/audio/document) when not in conversation
     async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fallback handler for non-text messages when not in conversation - ensures no silence"""
         if not update.message:
             return
-        
-        user_id = update.effective_user.id if update.effective_user else None
-        user_lang = get_user_language(user_id) if user_id else 'ru'
-        keyboard = build_main_menu_keyboard(user_id, user_lang)
-        
-        message_type = "файл"
-        if update.message.photo:
-            message_type = "фото"
-        elif update.message.video:
-            message_type = "видео"
-        elif update.message.audio or update.message.voice:
-            message_type = "аудио"
-        elif update.message.document:
-            message_type = "документ"
-        
-        try:
-            await update.message.reply_text(
-                f"❌ <b>Я не ожидаю {message_type} сейчас</b>\n\n"
-                "Пожалуйста:\n"
-                "• Выберите модель из меню через /start\n"
-                "• Или следуйте инструкциям бота",
-                reply_markup=keyboard,
-                parse_mode='HTML'
-            )
-        except Exception as e:
-            logger.error(f"Error in unknown_message_handler: {e}", exc_info=True)
+        await show_main_menu(update, context, source="unknown_message_handler")
     
     # Add fallback handlers with lowest priority (group=100, added last)
     application.add_handler(CallbackQueryHandler(unknown_callback_handler), group=100)
@@ -25793,8 +25227,6 @@ async def main():
             CallbackQueryHandler(button_callback, pattern='^gen_type:'),
             CallbackQueryHandler(button_callback, pattern='^free_tools$'),
             CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-            CallbackQueryHandler(button_callback, pattern='^language_select:'),
-            CallbackQueryHandler(button_callback, pattern='^change_language$'),
             CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
             CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
             CallbackQueryHandler(button_callback, pattern='^help_menu$'),
@@ -25855,8 +25287,6 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -25899,8 +25329,6 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -25952,8 +25380,6 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -25988,8 +25414,6 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^referral_info$'),
@@ -26033,8 +25457,6 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -26073,8 +25495,6 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^support_contact$'),
                 CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, pattern='^my_generations$'),
                 CallbackQueryHandler(button_callback, pattern='^gen_view:'),
@@ -26107,15 +25527,11 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
             ],
             WAITING_CURRENCY_RATE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^language_select:'),
-                CallbackQueryHandler(button_callback, pattern='^change_language$'),
                 CallbackQueryHandler(button_callback, pattern='^cancel$')
             ]
         },
@@ -26140,18 +25556,16 @@ async def main():
         update_id = update.update_id
         user_id = update.effective_user.id if update.effective_user else None
         
-        # Instant ACK before processing
-        try:
-            await update.message.reply_text("⏳ Принято. Обрабатываю…", parse_mode='HTML')
-            track_outgoing_action(update_id)
-        except Exception as e:
-            logger.warning(f"Could not send instant ACK: {e}")
-        
         # Check if user has active session with waiting_for
         if user_id and user_id in user_sessions:
             session = user_sessions[user_id]
             waiting_for = session.get('waiting_for')
             if waiting_for:
+                try:
+                    await update.message.reply_text("⏳ Принято. Обрабатываю…", parse_mode='HTML')
+                    track_outgoing_action(update_id)
+                except Exception as e:
+                    logger.warning(f"Could not send instant ACK: {e}")
                 # Route to input_parameters
                 logger.info(f"🔀 GLOBAL_TEXT_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
                 return await input_parameters(update, context)
@@ -26159,16 +25573,7 @@ async def main():
         # No waiting_for - show main menu
         logger.info(f"🔀 GLOBAL_TEXT_ROUTER: No waiting_for, showing main menu")
         try:
-            user_lang = get_user_language(user_id) if user_id else 'ru'
-            keyboard = build_main_menu_keyboard(user_id, user_lang)
-            await update.message.reply_text(
-                "❌ <b>Я не жду текст сейчас</b>\n\n"
-                "Пожалуйста:\n"
-                "• Выберите модель из меню\n"
-                "• Или нажмите кнопку для продолжения",
-                reply_markup=keyboard,
-                parse_mode='HTML'
-            )
+            await show_main_menu(update, context, source="global_text_router")
             track_outgoing_action(update_id)
         except Exception as e:
             logger.error(f"Error in global_text_router fallback: {e}", exc_info=True)
@@ -26181,13 +25586,6 @@ async def main():
         update_id = update.update_id
         user_id = update.effective_user.id if update.effective_user else None
         
-        # Instant ACK before processing
-        try:
-            await update.message.reply_text("⏳ Принято. Обрабатываю фото…", parse_mode='HTML')
-            track_outgoing_action(update_id)
-        except Exception as e:
-            logger.warning(f"Could not send instant ACK: {e}")
-        
         # Check if user has active session expecting image
         if user_id and user_id in user_sessions:
             session = user_sessions[user_id]
@@ -26195,22 +25593,18 @@ async def main():
             current_param = session.get('current_param', waiting_for)
             # Check if waiting for image-related parameter
             if waiting_for and current_param in ['image_input', 'image_urls', 'mask_input', 'reference_image_input']:
+                try:
+                    await update.message.reply_text("⏳ Принято. Обрабатываю фото…", parse_mode='HTML')
+                    track_outgoing_action(update_id)
+                except Exception as e:
+                    logger.warning(f"Could not send instant ACK: {e}")
                 logger.info(f"🔀 GLOBAL_PHOTO_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
                 return await input_parameters(update, context)
         
         # Not expecting photo - show guidance
         logger.info(f"🔀 GLOBAL_PHOTO_ROUTER: Not expecting photo, showing guidance")
         try:
-            user_lang = get_user_language(user_id) if user_id else 'ru'
-            keyboard = build_main_menu_keyboard(user_id, user_lang)
-            await update.message.reply_text(
-                "❌ <b>Я не жду фото сейчас</b>\n\n"
-                "Пожалуйста:\n"
-                "• Выберите модель из меню\n"
-                "• Или нажмите кнопку для продолжения",
-                reply_markup=keyboard,
-                parse_mode='HTML'
-            )
+            await show_main_menu(update, context, source="global_photo_router")
             track_outgoing_action(update_id)
         except Exception as e:
             logger.error(f"Error in global_photo_router fallback: {e}", exc_info=True)
@@ -26223,13 +25617,6 @@ async def main():
         update_id = update.update_id
         user_id = update.effective_user.id if update.effective_user else None
         
-        # Instant ACK before processing
-        try:
-            await update.message.reply_text("⏳ Принято. Обрабатываю аудио…", parse_mode='HTML')
-            track_outgoing_action(update_id)
-        except Exception as e:
-            logger.warning(f"Could not send instant ACK: {e}")
-        
         # Check if user has active session expecting audio
         if user_id and user_id in user_sessions:
             session = user_sessions[user_id]
@@ -26237,22 +25624,18 @@ async def main():
             current_param = session.get('current_param', waiting_for)
             # Check if waiting for audio-related parameter
             if waiting_for and current_param in ['audio_url', 'audio_input']:
+                try:
+                    await update.message.reply_text("⏳ Принято. Обрабатываю аудио…", parse_mode='HTML')
+                    track_outgoing_action(update_id)
+                except Exception as e:
+                    logger.warning(f"Could not send instant ACK: {e}")
                 logger.info(f"🔀 GLOBAL_AUDIO_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
                 return await input_parameters(update, context)
         
         # Not expecting audio - show guidance
         logger.info(f"🔀 GLOBAL_AUDIO_ROUTER: Not expecting audio, showing guidance")
         try:
-            user_lang = get_user_language(user_id) if user_id else 'ru'
-            keyboard = build_main_menu_keyboard(user_id, user_lang)
-            await update.message.reply_text(
-                "❌ <b>Я не жду аудио сейчас</b>\n\n"
-                "Пожалуйста:\n"
-                "• Выберите модель из меню\n"
-                "• Или нажмите кнопку для продолжения",
-                reply_markup=keyboard,
-                parse_mode='HTML'
-            )
+            await show_main_menu(update, context, source="global_audio_router")
             track_outgoing_action(update_id)
         except Exception as e:
             logger.error(f"Error in global_audio_router fallback: {e}", exc_info=True)
@@ -26726,8 +26109,8 @@ async def main():
                 # Fallback: считаем известные паттерны
                 known_patterns = [
                     'show_models', 'show_all_models_list', 'category:', 'all_models',
-                    'gen_type:', 'free_tools', 'check_balance', 'language_select:',
-                    'change_language', 'copy_bot', 'claim_gift', 'help_menu',
+                    'gen_type:', 'free_tools', 'check_balance',
+                    'copy_bot', 'claim_gift', 'help_menu',
                     'support_contact', 'select_model:', 'back_to_menu', 'topup_balance',
                     'topup_amount:', 'topup_custom', 'referral_info', 'generate_again',
                     'my_generations', 'gen_view:', 'gen_repeat:', 'gen_history:',
@@ -26785,8 +26168,6 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_callback, pattern='^gen_history:'))
     application.add_handler(CallbackQueryHandler(button_callback, pattern='^help_menu$'))
     application.add_handler(CallbackQueryHandler(button_callback, pattern='^support_contact$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^change_language$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^language_select:'))
     application.add_handler(CallbackQueryHandler(button_callback, pattern='^free_tools$'))
     application.add_handler(CallbackQueryHandler(button_callback, pattern='^claim_gift$'))
     application.add_handler(CallbackQueryHandler(button_callback, pattern='^generate_again$'))
@@ -27153,4 +26534,3 @@ if __name__ == '__main__':
         logger.error(f"❌ Fatal error in main(): {e}", exc_info=True)
         logger.error("❌ Bot failed to start. Check logs above for details.")
         sys.exit(1)
-

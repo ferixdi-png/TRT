@@ -151,7 +151,7 @@ def main():
     essential_callbacks = [
         "show_models", "category:", "model:", "back_to_menu",
         "check_balance", "topup_balance", "my_generations",
-        "help_menu", "language_select:", "admin_stats"
+        "help_menu", "admin_stats"
     ]
     
     missing = []
@@ -189,4 +189,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-

@@ -45,13 +45,13 @@ def _register_all_callbacks(registry: ButtonRegistry):
     # Точные совпадения
     exact_callbacks = [
         "back_to_menu", "check_balance", "show_models", "all_models",
-        "help_menu", "support_contact", "change_language", "admin_stats",
+        "help_menu", "support_contact", "admin_stats",
         "claim_gift", "cancel", "topup_balance", "my_generations"
     ]
     
     # Префиксы
     prefix_callbacks = [
-        "language_select:", "gen_type:", "category:", "set_param:",
+        "gen_type:", "category:", "set_param:",
         "select_model:", "retry_generate:", "gen_view:", "gen_repeat:",
         "admin_gen_nav:", "admin_gen_view:", "payment_screenshot_nav:",
         "topup_amount:", "pay_stars:", "pay_sbp:", "set_language:"
@@ -120,7 +120,6 @@ async def route_callback_with_fallback(
         # Используем fallback напрямую
         await fallback_callback_handler(callback_data, update, context, user_id, user_lang)
         return False
-
 
 
 
