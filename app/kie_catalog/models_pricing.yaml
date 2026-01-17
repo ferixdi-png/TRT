@@ -187,6 +187,20 @@ models:
   - unit: image
     credits: 5.0
     official_usd: 0.025
+- id: bytedance/seedream-v4-text-to-image
+  title_ru: Seedream V4 Text to Image
+  type: t2i
+  modes:
+  - unit: image
+    credits: 5.0
+    official_usd: 0.025
+- id: bytedance/seedream-v4-edit
+  title_ru: Seedream V4 Image Edit
+  type: i2i
+  modes:
+  - unit: image
+    credits: 5.0
+    official_usd: 0.025
 - id: seedream/4.5-text-to-image
   title_ru: Seedream 4.5 Text to Image
   type: t2i
@@ -267,6 +281,13 @@ models:
     official_usd: 0.04
 - id: google/nano-banana
   title_ru: Google Nano Banana Text to Image
+  type: t2i
+  modes:
+  - unit: image
+    credits: 4.0
+    official_usd: 0.02
+- id: google/nanobanana-gemini-2.5-flash
+  title_ru: Google Nano Banana Gemini 2.5 Flash
   type: t2i
   modes:
   - unit: image
@@ -586,6 +607,13 @@ models:
     credits: 320.0
     official_usd: 1.6
     notes: Master-10.0s
+- id: kling/v2-5-turbo
+  title_ru: Kling 2.5 Turbo
+  type: t2i
+  modes:
+  - unit: image
+    credits: 30.0
+    official_usd: 0.15
 - id: kling/v2-5-turbo-image-to-video-pro
   title_ru: Kling 2.5 Turbo Image to Video
   type: i2v
