@@ -39,10 +39,18 @@ class DependencyContainer:
         # Инициализация storage
         try:
             self.storage = get_storage()
-            if self.storage.test_connection():
-                logger.info("[OK] Storage initialized")
+            if hasattr(self.storage, "initialize") and asyncio.iscoroutinefunction(self.storage.initialize):
+                if await self.storage.initialize():
+                    logger.info("[OK] Storage initialized")
+                else:
+                    logger.warning("[WARN] Storage connection test failed")
+            elif hasattr(self.storage, "test_connection"):
+                if await asyncio.to_thread(self.storage.test_connection):
+                    logger.info("[OK] Storage initialized")
+                else:
+                    logger.warning("[WARN] Storage connection test failed")
             else:
-                logger.warning("[WARN] Storage connection test failed")
+                logger.info("[OK] Storage initialized")
         except Exception as e:
             logger.error(f"[ERROR] Failed to initialize storage: {e}")
             # Мягкая деградация - продолжаем без storage
@@ -142,5 +150,4 @@ async def build_application(settings: Optional[Settings] = None) -> Application:
         Application с инициализированными зависимостями
     """
     return await create_application(settings)
-
 
