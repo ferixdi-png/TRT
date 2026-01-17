@@ -126,7 +126,7 @@ async def show_quick_actions(callback: CallbackQuery, state: FSMContext, cid=Non
 
 
 @router.callback_query(F.data.startswith("quick:action:"))
-async def show_action_details(callback: CallbackQuery, state: FSMContext):
+async def show_action_details(callback: CallbackQuery, state: FSMContext, cid=None, bot_state=None):
     """Show quick action details with model recommendations"""
     # CRITICAL: None check for callback.from_user
     if not callback.from_user:
