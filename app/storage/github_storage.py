@@ -46,8 +46,6 @@ class GitHubStorage(BaseStorage):
 
     def __init__(self):
         self.config = self._load_config()
-        self._sessions: Dict[int, aiohttp.ClientSession] = {}
-        self._session_loops: Dict[int, asyncio.AbstractEventLoop] = {}
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
         self._implicit_dirs_logged = False
 
@@ -112,93 +110,28 @@ class GitHubStorage(BaseStorage):
             backoff_base=backoff_base,
         )
 
-    async def _safe_close_session(
-        self,
-        session: aiohttp.ClientSession,
-        loop: Optional[asyncio.AbstractEventLoop],
-        *,
-        reason: str,
-        loop_id: int,
-    ) -> None:
-        if session.closed:
-            return
-        try:
-            if loop and loop.is_running() and loop is not asyncio.get_running_loop():
-                future = asyncio.run_coroutine_threadsafe(session.close(), loop)
-                future.result(timeout=2)
-            else:
-                await session.close()
-            logger.info("[GITHUB] session_closed reason=%s loop_id=%s", reason, loop_id)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("[GITHUB] session_close_failed reason=%s error=%s", reason, exc)
+    @dataclass(frozen=True)
+    class _ResponsePayload:
+        status: int
+        headers: Dict[str, str]
+        text: str
 
-    async def _detach_session(self, loop_id: int, *, reason: str, new_loop_id: Optional[int] = None) -> None:
-        session = self._sessions.pop(loop_id, None)
-        loop = self._session_loops.pop(loop_id, None)
-        if session:
-            logger.warning(
-                "[GITHUB] session_detached reason=%s old_loop_id=%s new_loop_id=%s",
-                reason,
-                loop_id,
-                new_loop_id,
-            )
-            await self._safe_close_session(session, loop, reason=reason, loop_id=loop_id)
-
-    async def _close_session_for_current_loop(self, reason: str) -> None:
-        loop = asyncio.get_running_loop()
-        loop_id = id(loop)
-        session = self._sessions.pop(loop_id, None)
-        stored_loop = self._session_loops.pop(loop_id, None)
-        if not session:
-            return
-        await self._safe_close_session(session, stored_loop or loop, reason=reason, loop_id=loop_id)
-
-    async def _close_all_sessions(self, reason: str) -> None:
-        for loop_id, session in list(self._sessions.items()):
-            loop = self._session_loops.get(loop_id)
-            await self._safe_close_session(session, loop, reason=reason, loop_id=loop_id)
-        self._sessions.clear()
-        self._session_loops.clear()
-
-    async def _get_session(self) -> aiohttp.ClientSession:
-        loop = asyncio.get_running_loop()
-        loop_id = id(loop)
-        session = self._sessions.get(loop_id)
-        stored_loop = self._session_loops.get(loop_id)
-
-        if session and session.closed:
-            await self._detach_session(loop_id, reason="loop_closed", new_loop_id=loop_id)
-            session = None
-            stored_loop = None
-
-        if session and stored_loop is not loop:
-            await self._detach_session(loop_id, reason="loop_mismatch", new_loop_id=loop_id)
-            session = None
-
-        if not session:
-            for other_loop_id, other_loop in list(self._session_loops.items()):
-                if other_loop_id != loop_id and other_loop.is_closed():
-                    await self._detach_session(
-                        other_loop_id,
-                        reason="loop_mismatch",
-                        new_loop_id=loop_id,
-                    )
-
-        if session and not session.closed:
-            return session
-
+    async def _request_raw(self, method: str, url: str, **kwargs: Any) -> _ResponsePayload:
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
-        session = aiohttp.ClientSession(
-            timeout=timeout,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"token {self.config.token}",
-                "User-Agent": "TRT-GitHubStorage",
-            },
-        )
-        self._sessions[loop_id] = session
-        self._session_loops[loop_id] = loop
-        return session
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"token {self.config.token}",
+            "User-Agent": "TRT-GitHubStorage",
+        }
+        async with self._semaphore:
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.request(method, url, **kwargs) as response:
+                    text = await response.text()
+                    return self._ResponsePayload(
+                        status=response.status,
+                        headers=dict(response.headers),
+                        text=text,
+                    )
 
     def _storage_path(self, filename: str) -> str:
         safe_name = filename.strip("/").replace("..", "")
@@ -206,12 +139,6 @@ class GitHubStorage(BaseStorage):
 
     def _contents_url(self, path: str) -> str:
         return f"https://api.github.com/repos/{self.config.repo}/contents/{path}"
-
-    async def _request(self, method: str, url: str, **kwargs) -> aiohttp.ClientResponse:
-        session = await self._get_session()
-        async with self._semaphore:
-            response = await session.request(method, url, **kwargs)
-        return response
 
     async def _request_with_retry(
         self,
@@ -222,10 +149,10 @@ class GitHubStorage(BaseStorage):
         path: str,
         ok_statuses: Tuple[int, ...],
         **kwargs: Any,
-    ) -> aiohttp.ClientResponse:
-        last_response: Optional[aiohttp.ClientResponse] = None
+    ) -> _ResponsePayload:
+        last_response: Optional[GitHubStorage._ResponsePayload] = None
         for attempt in range(1, self.config.max_retries + 1):
-            response = await self._request(method, url, **kwargs)
+            response = await self._request_raw(method, url, **kwargs)
             last_response = response
             status = response.status
             ok = status in ok_statuses
@@ -241,7 +168,6 @@ class GitHubStorage(BaseStorage):
                 return response
 
             if self._should_retry(status, response.headers):
-                await response.release()
                 await self._backoff(attempt, response.headers)
                 continue
 
@@ -286,19 +212,18 @@ class GitHubStorage(BaseStorage):
             params={"ref": self.config.branch},
         )
         if response.status == 404:
-            await response.release()
             return {}, None
         if response.status != 200:
-            payload = await response.text()
-            await response.release()
             logger.error(
                 "[GITHUB] op=read path=%s ok=false status=%s error_class=GitHubReadError",
                 path,
                 response.status,
             )
-            raise RuntimeError(f"GitHub read failed {response.status}: {payload}")
-        payload = await response.json()
-        await response.release()
+            raise RuntimeError(f"GitHub read failed {response.status}: {response.text}")
+        try:
+            payload = json.loads(response.text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("GitHub read failed: invalid JSON response") from exc
         content = payload.get("content", "")
         sha = payload.get("sha")
         decoded = base64.b64decode(content).decode("utf-8") if content else "{}"
@@ -342,7 +267,6 @@ class GitHubStorage(BaseStorage):
             json=payload,
         )
         if response.status in (200, 201):
-            await response.release()
             logger.info(
                 "[GITHUB] write_ok path=%s status=%s",
                 path,
@@ -350,16 +274,13 @@ class GitHubStorage(BaseStorage):
             )
             return
         if response.status == 409:
-            await response.release()
             raise GitHubConflictError(f"GitHub write conflict for {path}")
-        payload_text = await response.text()
-        await response.release()
         logger.error(
             "[GITHUB] op=write path=%s ok=false status=%s error_class=GitHubWriteError",
             path,
             response.status,
         )
-        raise RuntimeError(f"GitHub write failed {response.status}: {payload_text}")
+        raise RuntimeError(f"GitHub write failed {response.status}: {response.text}")
 
     def _merge_json(self, base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
         merged = dict(base)
