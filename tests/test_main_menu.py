@@ -32,15 +32,14 @@ async def test_start_command(harness):
     # Проверяем, что бот отправил сообщение
     assert len(result['outbox']['messages']) > 0, "Bot should send a message"
     
-    last_message = result['outbox']['messages'][-1]
-    assert 'text' in last_message, "Message should have text"
-    assert "ДОБРО ПОЖАЛОВАТЬ" in last_message['text']
-    assert "Версия" in last_message['text']
-    assert "Что нового" in last_message['text']
-    
-    assert 'reply_markup' in last_message
-    assert last_message['reply_markup'] is not None, "Should have reply_markup"
-    keyboard = last_message['reply_markup'].inline_keyboard
+    messages = result['outbox']['messages']
+    assert messages, "Bot should send a message"
+    header_message = messages[0]
+    assert 'text' in header_message, "Message should have text"
+    assert "Добро пожаловать" in header_message['text']
+    assert 'reply_markup' in header_message
+    assert header_message['reply_markup'] is not None, "Should have reply_markup"
+    keyboard = header_message['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [
         "БЕСПЛАТНЫЕ МОДЕЛИ",
         "Из текста в фото",
@@ -51,6 +50,8 @@ async def test_start_command(harness):
         "Баланс",
         "Партнерка",
     ]
+    assert any("Версия" in message['text'] for message in messages)
+    assert any("Что нового" in message['text'] for message in messages)
 
 
 @pytest.mark.asyncio
@@ -66,13 +67,14 @@ async def test_start_command_no_crash(harness):
 
 @pytest.mark.asyncio
 async def test_start_long_welcome_splits_chunks(harness, monkeypatch):
-    """Длинный welcome должен быть разбит на чанки и иметь клавиатуру в конце."""
-    long_text = "<b>ДОБРО ПОЖАЛОВАТЬ</b>\n\n" + ("A" * (TELEGRAM_TEXT_LIMIT + 500))
+    """Длинный details блок должен быть разбит на чанки без клавиатуры."""
+    header_text = "<b>ДОБРО ПОЖАЛОВАТЬ</b>"
+    long_text = "<b>Детали</b>\n\n" + ("A" * (TELEGRAM_TEXT_LIMIT + 500))
 
-    async def fake_build_main_menu_text(update):
-        return long_text
+    async def fake_build_main_menu_sections(update):
+        return header_text, long_text
 
-    monkeypatch.setattr(bot_kie, "_build_main_menu_text", fake_build_main_menu_text)
+    monkeypatch.setattr(bot_kie, "_build_main_menu_sections", fake_build_main_menu_sections)
 
     harness.add_handler(CommandHandler('start', start))
 
@@ -80,10 +82,10 @@ async def test_start_long_welcome_splits_chunks(harness, monkeypatch):
 
     assert result['success'], f"Command failed: {result.get('error')}"
     messages = result['outbox']['messages']
-    assert len(messages) > 1, "Long welcome should be split into multiple messages"
+    assert len(messages) > 1, "Long details should be split into multiple messages"
     assert all(len(message['text']) <= TELEGRAM_TEXT_LIMIT for message in messages)
-    assert all(message['reply_markup'] is None for message in messages[:-1])
-    assert messages[-1]['reply_markup'] is not None
+    assert messages[0]['reply_markup'] is not None
+    assert all(message['reply_markup'] is None for message in messages[1:])
 
 
 @pytest.mark.asyncio
@@ -98,11 +100,10 @@ async def test_unknown_callback_shows_main_menu(harness):
     messages = result['outbox']['messages']
     assert edited or messages
 
-    last_payload = edited[-1] if edited else messages[-1]
-    assert "ДОБРО ПОЖАЛОВАТЬ" in last_payload['text']
-    assert "Версия" in last_payload['text']
-    assert "Что нового" in last_payload['text']
-    keyboard = last_payload['reply_markup'].inline_keyboard
+    payloads = edited + messages
+    assert any("Добро пожаловать" in payload["text"] for payload in payloads)
+    header_payload = next(payload for payload in payloads if payload.get("reply_markup"))
+    keyboard = header_payload['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [
         "БЕСПЛАТНЫЕ МОДЕЛИ",
         "Из текста в фото",
@@ -113,6 +114,8 @@ async def test_unknown_callback_shows_main_menu(harness):
         "Баланс",
         "Партнерка",
     ]
+    assert any("Версия" in message['text'] for message in messages)
+    assert any("Что нового" in message['text'] for message in messages)
 
 
 @pytest.mark.asyncio
