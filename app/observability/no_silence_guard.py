@@ -89,10 +89,10 @@ class NoSilenceGuard:
             # Определяем язык пользователя (если доступно)
             user_lang = 'ru'  # Default
             try:
-                from app.state.user_state import get_user_language
+                from app.services.user_service import get_user_language as get_user_language_async
                 if user_id:
-                    user_lang = get_user_language(user_id)
-            except:
+                    user_lang = await get_user_language_async(user_id)
+            except Exception:
                 pass
             
             # Текст сообщения
@@ -176,7 +176,6 @@ def track_outgoing_action(update_id: int):
     """Удобная функция для отслеживания исходящего действия"""
     guard = get_no_silence_guard()
     guard.track_outgoing_action(update_id)
-
 
 
 
