@@ -1270,6 +1270,7 @@ def build_webhook_handler(application, settings):
             else:
                 logger.info("[WEBHOOK] secret_ok=true correlation_id=%s", correlation_id)
 
+            smoke_no_process = os.getenv("SMOKE_NO_PROCESS", "").lower() in ("1", "true", "yes")
             try:
                 payload = await request.json()
             except Exception as exc:
@@ -1280,6 +1281,13 @@ def build_webhook_handler(application, settings):
                     correlation_id,
                 )
                 return web.Response(status=status)
+
+            if smoke_no_process:
+                logger.info(
+                    "[WEBHOOK] update_received=true smoke_no_process=true correlation_id=%s",
+                    correlation_id,
+                )
+                return web.Response(status=200)
 
             logger.info("[WEBHOOK] update_received=true correlation_id=%s", correlation_id)
             try:
@@ -3722,7 +3730,12 @@ async def run(settings, application):
 
 
 
-            await application.initialize()
+            smoke_no_process = os.getenv("SMOKE_NO_PROCESS", "").lower() in ("1", "true", "yes")
+            if smoke_no_process:
+                logger.warning("[RUN] bot_ready=true telegram_init_skipped=true reason=smoke_no_process")
+                _bot_ready = True
+            else:
+                await application.initialize()
 
 
 
@@ -3738,9 +3751,9 @@ async def run(settings, application):
 
 
 
-            await application.start()
-            _bot_ready = True
-            logger.info("[RUN] bot_ready=true")
+                await application.start()
+                _bot_ready = True
+                logger.info("[RUN] bot_ready=true")
 
             if settings.port > 0:
                 webhook_handler = None
@@ -7020,8 +7033,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
-
 
 
 
