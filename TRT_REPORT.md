@@ -99,3 +99,24 @@
 
 ## Что не проверено в этой среде
 - Реальные Render логи и Telegram-сценарии: требуется доступ к Render/Telegram с .env (секреты не доступны в sandbox).
+
+## 2025-02-14: UX contract + safe KIE mode + structured callback log
+**Было:**
+- Не было формального UX/State/Log контрактов в docs/.
+- KIE stub включался только при явном `KIE_STUB=1`.
+- Structured log для callback был неформализован.
+
+**Стало:**
+- Добавлены UX/State/Log контракты в `docs/` как соглашение для дальнейшей реализации.
+- Safe-mode для KIE: по умолчанию используется stub, реальный режим только при `KIE_ALLOW_REAL=1`.
+- Добавлен structured callback log (correlation_id/action_path/waiting_for/param/outcome).
+
+**Причина:**
+- Зафиксировать UX как контракт и обеспечить безопасный режим интеграций по умолчанию.
+
+**Как проверил:**
+- `pytest -q`
+
+**Что осталось:**
+- Интегрировать router parse→validate→route→execute→respond→log во все callback-ветки.
+- Доработать тесты UX/лог-контрактов по списку в задании.
