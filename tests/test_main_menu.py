@@ -8,7 +8,13 @@ import re
 import pytest
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ConversationHandler
 
-from bot_kie import _register_all_handlers_internal, button_callback, start
+import bot_kie
+from bot_kie import (
+    TELEGRAM_TEXT_LIMIT,
+    _register_all_handlers_internal,
+    button_callback,
+    start,
+)
 
 
 @pytest.mark.asyncio
@@ -56,6 +62,28 @@ async def test_start_command_no_crash(harness):
     for i in range(3):
         result = await harness.process_command('/start', user_id=12345 + i)
         assert result['success'], f"Command should not fail on attempt {i+1}"
+
+
+@pytest.mark.asyncio
+async def test_start_long_welcome_splits_chunks(harness, monkeypatch):
+    """Длинный welcome должен быть разбит на чанки и иметь клавиатуру в конце."""
+    long_text = "<b>ДОБРО ПОЖАЛОВАТЬ</b>\n\n" + ("A" * (TELEGRAM_TEXT_LIMIT + 500))
+
+    async def fake_build_main_menu_text(update):
+        return long_text
+
+    monkeypatch.setattr(bot_kie, "_build_main_menu_text", fake_build_main_menu_text)
+
+    harness.add_handler(CommandHandler('start', start))
+
+    result = await harness.process_command('/start', user_id=12345)
+
+    assert result['success'], f"Command failed: {result.get('error')}"
+    messages = result['outbox']['messages']
+    assert len(messages) > 1, "Long welcome should be split into multiple messages"
+    assert all(len(message['text']) <= TELEGRAM_TEXT_LIMIT for message in messages)
+    assert all(message['reply_markup'] is None for message in messages[:-1])
+    assert messages[-1]['reply_markup'] is not None
 
 
 @pytest.mark.asyncio

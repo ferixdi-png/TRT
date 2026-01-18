@@ -46,8 +46,8 @@ class GitHubStorage(BaseStorage):
 
     def __init__(self):
         self.config = self._load_config()
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._session_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._sessions: Dict[int, aiohttp.ClientSession] = {}
+        self._session_loops: Dict[int, asyncio.AbstractEventLoop] = {}
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
         self._implicit_dirs_logged = False
 
@@ -112,29 +112,59 @@ class GitHubStorage(BaseStorage):
             backoff_base=backoff_base,
         )
 
-    async def _close_session(self, reason: str) -> None:
-        session = self._session
-        self._session = None
-        self._session_loop = None
+    def _detach_session(self, loop_id: int, *, reason: str, new_loop_id: Optional[int] = None) -> None:
+        session = self._sessions.pop(loop_id, None)
+        self._session_loops.pop(loop_id, None)
+        if session:
+            logger.warning(
+                "[GITHUB] session_detached reason=%s old_loop_id=%s new_loop_id=%s",
+                reason,
+                loop_id,
+                new_loop_id,
+            )
+
+    async def _close_session_for_current_loop(self, reason: str) -> None:
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        session = self._sessions.pop(loop_id, None)
+        self._session_loops.pop(loop_id, None)
         if not session:
             return
         try:
             await session.close()
-            logger.info("[GITHUB] session_closed reason=%s", reason)
+            logger.info("[GITHUB] session_closed reason=%s loop_id=%s", reason, loop_id)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("[GITHUB] session_close_failed reason=%s error=%s", reason, exc)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         loop = asyncio.get_running_loop()
-        if self._session and not self._session.closed:
-            if self._session_loop is loop:
-                return self._session
-            await self._close_session("loop_mismatch")
-        if self._session_loop is not None and self._session_loop.is_closed():
-            await self._close_session("loop_closed")
+        loop_id = id(loop)
+        session = self._sessions.get(loop_id)
+        stored_loop = self._session_loops.get(loop_id)
+
+        if session and session.closed:
+            self._detach_session(loop_id, reason="loop_closed", new_loop_id=loop_id)
+            session = None
+            stored_loop = None
+
+        if session and stored_loop is not loop:
+            self._detach_session(loop_id, reason="loop_mismatch", new_loop_id=loop_id)
+            session = None
+
+        if not session:
+            for other_loop_id, other_loop in list(self._session_loops.items()):
+                if other_loop_id != loop_id and other_loop.is_closed():
+                    self._detach_session(
+                        other_loop_id,
+                        reason="loop_mismatch",
+                        new_loop_id=loop_id,
+                    )
+
+        if session and not session.closed:
+            return session
 
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
-        self._session = aiohttp.ClientSession(
+        session = aiohttp.ClientSession(
             timeout=timeout,
             headers={
                 "Accept": "application/vnd.github+json",
@@ -142,8 +172,9 @@ class GitHubStorage(BaseStorage):
                 "User-Agent": "TRT-GitHubStorage",
             },
         )
-        self._session_loop = loop
-        return self._session
+        self._sessions[loop_id] = session
+        self._session_loops[loop_id] = loop
+        return session
 
     def _storage_path(self, filename: str) -> str:
         safe_name = filename.strip("/").replace("..", "")
@@ -369,8 +400,19 @@ class GitHubStorage(BaseStorage):
     def test_connection(self) -> bool:
         """Sync connection test for GitHub storage."""
         async def _check() -> bool:
-            await self._read_json(self.balances_file)
-            await self._close_session("test_connection")
+            path = self._storage_path(self.balances_file)
+            url = self._contents_url(path)
+            timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"token {self.config.token}",
+                "User-Agent": "TRT-GitHubStorage",
+            }
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(url, params={"ref": self.config.branch}) as response:
+                    if response.status not in (200, 404):
+                        payload = await response.text()
+                        raise RuntimeError(f"GitHub test_connection failed {response.status}: {payload}")
             return True
 
         try:
@@ -782,5 +824,4 @@ class GitHubStorage(BaseStorage):
         return float(data.get(str(referrer_id), 0.0))
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+        await self._close_session_for_current_loop("close")

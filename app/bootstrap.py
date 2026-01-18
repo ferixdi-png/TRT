@@ -12,6 +12,7 @@ from telegram import Bot
 
 from app.config import Settings, get_settings
 from app.storage import get_storage
+from app.telegram_error_handler import ensure_error_handler_registered
 from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -132,6 +133,7 @@ async def create_application(settings: Optional[Settings] = None) -> Application
     
     # Создаем Application с post_init
     application = Application.builder().token(settings.telegram_bot_token).post_init(post_init).build()
+    ensure_error_handler_registered(application)
     
     # Инициализируем dependency container
     deps = DependencyContainer()
