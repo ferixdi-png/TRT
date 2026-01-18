@@ -87,16 +87,27 @@ def main() -> int:
 
     registry_models = _registry_models(registry_data)
     registry_ids = set(registry_models.keys())
+    meta_total = registry_data.get("meta", {}).get("total_models")
+    if isinstance(meta_total, bool):
+        meta_total = None
+    expected_total = meta_total if isinstance(meta_total, int) else None
     pricing_ids = _pricing_ids(pricing_data)
     registry_free = _registry_free_ids(registry_data)
     registry_disabled = _registry_disabled_ids(registry_data)
     pricing_free = _pricing_free_ids(pricing_data)
 
     errors = []
-    if len(registry_ids) != 72:
-        errors.append(f"Registry model count must be 72, got {len(registry_ids)}")
-    if len(pricing_ids) > 72:
-        errors.append(f"Pricing model count must be <= 72, got {len(pricing_ids)}")
+    if expected_total is None:
+        errors.append("Registry meta.total_models is missing or invalid")
+    elif len(registry_ids) != expected_total:
+        errors.append(
+            "Registry meta.total_models mismatch: "
+            f"meta={expected_total} actual={len(registry_ids)}"
+        )
+    if expected_total is not None and len(pricing_ids) > expected_total:
+        errors.append(
+            f"Pricing model count must be <= {expected_total}, got {len(pricing_ids)}"
+        )
 
     if len(pricing_ids) != len(set(pricing_ids)):
         errors.append("Pricing contains duplicate model_id entries")
@@ -130,6 +141,7 @@ def main() -> int:
     print(
         "✅ SSOT verification passed:",
         f"registry={len(registry_ids)} pricing={len(pricing_ids)} free={len(pricing_free)}",
+        f"meta_total={expected_total}",
     )
     return 0
 
