@@ -112,9 +112,29 @@ class GitHubStorage(BaseStorage):
             backoff_base=backoff_base,
         )
 
-    def _detach_session(self, loop_id: int, *, reason: str, new_loop_id: Optional[int] = None) -> None:
+    async def _safe_close_session(
+        self,
+        session: aiohttp.ClientSession,
+        loop: Optional[asyncio.AbstractEventLoop],
+        *,
+        reason: str,
+        loop_id: int,
+    ) -> None:
+        if session.closed:
+            return
+        try:
+            if loop and loop.is_running() and loop is not asyncio.get_running_loop():
+                future = asyncio.run_coroutine_threadsafe(session.close(), loop)
+                future.result(timeout=2)
+            else:
+                await session.close()
+            logger.info("[GITHUB] session_closed reason=%s loop_id=%s", reason, loop_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("[GITHUB] session_close_failed reason=%s error=%s", reason, exc)
+
+    async def _detach_session(self, loop_id: int, *, reason: str, new_loop_id: Optional[int] = None) -> None:
         session = self._sessions.pop(loop_id, None)
-        self._session_loops.pop(loop_id, None)
+        loop = self._session_loops.pop(loop_id, None)
         if session:
             logger.warning(
                 "[GITHUB] session_detached reason=%s old_loop_id=%s new_loop_id=%s",
@@ -122,19 +142,23 @@ class GitHubStorage(BaseStorage):
                 loop_id,
                 new_loop_id,
             )
+            await self._safe_close_session(session, loop, reason=reason, loop_id=loop_id)
 
     async def _close_session_for_current_loop(self, reason: str) -> None:
         loop = asyncio.get_running_loop()
         loop_id = id(loop)
         session = self._sessions.pop(loop_id, None)
-        self._session_loops.pop(loop_id, None)
+        stored_loop = self._session_loops.pop(loop_id, None)
         if not session:
             return
-        try:
-            await session.close()
-            logger.info("[GITHUB] session_closed reason=%s loop_id=%s", reason, loop_id)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("[GITHUB] session_close_failed reason=%s error=%s", reason, exc)
+        await self._safe_close_session(session, stored_loop or loop, reason=reason, loop_id=loop_id)
+
+    async def _close_all_sessions(self, reason: str) -> None:
+        for loop_id, session in list(self._sessions.items()):
+            loop = self._session_loops.get(loop_id)
+            await self._safe_close_session(session, loop, reason=reason, loop_id=loop_id)
+        self._sessions.clear()
+        self._session_loops.clear()
 
     async def _get_session(self) -> aiohttp.ClientSession:
         loop = asyncio.get_running_loop()
@@ -143,18 +167,18 @@ class GitHubStorage(BaseStorage):
         stored_loop = self._session_loops.get(loop_id)
 
         if session and session.closed:
-            self._detach_session(loop_id, reason="loop_closed", new_loop_id=loop_id)
+            await self._detach_session(loop_id, reason="loop_closed", new_loop_id=loop_id)
             session = None
             stored_loop = None
 
         if session and stored_loop is not loop:
-            self._detach_session(loop_id, reason="loop_mismatch", new_loop_id=loop_id)
+            await self._detach_session(loop_id, reason="loop_mismatch", new_loop_id=loop_id)
             session = None
 
         if not session:
             for other_loop_id, other_loop in list(self._session_loops.items()):
                 if other_loop_id != loop_id and other_loop.is_closed():
-                    self._detach_session(
+                    await self._detach_session(
                         other_loop_id,
                         reason="loop_mismatch",
                         new_loop_id=loop_id,
@@ -824,4 +848,4 @@ class GitHubStorage(BaseStorage):
         return float(data.get(str(referrer_id), 0.0))
 
     async def close(self) -> None:
-        await self._close_session_for_current_loop("close")
+        await self._close_all_sessions("close")

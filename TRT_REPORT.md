@@ -30,36 +30,31 @@
 - Дальнейшее уточнение требует полноценного runtime-теста (`/start` + callback) с .env.
 
 ## Было → Стало
-- **Было:** `models_registry source=unknown`, fallback на дефолтный RATE=100.0, отсутствующие модели в pricing.
-- **Стало:** явные пути registry/pricing/настроек, валидация на старте, синхронизация pricing ↔ registry.
-- **Было:** главное меню показывало только "Главное меню" без приветственного текста и блока "Версия/Дата/Что нового".
-- **Стало:** /start и возврат в меню всегда показывают расширенный welcome-текст + блок релиза, кнопки меню сохраняются.
-- **Было (P0-1):** welcome превышал лимит Telegram → `BadRequest: Message is too long`.
-- **Стало (P0-1):** добавлены безопасные чанки (3900), HTML-валидация и отправка клавиатуры только в последнем сообщении.
-- **Было (P0-2):** Application в webhook-пути мог создаваться без error_handler (лог: `No error handlers are registered`).
-- **Стало (P0-2):** error_handler регистрируется сразу после `Application.builder().build()` в bootstrap, плюс инвариант в точках запуска.
-- **Было (P0-3):** GitHubStorage мог закрывать aiohttp session в другом loop (`session_close_failed reason=loop_mismatch`).
-- **Стало (P0-3):** per-loop sessions, закрытие только в текущем loop, mismatch → detach без close, test_connection использует ephemeral session.
+- **Было:** главное меню ломало HTML при чанкинге и иногда отправлялось без parse_mode.
+- **Стало:** HTML-чанки нормализуются (баланс тегов, закрытие/переоткрытие), parse_mode всегда HTML.
+- **Было:** первое сообщение /start могло быть перегружено рамками и длинными секциями, клавиатура терялась среди чанков.
+- **Стало:** первый экран = короткий welcome + клавиатура; подробности уходят отдельными сообщениями без клавиатуры.
+- **Было:** input_parameters мог доходить до конца без ответа (NO-SILENCE violation при waiting_for=prompt).
+- **Стало:** для prompt всегда есть ответ (валидация, сохранение, переход к следующему шагу), fallback guard прикрывает тишину.
+- **Было:** GitHubStorage оставлял aiohttp-сессии незакрытыми при смене loop (warning `session_detached`, `Unclosed client session`).
+- **Стало:** сессии корректно закрываются при смене loop и при shutdown; добавлен smoke-тест 20+ операций.
 - **П1:** language selection не включён в handlers; default=ru, запись языка только при явном выборе пользователем.
 
 ## Как проверил
-- `git log --since="3 days ago" --stat`
-- `git diff 0ea378e5^ 0ea378e5 --stat`
-- `rg -n "pricing|prices|RUB|rate|multiplier|registry|models|menu|прайс|курс|source" ...`
-- `git bisect start` + GOOD/BAD (см. секцию Bisect)
-- `python -m compileall -q .`
-- `pytest -q`
+- `pytest tests/test_main_menu.py tests/test_e2e_flow.py tests/test_github_storage_loop.py tests/test_github_storage_smoke.py tests/test_input_parameters_no_silence.py`
 
 ## Какие файлы тронул
 - `bot_kie.py`
-- `app/bootstrap.py`
-- `app/main.py`
-- `app/telegram_error_handler.py`
 - `app/storage/github_storage.py`
 - `tests/test_main_menu.py`
-- `tests/test_error_handler_registration.py`
+- `tests/test_e2e_flow.py`
 - `tests/test_github_storage_loop.py`
+- `tests/test_github_storage_smoke.py`
+- `tests/test_input_parameters_no_silence.py`
+- `tests/ptb_harness.py`
+- `tests/conftest.py`
 - `TRT_REPORT.md`
+- `translations.py`
 
 ## Почему теперь не отвалится в webhook режиме
 - `create_application()` в `app/bootstrap.py` сразу после `Application.builder().build()` вызывает `ensure_error_handler_registered()`, поэтому webhook-строитель всегда получает error handler.
