@@ -119,6 +119,9 @@ def sync_check_pg(dsn: str, timeout: float = 5.0) -> bool:
         )
         return False
 
+                    # Use DB_MAXCONN from environment, default to 10
+                    max_conn = int(os.getenv('DB_MAXCONN', '10'))
+                        max_size=max_conn,
 
 class PGStorage:
     """PostgreSQL storage backend."""
