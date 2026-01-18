@@ -6,6 +6,7 @@ Healthcheck endpoint для Render
 import time
 import logging
 import json
+import asyncio
 from aiohttp import web
 from typing import Optional, Callable, Awaitable, Dict
 
@@ -76,6 +77,7 @@ async def health_handler(request):
 async def start_health_server(
     port: int = 8000,
     webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
+    self_check: bool = False,
     **kwargs,
 ):
     """Запустить healthcheck сервер в том же event loop"""
@@ -115,6 +117,24 @@ async def start_health_server(
         
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
+
+        logger.info("[HEALTH] port_bound=true host=0.0.0.0 port=%s", port)
+        if self_check:
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection("127.0.0.1", port),
+                    timeout=0.5,
+                )
+                writer.close()
+                if hasattr(writer, "wait_closed"):
+                    await writer.wait_closed()
+                logger.info("[HEALTH] self_check_ok=true host=127.0.0.1 port=%s", port)
+            except Exception as exc:
+                logger.warning(
+                    "[HEALTH] self_check_ok=false host=127.0.0.1 port=%s error=%s",
+                    port,
+                    exc,
+                )
         
         _health_server = app
         _health_runner = runner
