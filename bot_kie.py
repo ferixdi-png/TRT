@@ -81,6 +81,8 @@ KNOWN_CALLBACK_EXACT = {
     "view_payment_screenshots",
 }
 
+SKIP_PARAM_VALUE = "__skip__"
+
 
 def is_known_callback_data(callback_data: Optional[str]) -> bool:
     """Return True if callback data matches known routing patterns."""
@@ -303,6 +305,44 @@ def get_categories_from_registry() -> List[str]:
         if cat:
             categories.add(cat)
     return sorted(list(categories))
+
+
+def _determine_primary_input(
+    model_info: Dict[str, Any],
+    input_params: Dict[str, Any],
+) -> Optional[Dict[str, str]]:
+    """Determine which input should be requested first based on model_type + schema."""
+    model_type = (model_info.get("model_type") or "").lower()
+    image_param = None
+    if "image_input" in input_params:
+        image_param = "image_input"
+    elif "image_urls" in input_params:
+        image_param = "image_urls"
+    audio_param = None
+    if "audio_input" in input_params:
+        audio_param = "audio_input"
+    elif "audio_url" in input_params:
+        audio_param = "audio_url"
+
+    if model_type in {"image_to_video", "image_to_image", "image_edit", "outpaint", "upscale", "video_upscale"}:
+        if image_param:
+            return {"type": "image", "param": image_param}
+    if model_type in {"speech_to_text", "audio_to_audio", "speech_to_video"}:
+        if audio_param:
+            return {"type": "audio", "param": audio_param}
+    if model_type in {"text_to_video", "text_to_image", "text_to_speech", "text_to_audio", "text"}:
+        if "prompt" in input_params:
+            return {"type": "prompt", "param": "prompt"}
+
+    # Fallback for unknown types: prefer required media, then prompt
+    if image_param and input_params.get(image_param, {}).get("required", False):
+        return {"type": "image", "param": image_param}
+    if audio_param and input_params.get(audio_param, {}).get("required", False):
+        return {"type": "audio", "param": audio_param}
+    if "prompt" in input_params:
+        return {"type": "prompt", "param": "prompt"}
+
+    return None
 import json
 import aiohttp
 import aiofiles
@@ -3855,40 +3895,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_sessions[user_id]['current_param'] = None
             # NOTE: model_id and model_info are already stored above at lines 8449-8450
             
-            # Start with prompt parameter first (or image_input/image_urls first for image-to-video models)
-            # Special case: Models that require image_input first (nano-banana-pro, recraft models, etc.)
-            # These models need image before prompt
-            # Models that require image_input first (before prompt or other parameters)
-            # These models need image to be uploaded first
-            models_require_image_first = [
-                "nano-banana-pro",              # Requires image_input + prompt
-                "recraft/remove-background",    # Requires only image_input (no prompt)
-                "recraft/crisp-upscale",        # Requires only image_input (no prompt)
-                "ideogram/v3-reframe",          # Requires image_input first (no prompt)
-                "topaz/image-upscale",          # Requires image_input (no prompt)
-            ]
-            
-            # Check if model requires image_input first
-            requires_image_first = model_id in models_require_image_first
-            has_required_image = 'image_input' in input_params and input_params['image_input'].get('required', False)
-            
-            logger.info(f"🔥🔥🔥 SELECT_MODEL CHECK: model_id={model_id}, requires_image_first={requires_image_first}, has_required_image={has_required_image}, input_params_keys={list(input_params.keys())}, user_id={user_id}")
-            
-            if requires_image_first or has_required_image:
-                logger.info(f"🔥🔥🔥 SELECT_MODEL: Model requires image first! Setting up image input, user_id={user_id}")
-                # Determine parameter name
-                if 'image_input' in input_params:
-                    image_param_name = 'image_input'
-                elif 'image_urls' in input_params:
-                    image_param_name = 'image_urls'
-                else:
-                    image_param_name = 'image_input'  # Default
-                
-                # Start with image_input first
-                has_image_input = True
+            primary_input = _determine_primary_input(model_info, input_params)
+            logger.info(
+                "🔥🔥🔥 SELECT_MODEL CHECK: model_id=%s primary_input=%s input_params_keys=%s user_id=%s",
+                model_id,
+                primary_input,
+                list(input_params.keys()),
+                user_id,
+            )
+
+            if primary_input and primary_input["type"] == "image":
+                logger.info("🔥🔥🔥 SELECT_MODEL: Model requires image first! user_id=%s", user_id)
+                image_param_name = primary_input["param"]
                 user_lang = get_user_language(user_id)
-                
-                # Get translated text with model-specific messages
+                keyboard = [
+                    [
+                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                    ],
+                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+                ]
                 if user_lang == 'en':
                     step_text = "📷 <b>Step 1: Upload image</b>\n\n"
                     if model_id == "recraft/remove-background":
@@ -3899,89 +3925,74 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         step_text += "Send a photo to reframe and change aspect ratio.\n\n"
                     elif model_id == "topaz/image-upscale":
                         step_text += "Send a photo to upscale and enhance resolution.\n\n"
-                    elif model_id == "nano-banana-pro":
-                        step_text += "Send a photo to use as reference or for transformation.\n\n"
-                        step_text += "💡 <i>After uploading the image, you can enter a prompt</i>"
                     else:
                         step_text += "Send a photo to use as reference or for transformation.\n\n"
-                        # Check if model has prompt parameter
-                        if 'prompt' in input_params:
-                            step_text += "💡 <i>After uploading the image, you can enter a prompt</i>"
+                    if 'prompt' in input_params:
+                        step_text += "💡 <i>After uploading the image, you can enter a prompt</i>"
                 else:
                     step_text = (
                         "📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        "Отправьте изображение в сообщении.\n"
+                        "Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
+                        "Максимальный размер: 10 MB"
                     )
-                    if model_id == "recraft/remove-background":
-                        step_text += (
-                            "Отправьте фото для удаления фона.\n\n"
-                            "💡 <b>Что нужно:</b>\n"
-                            "• Отправьте изображение в сообщении\n"
-                            "• Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
-                            "• Максимальный размер: 10 MB\n\n"
-                            "✅ <b>После загрузки:</b> фон будет удален автоматически"
-                        )
-                    elif model_id == "recraft/crisp-upscale":
-                        step_text += (
-                            "Отправьте фото для улучшения качества.\n\n"
-                            "💡 <b>Что нужно:</b>\n"
-                            "• Отправьте изображение в сообщении\n"
-                            "• Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
-                            "• Максимальный размер: 10 MB\n\n"
-                            "✅ <b>После загрузки:</b> качество изображения будет улучшено"
-                        )
-                    elif model_id == "ideogram/v3-reframe":
-                        step_text += (
-                            "Отправьте фото для изменения кадра и соотношения сторон.\n\n"
-                            "💡 <b>Что нужно:</b>\n"
-                            "• Отправьте изображение в сообщении\n"
-                            "• Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
-                            "• Максимальный размер: 10 MB\n\n"
-                            "✅ <b>После загрузки:</b> вы сможете выбрать новое соотношение сторон"
-                        )
-                    elif model_id == "topaz/image-upscale":
-                        step_text += (
-                            "Отправьте фото для увеличения разрешения.\n\n"
-                            "💡 <b>Что нужно:</b>\n"
-                            "• Отправьте изображение в сообщении\n"
-                            "• Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
-                            "• Максимальный размер: 10 MB\n\n"
-                            "✅ <b>После загрузки:</b> разрешение изображения будет увеличено"
-                        )
-                    elif model_id == "nano-banana-pro":
-                        step_text += (
-                            "Отправьте фото, которое хотите использовать как референс или для трансформации.\n\n"
-                            "💡 <b>Что нужно:</b>\n"
-                            "• Отправьте изображение в сообщении\n"
-                            "• Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
-                            "• Максимальный размер: 10 MB\n\n"
-                            "✅ <b>После загрузки:</b> вы сможете ввести промпт для трансформации изображения"
-                        )
-                    else:
-                        step_text += (
-                            "Отправьте фото, которое хотите использовать как референс или для трансформации.\n\n"
-                            "💡 <b>Что нужно:</b>\n"
-                            "• Отправьте изображение в сообщении\n"
-                            "• Поддерживаются форматы: PNG, JPG, JPEG, WEBP\n"
-                            "• Максимальный размер: 10 MB"
-                        )
-                        # Check if model has prompt parameter
-                        if 'prompt' in input_params:
-                            step_text += "\n\n✅ <b>После загрузки:</b> вы сможете ввести промпт для генерации"
-                
+                    if 'prompt' in input_params:
+                        step_text += "\n\n✅ <b>После загрузки:</b> вы сможете ввести промпт"
+
                 await query.edit_message_text(
                     f"{model_info_text}\n\n{step_text}",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
                 user_sessions[user_id]['current_param'] = image_param_name
                 user_sessions[user_id]['waiting_for'] = image_param_name
                 if image_param_name not in user_sessions[user_id]:
-                    user_sessions[user_id][image_param_name] = []  # Initialize as array
+                    user_sessions[user_id][image_param_name] = []
                 await query.answer()
-                logger.info(f"🔥🔥🔥 SELECT_MODEL: Image input setup complete! model_id={model_id}, user_id={user_id}, waiting_for={image_param_name}, session_keys={list(user_sessions[user_id].keys())[:10]}")
-                logger.info(f"🔥🔥🔥 SELECT_MODEL: RETURNING INPUTTING_PARAMS for user {user_id}, model {model_id}, waiting_for={image_param_name}")
+                logger.info(
+                    "🔥🔥🔥 SELECT_MODEL: Image input setup complete! model_id=%s user_id=%s waiting_for=%s",
+                    model_id,
+                    user_id,
+                    image_param_name,
+                )
                 elapsed = time.time() - start_time
-                logger.info(f"🔥🔥🔥 SELECT_MODEL: Total time={elapsed:.3f}s, user_id={user_id}")
+                logger.info("🔥🔥🔥 SELECT_MODEL: Total time=%0.3fs user_id=%s", elapsed, user_id)
+                return INPUTTING_PARAMS
+
+            if primary_input and primary_input["type"] == "audio":
+                logger.info("🔥🔥🔥 SELECT_MODEL: Model requires audio first! user_id=%s", user_id)
+                audio_param_name = primary_input["param"]
+                user_lang = get_user_language(user_id)
+                keyboard = [
+                    [
+                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                    ],
+                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+                ]
+                if user_lang == 'en':
+                    audio_text = (
+                        f"{model_info_text}\n\n"
+                        f"🎤 <b>Step 1: Upload audio</b>\n\n"
+                        f"Send an audio file (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
+                        f"Maximum size: 200 MB"
+                    )
+                else:
+                    audio_text = (
+                        f"{model_info_text}\n\n"
+                        f"🎤 <b>Шаг 1: Загрузите аудио</b>\n\n"
+                        f"Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
+                        f"Максимальный размер: 200 MB"
+                    )
+                await query.edit_message_text(
+                    audio_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+                user_sessions[user_id]['current_param'] = audio_param_name
+                user_sessions[user_id]['waiting_for'] = audio_param_name
+                await query.answer()
                 return INPUTTING_PARAMS
             
             # Special case: sora-2-pro-image-to-video starts with image_urls first
@@ -4524,16 +4535,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if not free_models:
                 user_lang = get_user_language(user_id)
+                keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
                 if user_lang == 'ru':
                     await query.edit_message_text(
-                        "❌ <b>Бесплатные инструменты не найдены</b>\n\n"
-                        "В данный момент нет доступных бесплатных инструментов.",
+                        "ℹ️ <b>Бесплатные инструменты временно недоступны</b>\n\n"
+                        "Сейчас нет бесплатных инструментов, но скоро появятся новые.\n\n"
+                        "Пока можно выбрать модель из каталога.",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
                 else:
                     await query.edit_message_text(
-                        "❌ <b>Free tools not found</b>\n\n"
-                        "No free tools are currently available.",
+                        "ℹ️ <b>Free tools are temporarily unavailable</b>\n\n"
+                        "There are no free tools right now, but new ones will appear soon.\n\n"
+                        "You can pick a model from the catalog.",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
                 return ConversationHandler.END
@@ -5142,6 +5158,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if len(parts) == 3:
                 param_name = parts[1]
                 param_value = parts[2]
+                skip_param = False
                 
                 if user_id not in user_sessions:
                     await query.edit_message_text("❌ Сессия не найдена.")
@@ -5154,7 +5171,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # 🔴 ВАЛИДАЦИЯ ENUM ЗНАЧЕНИЙ: Проверяем, что значение находится в списке допустимых
                 enum_values = param_info.get('enum')
-                if enum_values and param_value not in enum_values:
+                if enum_values and param_value not in enum_values and param_value not in {SKIP_PARAM_VALUE, "custom"}:
                     # Недопустимое enum значение
                     user_lang = get_user_language(user_id) if user_id else 'ru'
                     error_text = (
@@ -5169,6 +5186,40 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.answer(error_text, show_alert=True)
                     return ConversationHandler.END
                 
+                if param_value == SKIP_PARAM_VALUE:
+                    if param_info.get('required', False):
+                        user_lang = get_user_language(user_id) if user_id else 'ru'
+                        error_text = (
+                            "❌ Этот параметр обязателен и не может быть пропущен."
+                            if user_lang == 'ru'
+                            else "❌ This parameter is required and cannot be skipped."
+                        )
+                        await query.answer(error_text, show_alert=True)
+                        return INPUTTING_PARAMS
+                    if 'params' in session and param_name in session['params']:
+                        session['params'].pop(param_name, None)
+                    session['current_param'] = None
+                    session['waiting_for'] = None
+                    skip_param = True
+                    await query.edit_message_text(f"⏭️ {param_name} пропущен.")
+                    try:
+                        next_param_result = await start_next_parameter(update, context, user_id)
+                        if next_param_result:
+                            return next_param_result
+                    except Exception as e:
+                        logger.error(f"Error starting next parameter after skip: {e}")
+                        await query.edit_message_text("❌ Ошибка при переходе к следующему параметру.")
+                        return INPUTTING_PARAMS
+
+                if param_value == "custom" and param_name == "language_code":
+                    session['current_param'] = param_name
+                    session['waiting_for'] = param_name
+                    session['language_code_custom'] = True
+                    await query.edit_message_text(
+                        "✏️ Введите код языка (например: en, ru, de, fr).",
+                    )
+                    return INPUTTING_PARAMS
+
                 # Convert boolean string to actual boolean
                 if param_type == 'boolean':
                     if param_value.lower() == 'true':
@@ -5181,7 +5232,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if 'params' not in session:
                     session['params'] = {}
-                session['params'][param_name] = param_value
+                if not skip_param:
+                    session['params'][param_name] = param_value
                 session['current_param'] = None
                 
                 # Check if there are more parameters
@@ -8979,6 +9031,9 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     params = session.get('params', {})
     required = session.get('required', [])
     model_id = session.get('model_id', '')
+    model_info = session.get('model_info', {})
+    primary_input = _determine_primary_input(model_info, properties)
+    user_lang = get_user_language(user_id)
     logger.info(
         "🧭🧭🧭 START_NEXT_PARAMETER: user_id=%s model_id=%s required=%s params_keys=%s properties_keys=%s session_keys=%s",
         user_id,
@@ -9023,78 +9078,80 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     for special_param in ['mask_input', 'reference_image_input']:
         if special_param in all_params_to_check and special_param not in params:
             param_info = properties.get(special_param, {})
-            if param_info.get('required', False):
-                logger.info(
-                    "🧩🧩🧩 SPECIAL_IMAGE_PARAM: user_id=%s model_id=%s param=%s required=%s",
-                    user_id,
-                    model_id,
-                    special_param,
-                    param_info.get('required', False),
+            is_required = param_info.get('required', False)
+            logger.info(
+                "🧩🧩🧩 SPECIAL_IMAGE_PARAM: user_id=%s model_id=%s param=%s required=%s",
+                user_id,
+                model_id,
+                special_param,
+                is_required,
+            )
+            session['current_param'] = special_param
+            session['waiting_for'] = special_param
+            if special_param not in session:
+                session[special_param] = []  # Initialize as array
+
+            # Get chat_id from update
+            chat_id = None
+            if hasattr(update, 'effective_chat') and update.effective_chat:
+                chat_id = update.effective_chat.id
+            elif hasattr(update, 'message') and update.message:
+                chat_id = update.message.chat_id
+            elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
+                chat_id = update.callback_query.message.chat_id
+
+            if not chat_id:
+                logger.error("Cannot determine chat_id in start_next_parameter")
+                return None
+
+            logger.info(
+                "📤📤📤 SPECIAL_IMAGE_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s",
+                user_id,
+                model_id,
+                special_param,
+                chat_id,
+            )
+            param_desc = param_info.get('description', '')
+            if special_param == 'mask_input':
+                prompt_text = (
+                    f"🎭 <b>Шаг: Загрузите маску</b>\n\n"
+                    f"{param_desc}\n\n"
+                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
+                    f"📏 Максимальный размер: 10 MB"
                 )
-                # This is a required image parameter
-                session['current_param'] = special_param
-                session['waiting_for'] = special_param
-                if special_param not in session:
-                    session[special_param] = []  # Initialize as array
-                
-                # Get chat_id from update
-                chat_id = None
-                if hasattr(update, 'effective_chat') and update.effective_chat:
-                    chat_id = update.effective_chat.id
-                elif hasattr(update, 'message') and update.message:
-                    chat_id = update.message.chat_id
-                elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
-                    chat_id = update.callback_query.message.chat_id
-                
-                if not chat_id:
-                    logger.error("Cannot determine chat_id in start_next_parameter")
-                    return None
-                
-                logger.info(
-                    "📤📤📤 SPECIAL_IMAGE_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s",
-                    user_id,
-                    model_id,
-                    special_param,
-                    chat_id,
+            elif special_param == 'reference_image_input':
+                prompt_text = (
+                    f"🖼️ <b>Шаг: Загрузите референсное изображение</b>\n\n"
+                    f"{param_desc}\n\n"
+                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
+                    f"📏 Максимальный размер: 10 MB"
                 )
-                param_desc = param_info.get('description', '')
-                if special_param == 'mask_input':
-                    prompt_text = (
-                        f"🎭 <b>Шаг: Загрузите маску</b>\n\n"
-                        f"{param_desc}\n\n"
-                        f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
-                        f"📏 Максимальный размер: 10 MB"
-                    )
-                elif special_param == 'reference_image_input':
-                    prompt_text = (
-                        f"🖼️ <b>Шаг: Загрузите референсное изображение</b>\n\n"
-                        f"{param_desc}\n\n"
-                        f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
-                        f"📏 Максимальный размер: 10 MB"
-                    )
-                else:
-                    prompt_text = (
-                        f"📷 <b>Шаг: Загрузите изображение</b>\n\n"
-                        f"{param_desc}\n\n"
-                        f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
-                        f"📏 Максимальный размер: 10 MB"
-                    )
-                
-                keyboard = [
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            else:
+                prompt_text = (
+                    f"📷 <b>Шаг: Загрузите изображение</b>\n\n"
+                    f"{param_desc}\n\n"
+                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
+                    f"📏 Максимальный размер: 10 MB"
+                )
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                 ]
-                
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=prompt_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                return INPUTTING_PARAMS
+            ]
+            if not is_required:
+                skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{special_param}:{SKIP_PARAM_VALUE}")])
+            keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=prompt_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return INPUTTING_PARAMS
     
     # Find next unset parameter (skip prompt, image_input, image_urls, audio_url, audio_input, mask_input, reference_image_input as they're handled separately)
     # BUT: for nano-banana-pro, we want: image_input -> prompt -> aspect_ratio -> resolution
@@ -9126,9 +9183,13 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 if 'prompt' not in params or not params.get('prompt'):
                     continue  # Skip aspect_ratio until prompt is set
         
-        # Skip prompt if it's not handled by special cases above
         if param_name == 'prompt':
-            continue
+            image_param = 'image_input' if 'image_input' in properties else 'image_urls' if 'image_urls' in properties else None
+            audio_param = 'audio_input' if 'audio_input' in properties else 'audio_url' if 'audio_url' in properties else None
+            if primary_input and primary_input.get("type") == "image" and image_param and image_param not in params:
+                continue
+            if primary_input and primary_input.get("type") == "audio" and audio_param and audio_param not in params:
+                continue
         
         if param_name not in params:
             param_info = properties.get(param_name, {})
@@ -9148,7 +9209,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # Handle boolean parameters
             if param_type == 'boolean':
-                default_value = param_info.get('default', False)
+                default_value = param_info.get('default')
                 is_optional = not param_info.get('required', False)
                 
                 keyboard = [
@@ -9158,11 +9219,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     ]
                 ]
                 
-                # For optional parameters, add "Пропустить" button
+                # For optional parameters, add default/skip button
                 user_lang = get_user_language(user_id)
                 if is_optional:
-                    skip_text = "⏭️ Пропустить (по умолчанию)" if user_lang == 'ru' else "⏭️ Skip (default)"
-                    keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{str(default_value).lower()}")])
+                    if default_value is None:
+                        skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+                    else:
+                        skip_text = "⏭️ Использовать по умолчанию" if user_lang == 'ru' else "⏭️ Use default"
+                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{str(default_value).lower()}")])
                 
                 keyboard.append([
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
@@ -9171,7 +9236,9 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
                 
                 param_desc = param_info.get('description', '')
-                default_text = f"\n\nПо умолчанию: {'Да' if default_value else 'Нет'}" if is_optional else ""
+                default_text = ""
+                if is_optional and default_value is not None:
+                    default_text = f"\n\nПо умолчанию: {'Да' if default_value else 'Нет'}"
                 chat_id = None
                 if hasattr(update, 'effective_chat') and update.effective_chat:
                     chat_id = update.effective_chat.id
@@ -9233,6 +9300,10 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     user_lang = get_user_language(user_id)
                     default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
                     keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
+                elif is_optional and not default_value:
+                    user_lang = get_user_language(user_id)
+                    skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                    keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
                 
                 user_lang = get_user_language(user_id)
                 keyboard.append([
@@ -9280,13 +9351,24 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 # Улучшенное сообщение для enum параметров
                 param_display_name = param_name.replace('_', ' ').title()
+                action_hint = ""
+                if is_optional:
+                    action_hint = "• Или используйте значение по умолчанию" if default_value else "• Или нажмите «Пропустить (auto)»"
+                    if user_lang != 'ru':
+                        action_hint = "• Or use the default value" if default_value else "• Or press “Skip (auto)”"
+                elif default_value:
+                    action_hint = "• Или используйте значение по умолчанию"
+                    if user_lang != 'ru':
+                        action_hint = "• Or use the default value"
+
                 message_text = (
                     f"📝 <b>Выберите {param_display_name.lower()}:</b>\n\n"
                     f"{param_desc}{default_info}\n\n"
                     f"💡 <b>Что делать:</b>\n"
-                    f"• Выберите значение из списка ниже\n"
-                    f"• Или используйте значение по умолчанию"
+                    f"• Выберите значение из списка ниже"
                 )
+                if action_hint:
+                    message_text += f"\n{action_hint}"
                 
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -9335,7 +9417,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     is_optional,
                 )
                 keyboard = []
-                # For optional text parameters, add skip button with default value info
+                # For optional text parameters, add skip/default button with default value info
                 if is_optional:
                     if default_value:
                         # Special handling for language_code - show quick select buttons
@@ -9355,8 +9437,8 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                             keyboard.append([InlineKeyboardButton(f"⏭️ Использовать по умолчанию{default_text}", callback_data=f"set_param:{param_name}:{default_value}")])
                     else:
                         user_lang = get_user_language(user_id)
-                        skip_text = "⏭️ Пропустить (опционально)" if user_lang == 'ru' else "⏭️ Skip (optional)"
-                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:")])
+                        skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
                 user_lang = get_user_language(user_id)
                 keyboard.append([
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
@@ -9369,12 +9451,26 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 # Улучшенное сообщение с более понятными подсказками
                 param_display_name = param_name.replace('_', ' ').title()
+                if default_value:
+                    action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
+                elif is_optional:
+                    action_hint = "• Или используйте кнопку «⏭️ Пропустить (auto)» ниже"
+                else:
+                    action_hint = "• Отправьте значение текстом"
+                if user_lang != 'ru':
+                    if default_value:
+                        action_hint = "• Or use the “⏭️ Use default” button below"
+                    elif is_optional:
+                        action_hint = "• Or use the “⏭️ Skip (auto)” button below"
+                    else:
+                        action_hint = "• Send the value as text"
+
                 message_text = (
                     f"📝 <b>Введите {param_display_name.lower()}:</b>\n\n"
                     f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
                     f"💡 <b>Что делать:</b>\n"
                     f"• Введите значение в текстовом сообщении\n"
-                    f"• Или используйте кнопку \"⏭️ Использовать по умолчанию\" ниже"
+                    f"{action_hint}"
                 )
                 
                 # If language_code with quick select, modify message
