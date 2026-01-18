@@ -3319,6 +3319,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session_properties_keys[:15],
                 session_keys[:15],
             )
+            try:
+                from app.observability.structured_logs import (
+                    build_action_path,
+                    get_correlation_id,
+                    log_structured_event,
+                )
+
+                correlation_id = None
+                if context and getattr(context, "user_data", None) is not None:
+                    if context.user_data.get("correlation_update_id") == update_id:
+                        correlation_id = context.user_data.get("correlation_id")
+                    if not correlation_id:
+                        correlation_id = get_correlation_id(update_id, user_id)
+                        context.user_data["correlation_id"] = correlation_id
+                        context.user_data["correlation_update_id"] = update_id
+                else:
+                    correlation_id = get_correlation_id(update_id, user_id)
+
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update_id,
+                    action="CALLBACK",
+                    action_path=build_action_path(data),
+                    model_id=session_model_id,
+                    gen_type=session.get('gen_type') if session else None,
+                    stage="router",
+                    waiting_for=session_waiting_for,
+                    param=session_current_param,
+                    outcome="received",
+                    duration_ms=int((time.time() - start_time) * 1000),
+                    error_code=None,
+                    fix_hint=None,
+                )
+            except Exception as structured_log_error:
+                logger.warning(
+                    f"STRUCTURED_LOG error: {structured_log_error}",
+                    exc_info=True,
+                )
         except Exception as log_error:
             logger.error(f"❌❌❌ ERROR in BUTTON_CALLBACK CONTEXT logging: {log_error}", exc_info=True)
             
