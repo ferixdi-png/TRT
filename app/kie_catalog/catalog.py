@@ -9,6 +9,8 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from app.kie_contract.schema_loader import REGISTRY_PATH
+
 logger = logging.getLogger(__name__)
 
 # Глобальный кеш
@@ -44,8 +46,68 @@ class ModelSpec:
     """Спецификация модели."""
     id: str  # model_id для KIE API
     title_ru: str  # Название для пользователя
+    name: str  # Alias for title_ru (required by contract)
     type: str  # t2i, i2i, t2v, i2v, v2v, tts, stt, sfx, audio_isolation, upscale, bg_remove, watermark_remove, music, lip_sync
+    category: str  # Alias for type (contract requirement)
+    model_type: str  # text_to_image, image_to_video, etc (registry)
+    schema_required: List[str] = field(default_factory=list)
+    schema_properties: Dict[str, Any] = field(default_factory=dict)
+    output_media_type: str = "image"  # image|video|audio|voice|text|file
+    kie_model: str = ""  # if differs from id
     modes: List[ModelMode] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            self.name = self.title_ru
+        if not self.category:
+            self.category = self.type
+        if not self.kie_model:
+            self.kie_model = self.id
+
+
+MODEL_TYPE_TO_MEDIA = {
+    "text_to_image": "image",
+    "image_to_image": "image",
+    "image_edit": "image",
+    "outpaint": "image",
+    "upscale": "image",
+    "text_to_video": "video",
+    "image_to_video": "video",
+    "video_upscale": "video",
+    "speech_to_video": "video",
+    "text_to_speech": "voice",
+    "audio_to_audio": "audio",
+    "speech_to_text": "text",
+}
+
+
+def _load_registry_models() -> Dict[str, Any]:
+    """Load registry models from SSOT."""
+    if not REGISTRY_PATH.exists():
+        logger.error(f"Registry file not found: {REGISTRY_PATH}")
+        return {}
+    try:
+        with REGISTRY_PATH.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except Exception as exc:
+        logger.error(f"Failed to load registry: {exc}", exc_info=True)
+        return {}
+    models = data.get("models", {})
+    return models if isinstance(models, dict) else {}
+
+
+def _extract_schema(model_data: Dict[str, Any]) -> Dict[str, Any]:
+    schema = model_data.get("input", {})
+    return schema if isinstance(schema, dict) else {}
+
+
+def _schema_required(schema: Dict[str, Any]) -> List[str]:
+    required = [name for name, spec in schema.items() if spec.get("required", False)]
+    return required
+
+
+def _compute_output_media_type(model_type: str) -> Optional[str]:
+    return MODEL_TYPE_TO_MEDIA.get(model_type)
 
 
 def _load_yaml_catalog() -> List[Dict[str, Any]]:
@@ -82,7 +144,10 @@ def _is_free_model_data(model_data: Dict[str, Any]) -> bool:
     return False
 
 
-def _parse_model_spec(model_data: Dict[str, Any]) -> ModelSpec:
+def _parse_model_spec(
+    model_data: Dict[str, Any],
+    registry_data: Optional[Dict[str, Any]] = None,
+) -> ModelSpec:
     """Парсит данные модели в ModelSpec."""
     modes = []
     for mode_data in model_data.get('modes', []):
@@ -93,11 +158,23 @@ def _parse_model_spec(model_data: Dict[str, Any]) -> ModelSpec:
             notes=mode_data.get('notes')
         )
         modes.append(mode)
-    
+
+    model_id = model_data.get('id', '')
+    registry_data = registry_data or {}
+    model_type = registry_data.get("model_type", "")
+    schema = _extract_schema(registry_data)
+    output_media_type = _compute_output_media_type(model_type)
     return ModelSpec(
-        id=model_data.get('id', ''),
+        id=model_id,
         title_ru=model_data.get('title_ru', ''),
+        name=model_data.get('title_ru', ''),
         type=model_data.get('type', 't2i'),
+        category=model_data.get('type', 't2i'),
+        model_type=model_type,
+        schema_required=_schema_required(schema),
+        schema_properties=schema,
+        output_media_type=output_media_type or "",
+        kie_model=registry_data.get("kie_model", model_id),
         modes=modes
     )
 
@@ -119,11 +196,14 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
     
     logger.info("Loading KIE models catalog...")
     raw_models = _load_yaml_catalog()
+    registry_models = _load_registry_models()
     
     models = []
     for model_data in raw_models:
         try:
-            model_spec = _parse_model_spec(model_data)
+            model_id = model_data.get("id", "")
+            registry_data = registry_models.get(model_id, {})
+            model_spec = _parse_model_spec(model_data, registry_data)
             if model_spec.id:
                 models.append(model_spec)
         except Exception as e:
@@ -134,10 +214,7 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
     logger.info(f"Loaded {len(models)} models from catalog")
     
     # Проверяем каталог при загрузке (только предупреждения, не останавливаем)
-    try:
-        _verify_catalog_internal(models)
-    except Exception as e:
-        logger.warning(f"Catalog verification warning: {e}")
+    _verify_catalog_internal(models)
     
     return models
 
@@ -187,6 +264,23 @@ def _verify_catalog_internal(models: List[ModelSpec]) -> None:
     invalid_types = [m.id for m in models if m.type not in allowed_types]
     if invalid_types:
         logger.warning(f"Catalog warning: models with invalid types: {invalid_types[:5]}")
+
+    # Проверяем уникальные model_id и обязательные поля SSOT
+    if len(model_ids) != len(set(model_ids)):
+        raise ValueError(f"Duplicate model_ids detected: {duplicates}")
+
+    invalid_schema = [m.id for m in models if m.schema_properties is None or m.schema_required is None]
+    if invalid_schema:
+        raise ValueError(f"Missing schema for models: {invalid_schema}")
+
+    missing_output = [m.id for m in models if not m.output_media_type]
+    if missing_output:
+        raise ValueError(f"Missing output_media_type for models: {missing_output}")
+
+
+def get_model_map() -> Dict[str, ModelSpec]:
+    """Return dict[model_id] = ModelSpec."""
+    return {model.id: model for model in load_catalog()}
 
 
 def get_model(model_id: str) -> Optional[ModelSpec]:
