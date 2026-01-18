@@ -24,7 +24,7 @@ def get_test_models() -> list:
         elif isinstance(KIE_MODELS, list):
             return [m.get('id', '') for m in KIE_MODELS[:5] if isinstance(m, dict)]
     except:
-        return ["z-image", "wan/2-6-text-to-video"]  # Fallback
+        return ["z-image", "wan/2-5-text-to-video"]  # Fallback
 
 
 @pytest.mark.asyncio
@@ -103,7 +103,6 @@ def test_no_real_network():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
 
 
 

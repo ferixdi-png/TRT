@@ -283,6 +283,23 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     
     # Формируем текст карточки
     type_emoji = _get_type_emoji(model.type)
+    try:
+        from app.ux.form_engine import summarize_required_fields
+        required_fields = summarize_required_fields(model.id)
+    except Exception:
+        required_fields = []
+    required_text = ", ".join(required_fields) if required_fields else ("—" if user_lang == "ru" else "—")
+    examples = []
+    if "prompt" in required_fields:
+        examples.append("prompt=\"Футуристический город\"" if user_lang == "ru" else "prompt=\"Futuristic city\"")
+    if "image_url" in required_fields or "image_urls" in required_fields:
+        examples.append("image_url=https://example.com/image.jpg")
+    if "audio_url" in required_fields:
+        examples.append("audio_url=https://example.com/audio.mp3")
+    if "video_url" in required_fields or "video_urls" in required_fields:
+        examples.append("video_url=https://example.com/video.mp4")
+    example_text = "; ".join(examples) if examples else ("—" if user_lang == "ru" else "—")
+    price_label = f"₽{price_rub}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
     
     if user_lang == 'ru':
         type_name = _get_type_name_ru(model.type)
@@ -304,13 +321,15 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
         
         card_text += (
             f"\n╔═══════════════════════════════════════════╗\n"
-            f"║  💰 ЦЕНА: <b>₽{price_rub}</b> 💰              ║\n"
+            f"║  💰 ЦЕНА: <b>{price_label}</b> 💰              ║\n"
             f"╚═══════════════════════════════════════════╝\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"💵 Официально: <code>${mode.official_usd:.4f}</code>\n"
             f"🎫 Кредиты: <code>{mode.credits}</code>\n"
             f"📦 Единица: <code>{mode.unit}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🧩 <b>Обязательные поля:</b> {required_text}\n"
+            f"📌 <b>Пример:</b> {example_text}\n"
         )
         
         if len(model.modes) > 1:
@@ -333,10 +352,12 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
         
         card_text += (
             f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 <b>PRICE:</b> <b>₽{price_rub}</b>\n"
+            f"💰 <b>PRICE:</b> <b>{price_label}</b>\n"
             f"💵 Official: ${mode.official_usd:.4f}\n"
             f"🎫 Credits: {mode.credits}\n"
             f"📦 Unit: {mode.unit}\n"
+            f"🧩 <b>Required:</b> {required_text}\n"
+            f"📌 <b>Example:</b> {example_text}\n"
         )
         
         if len(model.modes) > 1:
@@ -378,4 +399,3 @@ def resolve_model_id_from_callback(callback_data: str) -> Optional[str]:
     Используется в обработчиках для получения model_id из callback.
     """
     return _resolve_model_id(callback_data)
-
