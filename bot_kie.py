@@ -1065,6 +1065,21 @@ async def cleanup_http_client():
         _http_client = None
 
 
+async def cleanup_storage():
+    """Close storage sessions on shutdown."""
+    try:
+        from app.storage.factory import get_storage
+
+        storage_instance = get_storage()
+        close_method = getattr(storage_instance, "close", None)
+        if close_method:
+            result = close_method()
+            if asyncio.iscoroutine(result):
+                await result
+    except Exception as exc:
+        logger.warning("Failed to close storage cleanly: %s", exc)
+
+
 def cleanup_old_sessions(max_age_seconds: int = 3600):
     """Clean up old user sessions to prevent memory leaks (optimized for 1000+ users)."""
     current_time = time.time()
@@ -2537,7 +2552,7 @@ def _build_release_block(user_lang: str) -> str:
     )
 
 
-async def _build_main_menu_text(update: Update) -> str:
+async def _build_main_menu_sections(update: Update) -> tuple[str, str]:
     user = update.effective_user
     user_id = user.id if user else None
     user_lang = "ru"
@@ -2570,7 +2585,7 @@ async def _build_main_menu_text(update: Update) -> str:
         name = user.mention_html() if user else "друг"
 
     if is_new:
-        welcome_text = t(
+        header_text = t(
             "welcome_new",
             lang=user_lang,
             name=name,
@@ -2581,6 +2596,7 @@ async def _build_main_menu_text(update: Update) -> str:
             ref_bonus=REFERRAL_BONUS_GENERATIONS,
             ref_link=referral_link,
         )
+        referral_bonus_text = ""
     else:
         referral_bonus_text = ""
         if referrals_count > 0:
@@ -2591,7 +2607,7 @@ async def _build_main_menu_text(update: Update) -> str:
                 bonus=referrals_count * REFERRAL_BONUS_GENERATIONS,
             )
 
-        welcome_text = t(
+        header_text = t(
             "welcome_returning",
             lang=user_lang,
             name=name,
@@ -2600,8 +2616,17 @@ async def _build_main_menu_text(update: Update) -> str:
             models=total_models,
             types=len(generation_types),
         )
-        welcome_text += referral_bonus_text
-        welcome_text += t(
+
+    if user_lang == "en":
+        header_text += "\n👇 Select a section from the menu below."
+    else:
+        header_text += "\n👇 Выберите раздел в меню ниже."
+
+    details_parts = []
+    if referral_bonus_text:
+        details_parts.append(referral_bonus_text.strip())
+    details_parts.append(
+        t(
             "msg_full_functionality",
             lang=user_lang,
             remaining=remaining_free,
@@ -2611,14 +2636,11 @@ async def _build_main_menu_text(update: Update) -> str:
             models=total_models,
             types=len(generation_types),
         )
+    )
+    details_parts.append(_build_release_block(user_lang))
+    details_text = "\n\n".join(part for part in details_parts if part)
 
-    welcome_text += "\n\n" + _build_release_block(user_lang)
-    if user_lang == "en":
-        welcome_text += "\n👇 Select a section from the menu below."
-    else:
-        welcome_text += "\n👇 Выберите раздел в меню ниже."
-
-    return welcome_text
+    return header_text, details_text
 
 
 def _split_text_by_delimiters(text: str, limit: int, delimiters: List[str]) -> List[str]:
@@ -2659,6 +2681,104 @@ def _split_text_by_delimiters(text: str, limit: int, delimiters: List[str]) -> L
     return chunks
 
 
+def _find_split_index(text: str, max_len: int, delimiters: List[str]) -> int:
+    for delimiter in delimiters:
+        index = text.rfind(delimiter, 0, max_len + 1)
+        if index != -1:
+            return index + len(delimiter)
+    return -1
+
+
+def _split_html_text(text: str, limit: int, delimiters: List[str]) -> List[str]:
+    tag_pattern = re.compile(r"<(/?)([a-zA-Z0-9]+)([^>]*)?>")
+    void_tags = {"br", "img", "hr"}
+
+    tokens: List[tuple[str, str]] = []
+    last_end = 0
+    for match in tag_pattern.finditer(text):
+        if match.start() > last_end:
+            tokens.append(("text", text[last_end:match.start()]))
+        tokens.append(("tag", match.group(0)))
+        last_end = match.end()
+    if last_end < len(text):
+        tokens.append(("text", text[last_end:]))
+
+    stack: List[tuple[str, str]] = []
+    chunks: List[str] = []
+    current = ""
+
+    def closing_len() -> int:
+        return sum(len(f"</{name}>") for name, _ in stack)
+
+    def flush_chunk() -> None:
+        nonlocal current
+        if not current:
+            return
+        closing_tags = "".join(f"</{name}>" for name, _ in reversed(stack))
+        chunks.append(current + closing_tags)
+        current = "".join(tag for _, tag in stack)
+
+    for token_type, token_value in tokens:
+        if token_type == "text":
+            remaining = token_value
+            while remaining:
+                available = limit - len(current) - closing_len()
+                if available <= 0:
+                    flush_chunk()
+                    continue
+                if len(remaining) <= available:
+                    current += remaining
+                    break
+                split_index = _find_split_index(remaining, available, delimiters)
+                if split_index <= 0:
+                    split_index = available
+                segment = remaining[:split_index]
+                current += segment
+                remaining = remaining[split_index:]
+                flush_chunk()
+            continue
+
+        match = tag_pattern.match(token_value)
+        if not match:
+            current += token_value
+            continue
+        is_closing = match.group(1) == "/"
+        tag_name = match.group(2).lower()
+        is_self_closing = token_value.endswith("/>") or tag_name in void_tags
+
+        if is_closing and not any(name == tag_name for name, _ in stack):
+            continue
+
+        projected_stack = list(stack)
+        if not is_self_closing:
+            if is_closing:
+                for index in range(len(projected_stack) - 1, -1, -1):
+                    if projected_stack[index][0] == tag_name:
+                        del projected_stack[index]
+                        break
+            else:
+                projected_stack.append((tag_name, token_value))
+
+        projected_closing_len = sum(len(f"</{name}>") for name, _ in projected_stack)
+        if len(current) + len(token_value) + projected_closing_len > limit and current:
+            flush_chunk()
+
+        current += token_value
+        if not is_self_closing:
+            if is_closing:
+                for index in range(len(stack) - 1, -1, -1):
+                    if stack[index][0] == tag_name:
+                        del stack[index]
+                        break
+            else:
+                stack.append((tag_name, token_value))
+
+    if current:
+        flush_chunk()
+
+    return chunks
+
+
 def _is_safe_html_chunk(text: str) -> bool:
     if text.count("<") != text.count(">"):
         return False
@@ -2691,11 +2811,18 @@ async def send_long_message(
     if not text:
         return []
 
-    chunks = _split_text_by_delimiters(
-        text,
-        TELEGRAM_CHUNK_LIMIT,
-        ["\n\n", "\n", " "],
-    )
+    if parse_mode == "HTML":
+        chunks = _split_html_text(
+            text,
+            TELEGRAM_CHUNK_LIMIT,
+            ["\n\n", "\n", " "],
+        )
+    else:
+        chunks = _split_text_by_delimiters(
+            text,
+            TELEGRAM_CHUNK_LIMIT,
+            ["\n\n", "\n", " "],
+        )
     sent_messages = []
     total_chunks = len(chunks)
 
@@ -2706,14 +2833,8 @@ async def send_long_message(
         if index == total_chunks - 1 and reply_markup is not None:
             message_kwargs["reply_markup"] = reply_markup
 
-        if parse_mode and not _is_safe_html_chunk(chunk):
-            logger.warning(
-                "HTML chunk invalid; sending without parse_mode. chunk_index=%s",
-                index,
-            )
-        else:
-            if parse_mode:
-                message_kwargs["parse_mode"] = parse_mode
+        if parse_mode:
+            message_kwargs["parse_mode"] = parse_mode
 
         sent_messages.append(
             await bot.send_message(
@@ -2743,7 +2864,7 @@ async def show_main_menu(
     reply_markup = InlineKeyboardMarkup(
         await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
     )
-    main_menu_text = await _build_main_menu_text(update)
+    header_text, details_text = await _build_main_menu_sections(update)
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
     chat_id = None
@@ -2754,26 +2875,41 @@ async def show_main_menu(
 
     if update.callback_query:
         query = update.callback_query
-        if len(main_menu_text) <= TELEGRAM_TEXT_LIMIT:
+        if len(header_text) <= TELEGRAM_TEXT_LIMIT:
             try:
                 await query.edit_message_text(
-                    main_menu_text,
+                    header_text,
                     reply_markup=reply_markup,
                     parse_mode="HTML",
                 )
+                if details_text and chat_id:
+                    await send_long_message(
+                        context.bot,
+                        chat_id=chat_id,
+                        text=details_text,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                 return
             except Exception:
                 pass
 
     if chat_id:
-        await send_long_message(
-            context.bot,
+        await context.bot.send_message(
             chat_id=chat_id,
-            text=main_menu_text,
+            text=header_text,
             reply_markup=reply_markup,
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
+        if details_text:
+            await send_long_message(
+                context.bot,
+                chat_id=chat_id,
+                text=details_text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -11065,9 +11201,14 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Handle text input
     if not update.message.text:
         await update.message.reply_text("❌ Пожалуйста, отправьте текстовое сообщение.")
+        track_outgoing_action(update_id)
         return INPUTTING_PARAMS
 
     text = update.message.text.strip()
+    if not text:
+        await update.message.reply_text("❌ Сообщение не должно быть пустым. Попробуйте снова.")
+        track_outgoing_action(update_id)
+        return INPUTTING_PARAMS
     
     # Handle /cancel command
     if text.lower() in ['/cancel', 'отмена', 'cancel']:
@@ -11099,12 +11240,15 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current_param = session.get('current_param', waiting_for)
             param_info = properties.get(current_param, {})
             max_length = param_info.get('max_length')
+            if current_param == 'prompt' and not max_length:
+                max_length = 1000
             
             # Validate max length
             if max_length and len(text) > max_length:
                 await update.message.reply_text(
                     f"❌ Текст слишком длинный (макс. {max_length} символов). Попробуйте снова."
                 )
+                track_outgoing_action(update_id)
                 return INPUTTING_PARAMS
         
             # For language_code, convert common language names to codes
@@ -25577,6 +25721,11 @@ async def main():
     if not settings.telegram_bot_token:
         logger.error("No TELEGRAM_BOT_TOKEN found in environment variables!")
         return
+    if not settings.database_url:
+        logger.warning(
+            "⚠️ DATABASE_URL not set - database features disabled, "
+            "balance defaults to 0 when no records exist."
+        )
     
     ensure_source_of_truth()
 
@@ -26470,6 +26619,9 @@ async def main():
         except Exception as e:
             logger.error(f"❌ Error in webhook mode: {e}")
             return
+        finally:
+            await cleanup_storage()
+            await cleanup_http_client()
     
     # Polling режим - продолжаем как обычно
     logger.info("📡 Starting polling mode")
@@ -26701,6 +26853,9 @@ async def main():
             await application.shutdown()
         except Exception as e:
             logger.error(f"Error stopping application: {e}")
+
+        await cleanup_storage()
+        await cleanup_http_client()
         
         # Освобождаем single instance lock перед выходом (дополнительно к atexit)
         try:
