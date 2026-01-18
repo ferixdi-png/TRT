@@ -9674,7 +9674,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         if param_name not in params:
             param_info = properties.get(param_name, {})
             param_type = param_info.get('type', 'string')
-            enum_values = param_info.get('enum')
+            enum_values = param_info.get('enum') or param_info.get('values')
+            if isinstance(enum_values, str):
+                enum_values = [enum_values]
+            elif enum_values is None:
+                enum_values = []
+            is_enum_type = param_type == 'enum' or bool(enum_values)
             logger.info(
                 "🔎🔎🔎 PARAM_SELECTED: user_id=%s model_id=%s param=%s type=%s required=%s has_enum=%s",
                 user_id,
@@ -9695,6 +9700,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # Handle boolean parameters
             if param_type == 'boolean':
+                logger.info(
+                    "🧭 NEXT_PARAM_SELECTION: model_id=%s next_param=%s enum_values_count=%s fallback_mode=buttons",
+                    model_id,
+                    param_name,
+                    len(enum_values),
+                )
                 default_value = param_info.get('default')
                 is_optional = not param_info.get('required', False)
                 
@@ -9769,6 +9780,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 return INPUTTING_PARAMS
             # If parameter has enum values, show buttons
             elif enum_values:
+                logger.info(
+                    "🧭 NEXT_PARAM_SELECTION: model_id=%s next_param=%s enum_values_count=%s fallback_mode=buttons",
+                    model_id,
+                    param_name,
+                    len(enum_values),
+                )
                 logger.info(
                     "🧭🧭🧭 ENUM_PARAM: user_id=%s model_id=%s param=%s enum_count=%s enum_sample=%s",
                     user_id,
@@ -9892,12 +9909,28 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 return INPUTTING_PARAMS
             else:
+                logger.info(
+                    "🧭 NEXT_PARAM_SELECTION: model_id=%s next_param=%s enum_values_count=%s fallback_mode=text",
+                    model_id,
+                    param_name,
+                    len(enum_values),
+                )
                 # Text input
                 param_desc = param_info.get('description', '')
                 max_length = param_info.get('max_length')
                 max_text = f"\n\nМаксимум {max_length} символов." if max_length else ""
                 is_optional = not param_info.get('required', False)
                 default_value = param_info.get('default')
+                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+                example_line = f"🧪 {example_hint}\n" if example_hint else ""
+                enum_fallback_note = ""
+                if is_enum_type and not enum_values:
+                    enum_fallback_note = (
+                        "⚠️ Введите одно из допустимых значений."
+                        if user_lang == 'ru'
+                        else "⚠️ Please enter one of the allowed values."
+                    )
                 
                 # Get chat_id from update
                 chat_id = None
@@ -9959,8 +9992,6 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 param_display_name = param_name.replace('_', ' ').title()
                 step_info = _get_step_info(session, param_name, user_lang)
                 step_prefix = f"{step_info}: " if step_info else ""
-                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
-                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
                 if default_value:
                     action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
                 elif is_optional:
@@ -9979,6 +10010,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
                     f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
                     f"💡 {format_hint}\n"
+                    f"{enum_fallback_note}\n"
                     f"{example_line}\n"
                     f"💡 <b>Что делать:</b>\n"
                     f"• Введите значение в текстовом сообщении\n"

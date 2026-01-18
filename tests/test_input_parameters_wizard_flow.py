@@ -62,6 +62,65 @@ async def test_flux_prompt_advances_to_aspect_ratio():
 
 
 @pytest.mark.asyncio
+async def test_z_image_prompt_advances_to_aspect_ratio_with_values():
+    harness = PTBHarness()
+    await harness.setup()
+    user_id = 3010
+    message = MagicMock()
+    message.text = "Bright sunset over mountains"
+    message.photo = None
+    message.audio = None
+    message.voice = None
+    message.document = None
+    message.message_id = 1
+    message.chat_id = user_id
+    message.date = None
+    message.from_user = harness.create_mock_user(user_id)
+    update = Update(update_id=3, message=message)
+    context = SimpleNamespace(bot=harness.application.bot, user_data={})
+
+    message.reply_text = AsyncMock()
+
+    bot_kie.user_sessions[user_id] = {
+        "model_id": "z-image",
+        "model_info": {
+            "name": "Qwen Z-Image Text to Image",
+            "input": {
+                "prompt": {"required": True, "type": "string"},
+                "aspect_ratio": {
+                    "required": True,
+                    "type": "enum",
+                    "values": ["1:1", "16:9"],
+                },
+            },
+        },
+        "properties": {
+            "prompt": {"type": "string", "required": True},
+            "aspect_ratio": {
+                "type": "enum",
+                "required": True,
+                "values": ["1:1", "16:9"],
+            },
+        },
+        "required": ["prompt", "aspect_ratio"],
+        "param_order": ["prompt", "aspect_ratio"],
+        "waiting_for": "prompt",
+        "current_param": "prompt",
+        "params": {},
+        "param_history": [],
+        "has_image_input": False,
+    }
+
+    try:
+        await bot_kie.input_parameters(update, context)
+        assert bot_kie.user_sessions[user_id]["waiting_for"] == "aspect_ratio"
+        assert any("aspect ratio" in msg["text"].lower() for msg in harness.outbox.messages)
+    finally:
+        bot_kie.user_sessions.pop(user_id, None)
+        await harness.teardown()
+
+
+@pytest.mark.asyncio
 async def test_back_to_previous_step_uses_history_stack():
     harness = PTBHarness()
     await harness.setup()
