@@ -102,34 +102,39 @@ async def get_admin_remaining(user_id: int) -> float:
 def get_user_balance_sync(user_id: int) -> float:
     """Синхронная обертка для get_user_balance (для обратной совместимости)"""
     import asyncio
+    import traceback
+
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Если loop уже запущен, используем run_in_executor
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, get_user_balance(user_id))
-                return future.result()
-        else:
-            return loop.run_until_complete(get_user_balance(user_id))
+        loop = asyncio.get_running_loop()
     except RuntimeError:
-        # Нет event loop, создаем новый
-        return asyncio.run(get_user_balance(user_id))
+        loop = None
+    if loop and loop.is_running():
+        stack = "".join(traceback.format_stack(limit=12))
+        logger.error(
+            "SYNC_WRAPPER_CALLED_IN_ASYNC wrapper=get_user_balance_sync stack=%s",
+            stack,
+        )
+        raise RuntimeError("get_user_balance_sync called inside running event loop")
+
+    return asyncio.run(get_user_balance(user_id))
 
 
 def get_user_language_sync(user_id: int) -> str:
     """Синхронная обертка для get_user_language (для обратной совместимости)"""
     import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, get_user_language(user_id))
-                return future.result()
-        else:
-            return loop.run_until_complete(get_user_language(user_id))
-    except RuntimeError:
-        return asyncio.run(get_user_language(user_id))
+    import traceback
 
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        stack = "".join(traceback.format_stack(limit=12))
+        logger.error(
+            "SYNC_WRAPPER_CALLED_IN_ASYNC wrapper=get_user_language_sync stack=%s",
+            stack,
+        )
+        raise RuntimeError("get_user_language_sync called inside running event loop")
+
+    return asyncio.run(get_user_language(user_id))
 
