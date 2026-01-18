@@ -47,6 +47,7 @@ class GitHubStorage(BaseStorage):
     def __init__(self):
         self.config = self._load_config()
         self._session: Optional[aiohttp.ClientSession] = None
+        self._session_loop: Optional[asyncio.AbstractEventLoop] = None
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
         self._implicit_dirs_logged = False
 
@@ -111,9 +112,27 @@ class GitHubStorage(BaseStorage):
             backoff_base=backoff_base,
         )
 
+    async def _close_session(self, reason: str) -> None:
+        session = self._session
+        self._session = None
+        self._session_loop = None
+        if not session:
+            return
+        try:
+            await session.close()
+            logger.info("[GITHUB] session_closed reason=%s", reason)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("[GITHUB] session_close_failed reason=%s error=%s", reason, exc)
+
     async def _get_session(self) -> aiohttp.ClientSession:
+        loop = asyncio.get_running_loop()
         if self._session and not self._session.closed:
-            return self._session
+            if self._session_loop is loop:
+                return self._session
+            await self._close_session("loop_mismatch")
+        if self._session_loop is not None and self._session_loop.is_closed():
+            await self._close_session("loop_closed")
+
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
         self._session = aiohttp.ClientSession(
             timeout=timeout,
@@ -123,6 +142,7 @@ class GitHubStorage(BaseStorage):
                 "User-Agent": "TRT-GitHubStorage",
             },
         )
+        self._session_loop = loop
         return self._session
 
     def _storage_path(self, filename: str) -> str:
@@ -350,6 +370,7 @@ class GitHubStorage(BaseStorage):
         """Sync connection test for GitHub storage."""
         async def _check() -> bool:
             await self._read_json(self.balances_file)
+            await self._close_session("test_connection")
             return True
 
         try:

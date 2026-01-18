@@ -10,6 +10,7 @@ import asyncio
 import sys
 import os
 from pathlib import Path
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 # Enable logging FIRST (before any other imports that might log)
@@ -2469,7 +2470,150 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
     return None
 
 
-MAIN_MENU_TEXT = "Главное меню"
+MAIN_MENU_TEXT_FALLBACK = "Главное меню"
+
+
+def _get_release_version() -> str:
+    env_version = os.getenv("BOT_RELEASE_VERSION", "").strip()
+    if env_version:
+        return env_version
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "1.0.0"
+
+
+def _get_release_date() -> str:
+    env_date = os.getenv("BOT_RELEASE_DATE", "").strip()
+    if env_date:
+        return env_date
+    return datetime.now().strftime("%d.%m.%Y")
+
+
+def _get_whats_new_lines(user_lang: str) -> list[str]:
+    env_lines = os.getenv("BOT_WHATS_NEW", "").strip()
+    if env_lines:
+        return [line.strip("• ").strip() for line in env_lines.splitlines() if line.strip()]
+    if user_lang == "en":
+        return [
+            "Welcome screen and main menu restored",
+            "GitHub storage stability improvements",
+            "Catalog and pricing flow synchronized",
+        ]
+    return [
+        "Возвращено приветствие и главное меню",
+        "Устойчивый GitHub storage без падений",
+        "Синхронизирован каталог моделей и цены",
+    ]
+
+
+def _build_release_block(user_lang: str) -> str:
+    version_label = "Version" if user_lang == "en" else "Версия"
+    date_label = "Date" if user_lang == "en" else "Дата"
+    whats_new_label = "What's new" if user_lang == "en" else "Что нового"
+    lines = _get_whats_new_lines(user_lang)
+    bullets = "\n".join(f"• {line}" for line in lines)
+    return (
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🧾 <b>{version_label}:</b> {_get_release_version()}\n"
+        f"📅 <b>{date_label}:</b> {_get_release_date()}\n"
+        f"🆕 <b>{whats_new_label}:</b>\n"
+        f"{bullets}\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+    )
+
+
+async def _build_main_menu_text(update: Update) -> str:
+    user = update.effective_user
+    user_id = user.id if user else None
+    user_lang = "ru"
+    if user_id:
+        try:
+            from app.services.user_service import get_user_language as get_user_language_async
+            user_lang = await get_user_language_async(user_id)
+        except Exception as exc:
+            logger.warning("Failed to resolve user language: %s", exc)
+            user_lang = "ru"
+
+    generation_types = get_generation_types()
+    total_models = len(get_models_sync())
+    remaining_free = FREE_GENERATIONS_PER_DAY
+    if user_id:
+        try:
+            from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
+            remaining_free = await get_free_remaining_async(user_id)
+        except Exception as exc:
+            logger.warning("Failed to resolve free generations: %s", exc)
+
+    is_new = is_new_user(user_id) if user_id else True
+    referral_link = get_user_referral_link(user_id) if user_id else ""
+    referrals_count = len(get_user_referrals(user_id)) if user_id else 0
+    online_count = get_fake_online_count()
+
+    if user_lang == "en":
+        name = user.mention_html() if user else "friend"
+    else:
+        name = user.mention_html() if user else "друг"
+
+    if is_new:
+        welcome_text = t(
+            "welcome_new",
+            lang=user_lang,
+            name=name,
+            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+            models=total_models,
+            types=len(generation_types),
+            online=online_count,
+            ref_bonus=REFERRAL_BONUS_GENERATIONS,
+            ref_link=referral_link,
+        )
+    else:
+        referral_bonus_text = ""
+        if referrals_count > 0:
+            referral_bonus_text = t(
+                "msg_referral_bonus",
+                lang=user_lang,
+                count=referrals_count,
+                bonus=referrals_count * REFERRAL_BONUS_GENERATIONS,
+            )
+
+        welcome_text = t(
+            "welcome_returning",
+            lang=user_lang,
+            name=name,
+            online=online_count,
+            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+            models=total_models,
+            types=len(generation_types),
+        )
+        welcome_text += referral_bonus_text
+        welcome_text += t(
+            "msg_full_functionality",
+            lang=user_lang,
+            remaining=remaining_free,
+            total=FREE_GENERATIONS_PER_DAY,
+            ref_bonus=REFERRAL_BONUS_GENERATIONS,
+            ref_link=referral_link,
+            models=total_models,
+            types=len(generation_types),
+        )
+
+    welcome_text += "\n\n" + _build_release_block(user_lang)
+    if user_lang == "en":
+        welcome_text += "\n👇 Select a section from the menu below."
+    else:
+        welcome_text += "\n👇 Выберите раздел в меню ниже."
+
+    return welcome_text
 
 
 async def show_main_menu(
@@ -2479,32 +2623,57 @@ async def show_main_menu(
 ) -> None:
     """Показывает единое главное меню для всех входов."""
     user_id = update.effective_user.id if update.effective_user else None
+    user_lang = "ru"
+    if user_id:
+        try:
+            from app.services.user_service import get_user_language as get_user_language_async
+            user_lang = await get_user_language_async(user_id)
+        except Exception as exc:
+            logger.warning("Failed to resolve user language: %s", exc)
     reply_markup = InlineKeyboardMarkup(
-        await build_main_menu_keyboard(user_id, user_lang='ru', is_new=False)
+        await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
     )
+    main_menu_text = await _build_main_menu_text(update)
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
     if update.callback_query:
         query = update.callback_query
         try:
-            await query.edit_message_text(MAIN_MENU_TEXT, reply_markup=reply_markup)
+            await query.edit_message_text(
+                main_menu_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+            )
             return
         except Exception:
             try:
-                await query.message.reply_text(MAIN_MENU_TEXT, reply_markup=reply_markup)
+                await query.message.reply_text(
+                    main_menu_text,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                )
                 return
             except Exception:
                 pass
 
     if update.message:
         try:
-            await update.message.reply_text(MAIN_MENU_TEXT, reply_markup=reply_markup)
+            await update.message.reply_text(
+                main_menu_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+            )
             return
         except Exception:
             pass
 
     if user_id:
-        await context.bot.send_message(chat_id=user_id, text=MAIN_MENU_TEXT, reply_markup=reply_markup)
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=main_menu_text,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -3,8 +3,11 @@ Pytest configuration и фикстуры для тестов.
 """
 
 import os
+import shutil
+import tempfile
 import pytest
-import pytest_asyncio
+import asyncio
+import inspect
 from tests.ptb_harness import PTBHarness
 
 
@@ -12,6 +15,7 @@ from tests.ptb_harness import PTBHarness
 def test_env():
     """Устанавливает тестовые переменные окружения."""
     old_env = {}
+    temp_dir = tempfile.mkdtemp(prefix="trt-test-storage-")
     test_vars = {
         'TEST_MODE': '1',
         'DRY_RUN': '1',
@@ -19,6 +23,8 @@ def test_env():
         'TELEGRAM_BOT_TOKEN': 'test_token_12345',
         'KIE_API_KEY': 'test_api_key',
         'ADMIN_ID': '12345',
+        'STORAGE_MODE': 'json',
+        'STORAGE_DATA_DIR': temp_dir,
     }
     
     # Сохраняем старые значения
@@ -61,12 +67,24 @@ def test_env():
         else:
             os.environ[key] = value
 
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
-@pytest_asyncio.fixture(scope="function")
-async def harness(test_env):
+
+@pytest.fixture(scope="function")
+def harness(test_env):
     """Создает и возвращает PTBHarness для тестов."""
     h = PTBHarness()
-    await h.setup()
+    asyncio.run(h.setup())
     yield h
-    await h.teardown()
+    asyncio.run(h.teardown())
 
+
+def pytest_pyfunc_call(pyfuncitem):
+    """Поддержка async тестов без pytest-asyncio."""
+    if inspect.iscoroutinefunction(pyfuncitem.obj):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(pyfuncitem.obj(**pyfuncitem.funcargs))
+        loop.close()
+        return True
+    return None

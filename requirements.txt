@@ -25,8 +25,8 @@ psycopg2-binary>=2.9.0  # Для синхронных операций
 asyncpg>=0.29.0  # Для async операций (рекомендуется для Telegram ботов)
 
 # Testing (опционально, для локальной разработки)
-# pytest>=7.4.0
-# pytest-asyncio>=0.21.0
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
 
 # Redis (optional, for distributed locking - не используется)
 # redis>=5.0.0
