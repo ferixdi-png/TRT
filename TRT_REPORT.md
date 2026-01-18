@@ -32,12 +32,18 @@
 ## Было → Стало
 - **Было:** `models_registry source=unknown`, fallback на дефолтный RATE=100.0, отсутствующие модели в pricing.
 - **Стало:** явные пути registry/pricing/настроек, валидация на старте, синхронизация pricing ↔ registry.
+- **Было:** главное меню показывало только "Главное меню" без приветственного текста и блока "Версия/Дата/Что нового".
+- **Стало:** /start и возврат в меню всегда показывают расширенный welcome-текст + блок релиза, кнопки меню сохраняются.
+- **Было:** GitHubStorage мог использовать session из закрытого event loop → `RuntimeError: Event loop is closed`.
+- **Стало:** GitHubStorage пересоздаёт session при смене loop и закрывает session после тестового подключения.
 
 ## Как проверил
 - `git log --since="3 days ago" --stat`
 - `git diff 0ea378e5^ 0ea378e5 --stat`
 - `rg -n "pricing|prices|RUB|rate|multiplier|registry|models|menu|прайс|курс|source" ...`
 - `git bisect start` + GOOD/BAD (см. секцию Bisect)
+- `pytest`
+- `python -m compileall -q .`
 
 ## Логи (до / после)
 **До:**
