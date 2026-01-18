@@ -29,8 +29,8 @@ async def test_start_command(harness):
     # Проверяем результат
     assert result['success'], f"Command failed: {result.get('error')}"
     
-    # Проверяем, что бот отправил сообщение
-    assert len(result['outbox']['messages']) > 0, "Bot should send a message"
+    # Проверяем, что бот отправил одно сообщение
+    assert len(result['outbox']['messages']) == 1, "Bot should send a single welcome message"
     
     messages = result['outbox']['messages']
     assert messages, "Bot should send a message"
@@ -50,8 +50,8 @@ async def test_start_command(harness):
         "Баланс",
         "Партнерка",
     ]
-    assert any("Версия" in message['text'] for message in messages)
-    assert any("Что нового" in message['text'] for message in messages)
+    assert "Версия" not in header_message['text']
+    assert "Что нового" not in header_message['text']
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_start_command_no_crash(harness):
 
 @pytest.mark.asyncio
 async def test_start_long_welcome_splits_chunks(harness, monkeypatch):
-    """Длинный details блок должен быть разбит на чанки без клавиатуры."""
+    """Details блоки не должны отправляться отдельными сообщениями."""
     header_text = "<b>ДОБРО ПОЖАЛОВАТЬ</b>"
     long_text = "<b>Детали</b>\n\n" + ("A" * (TELEGRAM_TEXT_LIMIT + 500))
 
@@ -82,10 +82,9 @@ async def test_start_long_welcome_splits_chunks(harness, monkeypatch):
 
     assert result['success'], f"Command failed: {result.get('error')}"
     messages = result['outbox']['messages']
-    assert len(messages) > 1, "Long details should be split into multiple messages"
-    assert all(len(message['text']) <= TELEGRAM_TEXT_LIMIT for message in messages)
+    assert len(messages) == 1, "Main menu should not send extra detail cards"
+    assert len(messages[0]['text']) <= TELEGRAM_TEXT_LIMIT
     assert messages[0]['reply_markup'] is not None
-    assert all(message['reply_markup'] is None for message in messages[1:])
 
 
 @pytest.mark.asyncio
@@ -114,8 +113,8 @@ async def test_unknown_callback_shows_main_menu(harness):
         "Баланс",
         "Партнерка",
     ]
-    assert any("Версия" in message['text'] for message in messages)
-    assert any("Что нового" in message['text'] for message in messages)
+    assert all("Версия" not in message['text'] for message in payloads)
+    assert all("Что нового" not in message['text'] for message in payloads)
 
 
 @pytest.mark.asyncio

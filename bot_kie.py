@@ -14,6 +14,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
+from app.observability.structured_logs import (
+    build_action_path,
+    get_correlation_id,
+    log_structured_event,
+)
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -2920,7 +2925,7 @@ async def show_main_menu(
     reply_markup = InlineKeyboardMarkup(
         await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
     )
-    header_text, details_text = await _build_main_menu_sections(update)
+    header_text, _details_text = await _build_main_menu_sections(update)
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
     chat_id = None
@@ -2938,14 +2943,6 @@ async def show_main_menu(
                     reply_markup=reply_markup,
                     parse_mode="HTML",
                 )
-                if details_text and chat_id:
-                    await send_long_message(
-                        context.bot,
-                        chat_id=chat_id,
-                        text=details_text,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
                 return
             except Exception:
                 pass
@@ -2958,14 +2955,6 @@ async def show_main_menu(
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
-        if details_text:
-            await send_long_message(
-                context.bot,
-                chat_id=chat_id,
-                text=details_text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3336,12 +3325,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session_keys[:15],
             )
             try:
-                from app.observability.structured_logs import (
-                    build_action_path,
-                    get_correlation_id,
-                    log_structured_event,
-                )
-
                 correlation_id = None
                 if context and getattr(context, "user_data", None) is not None:
                     if context.user_data.get("correlation_update_id") == update_id:
@@ -4989,6 +4972,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     
                     # Calculate price for confirmation message
+                    is_admin_user = get_is_admin(user_id)
                     is_free = is_free_generation_available(user_id, model_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
@@ -5117,6 +5101,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     
                     # Calculate price for confirmation message
+                    is_admin_user = get_is_admin(user_id)
                     is_free = is_free_generation_available(user_id, model_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
@@ -5404,6 +5389,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         return INPUTTING_PARAMS
                 else:
                     # All parameters collected
+                    session['waiting_for'] = None
                     # Get model_id from session (CRITICAL: must be defined before use)
                     model_id = session.get('model_id', '')
                     if not model_id:
@@ -5426,6 +5412,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     
                     # Calculate price for confirmation message
+                    is_admin_user = get_is_admin(user_id)
                     is_free = is_free_generation_available(user_id, model_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
@@ -9107,9 +9094,48 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in button_callback for data '{data}': {e}", exc_info=True)
         try:
-            await query.answer("❌ Произошла ошибка. Попробуйте еще раз или используйте /start", show_alert=True)
-        except:
+            correlation_id = None
+            if context and getattr(context, "user_data", None) is not None:
+                if context.user_data.get("correlation_update_id") == update_id:
+                    correlation_id = context.user_data.get("correlation_id")
+                if not correlation_id:
+                    correlation_id = get_correlation_id(update_id, user_id)
+                    context.user_data["correlation_id"] = correlation_id
+                    context.user_data["correlation_update_id"] = update_id
+            else:
+                correlation_id = get_correlation_id(update_id, user_id)
+
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=query.message.chat_id if query and query.message else None,
+                update_id=update_id,
+                action="CALLBACK",
+                action_path=build_action_path(data),
+                model_id=user_sessions.get(user_id, {}).get("model_id") if user_id else None,
+                gen_type=user_sessions.get(user_id, {}).get("gen_type") if user_id else None,
+                stage="router",
+                waiting_for=user_sessions.get(user_id, {}).get("waiting_for") if user_id else None,
+                param=user_sessions.get(user_id, {}).get("current_param") if user_id else None,
+                outcome="exception",
+                duration_ms=int((time.time() - start_time) * 1000),
+                error_code="UX_CALLBACK_EXCEPTION",
+                fix_hint="check is_admin_user/calc price",
+            )
+        except Exception as structured_log_error:
+            logger.warning(
+                "STRUCTURED_LOG error on callback exception: %s",
+                structured_log_error,
+                exc_info=True,
+            )
+        try:
+            await query.answer(
+                "❌ Произошла ошибка. Обновил меню — попробуйте снова.",
+                show_alert=True,
+            )
+        except Exception:
             pass
+        await show_main_menu(update, context, source="callback_exception")
         return ConversationHandler.END
     
     # 🔴 FALLBACK - универсальный обработчик для необработанных callback_data
@@ -9121,7 +9147,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Всегда отвечаем на callback, даже если не знаем что делать
     try:
-        await query.answer("Обновляю меню…", show_alert=False)
+        await query.answer("Не понял нажатие, обновил меню.", show_alert=False)
     except Exception:
         pass
     await show_main_menu(update, context, source="unknown_callback")
@@ -26333,7 +26359,7 @@ async def _register_all_handlers_internal(application: Application):
             return
         if query:
             try:
-                await query.answer("Обновляю меню…", show_alert=False)
+                await query.answer("Не понял нажатие, обновил меню.", show_alert=False)
             except Exception as e:
                 logger.error(f"Error in unknown_callback_handler: {e}", exc_info=True)
         await show_main_menu(update, context, source="unknown_callback_handler")
