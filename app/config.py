@@ -10,6 +10,8 @@ import logging
 from typing import Optional
 from pathlib import Path
 
+from pricing.engine import get_settings_source_info
+
 logger = logging.getLogger(__name__)
 
 # Глобальный экземпляр settings (singleton)
@@ -118,7 +120,9 @@ class Settings:
             logger.warning(f"Invalid CREDIT_TO_RUB_RATE: {credit_rate_str}, using 0.1")
         
         # Currency conversion
-        usd_to_rub_str = os.getenv('USD_TO_RUB', '100.0')
+        usd_to_rub_env = os.getenv('USD_TO_RUB', '').strip()
+        pricing_settings = get_settings_source_info().get("settings", {})
+        usd_to_rub_str = usd_to_rub_env or str(pricing_settings.get("usd_to_rub", "100.0"))
         try:
             self.usd_to_rub = float(usd_to_rub_str)
         except ValueError:
@@ -126,7 +130,8 @@ class Settings:
             logger.warning(f"Invalid USD_TO_RUB: {usd_to_rub_str}, using 100.0")
         
         # Price multiplier (×2 для пользовательских цен)
-        price_multiplier_str = os.getenv('PRICE_MULTIPLIER', '2.0')
+        price_multiplier_env = os.getenv('PRICE_MULTIPLIER', '').strip()
+        price_multiplier_str = price_multiplier_env or str(pricing_settings.get("markup_multiplier", "2.0"))
         try:
             self.price_multiplier = float(price_multiplier_str)
         except ValueError:
