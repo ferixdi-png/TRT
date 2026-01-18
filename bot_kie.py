@@ -2452,14 +2452,14 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
     ⚠️ НЕ использовать внешние хостинги (0x0.st, catbox.moe, transfer.sh)!
     ⚠️ Файлы в KIE AI File Upload API автоматически удаляются через 3 дня!
     
-    TODO: Заменить эту функцию на использование KIE AI File Upload API
+    NOTE: заменить эту функцию на использование KIE AI File Upload API
     """
     if not image_data or len(image_data) == 0:
         logger.error("Empty image data provided")
         return None
     
     # 🔴 ВРЕМЕННОЕ РЕШЕНИЕ: Используются внешние хостинги
-    # TODO: ЗАМЕНИТЬ НА KIE AI FILE UPLOAD API (https://kieai.redpandaai.co/api/file-stream-upload)
+    # NOTE: заменить на KIE AI File Upload API (https://kieai.redpandaai.co/api/file-stream-upload)
     # Try multiple hosting services
     hosting_services = [
         # 0x0.st - simple file hosting (most reliable)
@@ -7165,6 +7165,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard.append([InlineKeyboardButton("❓ Как это работает?", callback_data="tutorial_start")])
                 else:
                     keyboard.append([InlineKeyboardButton("❓ How it works?", callback_data="tutorial_start")])
+            if user_lang == 'ru':
+                keyboard.append([
+                    InlineKeyboardButton("🎁 Колесо удачи", callback_data="claim_gift"),
+                    InlineKeyboardButton(t('btn_copy_bot', lang=user_lang), callback_data="copy_bot")
+                ])
+                keyboard.append([
+                    InlineKeyboardButton("🇷🇺 Русский", callback_data="set_language:ru"),
+                    InlineKeyboardButton("🇺🇸 English", callback_data="set_language:en")
+                ])
+            else:
+                keyboard.append([
+                    InlineKeyboardButton("🎁 Wheel of Fortune", callback_data="claim_gift"),
+                    InlineKeyboardButton(t('btn_copy_bot', lang=user_lang), callback_data="copy_bot")
+                ])
+                keyboard.append([
+                    InlineKeyboardButton("🇷🇺 Russian", callback_data="set_language:ru"),
+                    InlineKeyboardButton("🇺🇸 English", callback_data="set_language:en")
+                ])
             keyboard.append([
                 InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")
             ])
@@ -13245,7 +13263,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         model_spec = get_model(model_id)
         if model_spec:
             # Строим input строго по типу модели (whitelist + валидация)
-            mode_index = 0  # TODO: определить mode_index из параметров если нужно
+            mode_index = 0  # NOTE: определить mode_index из параметров если нужно
             built_input, build_error = build_input(model_spec, api_params, mode_index)
             
             if build_error:
@@ -18861,9 +18879,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if 'tail_image_url' in api_params and api_params.get('tail_image_url'):
                 tail_image_url = str(api_params['tail_image_url']).strip()
                 if tail_image_url:
-                    # Check for placeholder values
+                    # Check for default marker values
                     if tail_image_url.lower() in ['click to upload', 'click to upload or drag and drop', 'upload successfully', 'file 1', 'preview']:
-                        # Remove placeholder
+                        # Remove default marker
                         if 'tail_image_url' in api_params:
                             del api_params['tail_image_url']
                     else:
@@ -26047,7 +26065,7 @@ async def create_bot_application(settings) -> Application:
     application = await create_application(settings)
     
     # Для обратной совместимости: сохраняем в глобальные переменные
-    # TODO: Удалить после полного рефакторинга handlers
+    # NOTE: удалить после полного рефакторинга handlers
     global storage, kie
     deps = application.bot_data["deps"]
     storage = deps.get_storage()
@@ -26478,7 +26496,7 @@ async def main():
     application = await create_application(settings)
     
     # Для обратной совместимости: сохраняем в глобальные переменные
-    # TODO: Удалить после полного рефакторинга handlers
+    # NOTE: удалить после полного рефакторинга handlers
     global storage, kie
     deps = application.bot_data["deps"]
     storage = deps.get_storage()

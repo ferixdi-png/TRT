@@ -58,45 +58,6 @@ models:
         values:
         - png
         - jpg
-  google/nano-banana-pro:
-    model_type: text_to_image
-    input:
-      image_input:
-        type: array
-        item_type: string
-        required: true
-      prompt:
-        type: string
-        required: true
-        max: 10000
-      aspect_ratio:
-        type: enum
-        required: false
-        values:
-        - '1:1'
-        - '2:3'
-        - '3:2'
-        - '3:4'
-        - '4:3'
-        - '4:5'
-        - '5:4'
-        - '9:16'
-        - '16:9'
-        - '21:9'
-        - auto
-      resolution:
-        type: enum
-        required: false
-        values:
-        - 1K
-        - 2K
-        - 4K
-      output_format:
-        type: enum
-        required: false
-        values:
-        - png
-        - jpg
   seedream/4.5-text-to-image:
     model_type: text_to_image
     input:
@@ -158,34 +119,6 @@ models:
         type: array
         item_type: string
         required: true
-      prompt:
-        type: string
-        required: true
-        max: 10000
-      aspect_ratio:
-        type: enum
-        required: false
-        values:
-        - portrait
-        - landscape
-      n_frames:
-        type: enum
-        required: false
-        values:
-        - '10'
-        - '15'
-      size:
-        type: enum
-        required: false
-        values:
-        - standard
-        - high
-      remove_watermark:
-        type: boolean
-        required: false
-  sora-2-pro-text-to-video:
-    model_type: text_to_video
-    input:
       prompt:
         type: string
         required: true
@@ -528,73 +461,6 @@ models:
       enable_prompt_expansion:
         type: boolean
         required: false
-  wan/2-6-text-to-video:
-    model_type: text_to_video
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 5000
-      duration:
-        type: enum
-        required: false
-        values:
-        - '5'
-        - '10'
-        - '15'
-      resolution:
-        type: enum
-        required: false
-        values:
-        - 720p
-        - 1080p
-  wan/2-6-image-to-video:
-    model_type: image_to_video
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 5000
-      image_urls:
-        type: array
-        item_type: string
-        required: true
-      duration:
-        type: enum
-        required: false
-        values:
-        - '5'
-        - '10'
-        - '15'
-      resolution:
-        type: enum
-        required: false
-        values:
-        - 720p
-        - 1080p
-  wan/2-6-video-to-video:
-    model_type: video_to_video
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 5000
-      video_urls:
-        type: array
-        item_type: string
-        required: true
-      duration:
-        type: enum
-        required: false
-        values:
-        - '5'
-        - '10'
-      resolution:
-        type: enum
-        required: false
-        values:
-        - 720p
-        - 1080p
   wan/2-2-animate-move:
     model_type: text_to_image
     input:
@@ -923,29 +789,6 @@ models:
       enable_safety_checker:
         type: boolean
         required: false
-  bytedance/seedance:
-    model_type: image_to_video
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 10000
-      image_input:
-        type: array
-        item_type: string
-        required: true
-      duration:
-        type: enum
-        required: false
-        values:
-        - '5'
-        - '10'
-      resolution:
-        type: enum
-        required: false
-        values:
-        - 720p
-        - 1080p
   bytedance/seedream:
     model_type: text_to_image
     input:

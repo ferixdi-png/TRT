@@ -78,7 +78,7 @@ class KIEClient:
     def _backoff_delay(self, attempt: int, status: int) -> float:
         delay = min(self.base_delay * (2 ** (attempt - 1)), self.max_delay)
         if status == 429:
-            delay *= 2
+            delay = min(delay * 2, self.max_delay)
         delay += random.uniform(0, self.base_delay)
         return delay
 

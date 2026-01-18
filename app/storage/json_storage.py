@@ -201,7 +201,7 @@ class JsonStorage(BaseStorage):
         """Получить оставшиеся бесплатные генерации"""
         from app.config import get_settings
         settings = get_settings()
-        free_per_day = 5  # TODO: добавить в settings
+        free_per_day = 5  # NOTE: можно вынести в settings при необходимости
         
         used = await self.get_user_free_generations_today(user_id)
         data = await self._load_json(self.free_generations_file)

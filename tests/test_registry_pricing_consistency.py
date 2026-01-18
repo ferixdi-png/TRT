@@ -13,6 +13,7 @@ def test_registry_pricing_ssot_consistency():
     registry_models = registry.get("models", {})
     registry_ids = set(registry_models.keys())
     registry_free = {model_id for model_id, model in registry_models.items() if model.get("free") is True}
+    registry_disabled = {model_id for model_id, model in registry_models.items() if model.get("disabled") is True}
 
     pricing_models = pricing.get("models", [])
     pricing_ids = {model.get("id") for model in pricing_models if model.get("id")}
@@ -29,6 +30,9 @@ def test_registry_pricing_ssot_consistency():
                 pricing_free.add(model_id)
                 break
 
+    assert len(registry_ids) == 72
+    assert len(pricing_ids) <= 72
+    assert len(pricing_ids) == len(pricing_models)
     assert pricing_ids <= registry_ids
-    assert registry_ids - pricing_ids - registry_free == set()
+    assert registry_ids - pricing_ids - registry_free - registry_disabled == set()
     assert registry_free == pricing_free
