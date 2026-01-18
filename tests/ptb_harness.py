@@ -7,7 +7,7 @@ import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
-from telegram import Update, Message, User, Chat, CallbackQuery, InlineKeyboardMarkup
+from telegram import Update, Message, User, Chat, CallbackQuery, InlineKeyboardMarkup, MessageEntity
 from telegram.ext import Application, ContextTypes
 from telegram.constants import ChatType
 
@@ -98,9 +98,30 @@ class PTBHarness:
             return True
         
         # Применяем моки
-        self.application.bot.send_message = AsyncMock(side_effect=mock_send_message)
-        self.application.bot.edit_message_text = AsyncMock(side_effect=mock_edit_message_text)
-        self.application.bot.answer_callback_query = AsyncMock(side_effect=mock_answer_callback_query)
+        object.__setattr__(
+            self.application.bot,
+            "send_message",
+            AsyncMock(side_effect=mock_send_message),
+        )
+        object.__setattr__(
+            self.application.bot,
+            "edit_message_text",
+            AsyncMock(side_effect=mock_edit_message_text),
+        )
+        object.__setattr__(
+            self.application.bot,
+            "answer_callback_query",
+            AsyncMock(side_effect=mock_answer_callback_query),
+        )
+        object.__setattr__(
+            self.application.bot,
+            "get_me",
+            AsyncMock(return_value=MagicMock()),
+        )
+
+        await self.application.initialize()
+        object.__setattr__(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
+        object.__setattr__(self.application.bot, "_initialized", True)
     
     async def teardown(self):
         """Очищает ресурсы."""
@@ -131,12 +152,16 @@ class PTBHarness:
         """Создает моковое сообщение."""
         user = self.create_mock_user(user_id)
         chat = self.create_mock_chat(chat_id)
+        entities = None
+        if text and text.startswith("/"):
+            entities = [MessageEntity(type=MessageEntity.BOT_COMMAND, offset=0, length=len(text.split()[0]))]
         return Message(
             message_id=1,
             date=None,
             chat=chat,
             from_user=user,
-            text=text
+            text=text,
+            entities=entities,
         )
     
     def create_mock_callback_query(
@@ -183,7 +208,7 @@ class PTBHarness:
         self.outbox.clear()
         
         update = self.create_mock_update_command(command, user_id)
-        context = self.application.create_context(update, None)
+        self._attach_bot(update)
         
         try:
             # Обрабатываем update
@@ -219,7 +244,7 @@ class PTBHarness:
         self.outbox.clear()
         
         update = self.create_mock_update_callback(callback_data, user_id)
-        context = self.application.create_context(update, None)
+        self._attach_bot(update)
         
         try:
             # Обрабатываем update
@@ -251,3 +276,14 @@ class PTBHarness:
             raise RuntimeError("Application not initialized. Call setup() first.")
         self.application.add_handler(handler)
 
+    def _attach_bot(self, update: Update) -> None:
+        """Attach bot to update/message to satisfy PTB command filters."""
+        if not self.application:
+            return
+        try:
+            if update.message:
+                object.__setattr__(update.message, "_bot", self.application.bot)
+            if update.callback_query and update.callback_query.message:
+                object.__setattr__(update.callback_query.message, "_bot", self.application.bot)
+        except Exception:
+            pass

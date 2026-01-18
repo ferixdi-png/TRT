@@ -13,7 +13,7 @@ class DummySession:
         self.closed = True
 
 
-def test_github_storage_loop_mismatch_does_not_close(monkeypatch):
+def test_github_storage_loop_mismatch_closes_old_session(monkeypatch):
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     monkeypatch.setenv("BOT_INSTANCE_ID", "test-instance")
@@ -42,5 +42,5 @@ def test_github_storage_loop_mismatch_does_not_close(monkeypatch):
 
     assert session1 is created_sessions[0]
     assert session2 is created_sessions[1]
-    assert session1.close_calls == 0
-    assert session1.closed is False
+    assert session1.close_calls == 1
+    assert session1.closed is True

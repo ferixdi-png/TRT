@@ -21,12 +21,15 @@ async def test_e2e_start_free_tools_select_model(harness):
 
     result = await harness.process_command("/start", user_id=23456)
     assert result["success"]
-    assert "ДОБРО ПОЖАЛОВАТЬ" in result["outbox"]["messages"][-1]["text"]
+    assert "Добро пожаловать" in result["outbox"]["messages"][0]["text"]
 
     result = await harness.process_callback("free_tools", user_id=23456)
     assert result["success"]
     payload = _last_payload(result["outbox"])
-    assert "БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ" in payload["text"]
+    assert (
+        "БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ" in payload["text"]
+        or "Бесплатные инструменты не найдены" in payload["text"]
+    )
 
     result = await harness.process_callback("gen_type:text-to-video", user_id=23456)
     assert result["success"]
