@@ -11,6 +11,7 @@ import os
 import random
 import threading
 import time
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Callable, Tuple
@@ -48,6 +49,8 @@ class GitHubStorage(BaseStorage):
         self.config = self._load_config()
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
         self._implicit_dirs_logged = False
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._session_loop: Optional[asyncio.AbstractEventLoop] = None
 
         self.balances_file = "user_balances.json"
         self.languages_file = "user_languages.json"
@@ -116,22 +119,45 @@ class GitHubStorage(BaseStorage):
         headers: Dict[str, str]
         text: str
 
+    async def _close_session(self, reason: str = "close") -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+            logger.info("[GITHUB] session_closed=true reason=%s", reason)
+        self._session = None
+        self._session_loop = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        loop = asyncio.get_running_loop()
+        if self._session and self._session_loop is not loop:
+            await self._close_session(reason="loop_mismatch")
+        if not self._session or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"token {self.config.token}",
+                "User-Agent": "TRT-GitHubStorage",
+            }
+            self._session = aiohttp.ClientSession(timeout=timeout, headers=headers)
+            self._session_loop = loop
+        return self._session
+
     async def _request_raw(self, method: str, url: str, **kwargs: Any) -> _ResponsePayload:
-        timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"token {self.config.token}",
-            "User-Agent": "TRT-GitHubStorage",
-        }
         async with self._semaphore:
-            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-                async with session.request(method, url, **kwargs) as response:
-                    text = await response.text()
-                    return self._ResponsePayload(
-                        status=response.status,
-                        headers=dict(response.headers),
-                        text=text,
-                    )
+            session = await self._get_session()
+            response = await session.request(method, url, **kwargs)
+            try:
+                text = await response.text()
+                return self._ResponsePayload(
+                    status=response.status,
+                    headers=dict(response.headers),
+                    text=text,
+                )
+            finally:
+                release = getattr(response, "release", None)
+                if callable(release):
+                    result = release()
+                    if asyncio.iscoroutine(result):
+                        await result
 
     def _storage_path(self, filename: str) -> str:
         safe_name = filename.strip("/").replace("..", "")
@@ -152,17 +178,20 @@ class GitHubStorage(BaseStorage):
     ) -> _ResponsePayload:
         last_response: Optional[GitHubStorage._ResponsePayload] = None
         for attempt in range(1, self.config.max_retries + 1):
+            start_ts = time.monotonic()
             response = await self._request_raw(method, url, **kwargs)
             last_response = response
             status = response.status
             ok = status in ok_statuses
+            latency_ms = int((time.monotonic() - start_ts) * 1000)
             logger.info(
-                "[GITHUB] op=%s path=%s ok=%s status=%s attempt=%s",
+                "[GITHUB] op=%s path=%s ok=%s status=%s attempt=%s latency_ms=%s",
                 op,
                 path,
                 str(ok).lower(),
                 status,
                 attempt,
+                latency_ms,
             )
             if ok:
                 return response
@@ -342,6 +371,10 @@ class GitHubStorage(BaseStorage):
         """Optional initialization hook for factory."""
         return True
 
+    async def close(self) -> None:
+        """Close shared resources (aiohttp session)."""
+        await self._close_session(reason="close")
+
     def test_connection(self) -> bool:
         """Sync connection test for GitHub storage."""
         async def _check() -> bool:
@@ -428,37 +461,54 @@ class GitHubStorage(BaseStorage):
 
     async def get_user_balance(self, user_id: int) -> float:
         data, _ = await self._read_json(self.balances_file)
-        return float(data.get(str(user_id), 0.0))
+        return self._coerce_balance(data.get(str(user_id), 0.0))
 
     async def set_user_balance(self, user_id: int, amount: float) -> None:
+        safe_amount = self._coerce_balance(amount)
+
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
-            data[str(user_id)] = amount
+            data[str(user_id)] = safe_amount
             return data
 
         await self._update_json(self.balances_file, updater)
 
     async def add_user_balance(self, user_id: int, amount: float) -> float:
+        safe_amount = self._coerce_balance(amount)
+
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
-            current = float(data.get(str(user_id), 0.0))
-            data[str(user_id)] = current + amount
+            current = self._coerce_balance(data.get(str(user_id), 0.0))
+            data[str(user_id)] = self._coerce_balance(current + safe_amount)
             return data
 
         data = await self._update_json(self.balances_file, updater)
-        return float(data.get(str(user_id), 0.0))
+        return self._coerce_balance(data.get(str(user_id), 0.0))
 
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
         success = False
+        safe_amount = self._coerce_balance(amount)
 
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
             nonlocal success
-            current = float(data.get(str(user_id), 0.0))
-            if current >= amount:
-                data[str(user_id)] = current - amount
+            current = self._coerce_balance(data.get(str(user_id), 0.0))
+            if safe_amount <= 0:
+                return data
+            if current >= safe_amount:
+                data[str(user_id)] = self._coerce_balance(current - safe_amount)
                 success = True
             return data
 
         await self._update_json(self.balances_file, updater)
         return success
+
+    @staticmethod
+    def _coerce_balance(value: Any) -> float:
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        if not math.isfinite(amount) or amount < 0:
+            return 0.0
+        return amount
 
     async def get_user_language(self, user_id: int) -> str:
         data, _ = await self._read_json(self.languages_file)

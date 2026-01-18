@@ -37,14 +37,21 @@
 - **Было:** input_parameters мог доходить до конца без ответа (NO-SILENCE violation при waiting_for=prompt).
 - **Стало:** для prompt всегда есть ответ (валидация, сохранение, переход к следующему шагу), fallback guard прикрывает тишину.
 - **Было:** GitHubStorage держал общие aiohttp-сессии между loop, что приводило к `session_detached`/`loop_mismatch`.
-- **Стало:** GitHubStorage использует per-request `ClientSession` без шаринга между event loop, исключая loop mismatch.
+- **Стало:** GitHubStorage использует управляемую сессию с проверкой loop mismatch и явным закрытием на shutdown; метрики чтения/записи включают latency.
+- **Было:** optional параметры могли не иметь кнопки “Пропустить/по умолчанию”, а подсказки обещали кнопку, которой нет.
+- **Стало:** для optional enum/boolean/text добавлены кнопки “Использовать по умолчанию” или “Пропустить (auto)” с корректными подсказками.
+- **Было:** image→video модели начинали с prompt, из-за чего prompt мог не запрашиваться после фото.
+- **Стало:** порядок первого ввода определяется по model_type + schema (image→video сначала фото, text→video сначала prompt, audio сначала файл).
 - **П1:** language selection не включён в handlers; default=ru, запись языка только при явном выборе пользователем.
 
 ## Как проверил
-- Локальные проверки не запускались в этой среде.
+- `pytest -q`
 
 ## Какие файлы тронул
 - `app/storage/github_storage.py`
+- `bot_kie.py`
+- `tests/test_parameter_buttons.py`
+- `scripts/kie_smoke.py`
 - `TRT_REPORT.md`
 
 ## Почему теперь не отвалится в webhook режиме
