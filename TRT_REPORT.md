@@ -166,3 +166,20 @@
 - `tests/test_main_menu.py`
 - `tests/ux/test_z_image_aspect_ratio_flow.py`
 - `TRT_REPORT.md`
+
+## 2025-02-15: Универсальный engine + SSOT coverage (72 модели)
+**Сделано:**
+- Введён единый ModelSpec, собираемый из SSOT (`models/kie_models.yaml` + `app/kie_catalog/models_pricing.yaml`), с полями schema/output_media_type.
+- Wizard/engine/payload используют единый pipeline без хардкодов под одну модель.
+- Унифицированный parser результата и отправка в Telegram по `media_type`.
+
+**Покрытие по моделям:**
+- Авто-smoke проверяет 72/72 моделей (schema + payload build).
+- Media buckets: image, video, audio, voice, text покрыты мок-тестами.
+
+**Ручные проверки:**
+- В этой среде не выполнялись (нет доступа к Telegram/KIE).
+
+**Как проверил:**
+- `python scripts/verify_project.py`
+- `pytest -q`

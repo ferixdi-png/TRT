@@ -349,6 +349,73 @@ def _determine_primary_input(
         return {"type": "prompt", "param": "prompt"}
 
     return None
+
+
+def _normalize_enum_values(param_info: Dict[str, Any]) -> List[Any]:
+    enum_values = param_info.get("enum") or param_info.get("values")
+    if enum_values is None:
+        return []
+    if isinstance(enum_values, str):
+        return [enum_values]
+    return list(enum_values)
+
+
+def _get_media_kind(param_name: str) -> Optional[str]:
+    name = param_name.lower()
+    if any(key in name for key in ["image", "photo", "mask"]):
+        return "image"
+    if "video" in name:
+        return "video"
+    if any(key in name for key in ["audio", "voice"]):
+        return "audio"
+    return None
+
+
+def _build_param_order(input_params: Dict[str, Any]) -> List[str]:
+    media_params = []
+    text_params = []
+    required_params = []
+    optional_params = []
+
+    for param_name, param_info in input_params.items():
+        is_required = param_info.get("required", False)
+        media_kind = _get_media_kind(param_name)
+
+        if media_kind:
+            target = media_params if is_required else optional_params
+            target.append(param_name)
+            continue
+
+        if param_name in {"prompt", "text"}:
+            target = text_params if is_required else optional_params
+            target.append(param_name)
+            continue
+
+        if is_required:
+            required_params.append(param_name)
+        else:
+            optional_params.append(param_name)
+
+    return media_params + text_params + required_params + optional_params
+
+
+def _is_image_only_model(properties: Dict[str, Any]) -> bool:
+    if not properties:
+        return False
+    required_fields = [name for name, info in properties.items() if info.get("required", False)]
+    if not required_fields:
+        return False
+    has_text = any(name in {"prompt", "text"} for name in required_fields)
+    if has_text:
+        return False
+    return all(_get_media_kind(name) == "image" for name in required_fields)
+
+
+def _first_required_media_param(properties: Dict[str, Any]) -> Optional[str]:
+    for param_name, info in properties.items():
+        if info.get("required", False) and _get_media_kind(param_name):
+            return param_name
+    return None
 import json
 import aiohttp
 import aiofiles
@@ -8780,291 +8847,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_sessions[user_id]['model_id'] = model_id
             user_sessions[user_id]['model_info'] = model_info
             logger.info(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(user_sessions[user_id].keys())}")
-            
-            # Get input parameters from YAML schema (registry)
-            from kie_input_adapter import get_schema
-            schema = get_schema(model_id)
-            if schema:
-                input_params = schema
-                logger.info(f"✅ SELECT_MODEL: Using YAML schema: count={len(input_params)}, keys={list(input_params.keys())}, user_id={user_id}")
-            else:
-                # Fallback to model_info input_params if YAML schema not found
-                input_params = model_info.get('input_params', {})
-                logger.warning(f"⚠️ SELECT_MODEL: YAML schema not found, using fallback: count={len(input_params)}, keys={list(input_params.keys())}, user_id={user_id}")
-            
-            if not input_params:
-                # If no params defined, ask for simple text input
-                keyboard = [
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
+
+            # Load model spec from SSOT catalog
+            from app.kie_catalog import get_model
+            model_spec = get_model(model_id)
+            if not model_spec:
                 await query.edit_message_text(
-                    f"{model_info_text}"
-                    f"Введите текст для генерации:",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    "❌ <b>Модель не найдена в каталоге</b>",
                     parse_mode='HTML'
                 )
-                user_sessions[user_id]['params'] = {}
-                user_sessions[user_id]['waiting_for'] = 'text'
-                return INPUTTING_PARAMS
-            
+                return ConversationHandler.END
+
+            input_params = model_spec.schema_properties or {}
+            logger.info(
+                "✅ SELECT_MODEL: Using SSOT schema: count=%s, keys=%s, user_id=%s",
+                len(input_params),
+                list(input_params.keys()),
+                user_id,
+            )
+
             # Store session data
             user_sessions[user_id]['params'] = {}
             user_sessions[user_id]['properties'] = input_params
-            # Get required parameters from schema (required=True)
-            user_sessions[user_id]['required'] = [p for p, info in input_params.items() if info.get('required', False)]
+            user_sessions[user_id]['required'] = model_spec.schema_required or []
             user_sessions[user_id]['current_param'] = None
             user_sessions[user_id]['param_history'] = []
-            
-            # Determine parameter order: image/video/audio input → prompt/text → optional
-            # Priority: media inputs first, then prompt/text, then optional
-            param_order = []
-            media_params = []  # image_input, video_input, audio_input, image_urls, etc.
-            text_params = []   # prompt, text, etc.
-            other_required = []  # other required params
-            optional_params = []  # optional params
-            
-            for param_name, param_info in input_params.items():
-                is_required = param_info.get('required', False)
-                param_type = param_info.get('type', 'string')
-                param_name_lower = param_name.lower()
-                
-                # Media inputs first
-                if any(keyword in param_name_lower for keyword in ['image', 'video', 'audio', 'url']):
-                    if is_required:
-                        media_params.append(param_name)
-                    else:
-                        optional_params.append(param_name)
-                # Text/prompt params second
-                elif any(keyword in param_name_lower for keyword in ['prompt', 'text']):
-                    if is_required:
-                        text_params.append(param_name)
-                    else:
-                        optional_params.append(param_name)
-                # Other required params
-                elif is_required:
-                    other_required.append(param_name)
-                # Optional params last
-                else:
-                    optional_params.append(param_name)
-            
-            # Build final order: media → text → other required → optional
-            param_order = media_params + text_params + other_required + optional_params
-            user_sessions[user_id]['param_order'] = param_order
-            logger.info(f"✅ SELECT_MODEL: Parameter order determined: {param_order}, user_id={user_id}")
-            
-            # Start with first required parameter (or first in order if no required)
-            # Priority: media inputs first, then prompt/text, then optional
-            # Special case: nano-banana-pro starts with image_input first
-            if model_id == "nano-banana-pro" and 'image_input' in input_params and input_params['image_input'].get('required', False):
-                # Start with image_input first for nano-banana-pro
-                has_image_input = True
-                image_param_name = 'image_input'
-                user_lang = get_user_language(user_id)
-                keyboard = [
-                    [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                try:
-                    await query.edit_message_text(
-                        f"{model_info_text}\n\n"
-                        f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
-                        f"Отправьте фото, которое хотите использовать как референс или для трансформации.\n\n"
-                        f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>",
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                except Exception as edit_error:
-                    # If edit fails, try to send new message
-                    logger.warning(f"Could not edit message for nano-banana-pro: {edit_error}, sending new message")
-                    try:
-                        await query.message.reply_text(
-                            f"{model_info_text}\n\n"
-                            f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
-                            f"Отправьте фото, которое хотите использовать как референс или для трансформации.\n\n"
-                            f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>",
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='HTML'
-                        )
-                    except Exception as send_error:
-                        logger.error(f"Could not send new message for nano-banana-pro: {send_error}", exc_info=True)
-                        await query.answer(t('error_try_start', lang=user_lang), show_alert=True)
-                        return ConversationHandler.END
-                user_sessions[user_id]['current_param'] = 'image_input'
-                user_sessions[user_id]['waiting_for'] = 'image_input'
-                if 'image_input' not in user_sessions[user_id]:
-                    user_sessions[user_id]['image_input'] = []  # Initialize as array
-                return INPUTTING_PARAMS
-            
-            # Special case: sora-2-pro-image-to-video starts with image_urls first
-            if model_id == "sora-2-pro-image-to-video" and 'image_urls' in input_params and input_params['image_urls'].get('required', False):
-                # Start with image_urls first for sora-2-pro-image-to-video
-                has_image_input = True
-                image_param_name = 'image_urls'
-                user_lang = get_user_language(user_id)
-                keyboard = [
-                    [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                try:
-                    await query.edit_message_text(
-                        f"{model_info_text}\n\n"
-                        f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
-                        f"Отправьте фото, которое будет использовано как первый кадр видео.\n\n"
-                        f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>",
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                except Exception as edit_error:
-                    # If edit fails, try to send new message
-                    logger.warning(f"Could not edit message for sora-2-pro-image-to-video: {edit_error}, sending new message")
-                    try:
-                        await query.message.reply_text(
-                            f"{model_info_text}\n\n"
-                            f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
-                            f"Отправьте фото, которое будет использовано как первый кадр видео.\n\n"
-                            f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>",
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='HTML'
-                        )
-                    except Exception as send_error:
-                        logger.error(f"Could not send new message for sora-2-pro-image-to-video: {send_error}", exc_info=True)
-                        await query.answer(t('error_try_start', lang=user_lang), show_alert=True)
-                        return ConversationHandler.END
-                user_sessions[user_id]['current_param'] = 'image_urls'
-                user_sessions[user_id]['waiting_for'] = 'image_urls'
-                if 'image_urls' not in user_sessions[user_id]:
-                    user_sessions[user_id]['image_urls'] = []  # Initialize as array
-                return INPUTTING_PARAMS
-            
-            # Start with prompt parameter first (if exists) - default behavior
-            # Or start with audio_url if no prompt and audio_url is required
-            if 'prompt' in input_params:
-                # Check if model supports image input (image_input or image_urls)
-                # BUT: z-image does NOT support image input (text-to-image only)
-                # AND: text-to-video models do NOT require image input (text-to-video only)
-                is_text_to_video = "text-to-video" in model_id.lower()
-                has_image_input = (model_id != "z-image" and 
-                                 not is_text_to_video and
-                                 ('image_input' in input_params or 'image_urls' in input_params))
-                has_audio_input = 'audio_url' in input_params or 'audio_input' in input_params
-                
-                prompt_text = (
-                    f"{model_info_text}"
-                )
-                
-                # Determine if this is a video or audio model
-                is_video = is_video_model(model_id)
-                is_audio = is_audio_model(model_id)
-                
-                if has_image_input:
-                    if is_video:
-                        prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите видео, которое хотите сгенерировать.\n\n"
-                            f"💡 После ввода промпта вы сможете добавить изображение (опционально)"
-                        )
-                    else:
-                        prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите изображение для генерации.\n\n"
-                            f"💡 После ввода промпта вы сможете добавить изображение (опционально)"
-                        )
-                elif has_audio_input:
-                    prompt_text += (
-                        f"📝 <b>Шаг 1: Введите промпт (опционально)</b>\n\n"
-                        f"Для транскрибации промпт не обязателен.\n\n"
-                        f"💡 После этого вы сможете загрузить аудио-файл"
-                    )
-                else:
-                    if is_video:
-                        prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите видео, которое хотите сгенерировать:"
-                        )
-                    elif is_audio:
-                        prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите контент для обработки:"
-                        )
-                    else:
-                        prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите изображение для генерации:"
-                        )
-                
-                keyboard = [
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                
-                await query.edit_message_text(
-                    prompt_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                user_sessions[user_id]['current_param'] = 'prompt'
-                user_sessions[user_id]['waiting_for'] = 'prompt'
-                user_sessions[user_id]['has_image_input'] = has_image_input
-                user_sessions[user_id]['has_audio_input'] = has_audio_input
-            elif 'audio_url' in input_params and input_params['audio_url'].get('required', False):
-                # If no prompt but audio_url is required, start with audio_url
-                keyboard = [
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                await query.edit_message_text(
-                    f"{model_info_text}"
-                    f"📝 <b>Шаг 1: Загрузите аудио-файл</b>\n\n"
-                    f"Отправьте аудио-файл для транскрибации.\n\n"
-                    f"Поддерживаемые форматы: MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG\n"
-                    f"Максимальный размер: 200 MB",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                user_sessions[user_id]['current_param'] = 'audio_url'
-                user_sessions[user_id]['waiting_for'] = 'audio_url'
-            elif ('image_input' in input_params and input_params['image_input'].get('required', False)) or \
-                 ('image_urls' in input_params and input_params['image_urls'].get('required', False)):
-                # If no prompt but image_input or image_urls is required, start with image
-                param_name = 'image_input' if 'image_input' in input_params else 'image_urls'
-                keyboard = [
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                await query.edit_message_text(
-                    f"{model_info_text}"
-                    f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
-                    f"Отправьте изображение для обработки.\n\n"
-                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
-                    f"📏 Максимальный размер: 10 MB",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                user_sessions[user_id]['current_param'] = param_name
-                user_sessions[user_id]['waiting_for'] = param_name  # Use actual parameter name
-                # CRITICAL: Initialize image_input/image_urls array for image-only models
-                if param_name not in user_sessions[user_id]:
-                    user_sessions[user_id][param_name] = []
-                logger.info(f"🔥🔥🔥 SET waiting_for={param_name} for model {model_id}, user {user_id}, initialized {param_name} array")
-            else:
-                # If no prompt, start with first required parameter
-                await start_next_parameter(update, context, user_id)
-            
-            logger.info(f"🔥🔥🔥 SELECT_MODEL: RETURNING INPUTTING_PARAMS for user {user_id}, model {model_id}, waiting_for={user_sessions[user_id].get('waiting_for', 'None')}")
-            return INPUTTING_PARAMS
+            user_sessions[user_id]['model_spec'] = model_spec
+            user_sessions[user_id]['param_order'] = _build_param_order(input_params)
+            logger.info(
+                "✅ SELECT_MODEL: Parameter order determined: %s, user_id=%s",
+                user_sessions[user_id]['param_order'],
+                user_id,
+            )
+
+            if not input_params:
+                return await send_confirmation_message(update, context, user_id, source="select_model")
+
+            next_param_result = await start_next_parameter(update, context, user_id)
+            if next_param_result is None:
+                return await send_confirmation_message(update, context, user_id, source="select_model")
+            return next_param_result
         
         # Handle confirm_generate as fallback (in case state didn't switch properly)
         if data == "confirm_generate":
@@ -9529,9 +9351,8 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     params = session.get('params', {})
     required = session.get('required', [])
     model_id = session.get('model_id', '')
-    model_info = session.get('model_info', {})
-    primary_input = _determine_primary_input(model_info, properties)
     user_lang = get_user_language(user_id)
+
     logger.info(
         "🧭🧭🧭 START_NEXT_PARAMETER: user_id=%s model_id=%s required=%s params_keys=%s properties_keys=%s session_keys=%s",
         user_id,
@@ -9541,114 +9362,61 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         list(properties.keys())[:20],
         list(session.keys())[:20],
     )
-    
-    # For elevenlabs/speech-to-text, also show optional parameters
-    all_params_to_check = required.copy()
-    if model_id == "elevenlabs/speech-to-text":
-        # Add optional parameters that should be shown to user
-        for param_name in ['language_code', 'tag_audio_events', 'diarize']:
-            if param_name in properties and param_name not in all_params_to_check:
-                all_params_to_check.append(param_name)
-    
-    # For models with resolution/aspect_ratio that affect price, always show them
-    # even if optional, so user can choose
-    resolution_aspect_models = [
-        "nano-banana-pro",  # resolution affects price
-        "sora-2-text-to-video",  # aspect_ratio is required but may be missing from required list
-        "sora-2-image-to-video",  # aspect_ratio may be required
-    ]
-    if model_id in resolution_aspect_models:
-        # Add resolution/aspect_ratio to check list if they exist in properties
-        for param_name in ['resolution', 'aspect_ratio']:
-            if param_name in properties and param_name not in all_params_to_check:
-                # Check if it's in required list or if it affects price
-                param_info = properties.get(param_name, {})
-                if param_info.get('required', False) or param_name == 'resolution':
-                    all_params_to_check.append(param_name)
-    logger.info(
-        "🧭🧭🧭 PARAMS_TO_CHECK: user_id=%s model_id=%s all_params_to_check=%s",
-        user_id,
-        model_id,
-        all_params_to_check[:30],
-    )
-    
-    # Handle mask_input and reference_image_input as special image parameters (before regular parameters)
-    for special_param in ['mask_input', 'reference_image_input']:
-        if special_param in all_params_to_check and special_param not in params:
-            param_info = properties.get(special_param, {})
-            is_required = param_info.get('required', False)
-            logger.info(
-                "🧩🧩🧩 SPECIAL_IMAGE_PARAM: user_id=%s model_id=%s param=%s required=%s",
-                user_id,
-                model_id,
-                special_param,
-                is_required,
-            )
-            session['current_param'] = special_param
-            session['waiting_for'] = special_param
-            if special_param not in session:
-                session[special_param] = []  # Initialize as array
 
-            # Get chat_id from update
-            chat_id = None
-            if hasattr(update, 'effective_chat') and update.effective_chat:
-                chat_id = update.effective_chat.id
-            elif hasattr(update, 'message') and update.message:
-                chat_id = update.message.chat_id
-            elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
-                chat_id = update.callback_query.message.chat_id
+    param_order = session.get("param_order") or _build_param_order(properties)
+    session["param_order"] = param_order
 
-            if not chat_id:
-                logger.error("Cannot determine chat_id in start_next_parameter")
-                return None
+    for param_name in param_order:
+        if param_name in params:
+            continue
 
-            logger.info(
-                "📤📤📤 SPECIAL_IMAGE_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s",
-                user_id,
-                model_id,
-                special_param,
-                chat_id,
-            )
+        param_info = properties.get(param_name, {})
+        param_type = param_info.get('type', 'string')
+        enum_values = _normalize_enum_values(param_info)
+        is_optional = not param_info.get('required', False)
+        session['current_param'] = param_name
+        media_kind = _get_media_kind(param_name)
+
+        chat_id = None
+        if hasattr(update, 'effective_chat') and update.effective_chat:
+            chat_id = update.effective_chat.id
+        elif hasattr(update, 'message') and update.message:
+            chat_id = update.message.chat_id
+        elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
+            chat_id = update.callback_query.message.chat_id
+
+        if not chat_id:
+            logger.error("Cannot determine chat_id in start_next_parameter")
+            return None
+
+        if media_kind:
+            session['waiting_for'] = param_name
             param_desc = param_info.get('description', '')
-            step_info = _get_step_info(session, special_param, user_lang)
+            step_info = _get_step_info(session, param_name, user_lang)
             step_prefix = f"{step_info}: " if step_info else ""
-            format_hint = _get_param_format_hint(param_info.get('type', 'string'), None, user_lang)
-            example_hint = _get_param_example(special_param, param_info, user_lang)
+            format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+            example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
             example_line = f"🧪 {example_hint}\n" if example_hint else ""
-            if special_param == 'mask_input':
-                prompt_text = (
-                    f"🎭 <b>{step_prefix}Загрузите маску</b>\n\n"
-                    f"{param_desc}\n\n"
-                    f"💡 {format_hint}\n"
-                    f"{example_line}"
-                    f"📏 Максимальный размер: 10 MB"
-                )
-            elif special_param == 'reference_image_input':
-                prompt_text = (
-                    f"🖼️ <b>{step_prefix}Загрузите референсное изображение</b>\n\n"
-                    f"{param_desc}\n\n"
-                    f"💡 {format_hint}\n"
-                    f"{example_line}"
-                    f"📏 Максимальный размер: 10 MB"
-                )
-            else:
-                prompt_text = (
-                    f"📷 <b>{step_prefix}Загрузите изображение</b>\n\n"
-                    f"{param_desc}\n\n"
-                    f"💡 {format_hint}\n"
-                    f"{example_line}"
-                    f"📏 Максимальный размер: 10 MB"
-                )
-
-            keyboard = [
-                [
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ]
-            ]
-            if not is_required:
+            title_map = {
+                "image": "Загрузите изображение",
+                "video": "Загрузите видео",
+                "audio": "Загрузите аудио",
+            }
+            title = title_map.get(media_kind, "Загрузите файл")
+            prompt_text = (
+                f"📥 <b>{step_prefix}{title}</b>\n\n"
+                f"{param_desc}\n\n"
+                f"💡 {format_hint}\n"
+                f"{example_line}"
+                f"📏 Максимальный размер: 30 MB"
+            )
+            keyboard = [[
+                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+            ]]
+            if is_optional:
                 skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
-                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{special_param}:{SKIP_PARAM_VALUE}")])
+                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
             await context.bot.send_message(
@@ -9658,416 +9426,160 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 parse_mode='HTML'
             )
             return INPUTTING_PARAMS
-    
-    # Find next unset parameter (skip prompt, image_input, image_urls, audio_url, audio_input, mask_input, reference_image_input as they're handled separately)
-    # BUT: for nano-banana-pro, we want: image_input -> prompt -> aspect_ratio -> resolution
-    # For sora-2-text-to-video: prompt -> aspect_ratio
-    for param_name in all_params_to_check:
-        # Skip special parameters that are handled separately
-        if param_name in ['image_input', 'image_urls', 'audio_url', 'audio_input', 'mask_input', 'reference_image_input']:
-            continue
-        
-        # For nano-banana-pro: handle prompt after image_input, then aspect_ratio, then resolution
-        if model_id == "nano-banana-pro":
-            if param_name == 'prompt':
-                # Only ask for prompt if image_input is already set
-                if 'image_input' not in params or not params.get('image_input'):
-                    continue  # Skip prompt until image_input is set
-            elif param_name == 'aspect_ratio':
-                # Only ask for aspect_ratio if prompt is already set
-                if 'prompt' not in params or not params.get('prompt'):
-                    continue  # Skip aspect_ratio until prompt is set
-            elif param_name == 'resolution':
-                # Only ask for resolution if aspect_ratio is already set (or if it doesn't exist)
-                if 'aspect_ratio' in properties and 'aspect_ratio' not in params:
-                    continue  # Skip resolution until aspect_ratio is set (if it exists)
-        
-        # For sora-2-text-to-video: handle aspect_ratio after prompt
-        if model_id == "sora-2-text-to-video":
-            if param_name == 'aspect_ratio':
-                # Only ask for aspect_ratio if prompt is already set
-                if 'prompt' not in params or not params.get('prompt'):
-                    continue  # Skip aspect_ratio until prompt is set
-        
-        if param_name == 'prompt':
-            image_param = 'image_input' if 'image_input' in properties else 'image_urls' if 'image_urls' in properties else None
-            audio_param = 'audio_input' if 'audio_input' in properties else 'audio_url' if 'audio_url' in properties else None
-            if primary_input and primary_input.get("type") == "image" and image_param and image_param not in params:
-                continue
-            if primary_input and primary_input.get("type") == "audio" and audio_param and audio_param not in params:
-                continue
-        
-        if param_name not in params:
-            param_info = properties.get(param_name, {})
-            param_type = param_info.get('type', 'string')
-            enum_values = param_info.get('enum') or param_info.get('values')
-            if isinstance(enum_values, str):
-                enum_values = [enum_values]
-            elif enum_values is None:
-                enum_values = []
-            is_enum_type = param_type == 'enum' or bool(enum_values)
-            logger.info(
-                "🔎🔎🔎 PARAM_SELECTED: user_id=%s model_id=%s param=%s type=%s required=%s has_enum=%s",
-                user_id,
-                model_id,
-                param_name,
-                param_type,
-                param_info.get('required', False),
-                bool(enum_values),
-            )
-            logger.info(
-                "🧭 STEP: action_path=start_next_parameter model_id=%s waiting_for=%s current_param=%s outcome=prompt",
-                model_id,
-                session.get('waiting_for'),
-                param_name,
-            )
-            
-            session['current_param'] = param_name
-            
-            # Handle boolean parameters
-            if param_type == 'boolean':
-                logger.info(
-                    "🧭 NEXT_PARAM_SELECTION: model_id=%s next_param=%s enum_values_count=%s fallback_mode=buttons",
-                    model_id,
-                    param_name,
-                    len(enum_values),
-                )
-                default_value = param_info.get('default')
-                is_optional = not param_info.get('required', False)
-                
-                keyboard = [
-                    [
-                        InlineKeyboardButton("✅ Да (true)", callback_data=f"set_param:{param_name}:true"),
-                        InlineKeyboardButton("❌ Нет (false)", callback_data=f"set_param:{param_name}:false")
-                    ]
-                ]
-                
-                # For optional parameters, add default/skip button
-                user_lang = get_user_language(user_id)
-                if is_optional:
-                    if default_value is None:
-                        skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
-                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
-                    else:
-                        skip_text = "⏭️ Использовать по умолчанию" if user_lang == 'ru' else "⏭️ Use default"
-                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{str(default_value).lower()}")])
-                
-                keyboard.append([
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ])
-                keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
-                
-                param_desc = param_info.get('description', '')
-                default_text = ""
-                if is_optional and default_value is not None:
-                    default_text = f"\n\nПо умолчанию: {'Да' if default_value else 'Нет'}"
-                step_info = _get_step_info(session, param_name, user_lang)
-                step_prefix = f"{step_info}: " if step_info else ""
-                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
-                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
-                example_line = f"🧪 {example_hint}\n" if example_hint else ""
-                details = [format_hint]
-                if example_hint:
-                    details.append(example_hint)
-                details_text = "\n".join(details)
-                chat_id = None
-                if hasattr(update, 'effective_chat') and update.effective_chat:
-                    chat_id = update.effective_chat.id
-                elif hasattr(update, 'message') and update.message:
-                    chat_id = update.message.chat_id
-                elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
-                    chat_id = update.callback_query.message.chat_id
-                
-                if not chat_id:
-                    logger.error("Cannot determine chat_id in start_next_parameter")
-                    return None
-                
-                logger.info(
-                    "📤📤📤 BOOLEAN_PARAM_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s default=%s optional=%s",
-                    user_id,
-                    model_id,
-                    param_name,
-                    chat_id,
-                    default_value,
-                    is_optional,
-                )
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=(
-                        f"📝 <b>{step_prefix}Выберите {param_name}:</b>\n\n"
-                        f"{param_desc}{default_text}\n\n"
-                        f"💡 {details_text}"
-                    ),
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                session['waiting_for'] = param_name
-                return INPUTTING_PARAMS
-            # If parameter has enum values, show buttons
-            elif enum_values:
-                logger.info(
-                    "🧭 NEXT_PARAM_SELECTION: model_id=%s next_param=%s enum_values_count=%s fallback_mode=buttons",
-                    model_id,
-                    param_name,
-                    len(enum_values),
-                )
-                logger.info(
-                    "🧭🧭🧭 ENUM_PARAM: user_id=%s model_id=%s param=%s enum_count=%s enum_sample=%s",
-                    user_id,
-                    model_id,
-                    param_name,
-                    len(enum_values),
-                    enum_values[:10],
-                )
-                keyboard = []
-                # Create buttons in rows of 2
-                for i in range(0, len(enum_values), 2):
-                    row = []
-                    row.append(InlineKeyboardButton(
-                        enum_values[i],
-                        callback_data=f"set_param:{param_name}:{enum_values[i]}"
-                    ))
-                    if i + 1 < len(enum_values):
-                        row.append(InlineKeyboardButton(
-                            enum_values[i + 1],
-                            callback_data=f"set_param:{param_name}:{enum_values[i + 1]}"
-                        ))
-                    keyboard.append(row)
-                
-                # For optional enum parameters with default, add "Use default" button
-                is_optional = not param_info.get('required', False)
-                default_value = param_info.get('default')
-                if is_optional and default_value and default_value in enum_values:
-                    user_lang = get_user_language(user_id)
-                    default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
-                    keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
-                elif is_optional and not default_value:
-                    user_lang = get_user_language(user_id)
+
+        if param_type == 'boolean':
+            default_value = param_info.get('default')
+            keyboard = [[
+                InlineKeyboardButton("✅ Да (true)", callback_data=f"set_param:{param_name}:true"),
+                InlineKeyboardButton("❌ Нет (false)", callback_data=f"set_param:{param_name}:false")
+            ]]
+            if is_optional:
+                if default_value is None:
                     skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
                     keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
-                
-                user_lang = get_user_language(user_id)
-                keyboard.append([
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ])
-                keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
-                
-                param_desc = param_info.get('description', '')
-                default_info = ""
-                if default_value and default_value in enum_values:
-                    default_info = f"\n\n💡 По умолчанию: <b>{default_value}</b>" if user_lang == 'ru' else f"\n\n💡 Default: <b>{default_value}</b>"
-                
-                # Get chat_id from update
-                chat_id = None
-                if hasattr(update, 'effective_chat') and update.effective_chat:
-                    chat_id = update.effective_chat.id
-                elif hasattr(update, 'message') and update.message:
-                    chat_id = update.message.chat_id
-                elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
-                    chat_id = update.callback_query.message.chat_id
-                
-                if not chat_id:
-                    logger.error("Cannot determine chat_id in start_next_parameter")
-                    return None
-                
-                logger.info(
-                    "📤📤📤 ENUM_PARAM_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s default=%s optional=%s",
-                    user_id,
-                    model_id,
-                    param_name,
-                    chat_id,
-                    default_value,
-                    is_optional,
-                )
-                
-                # Добавляем подсказку для параметра
-                try:
-                    from optimization_ux import get_parameter_hint
-                    hint = get_parameter_hint(param_name, user_lang)
-                    if hint:
-                        param_desc = f"{param_desc}\n\n💡 <i>{hint}</i>" if param_desc else f"💡 <i>{hint}</i>"
-                except ImportError:
-                    pass  # Модуль не доступен
-                
-                # Улучшенное сообщение для enum параметров
-                param_display_name = param_name.replace('_', ' ').title()
-                step_info = _get_step_info(session, param_name, user_lang)
-                step_prefix = f"{step_info}: " if step_info else ""
-                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
-                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
-                example_line = f"🧪 {example_hint}\n" if example_hint else ""
-                action_hint = ""
-                if is_optional:
-                    action_hint = "• Или используйте значение по умолчанию" if default_value else "• Или нажмите «Пропустить (auto)»"
-                    if user_lang != 'ru':
-                        action_hint = "• Or use the default value" if default_value else "• Or press “Skip (auto)”"
-                elif default_value:
-                    action_hint = "• Или используйте значение по умолчанию"
-                    if user_lang != 'ru':
-                        action_hint = "• Or use the default value"
+                else:
+                    skip_text = "⏭️ Использовать по умолчанию" if user_lang == 'ru' else "⏭️ Use default"
+                    keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{str(default_value).lower()}")])
 
-                message_text = (
-                    f"📝 <b>{step_prefix}Выберите {param_display_name.lower()}:</b>\n\n"
+            keyboard.append([
+                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+            ])
+            keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+
+            param_desc = param_info.get('description', '')
+            default_text = ""
+            if is_optional and default_value is not None:
+                default_text = f"\n\nПо умолчанию: {'Да' if default_value else 'Нет'}"
+            step_info = _get_step_info(session, param_name, user_lang)
+            step_prefix = f"{step_info}: " if step_info else ""
+            format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+            example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+            example_line = f"🧪 {example_hint}\n" if example_hint else ""
+            details_text = "\n".join([format_hint, example_hint] if example_hint else [format_hint])
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"📝 <b>{step_prefix}Выберите {param_name}:</b>\n\n"
+                    f"{param_desc}{default_text}\n\n"
+                    f"💡 {details_text}\n{example_line}"
+                ),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            session['waiting_for'] = param_name
+            return INPUTTING_PARAMS
+
+        if enum_values:
+            keyboard = []
+            for i in range(0, len(enum_values), 2):
+                row = [InlineKeyboardButton(
+                    enum_values[i],
+                    callback_data=f"set_param:{param_name}:{enum_values[i]}"
+                )]
+                if i + 1 < len(enum_values):
+                    row.append(InlineKeyboardButton(
+                        enum_values[i + 1],
+                        callback_data=f"set_param:{param_name}:{enum_values[i + 1]}"
+                    ))
+                keyboard.append(row)
+
+            default_value = param_info.get('default')
+            if is_optional and default_value and default_value in enum_values:
+                default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
+                keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
+            elif is_optional and not default_value:
+                skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+
+            keyboard.append([
+                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+            ])
+            keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+
+            param_desc = param_info.get('description', '')
+            default_info = ""
+            if default_value and default_value in enum_values:
+                default_info = (
+                    f"\n\n💡 По умолчанию: <b>{default_value}</b>"
+                    if user_lang == 'ru'
+                    else f"\n\n💡 Default: <b>{default_value}</b>"
+                )
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"📝 <b>Выберите {param_name}:</b>\n\n"
                     f"{param_desc}{default_info}\n\n"
-                    f"💡 {format_hint}\n"
-                    f"{example_line}\n"
-                    f"💡 <b>Что делать:</b>\n"
-                    f"• Выберите значение из списка ниже"
-                )
-                if action_hint:
-                    message_text += f"\n{action_hint}"
-                
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=message_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                session['waiting_for'] = param_name
-                session['current_param'] = param_name
-                logger.info(
-                    "✅✅✅ PARAM_WAITING_SET: user_id=%s model_id=%s waiting_for=%s",
-                    user_id,
-                    model_id,
-                    param_name,
-                )
-                return INPUTTING_PARAMS
-            else:
-                logger.info(
-                    "🧭 NEXT_PARAM_SELECTION: model_id=%s next_param=%s enum_values_count=%s fallback_mode=text",
-                    model_id,
-                    param_name,
-                    len(enum_values),
-                )
-                # Text input
-                param_desc = param_info.get('description', '')
-                max_length = param_info.get('max_length')
-                max_text = f"\n\nМаксимум {max_length} символов." if max_length else ""
-                is_optional = not param_info.get('required', False)
-                default_value = param_info.get('default')
-                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
-                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
-                example_line = f"🧪 {example_hint}\n" if example_hint else ""
-                enum_fallback_note = ""
-                if is_enum_type and not enum_values:
-                    enum_fallback_note = (
-                        "⚠️ Введите одно из допустимых значений."
-                        if user_lang == 'ru'
-                        else "⚠️ Please enter one of the allowed values."
-                    )
-                
-                # Get chat_id from update
-                chat_id = None
-                if hasattr(update, 'effective_chat') and update.effective_chat:
-                    chat_id = update.effective_chat.id
-                elif hasattr(update, 'message') and update.message:
-                    chat_id = update.message.chat_id
-                elif hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
-                    chat_id = update.callback_query.message.chat_id
-                
-                if not chat_id:
-                    logger.error("Cannot determine chat_id in start_next_parameter")
-                    return None
-                
-                logger.info(
-                    "📤📤📤 TEXT_PARAM_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s max_length=%s default=%s optional=%s",
-                    user_id,
-                    model_id,
-                    param_name,
-                    chat_id,
-                    max_length,
-                    default_value,
-                    is_optional,
-                )
-                keyboard = []
-                # For optional text parameters, add skip/default button with default value info
-                if is_optional:
-                    if default_value:
-                        # Special handling for language_code - show quick select buttons
-                        if param_name == 'language_code' and default_value == 'ru':
-                            keyboard.append([
-                                InlineKeyboardButton("🇷🇺 Русский (ru)", callback_data=f"set_param:{param_name}:ru"),
-                                InlineKeyboardButton("🇺🇸 English (en)", callback_data=f"set_param:{param_name}:en")
-                            ])
-                            keyboard.append([
-                                InlineKeyboardButton("🇩🇪 Deutsch (de)", callback_data=f"set_param:{param_name}:de"),
-                                InlineKeyboardButton("🇫🇷 Français (fr)", callback_data=f"set_param:{param_name}:fr")
-                            ])
-                            keyboard.append([InlineKeyboardButton("⏭️ Использовать по умолчанию (ru)", callback_data=f"set_param:{param_name}:ru")])
-                            keyboard.append([InlineKeyboardButton("✏️ Ввести другой код", callback_data=f"set_param:{param_name}:custom")])
-                        else:
-                            default_text = f" (по умолчанию: {default_value})" if default_value else ""
-                            keyboard.append([InlineKeyboardButton(f"⏭️ Использовать по умолчанию{default_text}", callback_data=f"set_param:{param_name}:{default_value}")])
-                    else:
-                        user_lang = get_user_language(user_id)
-                        skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
-                        keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
-                user_lang = get_user_language(user_id)
-                keyboard.append([
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ])
-                keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
-                
-                default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
-                optional_text = "\n\n(Этот параметр опциональный)" if is_optional else ""
-                
-                # Улучшенное сообщение с более понятными подсказками
-                param_display_name = param_name.replace('_', ' ').title()
-                step_info = _get_step_info(session, param_name, user_lang)
-                step_prefix = f"{step_info}: " if step_info else ""
-                if default_value:
-                    action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
-                elif is_optional:
-                    action_hint = "• Или используйте кнопку «⏭️ Пропустить (auto)» ниже"
-                else:
-                    action_hint = "• Отправьте значение текстом"
-                if user_lang != 'ru':
-                    if default_value:
-                        action_hint = "• Or use the “⏭️ Use default” button below"
-                    elif is_optional:
-                        action_hint = "• Or use the “⏭️ Skip (auto)” button below"
-                    else:
-                        action_hint = "• Send the value as text"
+                    f"💡 Нажмите одну из кнопок ниже"
+                ),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            session['waiting_for'] = param_name
+            return INPUTTING_PARAMS
 
-                message_text = (
-                    f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
-                    f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
-                    f"💡 {format_hint}\n"
-                    f"{enum_fallback_note}\n"
-                    f"{example_line}\n"
-                    f"💡 <b>Что делать:</b>\n"
-                    f"• Введите значение в текстовом сообщении\n"
-                    f"{action_hint}"
-                )
-                
-                # If language_code with quick select, modify message
-                if param_name == 'language_code' and default_value == 'ru':
-                    message_text = (
-                        f"🌍 <b>Выберите язык аудио:</b>\n\n"
-                        f"{param_desc}\n\n"
-                        f"По умолчанию: <b>Русский (ru)</b>\n\n"
-                        f"Выберите язык из списка или введите код языка вручную."
-                    )
-                
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=message_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-                
-                # If custom input requested, set waiting state
-                if param_name == 'language_code' and default_value == 'ru':
-                    # Don't set waiting_for yet - wait for button or text input
-                    session['language_code_custom'] = False
-                else:
-                    session['waiting_for'] = param_name
-                return INPUTTING_PARAMS
-    
-    # All parameters collected
+        param_desc = param_info.get('description', '')
+        max_length = param_info.get('max') or param_info.get('max_length')
+        max_text = f"\n\nМакс. длина: {max_length} символов" if max_length else ""
+        default_value = param_info.get('default')
+        format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+        example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+        example_line = f"🧪 {example_hint}\n" if example_hint else ""
+
+        keyboard = []
+        if is_optional:
+            if default_value:
+                default_text = f" (по умолчанию: {default_value})" if default_value else ""
+                keyboard.append([InlineKeyboardButton(f"⏭️ Использовать по умолчанию{default_text}", callback_data=f"set_param:{param_name}:{default_value}")])
+            else:
+                skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+        keyboard.append([
+            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+        ])
+        keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+
+        default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
+        optional_text = "\n\n(Этот параметр опциональный)" if is_optional else ""
+        param_display_name = param_name.replace('_', ' ').title()
+        step_info = _get_step_info(session, param_name, user_lang)
+        step_prefix = f"{step_info}: " if step_info else ""
+        if default_value:
+            action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
+        elif is_optional:
+            action_hint = "• Или используйте кнопку «⏭️ Пропустить (auto)» ниже"
+        else:
+            action_hint = "• Отправьте значение текстом"
+        if user_lang != 'ru':
+            if default_value:
+                action_hint = "• Or use the “⏭️ Use default” button below"
+            elif is_optional:
+                action_hint = "• Or use the “⏭️ Skip (auto)” button below"
+            else:
+                action_hint = "• Send the value as text"
+
+        message_text = (
+            f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
+            f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
+            f"💡 {format_hint}\n"
+            f"{example_line}\n"
+            f"💡 <b>Что делать:</b>\n"
+            f"• Введите значение в текстовом сообщении\n"
+            f"{action_hint}"
+        )
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        session['waiting_for'] = param_name
+        return INPUTTING_PARAMS
+
     return None
 
 
@@ -10134,13 +9646,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_image_urls = 'image_urls' in properties
     logger.info(f"🔥🔥🔥 INPUT_PARAMETERS SESSION: user_id={user_id}, model_id={model_id}, waiting_for={waiting_for}, has_image_input={has_image_input}, has_image_urls={has_image_urls}")
     
-    # CRITICAL: Define models_only_image at function level so it's available everywhere
-    models_only_image = [
-        "recraft/remove-background",
-        "recraft/crisp-upscale",
-        "topaz/image-upscale",
-        "ideogram/v3-reframe"
-    ]
+    image_only_model = _is_image_only_model(properties)
     logger.info(f"🔥🔥🔥 INPUT_PARAMETERS SESSION KEYS: {list(session.keys())[:15]}")
     logger.info(f"🔥🔥🔥 INPUT_PARAMETERS PARAMS: keys={list(params.keys())}, values={[(k, type(v).__name__, len(v) if isinstance(v, (list, dict)) else 'N/A') for k, v in params.items()][:5]}")
     
@@ -10148,6 +9654,91 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if has_photo and not waiting_for:
         logger.warning(f"⚠️⚠️⚠️ PHOTO SENT BUT waiting_for is None! user_id={user_id}, model_id={model_id}, properties={list(properties.keys())}, session_keys={list(session.keys())[:10]}")
     
+    # Universal handling for schema-based text/number inputs
+    if update.message and update.message.text and waiting_for in properties:
+        param_info = properties.get(waiting_for, {})
+        param_type = param_info.get('type', 'string')
+        enum_values = _normalize_enum_values(param_info)
+        value_text = update.message.text.strip()
+
+        if param_type in ('number', 'integer', 'float'):
+            try:
+                value = float(value_text)
+                if param_type == 'integer':
+                    value = int(value)
+            except ValueError:
+                await update.message.reply_text(
+                    "❌ <b>Неверный формат числа</b>\n\nПожалуйста, отправьте числовое значение.",
+                    parse_mode='HTML'
+                )
+                return INPUTTING_PARAMS
+
+            min_value = param_info.get('min')
+            max_value = param_info.get('max')
+            if min_value is not None and value < min_value:
+                await update.message.reply_text(
+                    f"❌ <b>Значение должно быть не меньше {min_value}</b>",
+                    parse_mode='HTML'
+                )
+                return INPUTTING_PARAMS
+            if max_value is not None and value > max_value:
+                await update.message.reply_text(
+                    f"❌ <b>Значение должно быть не больше {max_value}</b>",
+                    parse_mode='HTML'
+                )
+                return INPUTTING_PARAMS
+
+            params[waiting_for] = value
+            session['params'] = params
+            session['waiting_for'] = None
+            next_param_result = await start_next_parameter(update, context, user_id)
+            if next_param_result is None:
+                return await send_confirmation_message(update, context, user_id, source="number_input")
+            return next_param_result
+
+        if enum_values:
+            if value_text not in enum_values:
+                await update.message.reply_text(
+                    "❌ <b>Недопустимое значение</b>\n\nВыберите одно из допустимых значений.",
+                    parse_mode='HTML'
+                )
+                return INPUTTING_PARAMS
+            params[waiting_for] = value_text
+            session['params'] = params
+            session['waiting_for'] = None
+            next_param_result = await start_next_parameter(update, context, user_id)
+            if next_param_result is None:
+                return await send_confirmation_message(update, context, user_id, source="enum_input")
+            return next_param_result
+
+        if param_type == 'boolean':
+            normalized = value_text.lower()
+            if normalized in {'true', '1', 'yes', 'да'}:
+                params[waiting_for] = True
+            elif normalized in {'false', '0', 'no', 'нет'}:
+                params[waiting_for] = False
+            else:
+                await update.message.reply_text(
+                    "❌ <b>Введите Да/Нет</b>",
+                    parse_mode='HTML'
+                )
+                return INPUTTING_PARAMS
+            session['params'] = params
+            session['waiting_for'] = None
+            next_param_result = await start_next_parameter(update, context, user_id)
+            if next_param_result is None:
+                return await send_confirmation_message(update, context, user_id, source="boolean_input")
+            return next_param_result
+
+        # Default string handling
+        params[waiting_for] = value_text
+        session['params'] = params
+        session['waiting_for'] = None
+        next_param_result = await start_next_parameter(update, context, user_id)
+        if next_param_result is None:
+            return await send_confirmation_message(update, context, user_id, source="text_input")
+        return next_param_result
+
     # Handle admin OCR test
     if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_test_ocr':
         if update.message.photo:
@@ -11212,13 +10803,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # CRITICAL: For models that only require image (no prompt), force max_items=1
         # This ensures they always show the button immediately after image upload
-        models_only_image = [
-            "recraft/remove-background",
-            "recraft/crisp-upscale",
-            "topaz/image-upscale",
-            "ideogram/v3-reframe"
-        ]
-        if model_id in models_only_image:
+        if image_only_model:
             max_items = 1  # Force to 1 for these models
             logger.info(f"🔍 Model {model_id} is image-only, forcing max_items=1")
         
@@ -11288,530 +10873,15 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['waiting_for'] = None
             session['current_param'] = None
             logger.info(f"🔥🔥🔥 SESSION UPDATED: waiting_for=None, current_param=None, user_id={user_id}, model_id={model_id}")
-            
-            # CRITICAL: For models without prompt (like recraft/remove-background),
-            # check if all required parameters are collected
-            model_id = session.get('model_id', 'Unknown')
-            required = session.get('required', [])
-            properties = session.get('properties', {})
-            
-            logger.info(f"CRITICAL CHECK for {model_id}: required={required}, params_keys={list(session.get('params', {}).keys())}, image_param_name={image_param_name}, session[{image_param_name}]={bool(session.get(image_param_name))}")
-            
-            # CRITICAL: Check if all required parameters are in params
-            # For models like recraft/remove-background that only require image_input
-            all_required_collected = True
-            
-            # CRITICAL: First, ensure image_input/image_urls that was just uploaded is in params
-            # This MUST be done before checking required parameters
-            if image_param_name not in session.get('params', {}) or not session.get('params', {}).get(image_param_name):
-                # This should not happen, but double-check and fix
-                logger.warning(f"Image parameter {image_param_name} not in params after upload! Adding it...")
-                if image_param_name in session and session[image_param_name]:
-                    if 'params' not in session:
-                        session['params'] = {}
-                    if isinstance(session[image_param_name], list):
-                        session['params'][image_param_name] = session[image_param_name].copy()
-                    else:
-                        session['params'][image_param_name] = [session[image_param_name]]
-                    logger.info(f"✅ Fixed: {image_param_name} added to params")
-                else:
-                    logger.error(f"CRITICAL: {image_param_name} not in session either!")
-            
-            # CRITICAL: For models that only require image (no prompt), skip the required check
-            # and rely on the models_only_image check below
-            models_only_image = [
-                "recraft/remove-background",
-                "recraft/crisp-upscale",
-                "topaz/image-upscale",
-                "ideogram/v3-reframe"
-            ]
-            
-            # Only check required parameters if this is NOT a model that only requires image
-            if model_id not in models_only_image:
-                # Check all required parameters
-                for req_param in required:
-                    if req_param not in session.get('params', {}) or not session.get('params', {}).get(req_param):
-                        # Special case: image parameters that were just uploaded
-                        if req_param == image_param_name:
-                            # Should already be in params, but check session
-                            if req_param in session and session[req_param]:
-                                # Add it to params if missing
-                                if 'params' not in session:
-                                    session['params'] = {}
-                                if isinstance(session[req_param], list):
-                                    session['params'][req_param] = session[req_param].copy()
-                                else:
-                                    session['params'][req_param] = [session[req_param]]
-                                logger.info(f"✅ Fixed: {req_param} added to params from session")
-                                continue
-                        all_required_collected = False
-                        logger.warning(f"Required parameter {req_param} not collected for {model_id}")
-                        break
-            else:
-                # For models_only_image, we'll check in the special section below
-                logger.info(f"Model {model_id} is in models_only_image, skipping standard required check")
-            
-            # Also explicitly check if image_input/image_urls are required and collected
-            if 'image_input' in properties and properties['image_input'].get('required', False):
-                if 'image_input' not in session.get('params', {}) or not session.get('params', {}).get('image_input'):
-                    # Check if it's in session but not in params
-                    if 'image_input' in session and session['image_input']:
-                        if 'params' not in session:
-                            session['params'] = {}
-                        if isinstance(session['image_input'], list):
-                            session['params']['image_input'] = session['image_input']
-                        else:
-                            session['params']['image_input'] = [session['image_input']]
-                    else:
-                        all_required_collected = False
-                        logger.warning(f"Required image_input not collected for {model_id}")
-            
-            if 'image_urls' in properties and properties['image_urls'].get('required', False):
-                if 'image_urls' not in session.get('params', {}) or not session.get('params', {}).get('image_urls'):
-                    # Check if it's in session but not in params
-                    if 'image_urls' in session and session['image_urls']:
-                        if 'params' not in session:
-                            session['params'] = {}
-                        if isinstance(session['image_urls'], list):
-                            session['params']['image_urls'] = session['image_urls']
-                        else:
-                            session['params']['image_urls'] = [session['image_urls']]
-                    else:
-                        all_required_collected = False
-                        logger.warning(f"Required image_urls not collected for {model_id}")
-            
-            logger.info(f"After image upload for {model_id}: all_required_collected={all_required_collected}, required={required}, params={list(session.get('params', {}).keys())}, session_image_input={bool(session.get('image_input'))}, session_image_urls={bool(session.get('image_urls'))}")
-            
-            # CRITICAL: Final check - if image is in params, force all_required_collected=True for image-only models
-            # This is a safety net to ensure button is shown
-            if model_id in models_only_image:
-                params_final_check = session.get('params', {})
-                if image_param_name in params_final_check and params_final_check.get(image_param_name):
-                    image_list = params_final_check.get(image_param_name)
-                    if isinstance(image_list, list) and len(image_list) > 0:
-                        logger.info(f"✅✅✅ FINAL CHECK: {model_id} has {image_param_name} with {len(image_list)} item(s) in params. FORCING all_required_collected=True.")
-                        all_required_collected = True
-                    elif isinstance(image_list, str) and image_list:
-                        logger.info(f"✅✅✅ FINAL CHECK: {model_id} has {image_param_name} as string in params. FORCING all_required_collected=True.")
-                        all_required_collected = True
-            
-            logger.info(f"🔍🔍🔍 FINAL STATE: all_required_collected={all_required_collected}, model={model_id}, will_show_button={all_required_collected}")
-            
-            # CRITICAL: Special handling for models that only require image_input (no prompt)
-            # These models should immediately show confirmation after image upload
-            # NOTE: models_only_image list is defined above, but we check it again here for clarity
-            if model_id in models_only_image:
-                logger.info(f"🔍🔍🔍 CRITICAL: {model_id} is in models_only_image list! Checking image...")
-                # For these models, if image_input is in params, we're done
-                params_check = session.get('params', {})
-                image_in_params = image_param_name in params_check and params_check.get(image_param_name) and len(params_check.get(image_param_name, [])) > 0
-                
-                # Also check if it's in session (fallback)
-                image_in_session = image_param_name in session and session.get(image_param_name) and len(session.get(image_param_name, [])) > 0
-                
-                logger.info(f"🔍 {model_id} check: image_in_params={image_in_params}, image_in_session={image_in_session}, params_keys={list(params_check.keys())}, session_has_{image_param_name}={image_param_name in session}, session_value={session.get(image_param_name)}")
-                
-                if image_in_params:
-                    logger.info(f"✅✅✅ Model {model_id} only requires {image_param_name}, which is collected in params. FORCING all_required_collected=True.")
-                    all_required_collected = True
-                elif image_in_session:
-                    # Image is in session but not in params - fix it
-                    logger.warning(f"⚠️ {image_param_name} in session but not in params for {model_id}. Fixing...")
-                    if 'params' not in session:
-                        session['params'] = {}
-                    if isinstance(session[image_param_name], list):
-                        session['params'][image_param_name] = session[image_param_name].copy()
-                    else:
-                        session['params'][image_param_name] = [session[image_param_name]]
-                    logger.info(f"✅✅✅ Fixed: {image_param_name} now in params. FORCING all_required_collected=True.")
-                    all_required_collected = True
-                else:
-                    logger.error(f"❌❌❌ CRITICAL ERROR: {model_id} requires {image_param_name} but it's not in params or session!")
-                    logger.error(f"   params keys: {list(params_check.keys())}")
-                    logger.error(f"   params[{image_param_name}]: {params_check.get(image_param_name)}")
-                    logger.error(f"   session keys: {list(session.keys())}")
-                    logger.error(f"   session[{image_param_name}]: {session.get(image_param_name)}")
-                    # Even if not found, try to set all_required_collected based on what we have
-                    # This is a last resort - the image should have been uploaded
-                    if image_param_name in session and session[image_param_name]:
-                        logger.warning(f"⚠️ Last resort: Found {image_param_name} in session, forcing to params...")
-                        if 'params' not in session:
-                            session['params'] = {}
-                        if isinstance(session[image_param_name], list):
-                            session['params'][image_param_name] = session[image_param_name].copy()
-                        else:
-                            session['params'][image_param_name] = [session[image_param_name]]
-                        all_required_collected = True
-                        logger.info(f"✅✅✅ Last resort fix successful, all_required_collected=True")
-                    else:
-                        all_required_collected = False
-            
-            # CRITICAL: For image-only models, FORCE all_required_collected=True if image is uploaded
-            # This is the ABSOLUTE FINAL check before showing button
-            if model_id in models_only_image:
-                params_final = session.get('params', {})
-                if image_param_name in params_final and params_final.get(image_param_name):
-                    image_data_final = params_final.get(image_param_name)
-                    if (isinstance(image_data_final, list) and len(image_data_final) > 0) or \
-                       (isinstance(image_data_final, str) and image_data_final):
-                        logger.info(f"🚨🚨🚨 ABSOLUTE FINAL CHECK: {model_id} has image, FORCING all_required_collected=True")
-                        all_required_collected = True
-                    else:
-                        logger.error(f"❌ Image data is empty for {model_id}: {image_data_final}")
-                elif image_param_name in session and session.get(image_param_name):
-                    # Last resort - image is in session but not in params
-                    logger.warning(f"⚠️ Image in session but not in params for {model_id}, fixing...")
-                    if 'params' not in session:
-                        session['params'] = {}
-                    if isinstance(session[image_param_name], list):
-                        session['params'][image_param_name] = session[image_param_name].copy()
-                    else:
-                        session['params'][image_param_name] = [session[image_param_name]]
-                    all_required_collected = True
-                    logger.info(f"✅✅✅ Last resort fix: all_required_collected=True for {model_id}")
-                else:
-                    logger.error(f"❌❌❌ CRITICAL: {model_id} has no image in params or session!")
-            
-            logger.info(f"🎯🎯🎯 BEFORE BUTTON CHECK: all_required_collected={all_required_collected}, model={model_id}, params_keys={list(session.get('params', {}).keys())}")
-            
-            # ABSOLUTE FINAL CHECK: For image-only models, if image exists, FORCE all_required_collected=True
-            # This is the last chance to show the button
-            if not all_required_collected and model_id in models_only_image:
-                final_params_check = session.get('params', {})
-                final_session_check = session.get(image_param_name, [])
-                if (image_param_name in final_params_check and final_params_check.get(image_param_name)) or \
-                   (final_session_check and (isinstance(final_session_check, list) and len(final_session_check) > 0 or isinstance(final_session_check, str) and final_session_check)):
-                    logger.warning(f"🚨🚨🚨 ABSOLUTE FINAL: {model_id} has image, FORCING all_required_collected=True RIGHT BEFORE BUTTON CHECK")
-                    all_required_collected = True
-                    # Ensure image is in params
-                    if image_param_name not in final_params_check or not final_params_check.get(image_param_name):
-                        if 'params' not in session:
-                            session['params'] = {}
-                        if isinstance(final_session_check, list):
-                            session['params'][image_param_name] = final_session_check.copy()
-                        else:
-                            session['params'][image_param_name] = [final_session_check] if final_session_check else []
-            
-            logger.info(f"🎯🎯🎯 AFTER FINAL CHECK: all_required_collected={all_required_collected}, model={model_id}")
-            
-            # If all required parameters collected, show "Generate" button with price
-            if all_required_collected:
-                model_name = session.get('model_info', {}).get('name', 'Unknown')
-                params = session.get('params', {})
-                user_lang = get_user_language(user_id)
-                is_admin_user = get_is_admin(user_id)
-                
-                logger.info(f"✅ All parameters collected for {model_id}, showing generate button with price. Params: {list(params.keys())}")
-                
-                # CRITICAL: Log models_only_image check
-                logger.info(f"🔍🔍🔍 Checking auto-start: model_id={model_id}, models_only_image={models_only_image}, is_in_list={model_id in models_only_image}")
-                
-                # CRITICAL: For image-only models, automatically start generation instead of showing button
-                if model_id in models_only_image:
-                    logger.info(f"🚀🚀🚀 AUTO-STARTING generation for {model_id} (image-only model)")
-                    
-                    # Show "Generation started" message
-                    if user_lang == 'en':
-                        start_msg = (
-                            f"╔═══════════════════════════════════╗\n"
-                            f"║  🚀 GENERATION STARTED! 🚀         ║\n"
-                            f"╚═══════════════════════════════════╝\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"✅ <b>Processing your request</b>\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Model:</b> <code>{model_name}</code>\n"
-                            f"⏱️ <b>Expected time:</b> 10-60 seconds\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"💡 <b>What's happening:</b>\n"
-                            f"• AI is analyzing your request\n"
-                            f"• Content generation in progress\n"
-                            f"• Usually takes 10-60 seconds\n\n"
-                            f"✨ <b>Result will appear automatically!</b>"
-                        )
-                    else:
-                        start_msg = (
-                            f"╔═══════════════════════════════════╗\n"
-                            f"║  🚀 ГЕНЕРАЦИЯ НАЧАЛАСЬ! 🚀         ║\n"
-                            f"╚═══════════════════════════════════╝\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"✅ <b>Обрабатываю ваш запрос</b>\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Модель:</b> <code>{model_name}</code>\n"
-                            f"⏱️ <b>Ожидаемое время:</b> 10-60 секунд\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"💡 <b>Что происходит:</b>\n"
-                            f"• Нейросеть анализирует запрос\n"
-                            f"• Идет генерация контента\n"
-                            f"• Обычно 10-60 секунд\n\n"
-                            f"✨ <b>Результат появится автоматически!</b>"
-                        )
-                    
-                    try:
-                        if update.message:
-                            status_msg = await update.message.reply_text(start_msg, parse_mode='HTML')
-                        elif update.callback_query:
-                            try:
-                                await update.callback_query.edit_message_text(start_msg, parse_mode='HTML')
-                                status_msg = update.callback_query.message
-                            except Exception as edit_error:
-                                logger.warning(f"Could not edit message: {edit_error}, sending new")
-                                status_msg = await update.callback_query.message.reply_text(start_msg, parse_mode='HTML')
-                        else:
-                            status_msg = await context.bot.send_message(chat_id=user_id, text=start_msg, parse_mode='HTML')
-                        
-                        # CRITICAL: Ensure session exists before calling confirm_generation
-                        if user_id not in user_sessions:
-                            logger.error(f"❌❌❌ CRITICAL: Session lost before confirm_generation! user_id={user_id}, model_id={model_id}")
-                            raise Exception(f"Session lost for user {user_id}")
-                        
-                        # Verify session has required data
-                        session_check = user_sessions[user_id]
-                        if 'model_id' not in session_check or 'params' not in session_check:
-                            logger.error(f"❌❌❌ CRITICAL: Session incomplete! user_id={user_id}, session_keys={list(session_check.keys())}")
-                            raise Exception(f"Session incomplete for user {user_id}")
-                        
-                        logger.info(f"✅✅✅ Session verified before confirm_generation: user_id={user_id}, model_id={session_check.get('model_id')}, params_keys={list(session_check.get('params', {}).keys())}")
-                        
-                        # CRITICAL: Save session copy to restore if lost
-                        session_backup = session_check.copy()
-                        logger.info(f"💾💾💾 Session backup created: user_id={user_id}, backup_keys={list(session_backup.keys())}")
-                        
-                        # CRITICAL: Store backup in context.user_data for confirm_generation to access
-                        if not hasattr(context, 'user_data'):
-                            context.user_data = {}
-                        context.user_data['session_backup'] = session_backup.copy()
-                        context.user_data['session_backup_user_id'] = user_id
-                        logger.info(f"💾💾💾 Session backup stored in context.user_data for user_id={user_id}")
-                        
-                        # Create mock callback query to call confirm_generation
-                        class MockUser:
-                            def __init__(self, user_id):
-                                self.id = user_id
-                        
-                        class MockMessage:
-                            def __init__(self, status_msg):
-                                self.chat_id = status_msg.chat.id if hasattr(status_msg, 'chat') and hasattr(status_msg.chat, 'id') else user_id
-                                self.message_id = status_msg.message_id if hasattr(status_msg, 'message_id') else None
-                        
-                        class MockCallbackQuery:
-                            def __init__(self, user_id, status_msg, context):
-                                self.from_user = MockUser(user_id)
-                                self.message = MockMessage(status_msg)
-                                self.data = "confirm_generate"
-                                self.id = f"auto_{user_id}_{int(time.time())}"
-                                self._status_msg = status_msg
-                                self._context = context
-                                self._user_id = user_id
-                            
-                            async def answer(self, text=None, show_alert=False):
-                                pass
-                            
-                            async def edit_message_text(self, text, parse_mode='HTML', reply_markup=None):
-                                """Mock edit_message_text that uses status_msg.edit_text or context.bot"""
-                                try:
-                                    if hasattr(self._status_msg, 'edit_text'):
-                                        await self._status_msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
-                                    elif hasattr(self._status_msg, 'message_id') and hasattr(self._status_msg, 'chat'):
-                                        await self._context.bot.edit_message_text(
-                                            chat_id=self._status_msg.chat.id,
-                                            message_id=self._status_msg.message_id,
-                                            text=text,
-                                            parse_mode=parse_mode,
-                                            reply_markup=reply_markup
-                                        )
-                                    else:
-                                        # Fallback: send new message
-                                        await self._context.bot.send_message(
-                                            chat_id=self._user_id,
-                                            text=text,
-                                            parse_mode=parse_mode,
-                                            reply_markup=reply_markup
-                                        )
-                                except Exception as e:
-                                    logger.warning(f"MockCallbackQuery.edit_message_text failed: {e}, trying send_message")
-                                    await self._context.bot.send_message(
-                                        chat_id=self._user_id,
-                                        text=text,
-                                        parse_mode=parse_mode,
-                                        reply_markup=reply_markup
-                                    )
-                        
-                        # CRITICAL: Create effective_user that matches the real user
-                        class MockEffectiveUser:
-                            def __init__(self, user_id):
-                                self.id = user_id
-                        
-                        mock_query = MockCallbackQuery(user_id, status_msg, context)
-                        mock_effective_user = MockEffectiveUser(user_id)
-                        
-                        mock_update = type('obj', (object,), {
-                            'callback_query': mock_query,
-                            'effective_user': mock_effective_user,
-                            'message': None
-                        })()
-                        
-                        # Auto-start generation
-                        logger.info(f"🚀🚀🚀 Calling confirm_generation for {model_id}, user_id={user_id}")
-                        logger.info(f"🚀🚀🚀 Mock update: effective_user.id={mock_update.effective_user.id}, callback_query.data={mock_update.callback_query.data}")
-                        
-                        # CRITICAL: Double-check session exists right before calling
-                        if user_id not in user_sessions:
-                            logger.error(f"❌❌❌ Session lost RIGHT BEFORE confirm_generation! Restoring from backup...")
-                            user_sessions[user_id] = session_backup.copy()
-                            logger.info(f"✅✅✅ Session restored from backup: user_id={user_id}")
-                        
-                        try:
-                            logger.info(f"🚀🚀🚀 About to call confirm_generation: user_id={user_id}, model_id={model_id}, session_exists={user_id in user_sessions}")
-                            result = await confirm_generation(mock_update, context)
-                            logger.info(f"🚀🚀🚀 confirm_generation returned: {result} for {model_id}")
-                            # CRITICAL: If confirm_generation succeeded, return immediately - don't show button
-                            logger.info(f"✅✅✅ Auto-start succeeded, NOT showing button for {model_id}")
-                            return result
-                        except Exception as confirm_error:
-                            logger.error(f"❌❌❌ Error in confirm_generation: {confirm_error}", exc_info=True)
-                            logger.error(f"❌❌❌ Error type: {type(confirm_error).__name__}, error message: {str(confirm_error)}")
-                            # CRITICAL: Check if task was already created before error
-                            # If task_id exists in session, task was created and we should NOT show button
-                            if user_id in user_sessions:
-                                session_check = user_sessions[user_id]
-                                if 'task_id' in session_check:
-                                    task_id = session_check.get('task_id')
-                                    logger.warning(f"⚠️⚠️⚠️ Task {task_id} was already created before error, NOT showing button to prevent duplicate")
-                                    # Task was created, don't show button - just return
-                                    return ConversationHandler.END
-                            # Restore session if it was lost
-                            if user_id not in user_sessions:
-                                logger.warning(f"⚠️⚠️⚠️ Session lost during confirm_generation, restoring from backup...")
-                                user_sessions[user_id] = session_backup.copy()
-                            # Don't raise - fall through to show button only if task was NOT created
-                            logger.warning(f"⚠️⚠️⚠️ Falling through to show button due to confirm_generation error (task was NOT created)")
-                    except Exception as auto_start_error:
-                        logger.error(f"❌❌❌ CRITICAL Error auto-starting generation for {model_id}: {auto_start_error}", exc_info=True)
-                        logger.error(f"❌❌❌ Error type: {type(auto_start_error).__name__}, error message: {str(auto_start_error)}")
-                        logger.error(f"❌❌❌ Error traceback: {traceback.format_exc()}")
-                        # Fall through to show button as fallback
-                        error_fallback_msg = "❌ <b>Ошибка автоматического запуска</b>\n\nПопробуйте нажать кнопку генерации вручную."
-                        try:
-                            if update.message:
-                                await update.message.reply_text(error_fallback_msg, parse_mode='HTML')
-                            elif update.callback_query:
-                                await update.callback_query.message.reply_text(error_fallback_msg, parse_mode='HTML')
-                            else:
-                                await context.bot.send_message(chat_id=user_id, text=error_fallback_msg, parse_mode='HTML')
-                        except Exception as msg_error:
-                            logger.error(f"❌❌❌ Could not send error message: {msg_error}")
-                        # Continue to show button as fallback
-                
-                # Calculate price
-                is_free = is_free_generation_available(user_id, model_id)
-                price = calculate_price_rub(model_id, params, is_admin_user)
-                if is_free:
-                    price = 0.0
-                
-                # Format price string
-                price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                
-                # Format params text
-                params_text = ""
-                for k, v in params.items():
-                    if isinstance(v, list):
-                        params_text += f"  • {k}: {len(v)} image(s)\n"
-                    else:
-                        display_val = str(v)[:50] + '...' if len(str(v)) > 50 else str(v)
-                        params_text += f"  • {k}: {display_val}\n"
-                
-                # Prepare price info
-                if is_free:
-                    remaining = get_user_free_generations_remaining(user_id)
-                    if user_lang == 'en':
-                        price_info = f"\n\n🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day"
-                    else:
-                        price_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
-                else:
-                    if user_lang == 'en':
-                        price_info = f"\n\n💰 <b>Cost:</b> {price_str} ₽"
-                    else:
-                        price_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
-                
-                # Show message with "Generate" button and price
-                if user_lang == 'en':
-                    message_text = (
-                        f"✅ <b>Ready to generate!</b>\n\n"
-                        f"Model: <b>{model_name}</b>\n"
-                        f"Parameters:\n{params_text}{price_info}\n\n"
-                        f"Click the button below to start generation."
-                    )
-                    button_text = "🚀 Start Generation"
-                else:
-                    message_text = (
-                        f"✅ <b>Готово к генерации!</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n"
-                        f"Параметры:\n{params_text}{price_info}\n\n"
-                        f"Нажмите кнопку ниже для запуска генерации."
-                    )
-                    button_text = "🚀 Отправить на генерацию"
-                
-                keyboard = [
-                    [InlineKeyboardButton(button_text, callback_data="confirm_generate")],
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
-                
-                try:
-                    # Check if we have update.message (for photo/text input) or query (for callback)
-                    if update.message:
-                        await update.message.reply_text(
-                            message_text,
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='HTML'
-                        )
-                    elif update.callback_query:
-                        # If called from callback, edit the message
-                        try:
-                            await update.callback_query.edit_message_text(
-                                message_text,
-                                reply_markup=InlineKeyboardMarkup(keyboard),
-                                parse_mode='HTML'
-                            )
-                        except Exception as edit_error:
-                            logger.warning(f"Could not edit message, sending new: {edit_error}")
-                            await update.callback_query.message.reply_text(
-                                message_text,
-                                reply_markup=InlineKeyboardMarkup(keyboard),
-                                parse_mode='HTML'
-                            )
-                    else:
-                        # Fallback: send message to user
-                        await context.bot.send_message(
-                            chat_id=user_id,
-                            text=message_text,
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='HTML'
-                        )
-                    elapsed = time.time() - start_time
-                    logger.info(f"🔥🔥🔥 BUTTON SHOWN SUCCESS: model_id={model_id}, price={price_str} ₽, user_id={user_id}, elapsed={elapsed:.3f}s")
-                    logger.info(f"🔥🔥🔥 STATE TRANSITION: INPUTTING_PARAMS -> CONFIRMING_GENERATION for user {user_id}, model {model_id}")
-                    return CONFIRMING_GENERATION
-                except Exception as e:
-                    logger.error(f"❌ Error showing generate button: {e}", exc_info=True)
-                    error_msg = "❌ <b>Ошибка</b>\n\nНе удалось показать кнопку генерации."
-                    try:
-                        if update.message:
-                            await update.message.reply_text(error_msg, parse_mode='HTML')
-                        elif update.callback_query:
-                            await update.callback_query.message.reply_text(error_msg, parse_mode='HTML')
-                        else:
-                            await context.bot.send_message(chat_id=user_id, text=error_msg, parse_mode='HTML')
-                    except:
-                        pass
-                    return INPUTTING_PARAMS
+
+            next_param_result = await start_next_parameter(update, context, user_id)
+            if next_param_result is None:
+                return await send_confirmation_message(update, context, user_id, source="image_upload")
+            return next_param_result
             
             # CRITICAL: If all_required_collected is still False but this is an image-only model with image uploaded,
             # FORCE show the button anyway - this is a safety net
-            if not all_required_collected and model_id in models_only_image:
+            if not all_required_collected and image_only_model:
                 params_safety = session.get('params', {})
                 if image_param_name in params_safety and params_safety.get(image_param_name):
                     logger.warning(f"⚠️⚠️⚠️ SAFETY NET: all_required_collected=False but {model_id} has image, FORCING button show")
@@ -13313,39 +12383,11 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Параметры нормализованы, используем api_params вместо params
     params = api_params
     
-    # 🔴 КРИТИЧНО: Используем builder из каталога для фильтрации по типу модели
-    try:
-        from app.kie_catalog import get_model
-        from app.services.kie_input_builder import build_input, get_callback_url
-        
-        model_spec = get_model(model_id)
-        if model_spec:
-            # Строим input строго по типу модели (whitelist + валидация)
-            mode_index = 0  # NOTE: определить mode_index из параметров если нужно
-            built_input, build_error = build_input(model_spec, api_params, mode_index)
-            
-            if build_error:
-                # Мягкая ошибка валидации - показываем пользователю
-                user_lang = get_user_language(user_id) if user_id else 'ru'
-                error_text = (
-                    f"❌ <b>{build_error}</b>\n\n"
-                    f"Пожалуйста, проверьте параметры и попробуйте снова."
-                ) if user_lang == 'ru' else (
-                    f"❌ <b>{build_error}</b>\n\n"
-                    f"Please check parameters and try again."
-                )
-                await send_or_edit_message(error_text)
-                return ConversationHandler.END
-            
-            # Используем отфильтрованный input
-            api_params = built_input
-            logger.info(f"✅ Input built from catalog: MODEL={model_id} TYPE={model_spec.type} KEYS={list(built_input.keys())}")
-        else:
-            logger.warning(f"⚠️ Model {model_id} not found in catalog, using original api_params")
-    except Exception as e:
-        logger.error(f"❌ Error building input from catalog: {e}", exc_info=True)
-        # Fallback: используем оригинальные api_params
-        pass
+    logger.info(
+        "✅ Input normalized from SSOT: model_id=%s keys=%s",
+        model_id,
+        list(params.keys()),
+    )
     
     # Check if this is a free generation
     is_free = is_free_generation_available(user_id, model_id)
@@ -13454,6 +12496,38 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "💡 Usually takes a few seconds..."
     ).format(model_name=model_name)
     await send_or_edit_message(loading_msg)
+
+    try:
+        from app.generations.universal_engine import run_generation
+        from app.generations.telegram_sender import send_job_result
+        from app.kie_catalog import get_model
+
+        model_spec = get_model(model_id)
+        if not model_spec:
+            await send_or_edit_message("❌ <b>Модель не найдена в каталоге</b>")
+            return ConversationHandler.END
+
+        job_result = await run_generation(user_id, model_id, params)
+        elapsed = job_result.raw.get("elapsed")
+        await send_job_result(
+            context.bot,
+            user_id,
+            model_spec,
+            job_result,
+            price_rub=price,
+            elapsed=elapsed,
+            user_lang=user_lang,
+        )
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"❌ Generation failed: {e}", exc_info=True)
+        await send_or_edit_message(
+            "❌ <b>Ошибка генерации</b>\n\nПожалуйста, попробуйте позже.",
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
+
+
     
     try:
         # Параметры уже адаптированы к API через normalize_for_generation выше
