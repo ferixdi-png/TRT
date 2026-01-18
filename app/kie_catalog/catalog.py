@@ -70,6 +70,18 @@ def _load_yaml_catalog() -> List[Dict[str, Any]]:
         return []
 
 
+def _is_free_model_data(model_data: Dict[str, Any]) -> bool:
+    """Определяет бесплатную модель по данным каталога."""
+    if model_data.get("free") is True:
+        return True
+    for mode in model_data.get("modes", []):
+        if mode.get("free") is True:
+            return True
+        if mode.get("credits") == 0 or mode.get("official_usd") == 0 or mode.get("price_rub") == 0:
+            return True
+    return False
+
+
 def _parse_model_spec(model_data: Dict[str, Any]) -> ModelSpec:
     """Парсит данные модели в ModelSpec."""
     modes = []
@@ -128,6 +140,21 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
         logger.warning(f"Catalog verification warning: {e}")
     
     return models
+
+
+def get_free_model_ids() -> List[str]:
+    """
+    Возвращает список ID бесплатных моделей из каталога.
+    Бесплатность определяется только по данным каталога (free=true или 0 credits).
+    """
+    free_ids = []
+    for model_data in _load_yaml_catalog():
+        model_id = model_data.get("id")
+        if not model_id:
+            continue
+        if _is_free_model_data(model_data):
+            free_ids.append(model_id)
+    return free_ids
 
 
 def _verify_catalog_internal(models: List[ModelSpec]) -> None:

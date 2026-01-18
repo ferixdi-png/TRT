@@ -12,6 +12,7 @@ import random
 import threading
 import time
 import math
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Callable, Tuple
@@ -21,6 +22,11 @@ import aiohttp
 from app.storage.base import BaseStorage
 
 logger = logging.getLogger(__name__)
+
+_request_cache: ContextVar[Optional[Dict[str, Tuple[Dict[str, Any], Optional[str]]]]] = ContextVar(
+    "github_storage_request_cache",
+    default=None,
+)
 
 
 class GitHubConflictError(RuntimeError):
@@ -229,41 +235,26 @@ class GitHubStorage(BaseStorage):
                 return None
         return None
 
-    async def _read_json(self, filename: str) -> Tuple[Dict[str, Any], Optional[str]]:
-        path = self._storage_path(filename)
-        url = self._contents_url(path)
-        response = await self._request_with_retry(
-            "GET",
-            url,
-            op="read",
-            path=path,
-            ok_statuses=(200, 404),
-            params={"ref": self.config.branch},
-        )
-        if response.status == 404:
-            return {}, None
-        if response.status != 200:
-            logger.error(
-                "[GITHUB] op=read path=%s ok=false status=%s error_class=GitHubReadError",
-                path,
-                response.status,
-            )
-            raise RuntimeError(f"GitHub read failed {response.status}: {response.text}")
-        try:
-            payload = json.loads(response.text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("GitHub read failed: invalid JSON response") from exc
-        content = payload.get("content", "")
-        sha = payload.get("sha")
-        decoded = base64.b64decode(content).decode("utf-8") if content else "{}"
-        try:
-            data = json.loads(decoded) if decoded.strip() else {}
-        except json.JSONDecodeError:
-            logger.error("[GITHUB] read_invalid_json path=%s", path)
-            data = {}
+    async def _read_json(
+        self,
+        filename: str,
+        *,
+        force_refresh: bool = False,
+    ) -> Tuple[Dict[str, Any], Optional[str]]:
+        cache = self._get_request_cache()
+        if not force_refresh:
+            cached = cache.get(filename)
+            if cached is not None:
+                return cached
+
+        data, sha, status = await self._fetch_json_payload(filename)
+        if status == 404:
+            data, sha = await self._ensure_default_file(filename)
+
+        cache[filename] = (data, sha)
         return data, sha
 
-    async def _write_json(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> None:
+    async def _write_json(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> Optional[str]:
         path = self._storage_path(filename)
         url = self._contents_url(path)
         payload_json = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
@@ -301,7 +292,8 @@ class GitHubStorage(BaseStorage):
                 path,
                 response.status,
             )
-            return
+            payload = self._parse_json(response.text)
+            return payload.get("content", {}).get("sha") or payload.get("sha")
         if response.status == 409:
             raise GitHubConflictError(f"GitHub write conflict for {path}")
         logger.error(
@@ -327,11 +319,12 @@ class GitHubStorage(BaseStorage):
     ) -> Dict[str, Any]:
         last_error: Optional[Exception] = None
         for attempt in range(1, self.config.max_retries + 1):
-            data, sha = await self._read_json(filename)
+            data, sha = await self._read_json(filename, force_refresh=True)
             updated = update_fn(dict(data))
             merged = self._merge_json(data, updated)
             try:
-                await self._write_json(filename, merged, sha)
+                new_sha = await self._write_json(filename, merged, sha)
+                self._set_request_cache(filename, merged, new_sha or sha)
                 if attempt > 1:
                     logger.info(
                         "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
@@ -353,6 +346,72 @@ class GitHubStorage(BaseStorage):
             self._storage_path(filename),
         )
         raise RuntimeError("Exceeded GitHub write retries") from last_error
+
+    def _parse_json(self, payload: str) -> Dict[str, Any]:
+        if not payload:
+            return {}
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError:
+            return {}
+
+    def _get_request_cache(self) -> Dict[str, Tuple[Dict[str, Any], Optional[str]]]:
+        cache = _request_cache.get()
+        if cache is None:
+            cache = {}
+            _request_cache.set(cache)
+        return cache
+
+    def _set_request_cache(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> None:
+        cache = self._get_request_cache()
+        cache[filename] = (data, sha)
+
+    def _default_payload_for(self, filename: str) -> Dict[str, Any]:
+        return {}
+
+    async def _fetch_json_payload(self, filename: str) -> Tuple[Dict[str, Any], Optional[str], int]:
+        path = self._storage_path(filename)
+        url = self._contents_url(path)
+        response = await self._request_with_retry(
+            "GET",
+            url,
+            op="read",
+            path=path,
+            ok_statuses=(200, 404),
+            params={"ref": self.config.branch},
+        )
+        if response.status == 404:
+            return {}, None, 404
+        if response.status != 200:
+            logger.error(
+                "[GITHUB] op=read path=%s ok=false status=%s error_class=GitHubReadError",
+                path,
+                response.status,
+            )
+            raise RuntimeError(f"GitHub read failed {response.status}: {response.text}")
+        payload = self._parse_json(response.text)
+        content = payload.get("content", "")
+        sha = payload.get("sha")
+        decoded = base64.b64decode(content).decode("utf-8") if content else "{}"
+        try:
+            data = json.loads(decoded) if decoded.strip() else {}
+        except json.JSONDecodeError:
+            logger.error("[GITHUB] read_invalid_json path=%s", path)
+            data = {}
+        return data, sha, 200
+
+    async def _ensure_default_file(self, filename: str) -> Tuple[Dict[str, Any], Optional[str]]:
+        default_data = self._default_payload_for(filename)
+        path = self._storage_path(filename)
+        try:
+            new_sha = await self._write_json(filename, default_data, None)
+            logger.info("[GITHUB] default_created=true path=%s", path)
+            self._set_request_cache(filename, default_data, new_sha)
+            return default_data, new_sha
+        except GitHubConflictError:
+            logger.info("[GITHUB] default_create_conflict=true path=%s", path)
+        data, sha, _ = await self._fetch_json_payload(filename)
+        return data, sha
 
     async def _backoff(self, attempt: int, headers: Optional[aiohttp.typedefs.LooseHeaders] = None) -> None:
         delay = (2 ** (attempt - 1)) * self.config.backoff_base

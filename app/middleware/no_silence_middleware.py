@@ -1,0 +1,1 @@
+"""No-silence middleware placeholder."""

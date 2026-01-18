@@ -78,11 +78,11 @@ class DependencyContainer:
         if self.kie_client is None:
             # Ленивая инициализация при первом использовании
             try:
-                from kie_client import KieClient
+                from app.kie.kie_client import KIEClient
                 if self.settings and self.settings.kie_api_key:
-                    self.kie_client = KieClient(
+                    self.kie_client = KIEClient(
                         api_key=self.settings.kie_api_key,
-                        api_url=self.settings.kie_api_url or "https://api.kie.ai"
+                        base_url=self.settings.kie_api_url or "https://api.kie.ai",
                     )
                     logger.info("[OK] KIE client initialized")
                 else:
