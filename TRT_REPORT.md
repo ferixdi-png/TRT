@@ -145,3 +145,24 @@
 **Какие файлы тронул:**
 - `bot_kie.py`
 - `tests/test_input_parameters_wizard_flow.py`
+
+## 2025-02-15: Callback crash fix + single main menu UX
+**Причина бага:**
+- `NameError: is_admin_user is not defined` при обработке `set_param` → `calculate_price_rub` (отсутствовала инициализация is_admin_user перед расчетом цены).
+
+**Где исправил:**
+- `bot_kie.py` в обработчике `set_param` добавлено `is_admin_user = get_is_admin(user_id)` перед `calculate_price_rub` и сброс `waiting_for` после ввода последнего параметра.
+
+**Как устранил “второе меню”:**
+- `show_main_menu` теперь отправляет только одно сообщение с welcome + клавиатурой (без вторичных release/what's new карточек).
+- `unknown_callback_handler` и fallback в `button_callback` отвечают коротким сообщением и редактируют текущее сообщение в главное меню без дополнительных карточек.
+
+**Как проверил:**
+- Команды: `python scripts/verify_project.py`, `pytest -q`.
+- UX шаги (через harness): `/start -> gen_type:text-to-image -> select_model:z-image -> prompt -> set_param:aspect_ratio:1:1` — без исключений, подтверждение генерации отображается, главное меню не дублируется.
+
+**Какие файлы тронул:**
+- `bot_kie.py`
+- `tests/test_main_menu.py`
+- `tests/ux/test_z_image_aspect_ratio_flow.py`
+- `TRT_REPORT.md`
