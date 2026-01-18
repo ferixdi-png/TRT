@@ -879,6 +879,7 @@ models:
 - id: z-image
   title_ru: Qwen Z-Image Text to Image
   type: t2i
+  free: true
   modes:
   - unit: image
     credits: 0.8

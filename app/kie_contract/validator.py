@@ -1,0 +1,1 @@
+"""KIE contract validator placeholder."""
