@@ -27,7 +27,7 @@ def set_usd_to_rub_rate(rate: float) -> None:
     Установить курс USD к RUB
     Пока заглушка, можно расширить для сохранения в storage
     """
-    # TODO: можно сохранять в storage если нужно динамическое обновление
+        # NOTE: можно сохранять в storage если нужно динамическое обновление
     logger.info(f"USD to RUB rate set to {rate}")
 
 
@@ -39,4 +39,3 @@ def credit_to_rub(credits: float) -> float:
 def rub_to_credit(rub: float) -> float:
     """Конвертировать рубли в кредиты"""
     return rub / (CREDIT_TO_USD * get_usd_to_rub_rate())
-

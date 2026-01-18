@@ -31,18 +31,25 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
     return data
 
 
-def _registry_ids(data: Dict[str, Any]) -> Set[str]:
+def _registry_models(data: Dict[str, Any]) -> Dict[str, Any]:
     models = data.get("models", {})
     if not isinstance(models, dict):
-        return set()
-    return set(models.keys())
+        return {}
+    return models
+
+
+def _registry_ids(data: Dict[str, Any]) -> Set[str]:
+    return set(_registry_models(data).keys())
 
 
 def _registry_free_ids(data: Dict[str, Any]) -> Set[str]:
-    models = data.get("models", {})
-    if not isinstance(models, dict):
-        return set()
+    models = _registry_models(data)
     return {model_id for model_id, model_data in models.items() if model_data.get("free") is True}
+
+
+def _registry_disabled_ids(data: Dict[str, Any]) -> Set[str]:
+    models = _registry_models(data)
+    return {model_id for model_id, model_data in models.items() if model_data.get("disabled") is True}
 
 
 def _pricing_ids(data: Dict[str, Any]) -> Set[str]:
@@ -78,12 +85,21 @@ def main() -> int:
     registry_data = _load_yaml(REGISTRY_PATH)
     pricing_data = _load_yaml(PRICING_PATH)
 
-    registry_ids = _registry_ids(registry_data)
+    registry_models = _registry_models(registry_data)
+    registry_ids = set(registry_models.keys())
     pricing_ids = _pricing_ids(pricing_data)
     registry_free = _registry_free_ids(registry_data)
+    registry_disabled = _registry_disabled_ids(registry_data)
     pricing_free = _pricing_free_ids(pricing_data)
 
     errors = []
+    if len(registry_ids) != 72:
+        errors.append(f"Registry model count must be 72, got {len(registry_ids)}")
+    if len(pricing_ids) > 72:
+        errors.append(f"Pricing model count must be <= 72, got {len(pricing_ids)}")
+
+    if len(pricing_ids) != len(set(pricing_ids)):
+        errors.append("Pricing contains duplicate model_id entries")
 
     pricing_only = pricing_ids - registry_ids
     if pricing_only:
@@ -91,7 +107,7 @@ def main() -> int:
             f"Pricing has models missing in registry ({len(pricing_only)}): {sorted(pricing_only)}"
         )
 
-    registry_missing_pricing = registry_ids - pricing_ids - registry_free
+    registry_missing_pricing = registry_ids - pricing_ids - registry_free - registry_disabled
     if registry_missing_pricing:
         errors.append(
             "Registry has paid models missing pricing "
