@@ -1143,25 +1143,30 @@ def update_session_activity(user_id: int):
         user_sessions[user_id]['last_activity'] = time.time()
 
 
+def _guard_sync_wrapper_in_event_loop(wrapper_name: str) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if loop.is_running():
+        import traceback
+
+        stack = "".join(traceback.format_stack(limit=12))
+        logger.error(
+            "SYNC_WRAPPER_CALLED_IN_ASYNC wrapper=%s stack=%s",
+            wrapper_name,
+            stack,
+        )
+        raise RuntimeError(f"{wrapper_name} called inside running event loop")
+
+
 def get_user_balance(user_id: int) -> float:
     """Get user balance in rubles (synchronous wrapper for storage)."""
-    # Use storage layer through async wrapper (blocking call)
     import asyncio
     from app.services.user_service import get_user_balance as get_balance_async
+
+    _guard_sync_wrapper_in_event_loop("get_user_balance")
     try:
-        # Try to get current event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, we can't use run_until_complete
-            # Fall back to thread pool
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, get_balance_async(user_id))
-                return future.result(timeout=5.0)
-        else:
-            return loop.run_until_complete(get_balance_async(user_id))
-    except RuntimeError:
-        # No event loop, create new one
         return asyncio.run(get_balance_async(user_id))
     except Exception as e:
         logger.error(f"❌ Error getting user balance: {e}", exc_info=True)
@@ -1174,16 +1179,9 @@ def set_user_balance(user_id: int, amount: float):
     import asyncio
     from app.services.user_service import set_user_balance as set_balance_async
     logger.info(f"💰💰💰 SET_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
+
+    _guard_sync_wrapper_in_event_loop("set_user_balance")
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, set_balance_async(user_id, amount))
-                future.result(timeout=5.0)
-        else:
-            loop.run_until_complete(set_balance_async(user_id, amount))
-    except RuntimeError:
         asyncio.run(set_balance_async(user_id, amount))
     except Exception as e:
         logger.error(f"❌ Error setting user balance: {e}", exc_info=True)
@@ -1195,16 +1193,9 @@ def add_user_balance(user_id: int, amount: float) -> float:
     import asyncio
     from app.services.user_service import add_user_balance as add_balance_async
     logger.info(f"💰💰💰 ADD_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
+
+    _guard_sync_wrapper_in_event_loop("add_user_balance")
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, add_balance_async(user_id, amount))
-                return future.result(timeout=5.0)
-        else:
-            return loop.run_until_complete(add_balance_async(user_id, amount))
-    except RuntimeError:
         return asyncio.run(add_balance_async(user_id, amount))
     except Exception as e:
         logger.error(f"❌ Error adding user balance: {e}", exc_info=True)
@@ -1216,16 +1207,9 @@ def subtract_user_balance(user_id: int, amount: float) -> bool:
     # Use storage layer through async wrapper (blocking call)
     import asyncio
     from app.services.user_service import subtract_user_balance as subtract_balance_async
+
+    _guard_sync_wrapper_in_event_loop("subtract_user_balance")
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, subtract_balance_async(user_id, amount))
-                return future.result(timeout=5.0)
-        else:
-            return loop.run_until_complete(subtract_balance_async(user_id, amount))
-    except RuntimeError:
         return asyncio.run(subtract_balance_async(user_id, amount))
     except Exception as e:
         logger.error(f"❌ Error subtracting user balance: {e}", exc_info=True)
@@ -1849,6 +1833,23 @@ def is_new_user(user_id: int) -> bool:
     return True
 
 
+async def is_new_user_async(user_id: int) -> bool:
+    """Async check if user is new (no balance, no history, no payments)."""
+    balance = await get_user_balance_async(user_id)
+    if balance > 0:
+        return False
+
+    history = get_user_generations_history(user_id, limit=1)
+    if history:
+        return False
+
+    payments = get_user_payments(user_id)
+    if payments:
+        return False
+
+    return True
+
+
 async def send_broadcast(context: ContextTypes.DEFAULT_TYPE, broadcast_id: int, user_ids: list, message_text: str = None, message_photo=None):
     """Send broadcast message to all users."""
     sent = 0
@@ -1957,8 +1958,8 @@ def check_duplicate_payment(screenshot_file_id: str) -> bool:
     return False
 
 
-def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
-    """Add a payment record. Returns payment dict with id, timestamp, etc."""
+def _persist_payment_record(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
+    """Persist payment record and return payment payload."""
     # Ensure payments file exists
     if not os.path.exists(PAYMENTS_FILE):
         try:
@@ -1967,7 +1968,7 @@ def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> 
             logger.info(f"Created payments file {PAYMENTS_FILE}")
         except Exception as e:
             logger.error(f"Error creating payments file {PAYMENTS_FILE}: {e}")
-    
+
     payments = load_json_file(PAYMENTS_FILE, {})
     payment_id = len(payments) + 1
     import time
@@ -1980,12 +1981,12 @@ def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> 
         "status": "completed"  # Auto-completed
     }
     payments[str(payment_id)] = payment
-    
+
     # Force immediate save for payments (critical data)
     if PAYMENTS_FILE in _last_save_time:
         del _last_save_time[PAYMENTS_FILE]
     save_json_file(PAYMENTS_FILE, payments, use_cache=True)
-    
+
     # Verify payment was saved
     if os.path.exists(PAYMENTS_FILE):
         verify_payments = load_json_file(PAYMENTS_FILE, {})
@@ -1995,10 +1996,24 @@ def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> 
             logger.error(f"❌ Payment saved but not found in file! payment_id={payment_id}")
     else:
         logger.error(f"❌ Failed to save payment file: {PAYMENTS_FILE} does not exist after save!")
-    
+
+    return payment
+
+
+def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
+    """Add a payment record. Returns payment dict with id, timestamp, etc."""
+    payment = _persist_payment_record(user_id, amount, screenshot_file_id)
+
     # Auto-add balance
     add_user_balance(user_id, amount)
-    
+
+    return payment
+
+
+async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
+    """Async add payment with balance credit through async storage."""
+    payment = _persist_payment_record(user_id, amount, screenshot_file_id)
+    await add_user_balance_async(user_id, amount)
     return payment
 
 
@@ -2614,7 +2629,7 @@ async def _build_main_menu_sections(update: Update) -> tuple[str, str]:
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
 
-    is_new = is_new_user(user_id) if user_id else True
+    is_new = await is_new_user_async(user_id) if user_id else True
     referral_link = get_user_referral_link(user_id) if user_id else ""
     referrals_count = len(get_user_referrals(user_id)) if user_id else 0
     online_count = get_fake_online_count()
@@ -3477,7 +3492,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Get the gift amount
             amount = spin_gift_wheel()
-            add_user_balance(user_id, amount)
+            await add_user_balance_async(user_id, amount)
             set_gift_claimed(user_id)
             
             # Show result with celebration
@@ -6997,7 +7012,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Get user language
             user_lang = get_user_language(user_id)
-            is_new = is_new_user(user_id)
+            is_new = await is_new_user_async(user_id)
             
             if is_new:
                 if user_lang == 'ru':
@@ -8566,7 +8581,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             model_category = model_info.get('category', 'Общее')
             
             # Check if new user for hints
-            is_new = is_new_user(user_id)
+            is_new = await is_new_user_async(user_id)
             
             # Premium formatted model info (optimized for mobile - shorter lines)
             model_info_text = (
@@ -9995,7 +10010,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 
                 # Add payment and auto-credit balance
-                payment = add_payment(user_id, amount, screenshot_file_id)
+                payment = await add_payment_async(user_id, amount, screenshot_file_id)
                 new_balance = await get_user_balance_async(user_id)
                 balance_str = f"{new_balance:.2f}".rstrip('0').rstrip('.')
                 
