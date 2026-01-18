@@ -216,6 +216,7 @@ from helpers import (
 )
 # Используем registry как единый источник моделей
 from app.models.registry import get_models_sync
+from app.kie_catalog import get_free_model_ids
 from kie_models import (
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
@@ -4591,14 +4592,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             logger.info(f"User {user_id} clicked 'free_tools' button")
             
-            # Get free tools (models with price = 0)
-            free_models = []
-            for model in get_models_sync():
-                model_id = model.get('id')
-                # Check if model is free (price = 0)
-                price = calculate_price_rub(model_id, {}, False, user_id)  # Use user price (x2)
-                if price == 0.0:
-                    free_models.append(model)
+            # Get free tools from SSOT (pricing catalog)
+            free_ids = set(get_free_model_ids())
+            free_models = [model for model in get_models_sync() if model.get('id') in free_ids]
             
             if not free_models:
                 user_lang = get_user_language(user_id)
