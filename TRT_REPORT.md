@@ -46,6 +46,9 @@
 ## Какие файлы тронул
 - `bot_kie.py`
 - `app/storage/github_storage.py`
+- `main_render.py`
+- `pytest.ini`
+- `scripts/render_webhook_smoke.py`
 - `tests/test_main_menu.py`
 - `tests/test_e2e_flow.py`
 - `tests/test_github_storage_loop.py`
@@ -70,3 +73,34 @@
 - `✅ SOURCE OF TRUTH: registry=/workspace/TRT/models/kie_models.yaml models=... | pricing_catalog=/workspace/TRT/app/kie_catalog/models_pricing.yaml models=... | pricing_settings=/workspace/TRT/pricing/config.yaml | usd_to_rub=77.2222 | price_multiplier=2.0`
 - `📊 models_registry source=yaml path=/workspace/TRT/models/kie_models.yaml count=...`
 - `MAIN_MENU_SHOWN source=gen_type` (fallback не используется)
+
+## PTB ConversationHandler warning
+- В коде ConversationHandler использует `per_message=False` (default) и включает `CallbackQueryHandler` + `MessageHandler` для текстовых/медиа шагов. Это вызывает PTBUserWarning:
+  - `If 'per_message=False', 'CallbackQueryHandler' will not be tracked for every message`.
+- Это безопасно для текущего UX, потому что состояние ведётся по `per_chat` и сообщения/кнопки ожидаются в рамках чата пользователя.
+- Исправление через `per_message=True` невозможно без удаления MessageHandler из ConversationHandler (сломает ввод текста/медиа). Поэтому warning задокументирован как допустимый компромисс.
+
+## Runbook: локальный Render-mode smoke (без секретов)
+1. Убедитесь, что `python` доступен, затем:
+   - `python scripts/render_webhook_smoke.py`
+2. Скрипт стартует `main_render.py` в `BOT_MODE=webhook`, поднимает health server, вызывает `/health` и `/webhook`.
+   - Для sandbox/CI используется `SMOKE_NO_PROCESS=1` (skip Telegram init, без внешнего сетевого вызова).
+3. Ожидаемый результат:
+   - `status=ok` в JSON ответа `/health`
+   - `webhook_route_registered=true` в JSON ответа
+   - `/webhook` возвращает 200/204
+
+## Runbook: верификация на Render
+1. Deploy текущей ветки.
+2. В Render logs найти маркеры:
+   - `[HEALTH] server_listening=true port=...`
+   - `[WEBHOOK] route_registered=true`
+   - `[RUN] webhook_set_ok=true` (если не используется WEBHOOK_SKIP_SET)
+   - `POST /webhook status=200` (при ручном тесте)
+   - отсутствие `HTML chunk invalid`
+   - отсутствие `NO-SILENCE VIOLATION`
+   - отсутствие `Unclosed client session`
+3. Проверить `/health` = 200 и JSON содержит `webhook_route_registered=true`.
+
+## Что не проверено в этой среде
+- Реальные Render логи и Telegram-сценарии: требуется доступ к Render/Telegram с .env (секреты не доступны в sandbox).
