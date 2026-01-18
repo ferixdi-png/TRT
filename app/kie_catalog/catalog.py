@@ -15,6 +15,21 @@ logger = logging.getLogger(__name__)
 _catalog_cache: Optional[List['ModelSpec']] = None
 
 
+def _get_catalog_path() -> Path:
+    root_dir = Path(__file__).parent.parent.parent
+    return root_dir / "app" / "kie_catalog" / "models_pricing.yaml"
+
+
+def get_catalog_source_info() -> Dict[str, Any]:
+    """Return catalog source metadata for diagnostics and tests."""
+    catalog_file = _get_catalog_path()
+    raw_models = _load_yaml_catalog()
+    return {
+        "path": str(catalog_file) if catalog_file.exists() else "unknown",
+        "count": len(raw_models),
+    }
+
+
 @dataclass
 class ModelMode:
     """Режим генерации модели."""
@@ -35,8 +50,7 @@ class ModelSpec:
 
 def _load_yaml_catalog() -> List[Dict[str, Any]]:
     """Загружает YAML каталог."""
-    root_dir = Path(__file__).parent.parent.parent
-    catalog_file = root_dir / "app" / "kie_catalog" / "models_pricing.yaml"
+    catalog_file = _get_catalog_path()
     
     if not catalog_file.exists():
         logger.error(f"Catalog file not found: {catalog_file}")
@@ -180,4 +194,3 @@ def reset_catalog_cache():
     global _catalog_cache
     _catalog_cache = None
     logger.debug("Catalog cache reset")
-

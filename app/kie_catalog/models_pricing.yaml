@@ -316,6 +316,22 @@ models:
     credits: 24.0
     official_usd: 0.12
     notes: 1.0s-4K
+- id: nano-banana-pro
+  title_ru: Nano Banana Pro
+  type: t2i
+  modes:
+  - unit: image
+    credits: 18.0
+    official_usd: 0.09
+    notes: 1.0s-1K
+  - unit: image
+    credits: 18.0
+    official_usd: 0.09
+    notes: 1.0s-2K
+  - unit: image
+    credits: 24.0
+    official_usd: 0.12
+    notes: 1.0s-4K
 - id: google/veo-3
   title_ru: Google Veo 3 Text to Video
   type: t2v
@@ -419,6 +435,22 @@ models:
     credits: 50.0
     official_usd: 0.25
     notes: Standard-10.0s-768p
+- id: hailuo/02-text-to-video-pro
+  title_ru: Hailuo 02 Text to Video Pro
+  type: t2v
+  modes:
+  - unit: video
+    credits: 57.0
+    official_usd: 0.285
+    notes: Pro-6.0s-1080p
+- id: hailuo/02-image-to-video-pro
+  title_ru: Hailuo 02 Image to Video Pro
+  type: i2v
+  modes:
+  - unit: video
+    credits: 57.0
+    official_usd: 0.285
+    notes: Pro-6.0s-1080p
 - id: hailuo/2.3
   title_ru: Hailuo 2.3 Image to Video
   type: i2v
@@ -999,6 +1031,22 @@ models:
     notes: 480p
 - id: wan/2-2-animate-move
   title_ru: Wan 2.2 Animate Speech to Video
+  type: t2v
+  modes:
+  - unit: video
+    credits: 24.0
+    official_usd: 0.12
+    notes: Turbo-1.0s-720p
+  - unit: video
+    credits: 18.0
+    official_usd: 0.09
+    notes: Turbo-1.0s-580p
+  - unit: video
+    credits: 12.0
+    official_usd: 0.06
+    notes: Turbo-1.0s-480p
+- id: wan/2-2-animate-replace
+  title_ru: Wan 2.2 Animate Replace
   type: t2v
   modes:
   - unit: video
