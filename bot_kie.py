@@ -3757,6 +3757,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
+            if user_id in user_sessions:
+                session = user_sessions[user_id]
+                session['waiting_for'] = None
+                session['current_param'] = None
+                session['param_history'] = []
+                logger.info(
+                    "🏠 MENU_RESET: action_path=back_to_menu model_id=%s waiting_for=%s current_param=%s outcome=cleared",
+                    session.get('model_id'),
+                    session.get('waiting_for'),
+                    session.get('current_param'),
+                )
             await show_main_menu(update, context, source="back_to_menu")
             return ConversationHandler.END
         
@@ -4199,6 +4210,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_lang = get_user_language(user_id)
             keyboard = [
                 [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                 [
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                     InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -4972,6 +4984,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang = get_user_language(user_id)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                         [
                             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -5099,6 +5112,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang = get_user_language(user_id)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                         [
                             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -5186,6 +5200,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang = get_user_language(user_id)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                         [
                             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -5206,6 +5221,81 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Error after skipping image: {e}")
                 await query.edit_message_text("❌ Ошибка при переходе к следующему параметру.")
                 return INPUTTING_PARAMS
+
+        if data == "show_parameters":
+            await query.answer()
+            if user_id not in user_sessions:
+                await query.edit_message_text("❌ Сессия не найдена.")
+                return ConversationHandler.END
+
+            session = user_sessions[user_id]
+            properties = session.get('properties', {})
+            params = session.get('params', {})
+            param_order = session.get('param_order', list(properties.keys()))
+            user_lang = get_user_language(user_id)
+            keyboard = []
+
+            for param_name in param_order:
+                if param_name not in properties:
+                    continue
+                param_info = properties.get(param_name, {})
+                default_value = param_info.get('default')
+                if param_name in params:
+                    value_text = str(params[param_name])
+                elif default_value is not None:
+                    value_text = f"{default_value}"
+                else:
+                    value_text = "—"
+                if len(value_text) > 30:
+                    value_text = value_text[:30] + "…"
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{param_name}: {value_text}",
+                        callback_data=f"edit_param:{param_name}"
+                    )
+                ])
+
+            back_label = "◀️ Назад" if user_lang == 'ru' else "◀️ Back"
+            keyboard.append([InlineKeyboardButton(back_label, callback_data="back_to_confirmation")])
+            keyboard.append([InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")])
+            keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+
+            text = (
+                "⚙️ <b>Параметры модели</b>\n\n"
+                "Нажмите на параметр, чтобы изменить его значение."
+                if user_lang == 'ru'
+                else "⚙️ <b>Model parameters</b>\n\nTap a parameter to change its value."
+            )
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            logger.info(
+                "🧭 PARAMS_MENU: action_path=show_parameters model_id=%s waiting_for=%s current_param=%s outcome=shown",
+                session.get('model_id'),
+                session.get('waiting_for'),
+                session.get('current_param'),
+            )
+            return INPUTTING_PARAMS
+
+        if data.startswith("edit_param:"):
+            await query.answer()
+            if user_id not in user_sessions:
+                await query.edit_message_text("❌ Сессия не найдена.")
+                return ConversationHandler.END
+            session = user_sessions[user_id]
+            param_name = data.split(":", 1)[1]
+            session.setdefault('param_history', [])
+            if 'params' in session:
+                session['params'].pop(param_name, None)
+            session['waiting_for'] = param_name
+            session['current_param'] = param_name
+            return await prompt_for_specific_param(update, context, user_id, param_name, source="edit_param")
+
+        if data == "back_to_confirmation":
+            await query.answer()
+            return await send_confirmation_message(update, context, user_id, source="back_to_confirmation")
         
         if data.startswith("set_param:"):
             # Handle parameter setting via button
@@ -5255,6 +5345,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session['params'].pop(param_name, None)
                     session['current_param'] = None
                     session['waiting_for'] = None
+                    _record_param_history(session, param_name)
                     skip_param = True
                     await query.edit_message_text(f"⏭️ {param_name} пропущен.")
                     try:
@@ -5289,7 +5380,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     session['params'] = {}
                 if not skip_param:
                     session['params'][param_name] = param_value
+                    _record_param_history(session, param_name)
                 session['current_param'] = None
+                logger.info(
+                    "🧩 PARAM_SET: action_path=button_set_param model_id=%s waiting_for=%s current_param=%s outcome=%s",
+                    session.get('model_id'),
+                    session.get('waiting_for'),
+                    param_name,
+                    "skipped" if skip_param else "stored",
+                )
                 
                 # Check if there are more parameters
                 required = session.get('required', [])
@@ -5322,6 +5421,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang = get_user_language(user_id)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                         [
                             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -5397,112 +5497,47 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             session = user_sessions[user_id]
-            current_param = session.get('current_param')
-            waiting_for = session.get('waiting_for')
-            
-            # Show helpful message about going back
-            model_name = session.get('model_info', {}).get('name', 'Unknown')
-            if user_lang == 'ru':
-                back_msg = (
-                    f"◀️ <b>Возврат к предыдущему шагу</b>\n\n"
-                    f"🤖 <b>Модель:</b> {model_name}\n\n"
-                    f"💡 Вы можете изменить параметры или начать заново."
-                )
-            else:
-                back_msg = (
-                    f"◀️ <b>Going back to previous step</b>\n\n"
-                    f"🤖 <b>Model:</b> {model_name}\n\n"
-                    f"💡 You can change parameters or start over."
-                )
-            
-            # If we're waiting for a parameter, clear it and go back
-            if waiting_for:
-                session['waiting_for'] = None
-                session['current_param'] = None
-            
-            # Try to go back to previous parameter or model selection
             try:
-                # If we have params, remove the last one and restart
+                history = session.setdefault('param_history', [])
                 params = session.get('params', {})
-                if params:
-                    # Remove last parameter (simple approach - remove current_param if set)
-                    if current_param and current_param in params:
-                        del params[current_param]
-                        session['params'] = params
-                
-                # Restart parameter collection from beginning
-                next_param_result = await start_next_parameter(update, context, user_id)
-                if next_param_result:
-                    return next_param_result
-                else:
-                    # If no more parameters, show confirmation
-                    model_name = session.get('model_info', {}).get('name', 'Unknown')
-                    params = session.get('params', {})
-                    params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
-                    
-                    keyboard = [
-                        [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
-                        [
-                            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                        ],
-                        [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                    ]
-                    
-                    # Calculate price for confirmation message
-                    is_free = is_free_generation_available(user_id, model_id)
-                    price = calculate_price_rub(model_id, params, is_admin_user)
-                    if is_free:
-                        price = 0.0
-                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                    
-                    # Prepare price info
-                    if is_free:
-                        remaining = get_user_free_generations_remaining(user_id)
-                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
-                    else:
-                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
-                    
-                    # Format improved confirmation message with price
-                    if user_lang == 'ru':
-                        confirm_msg = (
-                            f"📋 <b>Подтверждение генерации</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Модель:</b> {model_name}\n\n"
-                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>Что будет дальше:</b>\n"
-                            f"• Генерация начнется после подтверждения\n"
-                            f"• Результат придет автоматически\n"
-                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-                            f"🚀 <b>Готовы начать?</b>"
-                        )
-                    else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
-                        confirm_msg = (
-                            f"📋 <b>Generation Confirmation</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Model:</b> {model_name}\n\n"
-                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info_en}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>What's next:</b>\n"
-                            f"• Generation will start after confirmation\n"
-                            f"• Result will come automatically\n"
-                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                            f"🚀 <b>Ready to start?</b>"
-                        )
-                    
-                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
+                if not history:
+                    logger.info(
+                        "🧭 BACK: action_path=back_to_previous_step model_id=%s waiting_for=%s current_param=%s outcome=no_history",
+                        session.get('model_id'),
+                        session.get('waiting_for'),
+                        session.get('current_param'),
+                    )
+                    next_param_result = await start_next_parameter(update, context, user_id)
+                    if next_param_result:
+                        return next_param_result
                     await query.edit_message_text(
-                        confirm_msg,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        t('error_try_start', lang=user_lang),
                         parse_mode='HTML'
                     )
-                    return CONFIRMING_GENERATION
+                    return ConversationHandler.END
+
+                previous_param = history.pop()
+                if previous_param in params:
+                    params.pop(previous_param, None)
+                session['params'] = params
+                session['waiting_for'] = previous_param
+                session['current_param'] = previous_param
+                logger.info(
+                    "🧭 BACK: action_path=back_to_previous_step model_id=%s waiting_for=%s current_param=%s outcome=rewind",
+                    session.get('model_id'),
+                    session.get('waiting_for'),
+                    session.get('current_param'),
+                )
+                next_param_result = await prompt_for_specific_param(
+                    update,
+                    context,
+                    user_id,
+                    previous_param,
+                    source="back_to_previous_step",
+                )
+                if next_param_result:
+                    return next_param_result
+                return INPUTTING_PARAMS
             except Exception as e:
                 logger.error(f"Error in back_to_previous_step: {e}", exc_info=True)
                 # Fallback: return to model selection
@@ -7657,6 +7692,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     repeat_msg,
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(t('btn_confirm_generate_text', lang=user_lang), callback_data="confirm_generate")],
+                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                         [InlineKeyboardButton(t('btn_back_to_history', lang=user_lang), callback_data="my_generations")],
                         [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
                     ]),
@@ -7703,6 +7739,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         repeat_msg,
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton("✅ Генерировать" if user_lang == 'ru' else "✅ Generate", callback_data="confirm_generate")],
+                            [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                             [InlineKeyboardButton("◀️ Назад к истории" if user_lang == 'ru' else "◀️ Back to history", callback_data="my_generations")],
                             [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
                         ]),
@@ -8779,6 +8816,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Get required parameters from schema (required=True)
             user_sessions[user_id]['required'] = [p for p, info in input_params.items() if info.get('required', False)]
             user_sessions[user_id]['current_param'] = None
+            user_sessions[user_id]['param_history'] = []
             
             # Determine parameter order: image/video/audio input → prompt/text → optional
             # Priority: media inputs first, then prompt/text, then optional
@@ -9076,6 +9114,371 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+def _get_chat_id_from_update(update: Update) -> int | None:
+    if hasattr(update, 'effective_chat') and update.effective_chat:
+        return update.effective_chat.id
+    if hasattr(update, 'message') and update.message:
+        return update.message.chat_id
+    if hasattr(update, 'callback_query') and update.callback_query and update.callback_query.message:
+        return update.callback_query.message.chat_id
+    return None
+
+
+def _get_step_info(session: dict, param_name: str, user_lang: str) -> str:
+    param_order = session.get('param_order', [])
+    if param_name in param_order:
+        step_index = param_order.index(param_name) + 1
+        total_steps = len(param_order)
+        if user_lang == 'en':
+            return f"Step {step_index}/{total_steps}"
+        return f"Шаг {step_index}/{total_steps}"
+    return ""
+
+
+def _get_param_example(param_name: str, param_info: dict, user_lang: str, enum_values: list | None = None) -> str:
+    example = param_info.get('example')
+    if not example and enum_values:
+        example = enum_values[0]
+    if not example and param_name == "prompt":
+        example = "A cinematic night cityscape with neon lights" if user_lang == 'en' else "Фотореалистичный киберпанк-город ночью"
+    if not example:
+        return ""
+    prefix = "Example" if user_lang == 'en' else "Пример"
+    return f"{prefix}: {example}"
+
+
+def _get_param_format_hint(param_type: str, enum_values: list | None, user_lang: str) -> str:
+    if enum_values:
+        return "Format: choose from list" if user_lang == 'en' else "Формат: выберите значение из списка"
+    if param_type == "boolean":
+        return "Format: yes/no" if user_lang == 'en' else "Формат: да/нет"
+    return "Format: text" if user_lang == 'en' else "Формат: текст"
+
+
+def _record_param_history(session: dict, param_name: str) -> None:
+    history = session.setdefault('param_history', [])
+    if not history or history[-1] != param_name:
+        history.append(param_name)
+
+
+def _get_settings_label(user_lang: str) -> str:
+    return "⚙️ Параметры" if user_lang == 'ru' else "⚙️ Parameters"
+
+
+async def prompt_for_specific_param(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    param_name: str,
+    source: str = "manual_edit",
+) -> int | None:
+    if user_id not in user_sessions:
+        logger.error("prompt_for_specific_param: session not found for user_id=%s", user_id)
+        return None
+    session = user_sessions[user_id]
+    properties = session.get('properties', {})
+    param_info = properties.get(param_name, {})
+    param_type = param_info.get('type', 'string')
+    enum_values = param_info.get('enum')
+    user_lang = get_user_language(user_id)
+    step_info = _get_step_info(session, param_name, user_lang)
+    step_prefix = f"{step_info}: " if step_info else ""
+    is_optional = not param_info.get('required', False)
+    default_value = param_info.get('default')
+    format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+    example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+    chat_id = _get_chat_id_from_update(update)
+
+    logger.info(
+        "🧭 PARAM_PROMPT: action_path=%s model_id=%s param=%s waiting_for=%s current_param=%s outcome=prompt",
+        source,
+        session.get('model_id'),
+        param_name,
+        session.get('waiting_for'),
+        session.get('current_param'),
+    )
+
+    if not chat_id:
+        logger.error("Cannot determine chat_id in prompt_for_specific_param")
+        return None
+
+    if param_name in ['image_input', 'image_urls', 'image', 'mask_input', 'reference_image_input']:
+        session['current_param'] = param_name
+        session['waiting_for'] = param_name
+        if param_name not in session:
+            session[param_name] = []
+        skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+        keyboard = [
+            [
+                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+            ]
+        ]
+        if is_optional:
+            keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+        keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+        prompt_text = (
+            f"📷 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+            f"{param_info.get('description', '')}\n\n"
+            f"💡 {format_hint}\n"
+        )
+        if example_hint:
+            prompt_text += f"🧪 {example_hint}\n"
+        prompt_text += "📏 Максимальный размер: 10 MB" if user_lang == 'ru' else "📏 Max size: 10 MB"
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=prompt_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        return INPUTTING_PARAMS
+
+    if param_name in ['audio_url', 'audio_input']:
+        session['current_param'] = param_name
+        session['waiting_for'] = param_name
+        skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+        keyboard = [
+            [
+                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+            ]
+        ]
+        if is_optional:
+            keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+        keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+        prompt_text = (
+            f"🎤 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+            f"{param_info.get('description', '')}\n\n"
+            f"💡 {format_hint}\n"
+        )
+        if example_hint:
+            prompt_text += f"🧪 {example_hint}\n"
+        prompt_text += (
+            "Максимальный размер: 200 MB" if user_lang == 'ru' else "Max size: 200 MB"
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=prompt_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        return INPUTTING_PARAMS
+
+    if param_type == 'boolean':
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Да (true)", callback_data=f"set_param:{param_name}:true"),
+                InlineKeyboardButton("❌ Нет (false)", callback_data=f"set_param:{param_name}:false")
+            ]
+        ]
+        if is_optional:
+            if default_value is None:
+                skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+            else:
+                skip_text = "⏭️ Использовать по умолчанию" if user_lang == 'ru' else "⏭️ Use default"
+                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{str(default_value).lower()}")])
+        keyboard.append([
+            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+        ])
+        keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+        description = param_info.get('description', '')
+        detail_lines = [format_hint]
+        if example_hint:
+            detail_lines.append(example_hint)
+        detail_text = "\n".join(detail_lines)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+                f"{description}\n\n"
+                f"💡 {detail_text}"
+            ),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        session['waiting_for'] = param_name
+        session['current_param'] = param_name
+        return INPUTTING_PARAMS
+
+    if enum_values:
+        keyboard = []
+        for i in range(0, len(enum_values), 2):
+            row = [
+                InlineKeyboardButton(enum_values[i], callback_data=f"set_param:{param_name}:{enum_values[i]}")
+            ]
+            if i + 1 < len(enum_values):
+                row.append(InlineKeyboardButton(enum_values[i + 1], callback_data=f"set_param:{param_name}:{enum_values[i + 1]}"))
+            keyboard.append(row)
+        if is_optional and default_value and default_value in enum_values:
+            default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
+            keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
+        elif is_optional and not default_value:
+            skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+            keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+        keyboard.append([
+            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+        ])
+        keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+        description = param_info.get('description', '')
+        detail_lines = [format_hint]
+        if example_hint:
+            detail_lines.append(example_hint)
+        detail_text = "\n".join(detail_lines)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+                f"{description}\n\n"
+                f"💡 {detail_text}"
+            ),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        session['waiting_for'] = param_name
+        session['current_param'] = param_name
+        return INPUTTING_PARAMS
+
+    keyboard = []
+    if is_optional:
+        if default_value:
+            default_text = f" (по умолчанию: {default_value})" if user_lang == 'ru' else f" (default: {default_value})"
+            keyboard.append([InlineKeyboardButton(f"⏭️ Использовать по умолчанию{default_text}", callback_data=f"set_param:{param_name}:{default_value}")])
+        else:
+            skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
+            keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+    keyboard.append([
+        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+    ])
+    keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+    description = param_info.get('description', '')
+    detail_lines = [format_hint]
+    if example_hint:
+        detail_lines.append(example_hint)
+    detail_text = "\n".join(detail_lines)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+            f"{description}\n\n"
+            f"💡 {detail_text}"
+        ),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML'
+    )
+    session['waiting_for'] = param_name
+    session['current_param'] = param_name
+    return INPUTTING_PARAMS
+
+
+async def send_confirmation_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    source: str = "confirmation",
+) -> int | None:
+    if user_id not in user_sessions:
+        return None
+    session = user_sessions[user_id]
+    model_id = session.get('model_id', '')
+    model_name = session.get('model_info', {}).get('name', 'Unknown')
+    params = session.get('params', {})
+    params_text = "\n".join([f"  • {k}: {str(v)[:50]}{'...' if len(str(v)) > 50 else ''}" for k, v in params.items()])
+    user_lang = get_user_language(user_id)
+    is_admin_user = get_is_admin(user_id)
+    is_free = is_free_generation_available(user_id, model_id)
+    price = calculate_price_rub(model_id, params, is_admin_user)
+    if is_free:
+        price = 0.0
+    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+    if is_free:
+        remaining = get_user_free_generations_remaining(user_id)
+        price_info = (
+            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+            if user_lang == 'ru'
+            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day"
+        )
+    else:
+        price_info = (
+            f"💰 <b>Стоимость:</b> {price_str} ₽"
+            if user_lang == 'ru'
+            else f"💰 <b>Cost:</b> {price_str} ₽"
+        )
+
+    settings_label = _get_settings_label(user_lang)
+    keyboard = [
+        [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+        [InlineKeyboardButton(settings_label, callback_data="show_parameters")],
+        [
+            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+        ],
+        [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+    ]
+
+    confirm_msg = (
+        f"📋 <b>Подтверждение генерации</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🤖 <b>Модель:</b> {model_name}\n\n"
+        f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{price_info}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💡 <b>Что будет дальше:</b>\n"
+        f"• Генерация начнется после подтверждения\n"
+        f"• Результат придет автоматически\n"
+        f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+        f"🚀 <b>Готовы начать?</b>"
+        if user_lang == 'ru'
+        else (
+            f"📋 <b>Generation Confirmation</b>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🤖 <b>Model:</b> {model_name}\n\n"
+            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{price_info}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"💡 <b>What's next:</b>\n"
+            f"• Generation will start after confirmation\n"
+            f"• Result will come automatically\n"
+            f"• Usually takes from 10 seconds to 2 minutes\n\n"
+            f"🚀 <b>Ready to start?</b>"
+        )
+    )
+
+    logger.info(
+        "✅ CONFIRMATION: action_path=%s model_id=%s waiting_for=%s current_param=%s outcome=sent",
+        source,
+        model_id,
+        session.get('waiting_for'),
+        session.get('current_param'),
+    )
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            confirm_msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    elif update.message:
+        await update.message.reply_text(
+            confirm_msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=confirm_msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    return CONFIRMING_GENERATION
+
+
 async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     """Start input for next parameter."""
     if user_id not in user_sessions:
@@ -9167,25 +9570,33 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 chat_id,
             )
             param_desc = param_info.get('description', '')
+            step_info = _get_step_info(session, special_param, user_lang)
+            step_prefix = f"{step_info}: " if step_info else ""
+            format_hint = _get_param_format_hint(param_info.get('type', 'string'), None, user_lang)
+            example_hint = _get_param_example(special_param, param_info, user_lang)
+            example_line = f"🧪 {example_hint}\n" if example_hint else ""
             if special_param == 'mask_input':
                 prompt_text = (
-                    f"🎭 <b>Шаг: Загрузите маску</b>\n\n"
+                    f"🎭 <b>{step_prefix}Загрузите маску</b>\n\n"
                     f"{param_desc}\n\n"
-                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
+                    f"💡 {format_hint}\n"
+                    f"{example_line}"
                     f"📏 Максимальный размер: 10 MB"
                 )
             elif special_param == 'reference_image_input':
                 prompt_text = (
-                    f"🖼️ <b>Шаг: Загрузите референсное изображение</b>\n\n"
+                    f"🖼️ <b>{step_prefix}Загрузите референсное изображение</b>\n\n"
                     f"{param_desc}\n\n"
-                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
+                    f"💡 {format_hint}\n"
+                    f"{example_line}"
                     f"📏 Максимальный размер: 10 MB"
                 )
             else:
                 prompt_text = (
-                    f"📷 <b>Шаг: Загрузите изображение</b>\n\n"
+                    f"📷 <b>{step_prefix}Загрузите изображение</b>\n\n"
                     f"{param_desc}\n\n"
-                    f"💡 Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n"
+                    f"💡 {format_hint}\n"
+                    f"{example_line}"
                     f"📏 Максимальный размер: 10 MB"
                 )
 
@@ -9259,6 +9670,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 param_info.get('required', False),
                 bool(enum_values),
             )
+            logger.info(
+                "🧭 STEP: action_path=start_next_parameter model_id=%s waiting_for=%s current_param=%s outcome=prompt",
+                model_id,
+                session.get('waiting_for'),
+                param_name,
+            )
             
             session['current_param'] = param_name
             
@@ -9294,6 +9711,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 default_text = ""
                 if is_optional and default_value is not None:
                     default_text = f"\n\nПо умолчанию: {'Да' if default_value else 'Нет'}"
+                step_info = _get_step_info(session, param_name, user_lang)
+                step_prefix = f"{step_info}: " if step_info else ""
+                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+                example_line = f"🧪 {example_hint}\n" if example_hint else ""
+                details = [format_hint]
+                if example_hint:
+                    details.append(example_hint)
+                details_text = "\n".join(details)
                 chat_id = None
                 if hasattr(update, 'effective_chat') and update.effective_chat:
                     chat_id = update.effective_chat.id
@@ -9317,7 +9743,11 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"📝 <b>Выберите {param_name}:</b>\n\n{param_desc}{default_text}",
+                    text=(
+                        f"📝 <b>{step_prefix}Выберите {param_name}:</b>\n\n"
+                        f"{param_desc}{default_text}\n\n"
+                        f"💡 {details_text}"
+                    ),
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -9406,6 +9836,11 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 # Улучшенное сообщение для enum параметров
                 param_display_name = param_name.replace('_', ' ').title()
+                step_info = _get_step_info(session, param_name, user_lang)
+                step_prefix = f"{step_info}: " if step_info else ""
+                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+                example_line = f"🧪 {example_hint}\n" if example_hint else ""
                 action_hint = ""
                 if is_optional:
                     action_hint = "• Или используйте значение по умолчанию" if default_value else "• Или нажмите «Пропустить (auto)»"
@@ -9417,8 +9852,10 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                         action_hint = "• Or use the default value"
 
                 message_text = (
-                    f"📝 <b>Выберите {param_display_name.lower()}:</b>\n\n"
+                    f"📝 <b>{step_prefix}Выберите {param_display_name.lower()}:</b>\n\n"
                     f"{param_desc}{default_info}\n\n"
+                    f"💡 {format_hint}\n"
+                    f"{example_line}\n"
                     f"💡 <b>Что делать:</b>\n"
                     f"• Выберите значение из списка ниже"
                 )
@@ -9506,6 +9943,10 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 # Улучшенное сообщение с более понятными подсказками
                 param_display_name = param_name.replace('_', ' ').title()
+                step_info = _get_step_info(session, param_name, user_lang)
+                step_prefix = f"{step_info}: " if step_info else ""
+                format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+                example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
                 if default_value:
                     action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
                 elif is_optional:
@@ -9521,8 +9962,10 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                         action_hint = "• Send the value as text"
 
                 message_text = (
-                    f"📝 <b>Введите {param_display_name.lower()}:</b>\n\n"
+                    f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
                     f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
+                    f"💡 {format_hint}\n"
+                    f"{example_line}\n"
                     f"💡 <b>Что делать:</b>\n"
                     f"• Введите значение в текстовом сообщении\n"
                     f"{action_hint}"
@@ -10351,6 +10794,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang = get_user_language(user_id)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                         [
                             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -11328,6 +11772,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         user_lang = get_user_language(user_id)
                         keyboard = [
                             [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                            [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                             [
                                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -11578,6 +12023,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['waiting_for'] = None
             session['current_param'] = None
             session['language_code_custom'] = False
+            _record_param_history(session, current_param)
+            logger.info(
+                "🧩 PARAM_SET: action_path=text_input model_id=%s waiting_for=%s current_param=%s outcome=stored",
+                model_id,
+                session.get('waiting_for'),
+                current_param,
+            )
             
             # Confirm parameter was set (КРИТИЧНО: это второй ответ после "✅ Принято, обрабатываю...")
             display_value = text[:100] + '...' if len(text) > 100 else text
@@ -11588,32 +12040,19 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             track_outgoing_action(update_id)  # Отслеживаем второй ответ
             
-            # If prompt was entered and model supports image input, offer to add image
-            # Or if prompt was entered and model supports audio input, offer to add audio
+            # If prompt was entered and model supports image/audio input, offer next steps
             if current_param == 'prompt':
-                model_info = session.get('model_info', {})
-                model_id = session.get('model_id', '')
-                input_params = model_info.get('input_params', {})
-            
-            # IMPORTANT: z-image does NOT support image input (text-to-image only)
-            if model_id == "z-image":
-                # For z-image, skip image input and go to next parameter
-                session['has_image_input'] = False
-            
                 # IMPORTANT: z-image does NOT support image input (text-to-image only)
-                # Skip image input check for z-image - it's text-to-image only
                 if model_id == "z-image":
-                    # z-image is text-to-image only, skip image input step completely
+                    session['has_image_input'] = False
                     session['waiting_for'] = None
-                    session['has_image_input'] = False  # Ensure flag is set correctly
-                    
+
                     # Check for audio_url requirement (unlikely for z-image, but check anyway)
                     if 'audio_url' in input_params or 'audio_input' in input_params:
                         audio_param_name = 'audio_url' if 'audio_url' in input_params else 'audio_input'
                         audio_required = input_params.get(audio_param_name, {}).get('required', False)
                         
                         if audio_required:
-                            # Audio is required
                             keyboard = [
                                 [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
                             ]
@@ -11628,13 +12067,10 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             session['current_param'] = audio_param_name
                             return INPUTTING_PARAMS
                     
-                    # Continue to next parameter (aspect_ratio for z-image)
                     try:
                         next_param_result = await start_next_parameter(update, context, user_id)
                         if next_param_result:
                             return next_param_result
-                        # Если start_next_parameter вернул None, но не отправил сообщение - отправляем fallback
-                        # Проверяем, было ли отправлено сообщение через NO-SILENCE GUARD
                         await guard.check_and_ensure_response(update, context)
                     except Exception as e:
                         logger.error(f"Error in start_next_parameter for z-image: {e}", exc_info=True)
@@ -11644,14 +12080,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                         track_outgoing_action(update_id)
                     return INPUTTING_PARAMS
-                
+
                 # Check for audio_url requirement (for non-z-image models)
                 if 'audio_url' in input_params or 'audio_input' in input_params:
                     audio_param_name = 'audio_url' if 'audio_url' in input_params else 'audio_input'
                     audio_required = input_params.get(audio_param_name, {}).get('required', False)
                     
                     if audio_required:
-                        # Audio is required
                         keyboard = [
                             [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
                         ]
@@ -11666,7 +12101,6 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session['current_param'] = audio_param_name
                         return INPUTTING_PARAMS
                     else:
-                        # Audio is optional - show buttons
                         keyboard = [
                             [InlineKeyboardButton("🎤 Загрузить аудио (опционально)", callback_data="add_audio")],
                             [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_audio")],
@@ -11678,9 +12112,9 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
-                        session['waiting_for'] = None  # Will be set when user clicks button or sends audio
+                        session['waiting_for'] = None
                         return INPUTTING_PARAMS
-                
+
                 if session.get('has_image_input'):
                     image_required = False
                     if 'image_urls' in input_params:
@@ -11689,7 +12123,6 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         image_required = input_params['image_input'].get('required', False)
                     
                     if image_required:
-                        # Image is required - show button without skip option
                         keyboard = [
                             [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")]
                         ]
@@ -11699,7 +12132,6 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
-                        # Determine which parameter name to use (image_input or image_urls)
                         if 'image_urls' in input_params:
                             image_param_name = 'image_urls'
                         else:
@@ -11708,8 +12140,6 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session['current_param'] = image_param_name
                         return INPUTTING_PARAMS
                     else:
-                        # Image is optional - show button with skip option
-                        # Note: z-image is already handled above (line 7672), so it won't reach here
                         keyboard = [
                             [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
                             [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")]
@@ -11904,6 +12334,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session['params']['prompt'] = text
                 session['waiting_for'] = None
                 session['current_param'] = None
+                _record_param_history(session, 'prompt')
                 
                 # Продолжаем пайплайн как обычно
                 # Проверяем, есть ли ещё параметры
@@ -11948,6 +12379,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         user_lang = get_user_language(user_id)
                         keyboard = [
                             [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                            [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
                             [
                                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -11969,17 +12401,36 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Если не удалось автоматически определить - отвечаем понятным сообщением
             user_lang = get_user_language(user_id)
-            keyboard = [
-                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-            ]
+            settings_label = _get_settings_label(user_lang)
+            keyboard = []
+            if session.get('properties'):
+                keyboard.append([InlineKeyboardButton(settings_label, callback_data="show_parameters")])
+            if session.get('param_history'):
+                keyboard.append([InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step")])
+            keyboard.append([InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")])
+            keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
             
+            model_name = model_info.get('name', 'Unknown')
             await update.message.reply_text(
-                "❌ <b>Я не жду текст сейчас</b>\n\n"
-                "Пожалуйста:\n"
-                "• Выберите модель из меню\n"
-                "• Или нажмите кнопку для продолжения\n"
-                "• Или отмените операцию",
+                (
+                    "💡 <b>Сейчас я жду действия через кнопки</b>\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n\n"
+                    "Пожалуйста:\n"
+                    "• Откройте параметры и выберите, что изменить\n"
+                    "• Или вернитесь в меню\n"
+                    "• Или отмените операцию\n\n"
+                    "🧪 Пример: нажмите «⚙️ Параметры», чтобы изменить значения."
+                    if user_lang == 'ru'
+                    else (
+                        "💡 <b>Please use buttons to continue</b>\n\n"
+                        f"🤖 <b>Model:</b> {model_name}\n\n"
+                        "Please:\n"
+                        "• Open parameters and choose what to change\n"
+                        "• Or return to the main menu\n"
+                        "• Or cancel the operation\n\n"
+                        "🧪 Example: tap “⚙️ Parameters” to edit values."
+                    )
+                ),
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
@@ -12008,8 +12459,16 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если мы дошли сюда без отправки сообщения - это КРИТИЧЕСКИЙ БАГ
     # ОБЯЗАТЕЛЬНО отправляем fallback
     try:
+        outgoing_count = guard.outgoing_actions.get(update_id, 0)
+        if outgoing_count > 0:
+            logger.info(
+                "✅ NO-SILENCE: action_path=input_parameters_end model_id=%s waiting_for=%s current_param=%s outcome=already_replied",
+                session.get('model_id'),
+                session.get('waiting_for'),
+                session.get('current_param'),
+            )
+            return INPUTTING_PARAMS
         logger.warning(f"⚠️⚠️⚠️ NO-SILENCE VIOLATION: input_parameters reached end without response for user {user_id}, waiting_for={waiting_for}")
-        # Проверяем через NO-SILENCE GUARD
         await guard.check_and_ensure_response(update, context)
     except Exception as e:
         logger.error(f"❌ CRITICAL: Failed to check NO-SILENCE in input_parameters: {e}", exc_info=True)
