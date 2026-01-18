@@ -41,9 +41,7 @@
 - **П1:** language selection не включён в handlers; default=ru, запись языка только при явном выборе пользователем.
 
 ## Как проверил
-- `python -m compileall .`
-- `pytest`
-- `python scripts/render_webhook_smoke.py` (локальный webhook smoke без секретов, см. runbook ниже)
+- `pytest tests/test_main_menu.py tests/test_e2e_flow.py tests/test_github_storage_loop.py tests/test_github_storage_smoke.py tests/test_input_parameters_no_silence.py`
 
 ## Какие файлы тронул
 - `bot_kie.py`
