@@ -9499,6 +9499,15 @@ def build_input(
     is_valid, error_msg = _check_required_fields(model_type, normalized_input, required_fields)
     if not is_valid:
         return {}, error_msg
+
+    # Дополнительная строгая проверка по YAML-спецификации модели
+    try:
+        from app.ux.form_engine import validate_payload as validate_form_payload
+        form_ok, form_errors = validate_form_payload(model_id, normalized_input, ignore_unknown=True)
+        if not form_ok:
+            return {}, "; ".join(form_errors)
+    except Exception as exc:
+        logger.warning(f"Form spec validation failed for {model_id}: {exc}")
     
     # Логируем (без секретов)
     input_keys = list(normalized_input.keys())
@@ -9541,4 +9550,3 @@ def get_callback_url() -> Optional[str]:
         callback_url = os.getenv('KIE_CALLBACK_URL')
     
     return callback_url
-

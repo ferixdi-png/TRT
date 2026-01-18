@@ -240,5 +240,5 @@ class GenerationService:
 
 def get_generation_service() -> GenerationService:
     """Получить generation service (singleton)"""
-    # TODO: можно добавить singleton если нужно
+        # NOTE: можно добавить singleton при необходимости
     return GenerationService()
