@@ -370,6 +370,7 @@ logger = get_logger(__name__)
 
 _bot_ready = False
 _handler_ready = False
+_dynamic_webhook_handler = None
 
 
 
@@ -1331,6 +1332,21 @@ def build_webhook_handler(application, settings):
             )
 
     return webhook_handler
+
+
+def build_dynamic_webhook_handler():
+    from aiohttp import web
+
+    async def dynamic_webhook_handler(request: web.Request) -> web.StreamResponse:
+        if _dynamic_webhook_handler is None:
+            logger.warning(
+                "[WEBHOOK] handler_ready=false reason=handler_not_bound bot_ready=%s",
+                str(_bot_ready).lower(),
+            )
+            return web.Response(status=503)
+        return await _dynamic_webhook_handler(request)
+
+    return dynamic_webhook_handler
 
 
 def load_and_validate_settings():
@@ -3365,7 +3381,7 @@ async def run(settings, application):
 
 
 
-    global _application, _bot_ready, _handler_ready
+    global _application, _bot_ready, _handler_ready, _dynamic_webhook_handler
 
 
 
@@ -3445,12 +3461,17 @@ async def run(settings, application):
 
 
 
-    try:
-        lock_acquired = await acquire_singleton_lock()
-        if not lock_acquired:
-            logger.warning("[LOCK] Singleton lock not acquired - continuing in passive mode (database may be unavailable)")
-    except Exception as e:
-        logger.warning(f"[LOCK] Failed to acquire singleton lock (database may be unavailable): {e} - continuing anyway")
+    lock_attempted = False
+    if not os.getenv("DATABASE_URL"):
+        logger.info("[LOCK] DATABASE_URL not set - skipping singleton lock")
+    else:
+        try:
+            lock_attempted = True
+            lock_acquired = await acquire_singleton_lock()
+            if not lock_acquired:
+                logger.warning("[LOCK] Singleton lock not acquired - continuing in passive mode (database may be unavailable)")
+        except Exception as e:
+            logger.warning(f"[LOCK] Failed to acquire singleton lock (database may be unavailable): {e} - continuing anyway")
 
 
 
@@ -3758,7 +3779,8 @@ async def run(settings, application):
             if settings.port > 0:
                 webhook_handler = None
                 if settings.bot_mode == "webhook":
-                    webhook_handler = build_webhook_handler(application, settings)
+                    _dynamic_webhook_handler = build_webhook_handler(application, settings)
+                    webhook_handler = build_dynamic_webhook_handler()
                     _handler_ready = True
                     logger.info("[WEBHOOK] handler_ready=true")
                 else:
@@ -6466,7 +6488,10 @@ async def run(settings, application):
 
 
 
-        await release_singleton_lock()
+        if lock_attempted:
+            await release_singleton_lock()
+        else:
+            logger.info("[LOCK] singleton_lock_release_skipped=true reason=not_attempted")
 
 
 
@@ -6512,332 +6537,74 @@ async def run(settings, application):
 
 
 
+
+
+async def initialize_and_run():
+    settings = await asyncio.to_thread(load_and_validate_settings)
+
+    if os.getenv("SMOKE_MODE", "0") in ("1", "true", "yes"):
+        logger.info("[SMOKE] mode=github_storage enabled=true")
+        try:
+            from app.storage import get_storage
+
+            storage = get_storage()
+            if hasattr(storage, "initialize") and asyncio.iscoroutinefunction(storage.initialize):
+                await storage.initialize()
+        except Exception as e:
+            logger.error("[SMOKE] storage_init_failed error=%s", e)
+
+        if settings.port > 0:
+            logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (SMOKE mode)")
+            health_started = await start_health_server(port=settings.port)
+            logger.info(
+                f"[HEALTH] server_listening={str(health_started).lower()} port={settings.port}"
+            )
+        else:
+            logger.info("[HEALTH] Port not set, running in Worker mode (SMOKE)")
+            logger.info("[HEALTH] server_listening=false reason=port_not_set")
+
+        await asyncio.Event().wait()
+
+    application = await build_application(settings)
+    await run(settings, application)
 
 
 async def main():
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     """???????????????????????????????????????? async ??????????????????????????????????????"""
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     try:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # 1. ??????????????????????????????????????????????????? ?????? ?????????????????????????????????????????????????????????? ???????????????????????????????????????????????????
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        settings = load_and_validate_settings()
-
-        if os.getenv("SMOKE_MODE", "0") in ("1", "true", "yes"):
-            logger.info("[SMOKE] mode=github_storage enabled=true")
-            try:
-                from app.storage import get_storage
-                storage = get_storage()
-                if hasattr(storage, "initialize") and asyncio.iscoroutinefunction(storage.initialize):
-                    await storage.initialize()
-            except Exception as e:
-                logger.error("[SMOKE] storage_init_failed error=%s", e)
-
-            if settings.port > 0:
-                logger.info(f"[HEALTH] Starting healthcheck server on port {settings.port} (SMOKE mode)")
-                health_started = await start_health_server(port=settings.port)
-                logger.info(
-                    f"[HEALTH] server_listening={str(health_started).lower()} port={settings.port}"
-                )
-            else:
-                logger.info("[HEALTH] Port not set, running in Worker mode (SMOKE)")
-                logger.info("[HEALTH] server_listening=false reason=port_not_set")
-
-            await asyncio.Event().wait()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # 2. ????????????????????????????????????????? application
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        application = await build_application(settings)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # 3. ??????????????????????????????????????????????????? ???????????????????????
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        await run(settings, application)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        port_env = os.getenv("PORT", "0")
+        try:
+            early_port = int(port_env)
+        except ValueError:
+            early_port = 0
+
+        if early_port < 0:
+            early_port = 0
+
+        if early_port > 0:
+            webhook_handler = build_dynamic_webhook_handler()
+            logger.info("[HEALTH] Starting early healthcheck server on port %s", early_port)
+            health_started = await start_health_server(
+                port=early_port,
+                webhook_handler=webhook_handler,
+                self_check=True,
+            )
+            logger.info(
+                "[HEALTH] server_listening=%s port=%s stage=early",
+                str(health_started).lower(),
+                early_port,
+            )
+
+        init_task = asyncio.create_task(initialize_and_run())
+        await init_task
     except SystemExit:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         raise
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     except Exception as e:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         from app.utils.logging_config import log_error_with_stacktrace
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         log_error_with_stacktrace(logger, e, "Fatal error in main")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         sys.exit(1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
@@ -7033,11 +6800,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
-
-
-
-
 
 
 
