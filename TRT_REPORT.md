@@ -36,28 +36,16 @@
 - **Стало:** первый экран = короткий welcome + клавиатура; подробности уходят отдельными сообщениями без клавиатуры.
 - **Было:** input_parameters мог доходить до конца без ответа (NO-SILENCE violation при waiting_for=prompt).
 - **Стало:** для prompt всегда есть ответ (валидация, сохранение, переход к следующему шагу), fallback guard прикрывает тишину.
-- **Было:** GitHubStorage оставлял aiohttp-сессии незакрытыми при смене loop (warning `session_detached`, `Unclosed client session`).
-- **Стало:** сессии корректно закрываются при смене loop и при shutdown; добавлен smoke-тест 20+ операций.
+- **Было:** GitHubStorage держал общие aiohttp-сессии между loop, что приводило к `session_detached`/`loop_mismatch`.
+- **Стало:** GitHubStorage использует per-request `ClientSession` без шаринга между event loop, исключая loop mismatch.
 - **П1:** language selection не включён в handlers; default=ru, запись языка только при явном выборе пользователем.
 
 ## Как проверил
-- `pytest tests/test_main_menu.py tests/test_e2e_flow.py tests/test_github_storage_loop.py tests/test_github_storage_smoke.py tests/test_input_parameters_no_silence.py`
+- Локальные проверки не запускались в этой среде.
 
 ## Какие файлы тронул
-- `bot_kie.py`
 - `app/storage/github_storage.py`
-- `main_render.py`
-- `pytest.ini`
-- `scripts/render_webhook_smoke.py`
-- `tests/test_main_menu.py`
-- `tests/test_e2e_flow.py`
-- `tests/test_github_storage_loop.py`
-- `tests/test_github_storage_smoke.py`
-- `tests/test_input_parameters_no_silence.py`
-- `tests/ptb_harness.py`
-- `tests/conftest.py`
 - `TRT_REPORT.md`
-- `translations.py`
 
 ## Почему теперь не отвалится в webhook режиме
 - `create_application()` в `app/bootstrap.py` сразу после `Application.builder().build()` вызывает `ensure_error_handler_registered()`, поэтому webhook-строитель всегда получает error handler.
