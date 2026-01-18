@@ -1,0 +1,1 @@
+"""RU UX texts placeholder."""
