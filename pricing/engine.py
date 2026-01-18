@@ -27,6 +27,25 @@ USD_TO_RUB = 77.2222  # 1 USD = 77.2222 RUB (calculated from 6.95 / 0.09)
 MARKUP_MULTIPLIER = 2.0  # Multiplier for regular users
 
 
+def resolve_default_config_path() -> Optional[Path]:
+    """Resolve the default pricing config path."""
+    if YAML_AVAILABLE and DEFAULT_CONFIG_PATH_YAML.exists():
+        return DEFAULT_CONFIG_PATH_YAML
+    if DEFAULT_CONFIG_PATH_JSON.exists():
+        return DEFAULT_CONFIG_PATH_JSON
+    return None
+
+
+def get_settings_source_info(config_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Return pricing settings info (path and settings)."""
+    resolved_path = config_path or resolve_default_config_path()
+    config = load_config(resolved_path) if resolved_path else {"models": {}, "settings": {}}
+    return {
+        "path": str(resolved_path) if resolved_path else "unknown",
+        "settings": config.get("settings", {}),
+    }
+
+
 def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
     """
     Load pricing configuration from YAML or JSON file.
@@ -38,12 +57,8 @@ def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         Dictionary with pricing configuration
     """
     if config_path is None:
-        # Try YAML first, then JSON
-        if YAML_AVAILABLE and DEFAULT_CONFIG_PATH_YAML.exists():
-            config_path = DEFAULT_CONFIG_PATH_YAML
-        elif DEFAULT_CONFIG_PATH_JSON.exists():
-            config_path = DEFAULT_CONFIG_PATH_JSON
-        else:
+        config_path = resolve_default_config_path()
+        if config_path is None:
             logger.warning(f"Config file not found: {DEFAULT_CONFIG_PATH_YAML} or {DEFAULT_CONFIG_PATH_JSON}, using defaults")
             return {"models": {}, "settings": {}}
     

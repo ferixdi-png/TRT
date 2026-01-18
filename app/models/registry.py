@@ -399,6 +399,7 @@ def get_model_registry() -> Dict[str, Any]:
 # Synchronous wrapper for compatibility
 def get_models_sync() -> List[Dict[str, Any]]:
     """Synchronous wrapper - loads models blocking."""
+    global _model_cache, _model_source, _model_timestamp
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -425,6 +426,9 @@ def get_models_sync() -> List[Dict[str, Any]]:
                                 normalized.append(norm_model)
                             except:
                                 continue
+                        _model_cache = normalized
+                        _model_source = "yaml"
+                        _model_timestamp = datetime.now()
                         return normalized
                 except Exception:
                     pass
@@ -441,6 +445,9 @@ def get_models_sync() -> List[Dict[str, Any]]:
                         normalized.append(norm_model)
                 except:
                     continue
+            _model_cache = normalized
+            _model_source = "kie_models_py_fallback"
+            _model_timestamp = datetime.now()
             return normalized
         else:
             return loop.run_until_complete(load_models())
@@ -468,6 +475,9 @@ def get_models_sync() -> List[Dict[str, Any]]:
                             normalized.append(norm_model)
                         except:
                             continue
+                    _model_cache = normalized
+                    _model_source = "yaml"
+                    _model_timestamp = datetime.now()
                     return normalized
             except Exception:
                 pass
@@ -484,6 +494,9 @@ def get_models_sync() -> List[Dict[str, Any]]:
                     normalized.append(norm_model)
             except:
                 continue
+        _model_cache = normalized
+        _model_source = "kie_models_py_fallback"
+        _model_timestamp = datetime.now()
         return normalized
 
 

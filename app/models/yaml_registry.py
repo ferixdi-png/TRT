@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Global cache
 _yaml_cache: Optional[Dict[str, Any]] = None
+_yaml_path_cache: Optional[Path] = None
 
 
 def _get_yaml_path() -> Path:
@@ -48,6 +49,14 @@ def _get_yaml_path() -> Path:
     return yaml_path
 
 
+def get_registry_path() -> Path:
+    """Public accessor for the YAML registry path."""
+    global _yaml_path_cache
+    if _yaml_path_cache is None:
+        _yaml_path_cache = _get_yaml_path()
+    return _yaml_path_cache
+
+
 def load_yaml_models() -> Dict[str, Dict[str, Any]]:
     """
     Загружает модели из models/kie_models.yaml.
@@ -62,7 +71,7 @@ def load_yaml_models() -> Dict[str, Dict[str, Any]]:
     if _yaml_cache is not None:
         return _yaml_cache
     
-    yaml_path = _get_yaml_path()
+    yaml_path = get_registry_path()
     
     if not yaml_path.exists():
         logger.error(f"YAML file not found: {yaml_path}")
@@ -280,4 +289,3 @@ def normalize_yaml_model(
         normalized['pricing'] = pricing
     
     return normalized
-
