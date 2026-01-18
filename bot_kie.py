@@ -3246,6 +3246,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_lang = get_user_language(user_id) if user_id else 'ru'
         except:
             user_lang = 'ru'
+
+        # 🔥🔥🔥 SUPER-DETAILED CONTEXT LOGGING
+        try:
+            session = user_sessions.get(user_id) if user_id else None
+            session_keys = list(session.keys()) if session else []
+            session_model_id = session.get('model_id') if session else None
+            session_waiting_for = session.get('waiting_for') if session else None
+            session_current_param = session.get('current_param') if session else None
+            session_params_keys = list(session.get('params', {}).keys()) if session else []
+            session_required = session.get('required', []) if session else []
+            session_properties_keys = list(session.get('properties', {}).keys()) if session else []
+            chat_id = query.message.chat_id if query and query.message else None
+            message_id = query.message.message_id if query and query.message else None
+            logger.info(
+                "🔍🔍🔍 BUTTON_CALLBACK CONTEXT: "
+                "user_id=%s data=%s chat_id=%s message_id=%s update_id=%s user_lang=%s "
+                "session_exists=%s model_id=%s waiting_for=%s current_param=%s "
+                "params_keys=%s required=%s properties_keys=%s session_keys=%s",
+                user_id,
+                data,
+                chat_id,
+                message_id,
+                update_id,
+                user_lang,
+                bool(session),
+                session_model_id,
+                session_waiting_for,
+                session_current_param,
+                session_params_keys[:15],
+                session_required[:15],
+                session_properties_keys[:15],
+                session_keys[:15],
+            )
+        except Exception as log_error:
+            logger.error(f"❌❌❌ ERROR in BUTTON_CALLBACK CONTEXT logging: {log_error}", exc_info=True)
             
     except Exception as e:
         logger.error(f"Error in button_callback setup: {e}", exc_info=True)
@@ -8943,9 +8978,18 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     properties = session.get('properties', {})
     params = session.get('params', {})
     required = session.get('required', [])
+    model_id = session.get('model_id', '')
+    logger.info(
+        "🧭🧭🧭 START_NEXT_PARAMETER: user_id=%s model_id=%s required=%s params_keys=%s properties_keys=%s session_keys=%s",
+        user_id,
+        model_id,
+        required[:20],
+        list(params.keys())[:20],
+        list(properties.keys())[:20],
+        list(session.keys())[:20],
+    )
     
     # For elevenlabs/speech-to-text, also show optional parameters
-    model_id = session.get('model_id', '')
     all_params_to_check = required.copy()
     if model_id == "elevenlabs/speech-to-text":
         # Add optional parameters that should be shown to user
@@ -8968,12 +9012,25 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 param_info = properties.get(param_name, {})
                 if param_info.get('required', False) or param_name == 'resolution':
                     all_params_to_check.append(param_name)
+    logger.info(
+        "🧭🧭🧭 PARAMS_TO_CHECK: user_id=%s model_id=%s all_params_to_check=%s",
+        user_id,
+        model_id,
+        all_params_to_check[:30],
+    )
     
     # Handle mask_input and reference_image_input as special image parameters (before regular parameters)
     for special_param in ['mask_input', 'reference_image_input']:
         if special_param in all_params_to_check and special_param not in params:
             param_info = properties.get(special_param, {})
             if param_info.get('required', False):
+                logger.info(
+                    "🧩🧩🧩 SPECIAL_IMAGE_PARAM: user_id=%s model_id=%s param=%s required=%s",
+                    user_id,
+                    model_id,
+                    special_param,
+                    param_info.get('required', False),
+                )
                 # This is a required image parameter
                 session['current_param'] = special_param
                 session['waiting_for'] = special_param
@@ -8993,6 +9050,13 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     logger.error("Cannot determine chat_id in start_next_parameter")
                     return None
                 
+                logger.info(
+                    "📤📤📤 SPECIAL_IMAGE_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s",
+                    user_id,
+                    model_id,
+                    special_param,
+                    chat_id,
+                )
                 param_desc = param_info.get('description', '')
                 if special_param == 'mask_input':
                     prompt_text = (
@@ -9070,6 +9134,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             param_info = properties.get(param_name, {})
             param_type = param_info.get('type', 'string')
             enum_values = param_info.get('enum')
+            logger.info(
+                "🔎🔎🔎 PARAM_SELECTED: user_id=%s model_id=%s param=%s type=%s required=%s has_enum=%s",
+                user_id,
+                model_id,
+                param_name,
+                param_type,
+                param_info.get('required', False),
+                bool(enum_values),
+            )
             
             session['current_param'] = param_name
             
@@ -9111,6 +9184,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     logger.error("Cannot determine chat_id in start_next_parameter")
                     return None
                 
+                logger.info(
+                    "📤📤📤 BOOLEAN_PARAM_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s default=%s optional=%s",
+                    user_id,
+                    model_id,
+                    param_name,
+                    chat_id,
+                    default_value,
+                    is_optional,
+                )
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"📝 <b>Выберите {param_name}:</b>\n\n{param_desc}{default_text}",
@@ -9121,7 +9203,14 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 return INPUTTING_PARAMS
             # If parameter has enum values, show buttons
             elif enum_values:
-                logger.info(f"🔥 start_next_parameter: {param_name} has enum values, showing buttons, user_id={user_id}")
+                logger.info(
+                    "🧭🧭🧭 ENUM_PARAM: user_id=%s model_id=%s param=%s enum_count=%s enum_sample=%s",
+                    user_id,
+                    model_id,
+                    param_name,
+                    len(enum_values),
+                    enum_values[:10],
+                )
                 keyboard = []
                 # Create buttons in rows of 2
                 for i in range(0, len(enum_values), 2):
@@ -9170,7 +9259,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     logger.error("Cannot determine chat_id in start_next_parameter")
                     return None
                 
-                logger.info(f"🔥 start_next_parameter: sending message for {param_name} to chat_id={chat_id}, user_id={user_id}")
+                logger.info(
+                    "📤📤📤 ENUM_PARAM_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s default=%s optional=%s",
+                    user_id,
+                    model_id,
+                    param_name,
+                    chat_id,
+                    default_value,
+                    is_optional,
+                )
                 
                 # Добавляем подсказку для параметра
                 try:
@@ -9199,7 +9296,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 session['waiting_for'] = param_name
                 session['current_param'] = param_name
-                logger.info(f"🔥 start_next_parameter: set waiting_for={param_name}, returning INPUTTING_PARAMS, user_id={user_id}")
+                logger.info(
+                    "✅✅✅ PARAM_WAITING_SET: user_id=%s model_id=%s waiting_for=%s",
+                    user_id,
+                    model_id,
+                    param_name,
+                )
                 return INPUTTING_PARAMS
             else:
                 # Text input
@@ -9222,6 +9324,16 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     logger.error("Cannot determine chat_id in start_next_parameter")
                     return None
                 
+                logger.info(
+                    "📤📤📤 TEXT_PARAM_PROMPT_SEND: user_id=%s model_id=%s param=%s chat_id=%s max_length=%s default=%s optional=%s",
+                    user_id,
+                    model_id,
+                    param_name,
+                    chat_id,
+                    max_length,
+                    default_value,
+                    is_optional,
+                )
                 keyboard = []
                 # For optional text parameters, add skip button with default value info
                 if is_optional:
@@ -11237,6 +11349,10 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # If waiting for text input (prompt or other text parameter)
         waiting_for = session.get('waiting_for')
         if waiting_for:
+            model_info = session.get('model_info', {})
+            model_id = session.get('model_id', '')
+            input_params = model_info.get('input_params', {})
+            user_lang = get_user_language(user_id)
             current_param = session.get('current_param', waiting_for)
             param_info = properties.get(current_param, {})
             max_length = param_info.get('max_length')
@@ -11282,7 +11398,6 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text = text.lower()
             
             # For video_url in sora-watermark-remover, validate URL format
-            model_id = session.get('model_id', '')
             if current_param == 'video_url' and model_id == 'sora-watermark-remover':
                 # Validate URL format (should contain sora.chatgpt.com)
                 if 'sora.chatgpt.com' not in text:
