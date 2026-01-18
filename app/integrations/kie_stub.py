@@ -159,13 +159,13 @@ class KIEStub:
 
 def get_kie_client_or_stub():
     """Получить KIE клиент или stub в зависимости от env"""
-    use_stub = os.getenv('KIE_STUB', '0') == '1'
-    
-    if use_stub:
-        logger.info("[STUB] Using KIE stub (KIE_STUB=1)")
-        return KIEStub()
-    else:
-        from app.integrations.kie_client import KIEClient
-        return KIEClient()
+    allow_real = os.getenv("KIE_ALLOW_REAL", "0").lower() in ("1", "true", "yes")
+    force_stub = os.getenv("KIE_STUB", "1").lower() in ("1", "true", "yes")
 
+    if force_stub or not allow_real:
+        logger.info("[STUB] Using KIE stub (KIE_STUB=1 or KIE_ALLOW_REAL!=1)")
+        return KIEStub()
+
+    from app.integrations.kie_client import KIEClient
+    return KIEClient()
 
