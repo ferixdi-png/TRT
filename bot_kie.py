@@ -20,6 +20,74 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# ==================== CALLBACK REGISTRY HELPERS ====================
+KNOWN_CALLBACK_PREFIXES = (
+    "category:",
+    "gen_type:",
+    "select_model:",
+    "model:",
+    "modelk:",
+    "start:",
+    "example:",
+    "info:",
+    "admin_gen_nav:",
+    "admin_gen_view:",
+    "admin_search:",
+    "admin_add:",
+    "admin_payments_back",
+    "payment_screenshot_nav:",
+    "admin_promocodes",
+    "admin_broadcast",
+    "admin_create_broadcast",
+    "admin_broadcast_stats",
+    "admin_test_ocr",
+    "admin_user_mode",
+    "admin_back_to_admin",
+    "topup_amount:",
+    "gen_view:",
+    "gen_repeat:",
+    "gen_history:",
+    "tutorial_step",
+    "retry_generate:",
+)
+
+KNOWN_CALLBACK_EXACT = {
+    "show_models",
+    "show_all_models_list",
+    "all_models",
+    "free_tools",
+    "check_balance",
+    "copy_bot",
+    "claim_gift",
+    "help_menu",
+    "support_contact",
+    "admin_stats",
+    "admin_view_generations",
+    "admin_settings",
+    "admin_set_currency_rate",
+    "back_to_menu",
+    "topup_balance",
+    "topup_custom",
+    "referral_info",
+    "generate_again",
+    "my_generations",
+    "tutorial_start",
+    "tutorial_complete",
+    "confirm_generate",
+    "cancel",
+    "back_to_previous_step",
+    "view_payment_screenshots",
+}
+
+
+def is_known_callback_data(callback_data: Optional[str]) -> bool:
+    """Return True if callback data matches known routing patterns."""
+    if not callback_data:
+        return False
+    if callback_data in KNOWN_CALLBACK_EXACT:
+        return True
+    return any(callback_data.startswith(prefix) for prefix in KNOWN_CALLBACK_PREFIXES)
+
 # ==================== SELF-CHECK: ENV SUMMARY AND VALIDATION ====================
 def log_env_summary():
     """Логирует summary ENV переменных без секретов"""
@@ -143,6 +211,68 @@ from app.models.registry import get_models_sync
 from kie_models import (
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
+
+
+def ensure_source_of_truth():
+    """Validate registry/pricing sources and exit on mismatch."""
+    from app.models.yaml_registry import get_registry_path, load_yaml_models
+    from app.kie_catalog.catalog import get_catalog_source_info, _load_yaml_catalog
+    from pricing.engine import get_settings_source_info
+
+    registry_path = get_registry_path()
+    registry_models = load_yaml_models()
+    if not registry_models:
+        logger.error(f"❌ FATAL: registry file missing or empty: {registry_path}")
+        sys.exit(1)
+
+    catalog_info = get_catalog_source_info()
+    raw_catalog = _load_yaml_catalog()
+    if not raw_catalog:
+        logger.error(f"❌ FATAL: pricing catalog missing or empty: {catalog_info['path']}")
+        sys.exit(1)
+
+    pricing_settings_info = get_settings_source_info()
+    pricing_settings = pricing_settings_info.get("settings", {})
+    usd_to_rub_env = os.getenv("USD_TO_RUB", "").strip()
+    price_multiplier_env = os.getenv("PRICE_MULTIPLIER", "").strip()
+    if not pricing_settings_info.get("path") or pricing_settings_info.get("path") == "unknown":
+        if not usd_to_rub_env or not price_multiplier_env:
+            logger.error("❌ FATAL: pricing settings file not found and env overrides missing")
+            sys.exit(1)
+
+    if not usd_to_rub_env and "usd_to_rub" not in pricing_settings:
+        logger.error("❌ FATAL: usd_to_rub missing in pricing settings and USD_TO_RUB env not set")
+        sys.exit(1)
+    if not price_multiplier_env and "markup_multiplier" not in pricing_settings:
+        logger.error("❌ FATAL: markup_multiplier missing in pricing settings and PRICE_MULTIPLIER env not set")
+        sys.exit(1)
+
+    usd_to_rub_value = float(usd_to_rub_env or pricing_settings.get("usd_to_rub"))
+    markup_multiplier_value = float(price_multiplier_env or pricing_settings.get("markup_multiplier"))
+
+    registry_ids = set(registry_models.keys())
+    pricing_ids = {item.get("id") for item in raw_catalog if isinstance(item, dict)}
+    missing_in_pricing = sorted([model_id for model_id in registry_ids if model_id not in pricing_ids])
+    if missing_in_pricing:
+        logger.error(
+            "❌ FATAL: registry models missing in pricing catalog: %s (catalog=%s)",
+            ", ".join(missing_in_pricing),
+            catalog_info["path"],
+        )
+        sys.exit(1)
+
+    logger.info(
+        "✅ SOURCE OF TRUTH: registry=%s models=%s | pricing_catalog=%s models=%s | pricing_settings=%s "
+        "| usd_to_rub=%s | price_multiplier=%s",
+        registry_path,
+        len(registry_models),
+        catalog_info["path"],
+        catalog_info["count"],
+        pricing_settings_info["path"],
+        usd_to_rub_value,
+        markup_multiplier_value,
+    )
+
 
 # Вспомогательные функции для работы с реестром моделей
 def get_model_by_id_from_registry(model_id: str) -> Optional[Dict[str, Any]]:
@@ -24758,15 +24888,21 @@ async def create_bot_application(settings) -> Application:
     if not settings.telegram_bot_token:
         raise ValueError("telegram_bot_token is required in settings")
     
+    ensure_source_of_truth()
+
     # Verify models are loaded correctly (using registry)
     from app.models.registry import get_models_sync, get_model_registry
+    from app.models.yaml_registry import get_registry_path
     models_list = get_models_sync()
     registry_info = get_model_registry()
     
     categories = get_categories_from_registry()
     
     # Логируем информацию о registry
-    logger.info(f"📊 models_registry source={registry_info['used_source']} count={registry_info['count']}")
+    logger.info(
+        f"📊 models_registry source={registry_info['used_source']} "
+        f"path={get_registry_path()} count={registry_info['count']}"
+    )
     if registry_info.get('yaml_total_models'):
         logger.info(f"📊 YAML total_models={registry_info['yaml_total_models']}")
     
@@ -25008,6 +25144,9 @@ async def _register_all_handlers_internal(application: Application):
     async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fallback handler for unknown callbacks - ensures no silence"""
         query = update.callback_query
+        if query and is_known_callback_data(query.data):
+            logger.debug(f"Skipping unknown_callback_handler for known callback: {query.data}")
+            return
         if query:
             try:
                 await query.answer("Обновляю меню…", show_alert=False)
@@ -25170,8 +25309,11 @@ async def main():
         logger.error("No TELEGRAM_BOT_TOKEN found in environment variables!")
         return
     
+    ensure_source_of_truth()
+
     # Verify models are loaded correctly (using registry)
     from app.models.registry import get_models_sync, get_model_registry
+    from app.models.yaml_registry import get_registry_path
     models_list = get_models_sync()
     registry_info = get_model_registry()
     
@@ -25179,7 +25321,10 @@ async def main():
     sora_models = [m for m in models_list if m.get('id') == 'sora-watermark-remover']
     
     # Логируем информацию о registry (source, count)
-    logger.info(f"📊 models_registry source={registry_info['used_source']} count={registry_info['count']}")
+    logger.info(
+        f"📊 models_registry source={registry_info['used_source']} "
+        f"path={get_registry_path()} count={registry_info['count']}"
+    )
     if registry_info.get('yaml_total_models'):
         logger.info(f"📊 YAML total_models={registry_info['yaml_total_models']}")
     
