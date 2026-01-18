@@ -9,6 +9,7 @@ import logging
 import asyncio
 import sys
 import os
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -190,6 +191,10 @@ from telegram.ext import (
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+
+# ==================== TELEGRAM TEXT LIMITS ====================
+TELEGRAM_TEXT_LIMIT = 4000
+TELEGRAM_CHUNK_LIMIT = 3900
 
 # Убрано: from dotenv import load_dotenv
 # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard)
@@ -2616,6 +2621,111 @@ async def _build_main_menu_text(update: Update) -> str:
     return welcome_text
 
 
+def _split_text_by_delimiters(text: str, limit: int, delimiters: List[str]) -> List[str]:
+    if len(text) <= limit:
+        return [text]
+    if not delimiters:
+        return [text[i:i + limit] for i in range(0, len(text), limit)]
+
+    delimiter = delimiters[0]
+    parts = text.split(delimiter)
+    chunks: List[str] = []
+    current = ""
+
+    for index, part in enumerate(parts):
+        prefix = delimiter if index > 0 else ""
+        segment = f"{prefix}{part}"
+        if len(segment) > limit:
+            if current:
+                chunks.append(current)
+                current = ""
+            subchunks = _split_text_by_delimiters(part, limit, delimiters[1:])
+            if prefix:
+                if subchunks:
+                    subchunks[0] = f"{prefix}{subchunks[0]}"
+                else:
+                    subchunks = [prefix]
+            chunks.extend(subchunks)
+            continue
+        if len(current) + len(segment) <= limit:
+            current += segment
+        else:
+            if current:
+                chunks.append(current)
+            current = segment
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _is_safe_html_chunk(text: str) -> bool:
+    if text.count("<") != text.count(">"):
+        return False
+
+    tag_pattern = re.compile(r"<(/?)([a-zA-Z0-9]+)(?:\\s[^>]*)?>")
+    stack: List[str] = []
+    for match in tag_pattern.finditer(text):
+        tag = match.group(2).lower()
+        if tag in {"br"}:
+            continue
+        if match.group(1) == "/":
+            if not stack or stack[-1] != tag:
+                return False
+            stack.pop()
+        else:
+            stack.append(tag)
+    return not stack
+
+
+async def send_long_message(
+    bot,
+    chat_id: int,
+    text: str,
+    *,
+    parse_mode: Optional[str] = "HTML",
+    disable_web_page_preview: bool = True,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    **kwargs: Any,
+) -> List[Any]:
+    if not text:
+        return []
+
+    chunks = _split_text_by_delimiters(
+        text,
+        TELEGRAM_CHUNK_LIMIT,
+        ["\n\n", "\n", " "],
+    )
+    sent_messages = []
+    total_chunks = len(chunks)
+
+    for index, chunk in enumerate(chunks):
+        message_kwargs = dict(kwargs)
+        if disable_web_page_preview is not None:
+            message_kwargs["disable_web_page_preview"] = disable_web_page_preview
+        if index == total_chunks - 1 and reply_markup is not None:
+            message_kwargs["reply_markup"] = reply_markup
+
+        if parse_mode and not _is_safe_html_chunk(chunk):
+            logger.warning(
+                "HTML chunk invalid; sending without parse_mode. chunk_index=%s",
+                index,
+            )
+        else:
+            if parse_mode:
+                message_kwargs["parse_mode"] = parse_mode
+
+        sent_messages.append(
+            await bot.send_message(
+                chat_id=chat_id,
+                text=chunk,
+                **message_kwargs,
+            )
+        )
+
+    return sent_messages
+
+
 async def show_main_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -2636,18 +2746,17 @@ async def show_main_menu(
     main_menu_text = await _build_main_menu_text(update)
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
+    chat_id = None
+    if update.effective_chat:
+        chat_id = update.effective_chat.id
+    elif user_id:
+        chat_id = user_id
+
     if update.callback_query:
         query = update.callback_query
-        try:
-            await query.edit_message_text(
-                main_menu_text,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-            )
-            return
-        except Exception:
+        if len(main_menu_text) <= TELEGRAM_TEXT_LIMIT:
             try:
-                await query.message.reply_text(
+                await query.edit_message_text(
                     main_menu_text,
                     reply_markup=reply_markup,
                     parse_mode="HTML",
@@ -2656,23 +2765,14 @@ async def show_main_menu(
             except Exception:
                 pass
 
-    if update.message:
-        try:
-            await update.message.reply_text(
-                main_menu_text,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-            )
-            return
-        except Exception:
-            pass
-
-    if user_id:
-        await context.bot.send_message(
-            chat_id=user_id,
+    if chat_id:
+        await send_long_message(
+            context.bot,
+            chat_id=chat_id,
             text=main_menu_text,
             reply_markup=reply_markup,
             parse_mode="HTML",
+            disable_web_page_preview=True,
         )
 
 
@@ -25292,8 +25392,8 @@ async def _register_all_handlers_internal(application: Application):
     # Для полной функциональности нужно вызвать полную регистрацию из main()
     # Но для create_bot_application достаточно базовой регистрации
     
-    # Регистрируем error handler (нужно найти его определение)
-    # application.add_error_handler(error_handler) - будет добавлено в main()
+    # Error handler регистрируется сразу после Application.builder().build()
+    # через app.telegram_error_handler.ensure_error_handler_registered
     
     # Регистрируем generation_handler
     application.add_handler(generation_handler)
@@ -26171,180 +26271,8 @@ async def main():
         except ValueError:
             await update.message.reply_text("❌ Неверный формат user_id. Используйте число.")
     
-    # Add handlers
-    # 🔴 ГЛОБАЛЬНЫЙ ERROR HANDLER
-    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Глобальный обработчик ошибок для всех исключений в боте.
-        Логирует коротко (без секретов), отвечает пользователю безопасно.
-        Ошибка не должна валить polling.
-        КРИТИЧНО: НЕ перезапускает polling, НЕ делает retry - только логирует!
-        """
-        try:
-            error = context.error
-            error_type = type(error).__name__
-            error_msg = str(error)
-            
-            # КРИТИЧНО: Логируем ВСЕ ошибки для диагностики
-            logger.error(f"[ERROR_HANDLER] Called with error: {error_type}: {error_msg[:200]}")
-            
-            # ==================== КРИТИЧНО: Обработка 409 Conflict ====================
-            # Если это Conflict ошибка, обрабатываем её специально (graceful exit)
-            from telegram.error import Conflict as TelegramConflict
-            if isinstance(error, TelegramConflict) or "Conflict" in error_msg or "terminated by other getUpdates" in error_msg or "409" in error_msg:
-                logger.error(f"❌❌❌ 409 CONFLICT DETECTED: {error_msg}")
-                logger.error("   Another bot instance is running or webhook is active")
-                logger.error("   This process will exit gracefully to prevent conflicts")
-                logger.error("   💡 ACTIONS:")
-                logger.error("      1. Check Render Dashboard - ensure only ONE service is running")
-                logger.error("      2. Check local runs - stop all bot instances")
-                logger.error("      3. Verify singleton lock is working correctly")
-                logger.error("      4. Ensure webhook is deleted: curl https://api.telegram.org/bot<TOKEN>/deleteWebhook?drop_pending_updates=true")
-                
-                # CRITICAL: Stop updater FIRST to stop polling loop immediately
-                try:
-                    if hasattr(context, 'application') and context.application:
-                        app = context.application
-                        # Stop updater polling immediately
-                        if hasattr(app, 'updater') and app.updater:
-                            try:
-                                if app.updater.running:
-                                    logger.info("   Stopping updater polling immediately...")
-                                    await app.updater.stop()
-                                    logger.info("   Updater stopped")
-                            except Exception as updater_error:
-                                logger.warning(f"   Could not stop updater: {updater_error}")
-                        
-                        # Then stop application
-                        try:
-                            if app.running:
-                                logger.info("   Stopping application...")
-                                await app.stop()
-                                await app.shutdown()
-                                logger.info("   Application stopped")
-                        except Exception as stop_error:
-                            logger.warning(f"   Could not stop application: {stop_error}")
-                except Exception as e:
-                    logger.warning(f"   Error stopping updater/application: {e}")
-                
-                try:
-                    handle_conflict_gracefully(error, "polling")
-                except Exception as e:
-                    logger.error(f"   Error in handle_conflict_gracefully: {e}")
-                
-                # Graceful shutdown при конфликте
-                logger.error("   Exiting gracefully to prevent repeated conflicts...")
-                try:
-                    from app.locking.single_instance import release_single_instance_lock
-                    release_single_instance_lock()
-                except:
-                    pass
-                
-                # CRITICAL: Use os._exit(0) for immediate termination without cleanup
-                # This prevents Render from restarting and stops polling loop immediately
-                # os._exit() terminates the process immediately, bypassing cleanup handlers
-                # Exit code 0 = success, Render won't restart the service
-                import os
-                logger.info("   Exiting with code 0 (immediate termination, no restart needed)")
-                os._exit(0)  # Immediate exit - stops polling loop, Render won't restart
-            
-            # Логируем с полным traceback для отладки (только для не-Conflict ошибок)
-            logger.exception(f"❌❌❌ GLOBAL ERROR HANDLER: {error_type}: {error_msg}")
-            
-            # ==================== SELF-HEAL: Попытка автоматического исправления ====================
-            try:
-                from app.observability.error_guard import ErrorGuard
-                project_root = Path(__file__).parent
-                error_guard = ErrorGuard(project_root)
-                
-                # Получаем контекст
-                user_id = None
-                callback_data = None
-                if isinstance(update, Update):
-                    if update.effective_user:
-                        user_id = update.effective_user.id
-                    if update.callback_query:
-                        callback_data = update.callback_query.data
-                
-                # Пытаемся применить безопасный фикс
-                fixed = await error_guard.handle_error(
-                    error, update, context, user_id, callback_data
-                )
-                
-                if fixed:
-                    logger.info("✅ Ошибка автоматически исправлена (self-heal)")
-                
-            except Exception as heal_error:
-                logger.warning(f"⚠️ Ошибка в self-heal: {heal_error}")
-                # Продолжаем обычную обработку ошибки
-            
-            # Пытаемся получить user_id из update
-            user_id = None
-            user_lang = 'ru'
-            chat_id = None
-            
-            if isinstance(update, Update):
-                if update.effective_user:
-                    user_id = update.effective_user.id
-                    user_lang = get_user_language(user_id) if user_id else 'ru'
-                if update.effective_chat:
-                    chat_id = update.effective_chat.id
-            
-            # Логируем детали ошибки
-            error_details = {
-                'error_type': error_type,
-                'error_message': error_msg,
-                'user_id': user_id,
-                'chat_id': chat_id
-            }
-            logger.error(f"Error details: {error_details}")
-            
-            # ==================== NO-SILENCE GUARD: Ensure response on error ====================
-            from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
-            guard = get_no_silence_guard()
-            update_id = update.update_id if isinstance(update, Update) else None
-            
-            # Для callback ошибок отвечаем безопасно
-            if isinstance(update, Update) and update.callback_query:
-                try:
-                    error_text = "⚠️ Ошибка. Откройте /start" if user_lang == 'ru' else "⚠️ Error. Open /start"
-                    await update.callback_query.answer(error_text, show_alert=True)
-                    if update_id:
-                        track_outgoing_action(update_id)
-                except Exception as e:
-                    logger.warning(f"Could not answer callback in error handler: {e}")
-            
-            # Для сообщений отправляем безопасный ответ
-            if isinstance(update, Update) and update.message and chat_id:
-                try:
-                    error_text = (
-                        "❌ <b>Произошла ошибка</b>\n\n"
-                        "Ошибка сервера, попробуйте позже.\n\n"
-                        "Если проблема повторяется, обратитесь в поддержку."
-                    ) if user_lang == 'ru' else (
-                        "❌ <b>An error occurred</b>\n\n"
-                        "Server error, please try later.\n\n"
-                        "If the problem persists, please contact support."
-                    )
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=error_text,
-                        parse_mode='HTML'
-                    )
-                    if update_id:
-                        track_outgoing_action(update_id)
-                except Exception as e:
-                    logger.warning(f"Could not send error message: {e}")
-            
-            # NO-SILENCE GUARD: Проверяем что был ответ
-            if update_id:
-                await guard.check_and_ensure_response(update, context)
-            # ==================== END NO-SILENCE GUARD ====================
-        except Exception as e:
-            # Если сам error handler упал, логируем критическую ошибку
-            logger.critical(f"❌❌❌ CRITICAL: Error handler itself failed: {e}", exc_info=True)
-    
-    application.add_error_handler(error_handler)
+    from app.telegram_error_handler import ensure_error_handler_registered
+    ensure_error_handler_registered(application)
     
     # Add payment handlers for Telegram Stars
     # NOTE: MessageHandler and filters already imported at top level, don't re-import

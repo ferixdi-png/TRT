@@ -57,6 +57,7 @@ async def initialize_storage() -> bool:
 async def start_telegram_bot():
     """Start Telegram bot polling."""
     from telegram.ext import Application
+    from app.telegram_error_handler import ensure_error_handler_registered
     
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
@@ -69,6 +70,7 @@ async def start_telegram_bot():
         
     try:
         app = Application.builder().token(token).build()
+        ensure_error_handler_registered(app)
         
         # Register handlers
         # КРИТИЧНО: Исправляем импорт для Render
