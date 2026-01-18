@@ -16,7 +16,7 @@ from telegram.ext import Application, ContextTypes
 from app.bot_mode import handle_conflict_gracefully
 from app.observability.error_guard import ErrorGuard
 from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
-from app.state.user_state import get_user_language
+from app.services.user_service import get_user_language as get_user_language_async
 from app.utils.singleton_lock import release_singleton_lock
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,12 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
             if isinstance(update, Update):
                 if update.effective_user:
                     user_id = update.effective_user.id
-                    user_lang = get_user_language(user_id) if user_id else "ru"
+                    if user_id:
+                        try:
+                            user_lang = await get_user_language_async(user_id)
+                        except Exception as exc:
+                            logger.warning("Failed to resolve user language in error handler: %s", exc)
+                            user_lang = "ru"
                 if update.effective_chat:
                     chat_id = update.effective_chat.id
 
