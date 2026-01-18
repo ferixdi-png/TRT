@@ -28,7 +28,9 @@ async def test_start_command(harness):
     
     last_message = result['outbox']['messages'][-1]
     assert 'text' in last_message, "Message should have text"
-    assert last_message['text'] == "Главное меню"
+    assert "ДОБРО ПОЖАЛОВАТЬ" in last_message['text']
+    assert "Версия" in last_message['text']
+    assert "Что нового" in last_message['text']
     
     assert 'reply_markup' in last_message
     assert last_message['reply_markup'] is not None, "Should have reply_markup"
@@ -69,7 +71,9 @@ async def test_unknown_callback_shows_main_menu(harness):
     assert edited or messages
 
     last_payload = edited[-1] if edited else messages[-1]
-    assert last_payload['text'] == "Главное меню"
+    assert "ДОБРО ПОЖАЛОВАТЬ" in last_payload['text']
+    assert "Версия" in last_payload['text']
+    assert "Что нового" in last_payload['text']
     keyboard = last_payload['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [
         "БЕСПЛАТНЫЕ МОДЕЛИ",
