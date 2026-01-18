@@ -29,12 +29,17 @@ def build_form_fields(model_id: str) -> List[FieldSpec]:
         raise FormSpecError(f"No schema available for model '{model_id}'")
     fields: List[FieldSpec] = []
     for field_name, field_data in schema.items():
+        enum_values = field_data.get("enum")
+        if enum_values is None:
+            enum_values = field_data.get("values")
+        if isinstance(enum_values, str):
+            enum_values = [enum_values]
         fields.append(
             FieldSpec(
                 name=field_name,
                 field_type=field_data.get("type", "string"),
                 required=bool(field_data.get("required", False)),
-                enum=field_data.get("values"),
+                enum=enum_values,
                 item_type=field_data.get("item_type"),
                 min_value=field_data.get("min"),
                 max_value=field_data.get("max"),

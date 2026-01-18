@@ -68,101 +68,7 @@ def get_schema(model_id: str) -> Optional[Dict[str, Any]]:
     return model_info.get('input', {})
 
 
-# Таблица маппингов для специальных случаев моделей
-# Формат: model_id -> {internal_param: api_param}
-API_PARAM_MAPPINGS: Dict[str, Dict[str, str]] = {
-    # recraft/remove-background: image_input[0] -> image (string)
-    "recraft/remove-background": {
-        "image_input": "image"  # array -> string (first element)
-    },
-    # recraft/crisp-upscale: image_input[0] -> image (string)
-    "recraft/crisp-upscale": {
-        "image_input": "image"  # array -> string (first element)
-    },
-    # ideogram/v3-reframe: image_input[0] -> image_url (string)
-    "ideogram/v3-reframe": {
-        "image_input": "image_url"  # array -> string (first element)
-    },
-    # topaz/image-upscale: image_input[0] -> image_url (string)
-    "topaz/image-upscale": {
-        "image_input": "image_url"  # array -> string (first element)
-    },
-    # seedream/4.5-edit: image_input -> image_urls (array)
-    "seedream/4.5-edit": {
-        "image_input": "image_urls"  # array -> array (same)
-    },
-    # kling-2.6/image-to-video: image_input -> image_urls (array)
-    "kling-2.6/image-to-video": {
-        "image_input": "image_urls"  # array -> array (same)
-    },
-    # flux-2/pro-image-to-image: image_input -> input_urls (array)
-    "flux-2/pro-image-to-image": {
-        "image_input": "input_urls"  # array -> array (same)
-    },
-    # flux-2/flex-image-to-image: image_input -> input_urls (array)
-    "flux-2/flex-image-to-image": {
-        "image_input": "input_urls"  # array -> array (same)
-    },
-    # topaz/image-upscale (дубль, уже есть выше) - оставляем как есть
-    # kling/v2-5-turbo-image-to-video-pro: image_input[0] -> image_url (string)
-    "kling/v2-5-turbo-image-to-video-pro": {
-        "image_input": "image_url"  # array -> string (first element)
-    },
-    # wan/2-5-image-to-video: image_input[0] -> image_url (string)
-    "wan/2-5-image-to-video": {
-        "image_input": "image_url"  # array -> string (first element)
-    },
-    # hailuo/02-image-to-video-pro: image_input[0] -> image_url (string)
-    "hailuo/02-image-to-video-pro": {
-        "image_input": "image_url"  # array -> string (first element)
-    },
-    # hailuo/02-image-to-video-standard: image_input[0] -> image_url (string)
-    "hailuo/02-image-to-video-standard": {
-        "image_input": "image_url"  # array -> string (first element)
-    },
-    # bytedance/seedream-v4-edit: image_input -> image_urls (array)
-    "bytedance/seedream-v4-edit": {
-        "image_input": "image_urls"  # array -> array (same)
-    },
-    # topaz/video-upscale: video_input[0] -> video_url (string)
-    "topaz/video-upscale": {
-        "video_input": "video_url"  # array -> string (first element)
-    },
-    # wan/2-2-animate-move: video_input[0] -> video_url, image_input[0] -> image_url
-    "wan/2-2-animate-move": {
-        "video_input": "video_url",  # array -> string (first element)
-        "image_input": "image_url"   # array -> string (first element)
-    },
-    # wan/2-2-animate-replace: video_input[0] -> video_url, image_input[0] -> image_url
-    "wan/2-2-animate-replace": {
-        "video_input": "video_url",  # array -> string (first element)
-        "image_input": "image_url"   # array -> string (first element)
-    },
-    # kling/v1-avatar-standard: image_input[0] -> image_url, audio_input[0] -> audio_url
-    "kling/v1-avatar-standard": {
-        "image_input": "image_url",  # array -> string (first element)
-        "audio_input": "audio_url"   # array -> string (first element)
-    },
-    # kling/ai-avatar-v1-pro: image_input[0] -> image_url, audio_input[0] -> audio_url
-    "kling/ai-avatar-v1-pro": {
-        "image_input": "image_url",  # array -> string (first element)
-        "audio_input": "audio_url"   # array -> string (first element)
-    },
-    # infinitalk/from-audio: image_input[0] -> image_url, audio_input[0] -> audio_url
-    "infinitalk/from-audio": {
-        "image_input": "image_url",  # array -> string (first element)
-        "audio_input": "audio_url"   # array -> string (first element)
-    },
-}
-
-# Определяет, какие параметры должны быть преобразованы из array в string (берется первый элемент)
-# Если параметр в этом списке, то array -> string[0]
-ARRAY_TO_STRING_PARAMS = {
-    "image",  # для recraft моделей
-    "image_url",  # для ideogram, topaz и других
-    "video_url",  # для video моделей
-    "audio_url",  # для audio моделей
-}
+API_PARAM_MAPPINGS: Dict[str, Dict[str, str]] = {}
 
 
 def apply_defaults(schema: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Any]:
@@ -236,7 +142,7 @@ def validate_params(schema: Dict[str, Any], params: Dict[str, Any]) -> Tuple[boo
                     errors.append(f"Параметр '{param_name}' не должен превышать {param_schema['max']} символов")
         
         elif param_type == 'enum':
-            valid_values = param_schema.get('values', [])
+            valid_values = param_schema.get('enum') or param_schema.get('values', [])
             if param_value not in valid_values:
                 valid_str = ', '.join(map(str, valid_values))
                 errors.append(f"Параметр '{param_name}' должен быть одним из: {valid_str} (указано: '{param_value}')")
@@ -284,8 +190,7 @@ def validate_params(schema: Dict[str, Any], params: Dict[str, Any]) -> Tuple[boo
 def adapt_to_api(model_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Адаптирует внутренние параметры к формату API.
-    
-    Преобразует параметры согласно таблице маппингов API_PARAM_MAPPINGS.
+    Возвращает только параметры, описанные в schema.
     
     Args:
         model_id: ID модели
@@ -294,32 +199,8 @@ def adapt_to_api(model_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Параметры в формате API
     """
-    api_params = params.copy()
-    
-    # Получаем маппинг для этой модели
-    mapping = API_PARAM_MAPPINGS.get(model_id, {})
-    
-    # Применяем маппинг
-    for internal_param, api_param in mapping.items():
-        if internal_param in api_params:
-            value = api_params.pop(internal_param)
-            
-            # Если целевой параметр должен быть строкой (из array берем первый элемент)
-            if api_param in ARRAY_TO_STRING_PARAMS:
-                if isinstance(value, list):
-                    if len(value) > 0:
-                        api_params[api_param] = value[0]
-                    else:
-                        logger.warning(f"Array {internal_param} is empty for model {model_id}")
-                elif isinstance(value, str):
-                    api_params[api_param] = value
-                else:
-                    logger.warning(f"Unexpected type for {internal_param}: {type(value)}, expected list or str")
-            else:
-                # Просто переименовываем (array -> array или другой тип)
-                api_params[api_param] = value
-    
-    return api_params
+    schema = get_schema(model_id) or {}
+    return {key: params[key] for key in schema if key in params}
 
 
 def normalize_for_generation(model_id: str, params: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
@@ -355,4 +236,3 @@ def normalize_for_generation(model_id: str, params: Dict[str, Any]) -> Tuple[Dic
     api_params = adapt_to_api(model_id, params_with_defaults)
     
     return api_params, []
-
