@@ -40,7 +40,7 @@ async def test_z_image_aspect_ratio_flow_no_unknown_menu(harness):
             "Подтверждение" in payload["text"] or "Generation Confirmation" in payload["text"]
             for payload in payloads
         )
-        assert all("Добро пожаловать" not in payload["text"] for payload in payloads)
+        assert all("Привет" not in payload["text"] and "Welcome" not in payload["text"] for payload in payloads)
         assert not any(
             answer.get("text") and "не понял" in answer["text"].lower()
             for answer in result["outbox"]["callback_answers"]
