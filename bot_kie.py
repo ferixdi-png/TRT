@@ -19,6 +19,13 @@ from app.observability.structured_logs import (
     get_correlation_id,
     log_structured_event,
 )
+from app.observability.trace import (
+    ensure_correlation_id,
+    prompt_summary,
+    trace_error,
+    trace_event,
+)
+from app.observability.error_catalog import ERROR_CATALOG
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -814,15 +821,6 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
         if price_rub is None:
             logger.warning(f"Price not found for model {model_id}, using fallback")
             return 1.0
-        
-        # Логируем информацию о цене
-        price_info = get_model_price_info(model_id, mode_index, settings)
-        if price_info:
-            logger.info(
-                f"PRICE_RUB={price_rub} OFFICIAL_USD={price_info['official_usd']:.4f} "
-                f"MULT={price_info['price_multiplier']} RATE={price_info['usd_to_rub']} "
-                f"MODEL={model_id}"
-            )
         
         return float(price_rub)
     except ImportError as e:
@@ -3302,11 +3300,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = None
     data = None
     user_lang = 'ru'
+    is_admin_user = False
     
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
     update_id = update.update_id
+    correlation_id = ensure_correlation_id(update, context)
     # ==================== END NO-SILENCE GUARD ====================
     
     # 🔥 MAXIMUM LOGGING: Log entry point
@@ -3314,6 +3314,34 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         user_id = query.from_user.id if query and query.from_user else None
         data = query.data if query else None
+        correlation_id = ensure_correlation_id(update, context)
+        chat_id = query.message.chat_id if query and query.message else None
+        message_id = query.message.message_id if query and query.message else None
+        guard.set_trace_context(
+            update_id,
+            correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            update_type="callback",
+            action="CALLBACK",
+            action_path=build_action_path(data),
+            stage="UI_ROUTER",
+        )
+        trace_event(
+            "info",
+            correlation_id,
+            event="TRACE_IN",
+            stage="UI_ROUTER",
+            update_type="callback",
+            action="CALLBACK",
+            action_path=build_action_path(data),
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=message_id,
+            callback_data=data,
+            route_decision="button_callback",
+        )
         logger.info(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
     except Exception as e:
         logger.error(f"❌❌❌ ERROR in button_callback entry logging: {e}", exc_info=True)
@@ -3328,13 +3356,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         user_id = update.effective_user.id if update.effective_user else None
         data = query.data if query else None
+        is_admin_user = get_is_admin(user_id) if user_id else False
         
         # ALWAYS answer callback immediately to prevent button hanging
         # This is critical - if we don't answer, button will hang
         try:
             await query.answer()
             # NO-SILENCE GUARD: Track outgoing action
-            track_outgoing_action(update_id)
+            track_outgoing_action(update_id, action_type="answerCallbackQuery")
         except Exception as answer_error:
             logger.warning(f"Could not answer callback query: {answer_error}")
             # Continue anyway - better to process than to fail completely
@@ -3391,6 +3420,27 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session_properties_keys[:15],
                 session_keys[:15],
             )
+            try:
+                trace_event(
+                    "info",
+                    correlation_id,
+                    event="TRACE_IN",
+                    stage="SESSION_LOAD",
+                    update_type="callback",
+                    action="CALLBACK",
+                    action_path=build_action_path(data),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    session_exists=bool(session),
+                    model_id=session_model_id,
+                    waiting_for=session_waiting_for,
+                    current_param=session_current_param,
+                    params_keys=session_params_keys[:15],
+                    required=session_required[:15],
+                    param_order=session.get("param_order")[:15] if session and session.get("param_order") else None,
+                )
+            except Exception as trace_exc:
+                logger.warning("TRACE session load failed: %s", trace_exc, exc_info=True)
             try:
                 correlation_id = None
                 if context and getattr(context, "user_data", None) is not None:
@@ -8495,6 +8545,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
             min_price = calculate_price_rub(model_id, default_params, is_admin_check, user_id)
             price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
+            try:
+                from app.services.pricing_service import get_model_price_info
+                from app.config import get_settings
+
+                settings = get_settings()
+                price_info = get_model_price_info(model_id, 0, settings)
+                trace_event(
+                    "info",
+                    correlation_id,
+                    event="PRICE_CALC",
+                    stage="PRICE_CALC",
+                    update_type="callback",
+                    action="SELECT_MODEL",
+                    action_path=build_action_path(data),
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    model_id=model_id,
+                    official_usd=price_info.get("official_usd") if price_info else None,
+                    rate=price_info.get("usd_to_rub") if price_info else None,
+                    multiplier=price_info.get("price_multiplier") if price_info else None,
+                    price_rub=min_price,
+                    is_admin=is_admin_check,
+                    pricing_source="catalog",
+                    always_fields=[
+                        "model_id",
+                        "official_usd",
+                        "rate",
+                        "multiplier",
+                        "price_rub",
+                        "is_admin",
+                        "pricing_source",
+                    ],
+                )
+            except Exception as price_exc:
+                logger.debug("Pricing trace skipped: %s", price_exc)
             
             # Format model card
             model_name = model_info.get('name', model_id)
@@ -8944,6 +9029,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_code="UX_CALLBACK_EXCEPTION",
                 fix_hint="check is_admin_user/calc price",
             )
+            trace_error(
+                correlation_id,
+                "INTERNAL_EXCEPTION",
+                ERROR_CATALOG["INTERNAL_EXCEPTION"],
+                e,
+                callback_data=data,
+                action_path=build_action_path(data),
+            )
         except Exception as structured_log_error:
             logger.warning(
                 "STRUCTURED_LOG error on callback exception: %s",
@@ -9352,6 +9445,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     required = session.get('required', [])
     model_id = session.get('model_id', '')
     user_lang = get_user_language(user_id)
+    correlation_id = ensure_correlation_id(update, context)
 
     logger.info(
         "🧭🧭🧭 START_NEXT_PARAMETER: user_id=%s model_id=%s required=%s params_keys=%s properties_keys=%s session_keys=%s",
@@ -9361,6 +9455,24 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         list(params.keys())[:20],
         list(properties.keys())[:20],
         list(session.keys())[:20],
+    )
+    trace_event(
+        "info",
+        correlation_id,
+        event="TRACE_IN",
+        stage="SESSION_LOAD",
+        update_type="message" if update.message else "callback",
+        action="PARAM_NEXT",
+        action_path="start_next_parameter",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        session_exists=True,
+        model_id=model_id,
+        waiting_for=session.get("waiting_for"),
+        current_param=session.get("current_param"),
+        params_keys=list(params.keys())[:15],
+        required=required[:15],
+        param_order=session.get("param_order")[:15] if session.get("param_order") else None,
     )
 
     param_order = session.get("param_order") or _build_param_order(properties)
@@ -9376,6 +9488,23 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         is_optional = not param_info.get('required', False)
         session['current_param'] = param_name
         media_kind = _get_media_kind(param_name)
+        reason = "missing_required" if param_name in required else "optional_next"
+        if enum_values:
+            reason = "enum_buttons"
+        trace_event(
+            "info",
+            correlation_id,
+            event="TRACE_IN",
+            stage="STATE_VALIDATE",
+            update_type="message" if update.message else "callback",
+            action="PARAM_SELECT",
+            action_path="start_next_parameter",
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            list_to_check=param_order[:15],
+            selected_param=param_name,
+            reason=reason,
+        )
 
         chat_id = None
         if hasattr(update, 'effective_chat') and update.effective_chat:
@@ -9580,6 +9709,19 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         session['waiting_for'] = param_name
         return INPUTTING_PARAMS
 
+    trace_event(
+        "info",
+        correlation_id,
+        event="TRACE_IN",
+        stage="STATE_VALIDATE",
+        update_type="message" if update.message else "callback",
+        action="PARAM_SELECT",
+        action_path="start_next_parameter",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        fallback_mode=True,
+        reason="no_next_param",
+    )
     return None
 
 
@@ -9594,7 +9736,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     guard = get_no_silence_guard()
     update_id = update.update_id
     # ==================== END NO-SILENCE GUARD ====================
-    
+
     # CRITICAL: Log function entry IMMEDIATELY
     logger.info(f"🚨🚨🚨 INPUT_PARAMETERS FUNCTION CALLED: user_id={user_id}, update_type={type(update).__name__}")
     
@@ -9604,6 +9746,44 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_audio = bool(update.message and (update.message.audio or update.message.voice))
     has_document = bool(update.message and update.message.document)
     logger.info(f"🔥🔥🔥 INPUT_PARAMETERS ENTRY: user_id={user_id}, has_photo={has_photo}, has_text={has_text}, has_audio={has_audio}, has_document={has_document}, update_type={type(update).__name__}")
+
+    correlation_id = ensure_correlation_id(update, context)
+    input_type = "unknown"
+    if has_text:
+        input_type = "text"
+    elif has_photo:
+        input_type = "photo"
+    elif has_audio:
+        input_type = "audio"
+    elif has_document:
+        input_type = "document"
+    chat_id = update.message.chat_id if update.message else None
+    guard.set_trace_context(
+        update_id,
+        correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        update_type="message",
+        action="INPUT",
+        action_path="input_parameters",
+        stage="UI_ROUTER",
+        outcome="received",
+        input_type=input_type,
+    )
+    trace_event(
+        "info",
+        correlation_id,
+        event="TRACE_IN",
+        stage="UI_ROUTER",
+        update_type="message",
+        action="INPUT",
+        action_path="input_parameters",
+        user_id=user_id,
+        chat_id=chat_id,
+        input_type=input_type,
+        message_id=update.message.message_id if update.message else None,
+    )
     
     # CRITICAL: Log photo details if photo is present
     if has_photo and update.message and update.message.photo:
@@ -9649,6 +9829,50 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     image_only_model = _is_image_only_model(properties)
     logger.info(f"🔥🔥🔥 INPUT_PARAMETERS SESSION KEYS: {list(session.keys())[:15]}")
     logger.info(f"🔥🔥🔥 INPUT_PARAMETERS PARAMS: keys={list(params.keys())}, values={[(k, type(v).__name__, len(v) if isinstance(v, (list, dict)) else 'N/A') for k, v in params.items()][:5]}")
+
+    trace_event(
+        "info",
+        correlation_id,
+        event="TRACE_IN",
+        stage="SESSION_LOAD",
+        update_type="message",
+        action="INPUT",
+        action_path="input_parameters",
+        user_id=user_id,
+        chat_id=chat_id,
+        session_exists=True,
+        model_id=model_id,
+        waiting_for=waiting_for,
+        current_param=session.get("current_param"),
+        params_keys=list(params.keys())[:15],
+        required=session.get("required", [])[:15],
+        param_order=session.get("param_order")[:15] if session.get("param_order") else None,
+    )
+
+    def _trace_param_saved(param_name: str, value: Any, source: str) -> None:
+        summary: Dict[str, Any] = {
+            "param_name": param_name,
+            "value_type": type(value).__name__,
+            "source": source,
+        }
+        if isinstance(value, str):
+            summary.update(prompt_summary(value))
+        elif isinstance(value, list):
+            summary["value_len"] = len(value)
+        elif isinstance(value, dict):
+            summary["value_keys"] = list(value.keys())[:10]
+        trace_event(
+            "info",
+            correlation_id,
+            event="TRACE_IN",
+            stage="STATE_VALIDATE",
+            update_type="message",
+            action="PARAM_SAVE",
+            action_path="input_parameters",
+            user_id=user_id,
+            chat_id=chat_id,
+            **summary,
+        )
     
     # CRITICAL: If photo is sent but session doesn't have waiting_for set, log warning
     if has_photo and not waiting_for:
@@ -9691,6 +9915,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             params[waiting_for] = value
             session['params'] = params
             session['waiting_for'] = None
+            _trace_param_saved(waiting_for, value, "number_input")
             next_param_result = await start_next_parameter(update, context, user_id)
             if next_param_result is None:
                 return await send_confirmation_message(update, context, user_id, source="number_input")
@@ -9706,6 +9931,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             params[waiting_for] = value_text
             session['params'] = params
             session['waiting_for'] = None
+            _trace_param_saved(waiting_for, value_text, "enum_input")
             next_param_result = await start_next_parameter(update, context, user_id)
             if next_param_result is None:
                 return await send_confirmation_message(update, context, user_id, source="enum_input")
@@ -9725,6 +9951,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return INPUTTING_PARAMS
             session['params'] = params
             session['waiting_for'] = None
+            _trace_param_saved(waiting_for, params[waiting_for], "boolean_input")
             next_param_result = await start_next_parameter(update, context, user_id)
             if next_param_result is None:
                 return await send_confirmation_message(update, context, user_id, source="boolean_input")
@@ -9734,6 +9961,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         params[waiting_for] = value_text
         session['params'] = params
         session['waiting_for'] = None
+        _trace_param_saved(waiting_for, value_text, "text_input")
         next_param_result = await start_next_parameter(update, context, user_id)
         if next_param_result is None:
             return await send_confirmation_message(update, context, user_id, source="text_input")
@@ -12257,6 +12485,34 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"🔥🔥🔥 CONFIRM_GENERATION ENTRY: user_id={user_id}, query_id={query.id if query else 'None'}, data={query.data if query else 'None'}")
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+    guard = get_no_silence_guard()
+    correlation_id = ensure_correlation_id(update, context)
+    chat_id = query.message.chat_id if query and query.message else None
+    guard.set_trace_context(
+        update.update_id,
+        correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        update_type="callback",
+        action="CONFIRM_GENERATE",
+        action_path="confirm_generate",
+        stage="UI_ROUTER",
+        outcome="received",
+    )
+    trace_event(
+        "info",
+        correlation_id,
+        event="TRACE_IN",
+        stage="UI_ROUTER",
+        update_type="callback",
+        action="CONFIRM_GENERATE",
+        action_path="confirm_generate",
+        user_id=user_id,
+        chat_id=chat_id,
+        message_id=query.message.message_id if query and query.message else None,
+    )
     
     # Answer callback immediately if present
     if query:
@@ -12270,13 +12526,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Helper function to send/edit messages safely
     async def send_or_edit_message(text, parse_mode='HTML'):
         try:
+            action_type = "send_message"
             if query:
                 try:
                     await query.edit_message_text(text, parse_mode=parse_mode)
+                    action_type = "edit_message_text"
                 except Exception as edit_error:
                     logger.warning(f"Could not edit message: {edit_error}, sending new")
                     try:
                         await query.message.reply_text(text, parse_mode=parse_mode)
+                        action_type = "reply_text"
                         try:
                             await query.message.delete()
                         except:
@@ -12284,12 +12543,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     except Exception as send_error:
                         logger.error(f"Could not send new message: {send_error}")
                         await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                        action_type = "send_message"
             else:
                 await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                action_type = "send_message"
+            track_outgoing_action(update.update_id, action_type=action_type)
         except Exception as e:
             logger.error(f"Error in send_or_edit_message: {e}", exc_info=True)
             try:
                 await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                track_outgoing_action(update.update_id, action_type="send_message")
             except:
                 pass
     
@@ -12394,6 +12657,41 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Calculate price (admins pay admin price, users pay user price)
     price = calculate_price_rub(model_id, params, is_admin_user)
+    try:
+        from app.services.pricing_service import get_model_price_info
+        from app.config import get_settings
+
+        settings = get_settings()
+        price_info = get_model_price_info(model_id, 0, settings)
+        trace_event(
+            "info",
+            correlation_id,
+            event="PRICE_CALC",
+            stage="PRICE_CALC",
+            update_type="callback",
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            user_id=user_id,
+            chat_id=chat_id,
+            model_id=model_id,
+            official_usd=price_info.get("official_usd") if price_info else None,
+            rate=price_info.get("usd_to_rub") if price_info else None,
+            multiplier=price_info.get("price_multiplier") if price_info else None,
+            price_rub=price,
+            is_admin=is_admin_user,
+            pricing_source="catalog",
+            always_fields=[
+                "model_id",
+                "official_usd",
+                "rate",
+                "multiplier",
+                "price_rub",
+                "is_admin",
+                "pricing_source",
+            ],
+        )
+    except Exception as price_exc:
+        logger.debug("Pricing trace skipped: %s", price_exc)
     
     # For free generations, price is 0
     if is_free:
@@ -12507,7 +12805,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await send_or_edit_message("❌ <b>Модель не найдена в каталоге</b>")
             return ConversationHandler.END
 
-        job_result = await run_generation(user_id, model_id, params)
+        job_result = await run_generation(user_id, model_id, params, correlation_id=correlation_id)
         elapsed = job_result.raw.get("elapsed")
         await send_job_result(
             context.bot,
@@ -12517,6 +12815,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             price_rub=price,
             elapsed=elapsed,
             user_lang=user_lang,
+            correlation_id=correlation_id,
         )
         return ConversationHandler.END
     except Exception as e:
@@ -25431,11 +25730,51 @@ async def _register_all_handlers_internal(application: Application):
         if query and is_known_callback_data(query.data):
             logger.debug(f"Skipping unknown_callback_handler for known callback: {query.data}")
             return
+        correlation_id = ensure_correlation_id(update, context)
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
+        from app.observability.no_silence_guard import get_no_silence_guard
+        guard = get_no_silence_guard()
+        guard.set_trace_context(
+            update.update_id,
+            correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            update_type="callback",
+            action="UNKNOWN_CALLBACK",
+            action_path=build_action_path(query.data if query else None),
+            stage="UI_ROUTER",
+            outcome="unknown_callback",
+        )
+        trace_event(
+            "info",
+            correlation_id,
+            event="TRACE_IN",
+            stage="UI_ROUTER",
+            update_type="callback",
+            action="UNKNOWN_CALLBACK",
+            action_path=build_action_path(query.data if query else None),
+            user_id=user_id,
+            chat_id=chat_id,
+            callback_data=query.data if query else None,
+            outcome="unknown_callback",
+            reason="no_handler",
+        )
         if query:
             try:
                 await query.answer("Не понял нажатие, обновил меню.", show_alert=False)
+                from app.observability.no_silence_guard import track_outgoing_action
+                track_outgoing_action(update.update_id, action_type="answerCallbackQuery")
             except Exception as e:
                 logger.error(f"Error in unknown_callback_handler: {e}", exc_info=True)
+                trace_error(
+                    correlation_id,
+                    "UI_UNKNOWN_CALLBACK",
+                    ERROR_CATALOG["UI_UNKNOWN_CALLBACK"],
+                    e,
+                    callback_data=query.data if query else None,
+                )
         await show_main_menu(update, context, source="unknown_callback_handler")
     
     # Fallback handler for non-text messages (photo/video/audio/document) when not in conversation

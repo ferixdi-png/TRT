@@ -15,9 +15,11 @@ NO-SILENCE GUARD - Критический инвариант
 """
 
 import logging
-from typing import Dict, Set, Optional
+from typing import Dict, Set, Optional, Any
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+
+from app.observability.trace import trace_event
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +30,35 @@ class NoSilenceGuard:
     def __init__(self):
         self.outgoing_actions: Dict[int, int] = {}  # update_id -> count
         self.processed_updates: Set[int] = set()
+        self.trace_contexts: Dict[int, Dict[str, Any]] = {}
+
+    def set_trace_context(self, update_id: int, correlation_id: str, **fields: Any) -> None:
+        """Attach trace context to an update for TRACE_OUT logging."""
+        self.trace_contexts[update_id] = {
+            "correlation_id": correlation_id,
+            **fields,
+        }
     
-    def track_outgoing_action(self, update_id: int):
+    def track_outgoing_action(self, update_id: int, action_type: Optional[str] = None):
         """Отслеживает исходящее действие (send/edit/media)"""
         if update_id not in self.outgoing_actions:
             self.outgoing_actions[update_id] = 0
         self.outgoing_actions[update_id] += 1
         logger.debug(f"📤 Tracked outgoing action for update {update_id}, total: {self.outgoing_actions[update_id]}")
+        if self.outgoing_actions[update_id] == 1 and update_id in self.trace_contexts:
+            trace_ctx = self.trace_contexts[update_id]
+            correlation_id = trace_ctx.get("correlation_id")
+            if correlation_id:
+                trace_event(
+                    "info",
+                    correlation_id,
+                    event="TRACE_OUT",
+                    stage=trace_ctx.get("stage", "TG_DELIVER"),
+                    outcome=trace_ctx.get("outcome", "responded"),
+                    response_count=self.outgoing_actions[update_id],
+                    response_type=action_type,
+                    **{k: v for k, v in trace_ctx.items() if k != "correlation_id"},
+                )
     
     def mark_update_processed(self, update_id: int):
         """Отмечает апдейт как обработанный"""
@@ -158,6 +182,8 @@ class NoSilenceGuard:
             del self.outgoing_actions[update_id]
         if update_id in self.processed_updates:
             self.processed_updates.remove(update_id)
+        if update_id in self.trace_contexts:
+            del self.trace_contexts[update_id]
 
 
 # Глобальный экземпляр
@@ -172,12 +198,10 @@ def get_no_silence_guard() -> NoSilenceGuard:
     return _no_silence_guard
 
 
-def track_outgoing_action(update_id: int):
+def track_outgoing_action(update_id: int, action_type: Optional[str] = None):
     """Удобная функция для отслеживания исходящего действия"""
     guard = get_no_silence_guard()
-    guard.track_outgoing_action(update_id)
-
-
+    guard.track_outgoing_action(update_id, action_type=action_type)
 
 
 

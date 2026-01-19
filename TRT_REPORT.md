@@ -183,3 +183,29 @@
 **Как проверил:**
 - `python scripts/verify_project.py`
 - `pytest -q`
+
+## 2025-02-15: ABSOLUTE TRACEABILITY (corr-id + stages)
+**Было:**
+- Корреляция между UI → KIE → TG отсутствовала, TRACE_IN/TRACE_OUT не гарантировались.
+- PRICE_RUB логировался дублирующе при каждом расчёте.
+- Ошибки не имели единой taxonomy/fix_hint.
+
+**Стало:**
+- Добавлен unified trace logger: `app/observability/trace.py` (corr-id, TRACE_IN/OUT, stage + duration). 
+- Корреляция прокидывается в UI/SESSION/KIE/TG пайплайн; ключевые стадии: `UI_ROUTER`, `SESSION_LOAD`, `STATE_VALIDATE`, `PRICE_CALC`, `KIE_CREATE`, `KIE_POLL`, `KIE_PARSE`, `TG_DELIVER`.
+- Telegram delivery вынесен в `deliver_result()` с логированием типа медиа, метода отправки и fallback.
+- Цена логируется только в `select_model` и финальном подтверждении; дублирование устранено.
+- Добавлен каталог ошибок `app/observability/error_catalog.py` и структурированный `trace_error` в error handler.
+
+**Как включать детализацию:**
+- `LOG_LEVEL=DEBUG` — stacktrace в trace_error и больше деталей.
+- `TRACE_VERBOSE=true` — расширенные поля в trace_event.
+- `TRACE_PAYLOADS=false` — не логирует сырые prompt/media (только len/hash).
+- `TRACE_PRICING=true` — детальнее price-каталог.
+
+**Пример поиска по корреляции:**
+- `grep "corr-<update_id>-<user_id>" render.log`
+
+**Как проверил:**
+- `python scripts/verify_project.py`
+- `pytest -q`
