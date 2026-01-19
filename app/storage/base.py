@@ -85,6 +85,26 @@ class BaseStorage(ABC):
     async def increment_free_generations(self, user_id: int) -> None:
         """Увеличить счетчик бесплатных генераций на сегодня"""
         pass
+
+    @abstractmethod
+    async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
+        """Получить данные об использовании бесплатных генераций за час."""
+        pass
+
+    @abstractmethod
+    async def set_hourly_free_usage(self, user_id: int, window_start_iso: str, used_count: int) -> None:
+        """Сохранить данные об использовании бесплатных генераций за час."""
+        pass
+
+    @abstractmethod
+    async def get_referral_free_bank(self, user_id: int) -> int:
+        """Получить остаток реферальных бесплатных генераций."""
+        pass
+
+    @abstractmethod
+    async def set_referral_free_bank(self, user_id: int, remaining_count: int) -> None:
+        """Сохранить остаток реферальных бесплатных генераций."""
+        pass
     
     @abstractmethod
     async def get_admin_limit(self, user_id: int) -> float:

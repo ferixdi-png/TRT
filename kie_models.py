@@ -2733,6 +2733,18 @@ def get_categories() -> list:
 
 
 # Generation types mapping
+def _get_free_tools_model_ids() -> set:
+    try:
+        from pricing.engine import load_config
+
+        config = load_config()
+        free_tools = config.get("free_tools", {}) if isinstance(config, dict) else {}
+        model_ids = free_tools.get("model_ids", [])
+        if isinstance(model_ids, list):
+            return set(model_ids)
+    except Exception:
+        return set()
+    return set()
 GENERATION_TYPES = {
     # Video Generation
     "text-to-video": {
@@ -2764,7 +2776,7 @@ GENERATION_TYPES = {
     "text-to-image": {
         "name": "✨ Текст в фото",
         "description": "Создавайте изображения из текста",
-        "models": ["z-image", "nano-banana-pro", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "midjourney/api"]
+        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "midjourney/api"]
     },
     "image-to-image": {
         "name": "🎨 Фото в фото",
@@ -2811,19 +2823,11 @@ def get_models_by_generation_type(gen_type: str) -> list:
     
     model_ids = GENERATION_TYPES[gen_type]["models"]
     result = []
+    free_ids = _get_free_tools_model_ids()
     
     for model in KIE_MODELS:
         model_id = model["id"]
-        # Special handling for nano-banana-pro (can be both text-to-image and image-to-image)
-        if model_id == "nano-banana-pro":
-            if gen_type == "text-to-image":
-                # Only include if no image_input is required (text-to-image mode)
-                # We'll show it in both, but user can choose
-                result.append(model)
-            elif gen_type == "image-to-image":
-                # Include for image-to-image (with image_input)
-                result.append(model)
-        elif model_id in model_ids:
+        if model_id in model_ids and model_id not in free_ids:
             result.append(model)
     
     return result
@@ -2914,4 +2918,3 @@ def normalize_model_for_api(model: dict) -> dict:
 def get_normalized_models() -> list:
     """Возвращает список моделей с нормализованной структурой."""
     return [normalize_model_for_api(model) for model in KIE_MODELS]
-

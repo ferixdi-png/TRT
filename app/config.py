@@ -120,9 +120,8 @@ class Settings:
             logger.warning(f"Invalid CREDIT_TO_RUB_RATE: {credit_rate_str}, using 0.1")
         
         # Currency conversion
-        usd_to_rub_env = os.getenv('USD_TO_RUB', '').strip()
         pricing_settings = get_settings_source_info().get("settings", {})
-        usd_to_rub_str = usd_to_rub_env or str(pricing_settings.get("usd_to_rub", "100.0"))
+        usd_to_rub_str = str(pricing_settings.get("usd_to_rub", "100.0"))
         try:
             self.usd_to_rub = float(usd_to_rub_str)
         except ValueError:

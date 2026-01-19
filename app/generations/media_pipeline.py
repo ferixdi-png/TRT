@@ -56,6 +56,8 @@ def _media_method_from_type(media_kind: str, content_type: str) -> str:
     normalized = (content_type or "").lower()
     if media_kind in {"document", "file"}:
         return "send_document"
+    if _is_textual(normalized):
+        return "send_document"
     if normalized in {"application/octet-stream", ""}:
         return "send_document"
     if normalized.startswith("image/"):
@@ -89,24 +91,6 @@ def _infer_filename(url: str, content_type: str, media_kind: str) -> str:
         }
         extension = fallback.get(media_kind, ".bin")
     return f"result{extension}"
-
-
-async def _head_or_range_probe(session: aiohttp.ClientSession, url: str) -> Tuple[str, Optional[int]]:
-    try:
-        async with session.head(url, allow_redirects=True) as response:
-            content_type = response.headers.get("Content-Type", "").split(";")[0].lower()
-            content_length = response.content_length
-            if content_type:
-                return content_type, content_length
-    except Exception:
-        pass
-    try:
-        async with session.get(url, allow_redirects=True, headers={"Range": "bytes=0-1023"}) as response:
-            content_type = response.headers.get("Content-Type", "").split(";")[0].lower()
-            content_length = response.content_length
-            return content_type, content_length
-    except Exception:
-        return "", None
 
 
 async def _download_with_retries(session: aiohttp.ClientSession, url: str, retries: int = 2) -> Tuple[bytes, str, Optional[int]]:
@@ -159,33 +143,29 @@ async def _resolve_single_media(
     if _is_kie_url(url, kie_client):
         resolved_url = await _resolve_kie_download_url(url, kie_client, correlation_id)
 
-    content_type, content_length = await _head_or_range_probe(http_client, resolved_url)
-    too_large = bool(content_length and content_length > TELEGRAM_MAX_BYTES)
-    needs_download = _is_textual(content_type) or too_large
-
-    if needs_download:
-        data, dl_type, dl_length = await _download_with_retries(http_client, resolved_url)
-        filename = _infer_filename(resolved_url, dl_type, media_kind)
-        payload = InputFile(io.BytesIO(data), filename=filename)
-        method = _media_method_from_type(media_kind, dl_type)
+    data, dl_type, dl_length = await _download_with_retries(http_client, resolved_url)
+    too_large = bool(dl_length and dl_length > TELEGRAM_MAX_BYTES)
+    method = _media_method_from_type(media_kind, dl_type)
+    if too_large:
         return ResolvedMedia(
             url=resolved_url,
-            payload=payload,
+            payload=resolved_url,
             content_type=dl_type,
             content_length=dl_length,
             method=method,
             used_download=True,
-            too_large=bool(dl_length and dl_length > TELEGRAM_MAX_BYTES),
+            too_large=True,
         )
 
-    method = _media_method_from_type(media_kind, content_type)
+    filename = _infer_filename(resolved_url, dl_type, media_kind)
+    payload = InputFile(io.BytesIO(data), filename=filename)
     return ResolvedMedia(
         url=resolved_url,
-        payload=resolved_url,
-        content_type=content_type,
-        content_length=content_length,
+        payload=payload,
+        content_type=dl_type,
+        content_length=dl_length,
         method=method,
-        used_download=False,
+        used_download=True,
         too_large=False,
     )
 
@@ -238,6 +218,17 @@ async def resolve_and_prepare_telegram_payload(
             tg_method=item.method,
             fallback_reason=fallback_reason,
         )
+    oversized_items = [item for item in resolved_items if item.too_large]
+    if oversized_items:
+        links_text = "\n".join(f"• {item.url}" for item in oversized_items)
+        return "send_message", {
+            "text": (
+                "⚠️ Файл слишком большой для Telegram.\n"
+                f"ID: {correlation_id or 'corr-na-na'}\n\n"
+                f"{links_text}"
+            ),
+            "disable_web_page_preview": True,
+        }
 
     caption = _build_caption(correlation_id, media_kind)
 
@@ -251,13 +242,6 @@ async def resolve_and_prepare_telegram_payload(
         return "send_media_group", {"media": media_group}
 
     first_item = resolved_items[0]
-    if first_item.too_large:
-        return "send_message", {
-            "text": (
-                "⚠️ Файл слишком большой для Telegram. "
-                f"ID: {correlation_id or 'corr-na-na'}"
-            ),
-        }
 
     payload_key = {
         "send_photo": "photo",
