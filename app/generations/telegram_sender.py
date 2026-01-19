@@ -14,6 +14,7 @@ from telegram.error import BadRequest
 from app.kie_catalog import ModelSpec
 from app.generations.universal_engine import JobResult
 from app.generations.media_pipeline import resolve_and_prepare_telegram_payload
+from app.services.free_tools_service import get_free_counter_snapshot
 from app.observability.trace import trace_event, url_summary
 from app.observability.structured_logs import log_structured_event
 
@@ -50,7 +51,7 @@ def _payload_metadata(tg_method: Optional[str], payload: dict) -> Tuple[str, Opt
             if size is not None:
                 total += size
         return "media_group", total or None
-    for key in ("photo", "video", "audio", "voice", "document"):
+    for key in ("photo", "video", "audio", "voice", "animation", "document"):
         if key in payload:
             value = payload.get(key)
             size = _input_file_size(value)
@@ -79,6 +80,23 @@ async def deliver_result(
     payload_type = "unknown"
     bytes_size = None
     start_ts = time.monotonic()
+    async def _send_failure_message(error_code: str, fix_hint: str) -> None:
+        message = (
+            "⚠️ Не удалось доставить результат.\n\n"
+            f"Код: {error_code}\n"
+            f"Совет: {fix_hint}\n"
+            f"ID: {correlation_id or 'corr-na-na'}"
+        )
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception as send_exc:
+            logger.warning("Telegram failure notification failed: %s", send_exc)
+
     try:
         async with aiohttp.ClientSession(timeout=DOWNLOAD_TIMEOUT) as session:
             tg_method, payload = await resolve_and_prepare_telegram_payload(
@@ -102,11 +120,13 @@ async def deliver_result(
             )
             log_structured_event(
                 correlation_id=correlation_id,
-                action="TG_SEND",
+                action="TG_SEND_ATTEMPT",
                 action_path="telegram_sender.deliver_result",
                 model_id=model_id,
                 stage="TG_SEND",
                 outcome="attempt",
+                error_code="TG_SEND_ATTEMPT",
+                fix_hint="Следим за корректной доставкой медиа в Telegram.",
                 param={
                     "tg_method": tg_method,
                     "media_type": media_type,
@@ -130,12 +150,14 @@ async def deliver_result(
         )
         log_structured_event(
             correlation_id=correlation_id,
-            action="TG_SEND",
+            action="TG_SEND_OK",
             action_path="telegram_sender.deliver_result",
             model_id=model_id,
             stage="TG_SEND",
             outcome="success",
             duration_ms=int((time.monotonic() - start_ts) * 1000),
+            error_code="TG_SEND_OK",
+            fix_hint="Доставка Telegram завершена успешно.",
             param={
                 "tg_method": tg_method,
                 "media_type": media_type,
@@ -147,7 +169,7 @@ async def deliver_result(
         logger.warning("Telegram media send failed, falling back to document: %s", exc)
         log_structured_event(
             correlation_id=correlation_id,
-            action="TG_SEND",
+            action="TG_SEND_FAIL",
             action_path="telegram_sender.deliver_result",
             model_id=model_id,
             stage="TG_SEND",
@@ -177,6 +199,7 @@ async def deliver_result(
                 await send_fn(chat_id=chat_id, **payload)
         except Exception as send_exc:  # pragma: no cover - best effort
             logger.warning("Telegram fallback send failed: %s", send_exc)
+            await _send_failure_message("TG_FALLBACK_FAILED", "Попробуйте повторить запрос позже.")
         return
     except Exception as exc:
         logger.warning("Telegram media send failed, falling back to document: %s", exc)
@@ -194,7 +217,7 @@ async def deliver_result(
         )
         log_structured_event(
             correlation_id=correlation_id,
-            action="TG_SEND",
+            action="TG_SEND_FAIL",
             action_path="telegram_sender.deliver_result",
             model_id=model_id,
             stage="TG_SEND",
@@ -224,6 +247,7 @@ async def deliver_result(
                 await send_fn(chat_id=chat_id, **payload)
         except Exception as send_exc:  # pragma: no cover - best effort
             logger.warning("Telegram fallback send failed: %s", send_exc)
+            await _send_failure_message("TG_FALLBACK_FAILED", "Попробуйте повторить запрос позже.")
 
 
 async def send_job_result(
@@ -262,6 +286,27 @@ async def send_job_result(
     if elapsed is not None:
         elapsed_text = f"\n⏱️ <b>Время:</b> {elapsed:.1f}s"
 
+    free_counter_line = ""
+    try:
+        snapshot = await get_free_counter_snapshot(chat_id)
+        remaining = snapshot.get("remaining", 0)
+        limit = snapshot.get("limit_per_hour", 0)
+        minutes = max(0, int(snapshot.get("next_refill_in", 0) / 60))
+        if user_lang == "en":
+            free_counter_line = (
+                f"Free: {remaining}/{limit} • refresh in {minutes} min"
+                if remaining > 0
+                else f"Next free in {minutes} min"
+            )
+        else:
+            free_counter_line = (
+                f"Бесплатные: {remaining}/{limit} • обновится через {minutes} мин"
+                if remaining > 0
+                else f"Следующая бесплатная через {minutes} мин"
+            )
+    except Exception:
+        free_counter_line = ""
+
     if user_lang == "en":
         summary = (
             f"✅ <b>Generation complete</b>\n\n"
@@ -285,7 +330,32 @@ async def send_job_result(
             [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
         ]
 
+    if free_counter_line:
+        summary = f"{summary}\n\n🆓 {free_counter_line}"
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=chat_id,
+            chat_id=chat_id,
+            action="FREE_COUNTER_VIEW",
+            action_path="telegram_sender.send_job_result",
+            outcome="shown",
+            error_code="FREE_COUNTER_VIEW_OK",
+            fix_hint="Показан счетчик бесплатных генераций после результата.",
+            param={"free_counter_line": free_counter_line},
+        )
+
     buttons.append([InlineKeyboardButton("🕒 Проверить статус", callback_data="check_status")])
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="TG_SEND_ATTEMPT",
+        action_path="telegram_sender.send_job_result",
+        model_id=spec.id,
+        stage="TG_SEND",
+        outcome="attempt",
+        error_code="TG_SEND_SUMMARY_ATTEMPT",
+        fix_hint="Отправляем итоговую карточку в Telegram.",
+        param={"tg_method": "send_message", "media_type": "summary"},
+    )
     await bot.send_message(
         chat_id=chat_id,
         text=summary,
@@ -309,5 +379,7 @@ async def send_job_result(
         model_id=spec.id,
         stage="GEN_COMPLETE",
         outcome="sent",
+        error_code="TG_SUMMARY_SENT",
+        fix_hint="Отправка итогового сообщения завершена.",
         param={"summary_sent": True},
     )

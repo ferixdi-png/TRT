@@ -1,3 +1,16 @@
+## 2026-02-02: P0 hardening — TG delivery, wizard conflicts, observability, free counter, SSOT guardrails
+**Было → стало (ключевые изменения):**
+- **A (Telegram delivery):** URL‑direct отправка могла приводить к `Wrong type of the web page content` и тихим сбоям. **Стало:** всегда скачиваем медиа через GET, определяем content‑type/подпись по байтам, отбрасываем HTML‑страницы с `KIE_MEDIA_URL_NOT_MEDIA`, выбираем корректный TG метод (включая GIF→animation) и шлём понятный текст при неудаче. 【F:app/generations/media_pipeline.py†L1-L328】【F:app/generations/telegram_sender.py†L1-L311】
+- **B (Wizard consistency):** противоречивые модели могли требовать картинку в text‑flow. **Стало:** фиксируется SSOT‑конфликт, prompt остаётся первым, появляется реф‑картинка «Да/Нет», обязательность медиа снимается в wizard и есть recoverable‑flow при ошибке KIE. 【F:bot_kie.py†L470-L1133】【F:bot_kie.py†L10182-L12461】【F:scripts/verify_model_specs.py†L1-L71】
+- **C (Tests for all 72 models + delivery):** добавлены контракты на wizard‑старт/параметры по всем моделям и медиапайплайн/telegram‑delivery кейсы (image/video/html/redirect), плюс free‑counter таймеры. 【F:tests/test_wizard_all_models.py†L1-L24】【F:tests/test_media_pipeline.py†L1-L90】【F:tests/test_telegram_sender_media.py†L1-L112】【F:tests/test_free_counter_snapshot.py†L1-L38】【F:tests/test_free_counter_view.py†L1-L33】
+- **D (Observability + no‑silence):** каждая UX‑кнопка, KIE create/poll и TG send теперь логируются с correlation_id/error_code/fix_hint; добавлен watchdog‑апдейт прогресса в polling. 【F:bot_kie.py†L3683-L3876】【F:bot_kie.py†L13372-L13943】【F:app/kie/kie_client.py†L260-L396】【F:app/generations/telegram_sender.py†L1-L311】
+- **E (SSOT guardrails):** отчёт о том, что SSOT — root /models + /app; добавлено предупреждение, если 5656‑main расходится. 【F:scripts/verify_project.py†L39-L65】【F:scripts/verify_source_of_truth.py†L1-L46】
+- **F (Free counter UX):** добавлен расчёт remaining/next_refill_in и вывод строки счётчика на меню/списках/подтверждении/результате‑ошибке с логом FREE_COUNTER_VIEW. 【F:app/services/free_tools_service.py†L40-L92】【F:bot_kie.py†L1600-L1845】【F:app/generations/telegram_sender.py†L230-L319】
+
+**Тесты/проверки:**
+- `python scripts/verify_project.py`
+- `pytest -q`
+
 # TRT_REPORT.md
 
 ## 2026-02-01: Observability + pricing rounding + free menu + generation progress
