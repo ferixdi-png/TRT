@@ -100,6 +100,7 @@ def load_yaml_models() -> Dict[str, Dict[str, Any]]:
             
             validated[model_id] = {
                 'model_type': model_data['model_type'],
+                'model_mode': model_data.get('model_mode'),
                 'input': model_data['input']
             }
         
@@ -138,7 +139,20 @@ def get_yaml_meta() -> Dict[str, Any]:
         return {}
 
 
-def _convert_yaml_input_to_input_params(yaml_input: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_required_for_mode(model_mode: str, param_name: str, param_spec: Dict[str, Any]) -> bool:
+    required = param_spec.get('required', False)
+    if param_name in {"image_input", "image_urls"}:
+        if model_mode in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}:
+            return False
+        if model_mode in {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale", "video_upscale"}:
+            return True
+    return required
+
+
+def _convert_yaml_input_to_input_params(
+    yaml_input: Dict[str, Any],
+    model_mode: str,
+) -> Dict[str, Any]:
     """
     Конвертирует YAML формат input в формат input_params, совместимый с текущим кодом.
     
@@ -166,7 +180,7 @@ def _convert_yaml_input_to_input_params(yaml_input: Dict[str, Any]) -> Dict[str,
             continue
         
         param_type = param_spec.get('type', 'string')
-        required = param_spec.get('required', False)
+        required = _normalize_required_for_mode(model_mode, param_name, param_spec)
         
         converted_param = {
             'type': param_type,
@@ -229,10 +243,11 @@ def normalize_yaml_model(
         - опционально: description, pricing
     """
     model_type = yaml_data.get('model_type', 'text_to_image')
+    model_mode = yaml_data.get('model_mode') or model_type
     yaml_input = yaml_data.get('input', {})
     
     # Конвертируем input в input_params
-    input_params = _convert_yaml_input_to_input_params(yaml_input)
+    input_params = _convert_yaml_input_to_input_params(yaml_input, model_mode)
     
     # Базовые поля из model_id или enrich_from
     name = model_id
@@ -280,6 +295,7 @@ def normalize_yaml_model(
         'category': category,
         'emoji': emoji,
         'model_type': model_type,
+        'model_mode': model_mode,
         'input_params': input_params
     }
     

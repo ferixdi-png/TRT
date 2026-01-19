@@ -30,6 +30,8 @@ def setup_mock_env():
     os.environ.setdefault("TELEGRAM_BOT_TOKEN", "1234567890:TEST_TOKEN_ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     os.environ.setdefault("ADMIN_ID", "123456789")
     os.environ.setdefault("SKIP_CONFIG_INIT", "1")  # Пропускаем инициализацию при импорте
+    os.environ.setdefault("STORAGE_MODE", "json")
+    os.environ.setdefault("STORAGE_DATA_DIR", "./data")
 
 
 async def smoke_test():

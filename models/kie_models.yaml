@@ -19,6 +19,7 @@ models:
         - '3:4'
         - '16:9'
         - '9:16'
+    model_mode: text_to_image
   nano-banana-pro:
     model_type: text_to_image
     input:
@@ -58,6 +59,7 @@ models:
         values:
         - png
         - jpg
+    model_mode: image_to_image
   seedream/4.5-text-to-image:
     model_type: text_to_image
     input:
@@ -83,6 +85,7 @@ models:
         values:
         - basic
         - high
+    model_mode: text_to_image
   seedream/4.5-edit:
     model_type: text_to_image
     input:
@@ -112,6 +115,7 @@ models:
         values:
         - basic
         - high
+    model_mode: image_edit
   sora-2-pro-image-to-video:
     model_type: image_to_video
     input:
@@ -144,6 +148,7 @@ models:
       remove_watermark:
         type: boolean
         required: false
+    model_mode: image_to_video
   sora-watermark-remover:
     model_type: text_to_image
     input:
@@ -151,6 +156,7 @@ models:
         type: string
         required: true
         max: 500
+    model_mode: text_to_image
   sora-2-text-to-video:
     model_type: text_to_video
     input:
@@ -173,6 +179,7 @@ models:
       remove_watermark:
         type: boolean
         required: false
+    model_mode: text_to_video
   kling-2.6/image-to-video:
     model_type: image_to_video
     input:
@@ -193,6 +200,7 @@ models:
         values:
         - '5'
         - '10'
+    model_mode: image_to_video
   kling-2.6/text-to-video:
     model_type: text_to_video
     input:
@@ -216,6 +224,7 @@ models:
         values:
         - '5'
         - '10'
+    model_mode: text_to_video
   flux-2/pro-image-to-image:
     model_type: image_to_image
     input:
@@ -246,6 +255,7 @@ models:
         values:
         - 1K
         - 2K
+    model_mode: image_to_image
   flux-2/pro-text-to-image:
     model_type: text_to_image
     input:
@@ -272,6 +282,7 @@ models:
         values:
         - 1K
         - 2K
+    model_mode: text_to_image
   flux-2/flex-image-to-image:
     model_type: image_to_image
     input:
@@ -302,6 +313,7 @@ models:
         values:
         - 1K
         - 2K
+    model_mode: image_to_image
   flux-2/flex-text-to-image:
     model_type: text_to_image
     input:
@@ -328,6 +340,7 @@ models:
         values:
         - 1K
         - 2K
+    model_mode: text_to_image
   topaz/image-upscale:
     model_type: upscale
     input:
@@ -343,6 +356,7 @@ models:
         - '2'
         - '4'
         - '8'
+    model_mode: upscale
   kling/v2-5-turbo-text-to-video-pro:
     model_type: text_to_video
     input:
@@ -372,6 +386,7 @@ models:
         required: false
         min: 0
         max: 1
+    model_mode: text_to_video
   kling/v2-5-turbo-image-to-video-pro:
     model_type: image_to_video
     input:
@@ -398,6 +413,7 @@ models:
         required: false
         min: 0
         max: 1
+    model_mode: image_to_video
   wan/2-5-image-to-video:
     model_type: image_to_video
     input:
@@ -428,6 +444,7 @@ models:
       enable_prompt_expansion:
         type: boolean
         required: false
+    model_mode: image_to_video
   wan/2-5-text-to-video:
     model_type: text_to_video
     input:
@@ -461,6 +478,7 @@ models:
       enable_prompt_expansion:
         type: boolean
         required: false
+    model_mode: text_to_video
   wan/2-2-animate-move:
     model_type: text_to_image
     input:
@@ -479,6 +497,7 @@ models:
         - 480p
         - 580p
         - 720p
+    model_mode: image_to_video
   wan/2-2-animate-replace:
     model_type: text_to_image
     input:
@@ -497,6 +516,7 @@ models:
         - 480p
         - 580p
         - 720p
+    model_mode: image_to_video
   hailuo/02-text-to-video-pro:
     model_type: text_to_video
     input:
@@ -507,6 +527,7 @@ models:
       prompt_optimizer:
         type: boolean
         required: false
+    model_mode: text_to_video
   hailuo/02-image-to-video-pro:
     model_type: image_to_video
     input:
@@ -524,6 +545,7 @@ models:
       prompt_optimizer:
         type: boolean
         required: false
+    model_mode: image_to_video
   hailuo/02-image-to-video-standard:
     model_type: image_to_video
     input:
@@ -553,6 +575,7 @@ models:
       prompt_optimizer:
         type: boolean
         required: false
+    model_mode: image_to_video
   hailuo/02-text-to-video-standard:
     model_type: text_to_video
     input:
@@ -569,6 +592,7 @@ models:
       prompt_optimizer:
         type: boolean
         required: false
+    model_mode: text_to_video
   topaz/video-upscale:
     model_type: video_upscale
     input:
@@ -583,6 +607,7 @@ models:
         - '1'
         - '2'
         - '4'
+    model_mode: video_upscale
   kling/v1-avatar-standard:
     model_type: text_to_image
     input:
@@ -598,6 +623,7 @@ models:
         type: string
         required: true
         max: 5000
+    model_mode: image_to_video
   kling/ai-avatar-v1-pro:
     model_type: text_to_image
     input:
@@ -613,6 +639,7 @@ models:
         type: string
         required: true
         max: 5000
+    model_mode: image_to_video
   bytedance/seedream-v4-text-to-image:
     model_type: text_to_image
     input:
@@ -645,6 +672,7 @@ models:
         required: false
         min: 1
         max: 6
+    model_mode: text_to_image
   bytedance/seedream-v4-edit:
     model_type: text_to_image
     input:
@@ -681,6 +709,7 @@ models:
         required: false
         min: 1
         max: 6
+    model_mode: image_edit
   recraft/remove-background:
     model_type: image_edit
     input:
@@ -688,6 +717,7 @@ models:
         type: array
         item_type: string
         required: true
+    model_mode: image_edit
   recraft/crisp-upscale:
     model_type: text_to_image
     input:
@@ -695,6 +725,7 @@ models:
         type: array
         item_type: string
         required: true
+    model_mode: image_edit
   ideogram/v3-reframe:
     model_type: outpaint
     input:
@@ -735,6 +766,7 @@ models:
         - '2'
         - '3'
         - '4'
+    model_mode: outpaint
   wan/2-2-a14b-speech-to-video-turbo:
     model_type: speech_to_video
     input:
@@ -789,6 +821,7 @@ models:
       enable_safety_checker:
         type: boolean
         required: false
+    model_mode: speech_to_video
   bytedance/seedream:
     model_type: text_to_image
     input:
@@ -814,6 +847,7 @@ models:
       enable_safety_checker:
         type: boolean
         required: false
+    model_mode: text_to_image
   qwen/text-to-image:
     model_type: text_to_image
     input:
@@ -861,6 +895,7 @@ models:
         - none
         - regular
         - high
+    model_mode: text_to_image
   qwen/image-to-image:
     model_type: image_to_image
     input:
@@ -907,6 +942,7 @@ models:
       enable_safety_checker:
         type: boolean
         required: false
+    model_mode: image_to_image
   qwen/image-edit:
     model_type: image_edit
     input:
@@ -966,6 +1002,7 @@ models:
         type: string
         required: false
         max: 500
+    model_mode: image_edit
   ideogram/character-edit:
     model_type: text_to_image
     input:
@@ -1010,6 +1047,7 @@ models:
         - '2'
         - '3'
         - '4'
+    model_mode: image_edit
   ideogram/character-remix:
     model_type: text_to_image
     input:
@@ -1069,6 +1107,7 @@ models:
         type: string
         required: false
         max: 500
+    model_mode: image_edit
   ideogram/character:
     model_type: text_to_image
     input:
@@ -1119,6 +1158,7 @@ models:
         type: string
         required: false
         max: 5000
+    model_mode: text_to_image
   bytedance/v1-pro-fast-image-to-video:
     model_type: image_to_video
     input:
@@ -1142,6 +1182,7 @@ models:
         values:
         - '5'
         - '10'
+    model_mode: image_to_video
   kling/v2-1-master-image-to-video:
     model_type: image_to_video
     input:
@@ -1168,6 +1209,7 @@ models:
         required: false
         min: 0
         max: 1
+    model_mode: image_to_video
   kling/v2-1-standard:
     model_type: text_to_image
     input:
@@ -1194,6 +1236,7 @@ models:
         required: false
         min: 0
         max: 1
+    model_mode: image_to_image
   kling/v2-1-pro:
     model_type: text_to_image
     input:
@@ -1223,6 +1266,7 @@ models:
       tail_image_url:
         type: string
         required: false
+    model_mode: image_to_image
   kling/v2-1-master-text-to-video:
     model_type: text_to_video
     input:
@@ -1252,6 +1296,7 @@ models:
         required: false
         min: 0
         max: 1
+    model_mode: text_to_video
   ideogram/v3-text-to-image:
     model_type: text_to_image
     input:
@@ -1302,6 +1347,7 @@ models:
         type: string
         required: false
         max: 5000
+    model_mode: text_to_image
   ideogram/v3-edit:
     model_type: text_to_image
     input:
@@ -1338,6 +1384,7 @@ models:
       seed:
         type: integer
         required: false
+    model_mode: image_edit
   ideogram/v3-remix:
     model_type: text_to_image
     input:
@@ -1397,6 +1444,7 @@ models:
         type: string
         required: false
         max: 5000
+    model_mode: image_edit
   wan/2-2-a14b-text-to-video-turbo:
     model_type: text_to_video
     input:
@@ -1432,6 +1480,7 @@ models:
         values:
         - none
         - regular
+    model_mode: text_to_video
   wan/2-2-a14b-image-to-video-turbo:
     model_type: image_to_video
     input:
@@ -1472,6 +1521,7 @@ models:
         values:
         - none
         - regular
+    model_mode: image_to_video
   google/imagen4-ultra:
     model_type: text_to_image
     input:
@@ -1496,6 +1546,7 @@ models:
         type: string
         required: false
         max: 500
+    model_mode: text_to_image
   google/imagen4-fast:
     model_type: text_to_image
     input:
@@ -1527,6 +1578,7 @@ models:
       seed:
         type: integer
         required: false
+    model_mode: text_to_image
   google/imagen4:
     model_type: text_to_image
     input:
@@ -1559,6 +1611,7 @@ models:
         type: string
         required: false
         max: 500
+    model_mode: text_to_image
   google/nano-banana:
     model_type: text_to_image
     input:
@@ -1587,6 +1640,7 @@ models:
         - '4:5'
         - '21:9'
         - auto
+    model_mode: text_to_image
   google/nano-banana-edit:
     model_type: text_to_image
     input:
@@ -1619,6 +1673,7 @@ models:
         - '4:5'
         - '21:9'
         - auto
+    model_mode: image_edit
   elevenlabs/speech-to-text:
     model_type: speech_to_text
     input:
@@ -1635,99 +1690,116 @@ models:
       diarize:
         type: boolean
         required: false
+    model_mode: speech_to_text
   grok/imagine:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   openai/4o-image:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   flux/kontext:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   google/veo-3:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   google/veo-3.1:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   sora-2-pro-storyboard:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   kling/v2-5-turbo:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   hailuo/2.3:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   infinitalk/from-audio:
     model_type: audio_to_audio
     input:
       prompt:
         type: string
         required: true
+    model_mode: audio_to_audio
   elevenlabs/audio-isolation:
     model_type: audio_to_audio
     input:
       audio_url:
         type: string
         required: true
+    model_mode: audio_to_audio
   elevenlabs/sound-effect:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   elevenlabs/text-to-speech:
     model_type: text_to_speech
     input:
       text:
         type: string
         required: true
+    model_mode: text_to_speech
   google/nanobanana-gemini-2.5-flash:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   runway/gen-4:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   suno/v5:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image
   midjourney/api:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+    model_mode: text_to_image

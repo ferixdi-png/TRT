@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 from telegram import InputFile
 
+from app.generations import media_pipeline
 from app.generations.media_pipeline import resolve_and_prepare_telegram_payload
 
 
@@ -24,23 +25,18 @@ class DummyResponse:
 
 
 class DummySession:
-    def __init__(self, head_factory, get_factory):
-        self._head_factory = head_factory
+    def __init__(self, get_factory):
         self._get_factory = get_factory
-        self.last_head_url = None
-
-    def head(self, url, *args, **kwargs):
-        self.last_head_url = url
-        return self._head_factory()
+        self.last_get_url = None
 
     def get(self, url, *args, **kwargs):
+        self.last_get_url = url
         return self._get_factory()
 
 
-def test_media_html_url_downloads_bytes_and_sends_inputfile():
-    head_response = DummyResponse(headers={"Content-Type": "text/html"}, content_length=1024)
+def test_media_download_image_uses_inputfile():
     get_response = DummyResponse(headers={"Content-Type": "image/png"}, body=b"data")
-    session = DummySession(lambda: head_response, lambda: get_response)
+    session = DummySession(lambda: get_response)
 
     tg_method, payload = asyncio.run(
         resolve_and_prepare_telegram_payload(
@@ -57,9 +53,8 @@ def test_media_html_url_downloads_bytes_and_sends_inputfile():
 
 
 def test_media_download_url_conversion_used():
-    head_response = DummyResponse(headers={"Content-Type": "image/png"}, content_length=1024)
     get_response = DummyResponse(headers={"Content-Type": "image/png"}, body=b"data")
-    session = DummySession(lambda: head_response, lambda: get_response)
+    session = DummySession(lambda: get_response)
 
     kie_client = AsyncMock()
     kie_client.base_url = "https://api.kie.ai"
@@ -78,13 +73,12 @@ def test_media_download_url_conversion_used():
     )
 
     assert tg_method == "send_photo"
-    assert session.last_head_url == "https://cdn.kie.ai/direct.png"
+    assert session.last_get_url == "https://cdn.kie.ai/direct.png"
 
 
 def test_unknown_content_type_goes_to_document():
-    head_response = DummyResponse(headers={"Content-Type": "application/octet-stream"}, content_length=1024)
     get_response = DummyResponse(headers={"Content-Type": "application/octet-stream"}, body=b"data")
-    session = DummySession(lambda: head_response, lambda: get_response)
+    session = DummySession(lambda: get_response)
 
     tg_method, payload = asyncio.run(
         resolve_and_prepare_telegram_payload(
@@ -98,3 +92,40 @@ def test_unknown_content_type_goes_to_document():
 
     assert tg_method == "send_document"
     assert "document" in payload
+
+
+def test_html_content_type_sends_document():
+    get_response = DummyResponse(headers={"Content-Type": "text/html"}, body=b"<html>ok</html>")
+    session = DummySession(lambda: get_response)
+
+    tg_method, payload = asyncio.run(
+        resolve_and_prepare_telegram_payload(
+            {"urls": ["https://example.com/result.html"], "text": None},
+            "corr-4",
+            "image",
+            kie_client=None,
+            http_client=session,
+        )
+    )
+
+    assert tg_method == "send_document"
+    assert isinstance(payload["document"], InputFile)
+
+
+def test_oversized_media_returns_message_without_preview(monkeypatch):
+    monkeypatch.setattr(media_pipeline, "TELEGRAM_MAX_BYTES", 1)
+    get_response = DummyResponse(headers={"Content-Type": "image/png"}, body=b"data")
+    session = DummySession(lambda: get_response)
+
+    tg_method, payload = asyncio.run(
+        resolve_and_prepare_telegram_payload(
+            {"urls": ["https://example.com/big.png"], "text": None},
+            "corr-5",
+            "image",
+            kie_client=None,
+            http_client=session,
+        )
+    )
+
+    assert tg_method == "send_message"
+    assert payload["disable_web_page_preview"] is True
