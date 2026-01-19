@@ -1224,6 +1224,7 @@ def build_webhook_handler(application, settings):
     from telegram import Update
     import uuid
     from app.observability.trace import set_correlation_id, reset_correlation_id
+    from app.observability.structured_logs import log_structured_event
 
     secret_token = os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
 
@@ -1320,6 +1321,14 @@ def build_webhook_handler(application, settings):
                         exc,
                         correlation_id,
                     )
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="WEBHOOK_PROCESS",
+                        action_path="webhook_handler.process_update",
+                        outcome="failed",
+                        error_code="INTERNAL_EXCEPTION",
+                        fix_hint="Проверьте stacktrace и логи.",
+                    )
                 finally:
                     reset_correlation_id(token)
 
@@ -1339,12 +1348,28 @@ def build_webhook_handler(application, settings):
                     exc,
                     correlation_id,
                 )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="WEBHOOK_ERROR",
+                    action_path="webhook_handler",
+                    outcome="exception_acked",
+                    error_code="INTERNAL_EXCEPTION",
+                    fix_hint="Проверьте stacktrace и логи.",
+                )
                 status = ack_status
                 return web.Response(status=status)
             logger.exception(
                 "[WEBHOOK] handler_error=exception_unacked error=%s correlation_id=%s",
                 exc,
                 correlation_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="WEBHOOK_ERROR",
+                action_path="webhook_handler",
+                outcome="exception_unacked",
+                error_code="INTERNAL_EXCEPTION",
+                fix_hint="Проверьте stacktrace и логи.",
             )
             status = 500
             return web.Response(status=status)
@@ -6829,6 +6854,5 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
 
 

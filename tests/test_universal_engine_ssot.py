@@ -16,6 +16,11 @@ def _build_dummy_params(model_spec):
             continue
         param_type = schema.get("type", "string")
         enum_values = schema.get("enum") or schema.get("values") or []
+        if isinstance(enum_values, dict):
+            enum_values = list(enum_values.values())
+        if isinstance(enum_values, list) and enum_values and isinstance(enum_values[0], dict):
+            enum_values = [value.get("value") or value.get("id") or value.get("name") for value in enum_values]
+            enum_values = [value for value in enum_values if value is not None]
         if param_type == "enum" and enum_values:
             params[name] = enum_values[0]
         elif param_type == "boolean":
