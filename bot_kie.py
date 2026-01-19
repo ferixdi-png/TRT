@@ -3318,12 +3318,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = query.message.chat_id if query and query.message else None
         message_id = query.message.message_id if query and query.message else None
         guard.set_trace_context(
-            update_id,
-            correlation_id,
             user_id=user_id,
             chat_id=chat_id,
             update_id=update_id,
+            message_id=message_id,
             update_type="callback",
+            correlation_id=correlation_id,
             action="CALLBACK",
             action_path=build_action_path(data),
             stage="UI_ROUTER",
@@ -3342,7 +3342,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data=data,
             route_decision="button_callback",
         )
-        logger.info(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
+        logger.debug(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
     except Exception as e:
         logger.error(f"❌❌❌ ERROR in button_callback entry logging: {e}", exc_info=True)
     
@@ -4072,7 +4072,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             if primary_input and primary_input["type"] == "image":
-                logger.info("🔥🔥🔥 SELECT_MODEL: Model requires image first! user_id=%s", user_id)
+                logger.debug("🔥🔥🔥 SELECT_MODEL: Model requires image first! user_id=%s", user_id)
                 image_param_name = primary_input["param"]
                 user_lang = get_user_language(user_id)
                 keyboard = [
@@ -4124,11 +4124,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image_param_name,
                 )
                 elapsed = time.time() - start_time
-                logger.info("🔥🔥🔥 SELECT_MODEL: Total time=%0.3fs user_id=%s", elapsed, user_id)
+                logger.debug("🔥🔥🔥 SELECT_MODEL: Total time=%0.3fs user_id=%s", elapsed, user_id)
                 return INPUTTING_PARAMS
 
             if primary_input and primary_input["type"] == "audio":
-                logger.info("🔥🔥🔥 SELECT_MODEL: Model requires audio first! user_id=%s", user_id)
+                logger.debug("🔥🔥🔥 SELECT_MODEL: Model requires audio first! user_id=%s", user_id)
                 audio_param_name = primary_input["param"]
                 user_lang = get_user_language(user_id)
                 keyboard = [
@@ -8651,7 +8651,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         data = f"select_model:{model_id}"
             
             # 🔥 MAXIMUM LOGGING: select_model entry
-            logger.info(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
+            logger.debug(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
             
             # Answer callback immediately to show button was pressed
             try:
@@ -8676,7 +8676,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 return ConversationHandler.END
             model_id = parts[1]
-            logger.info(f"🔥🔥🔥 SELECT_MODEL: Parsed model_id={model_id}, user_id={user_id}")
+            logger.debug(f"🔥🔥🔥 SELECT_MODEL: Parsed model_id={model_id}, user_id={user_id}")
             
             # Сначала пробуем получить из нового каталога
             model_info = None
@@ -8701,7 +8701,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Если не нашли в каталоге, пробуем старый реестр
             if not model_info:
                 model_info = get_model_by_id_from_registry(model_id)
-                logger.info(f"🔥🔥🔥 SELECT_MODEL: Model lookup result: found={bool(model_info)}, model_name={model_info.get('name', 'N/A') if model_info else 'N/A'}, user_id={user_id}")
+                logger.debug(f"🔥🔥🔥 SELECT_MODEL: Model lookup result: found={bool(model_info)}, model_name={model_info.get('name', 'N/A') if model_info else 'N/A'}, user_id={user_id}")
             
             if not model_info:
                 logger.error(f"❌❌❌ MODEL NOT FOUND: model_id={model_id}, user_id={user_id}")
@@ -8928,10 +8928,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Store selected model
             if user_id not in user_sessions:
                 user_sessions[user_id] = {}
-                logger.info(f"🔥🔥🔥 SELECT_MODEL: Created new session for user_id={user_id}")
+                logger.debug(f"🔥🔥🔥 SELECT_MODEL: Created new session for user_id={user_id}")
             user_sessions[user_id]['model_id'] = model_id
             user_sessions[user_id]['model_info'] = model_info
-            logger.info(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(user_sessions[user_id].keys())}")
+            logger.debug(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(user_sessions[user_id].keys())}")
 
             # Load model spec from SSOT catalog
             from app.kie_catalog import get_model
@@ -9745,7 +9745,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_text = bool(update.message and update.message.text)
     has_audio = bool(update.message and (update.message.audio or update.message.voice))
     has_document = bool(update.message and update.message.document)
-    logger.info(f"🔥🔥🔥 INPUT_PARAMETERS ENTRY: user_id={user_id}, has_photo={has_photo}, has_text={has_text}, has_audio={has_audio}, has_document={has_document}, update_type={type(update).__name__}")
+    logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS ENTRY: user_id={user_id}, has_photo={has_photo}, has_text={has_text}, has_audio={has_audio}, has_document={has_document}, update_type={type(update).__name__}")
 
     correlation_id = ensure_correlation_id(update, context)
     input_type = "unknown"
@@ -9759,12 +9759,12 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         input_type = "document"
     chat_id = update.message.chat_id if update.message else None
     guard.set_trace_context(
-        update_id,
-        correlation_id,
         user_id=user_id,
         chat_id=chat_id,
         update_id=update_id,
+        message_id=update.message.message_id if update.message else None,
         update_type="message",
+        correlation_id=correlation_id,
         action="INPUT",
         action_path="input_parameters",
         stage="UI_ROUTER",
@@ -9789,13 +9789,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if has_photo and update.message and update.message.photo:
         photo_count = len(update.message.photo) if update.message.photo else 0
         photo_file_id = update.message.photo[-1].file_id if update.message.photo else 'None'
-        logger.info(f"🔥🔥🔥 PHOTO DETECTED: user_id={user_id}, photo_count={photo_count}, file_id={photo_file_id}")
+        logger.debug(f"🔥🔥🔥 PHOTO DETECTED: user_id={user_id}, photo_count={photo_count}, file_id={photo_file_id}")
     
     if update.message:
-        logger.info(f"🔥🔥🔥 INPUT_PARAMETERS MESSAGE: message_id={update.message.message_id}, chat_id={update.message.chat_id}, date={update.message.date}, from_user_id={update.message.from_user.id if update.message.from_user else 'None'}")
+        logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS MESSAGE: message_id={update.message.message_id}, chat_id={update.message.chat_id}, date={update.message.date}, from_user_id={update.message.from_user.id if update.message.from_user else 'None'}")
         if has_photo:
             photo_count = len(update.message.photo) if update.message.photo else 0
-            logger.info(f"🔥🔥🔥 INPUT_PARAMETERS PHOTO: photo_count={photo_count}, file_id={update.message.photo[-1].file_id if update.message.photo else 'None'}, file_size={update.message.photo[-1].file_size if update.message.photo and update.message.photo[-1].file_size else 'Unknown'}")
+            logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS PHOTO: photo_count={photo_count}, file_id={update.message.photo[-1].file_id if update.message.photo else 'None'}, file_size={update.message.photo[-1].file_size if update.message.photo and update.message.photo[-1].file_size else 'Unknown'}")
     
     if user_id not in user_sessions:
         logger.error(f"❌❌❌ CRITICAL ERROR: User {user_id} not in user_sessions in input_parameters!")
@@ -9824,11 +9824,11 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     params = session.get('params', {})
     has_image_input = 'image_input' in properties
     has_image_urls = 'image_urls' in properties
-    logger.info(f"🔥🔥🔥 INPUT_PARAMETERS SESSION: user_id={user_id}, model_id={model_id}, waiting_for={waiting_for}, has_image_input={has_image_input}, has_image_urls={has_image_urls}")
+    logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS SESSION: user_id={user_id}, model_id={model_id}, waiting_for={waiting_for}, has_image_input={has_image_input}, has_image_urls={has_image_urls}")
     
     image_only_model = _is_image_only_model(properties)
-    logger.info(f"🔥🔥🔥 INPUT_PARAMETERS SESSION KEYS: {list(session.keys())[:15]}")
-    logger.info(f"🔥🔥🔥 INPUT_PARAMETERS PARAMS: keys={list(params.keys())}, values={[(k, type(v).__name__, len(v) if isinstance(v, (list, dict)) else 'N/A') for k, v in params.items()][:5]}")
+    logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS SESSION KEYS: {list(session.keys())[:15]}")
+    logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS PARAMS: keys={list(params.keys())}, values={[(k, type(v).__name__, len(v) if isinstance(v, (list, dict)) else 'N/A') for k, v in params.items()][:5]}")
 
     trace_event(
         "info",
@@ -10927,10 +10927,10 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return INPUTTING_PARAMS
             
-            logger.info(f"🔥🔥🔥 IMAGE DOWNLOADED: size={len(image_data)} bytes, user_id={user_id}, file_id={photo.file_id[:8]}")
+            logger.debug(f"🔥🔥🔥 IMAGE DOWNLOADED: size={len(image_data)} bytes, user_id={user_id}, file_id={photo.file_id[:8]}")
             
             # Upload to public hosting
-            logger.info(f"🔥🔥🔥 UPLOADING TO HOSTING: user_id={user_id}, filename=image_{user_id}_{photo.file_id[:8]}.jpg")
+            logger.debug(f"🔥🔥🔥 UPLOADING TO HOSTING: user_id={user_id}, filename=image_{user_id}_{photo.file_id[:8]}.jpg")
             # 🔴 API CALL: File Upload API - upload_image_to_hosting
             try:
                 public_url = await upload_image_to_hosting(image_data, filename=f"image_{user_id}_{photo.file_id[:8]}.jpg")
@@ -10963,12 +10963,12 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return INPUTTING_PARAMS
             
-            logger.info(f"🔥🔥🔥 IMAGE UPLOADED TO HOSTING: public_url={public_url}, user_id={user_id}, file_size={len(image_data)} bytes, model_id={session.get('model_id', 'Unknown')}")
+            logger.debug(f"🔥🔥🔥 IMAGE UPLOADED TO HOSTING: public_url={public_url}, user_id={user_id}, file_size={len(image_data)} bytes, model_id={session.get('model_id', 'Unknown')}")
             
             # Add to image_input array
             # Determine which parameter name to use
             waiting_for = session.get('waiting_for', 'image_input')
-            logger.info(f"🔥🔥🔥 IMAGE PROCESSING: waiting_for={waiting_for}, user_id={user_id}, model_id={session.get('model_id', 'Unknown')}")
+            logger.debug(f"🔥🔥🔥 IMAGE PROCESSING: waiting_for={waiting_for}, user_id={user_id}, model_id={session.get('model_id', 'Unknown')}")
             # Normalize: if waiting_for is 'image', use the actual parameter name from properties
             if waiting_for == 'image':
                 properties = session.get('properties', {})
@@ -10983,7 +10983,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if image_param_name not in session:
                 session[image_param_name] = []
             session[image_param_name].append(public_url)
-            logger.info(f"🔥🔥🔥 IMAGE ADDED TO SESSION: param={image_param_name}, count={len(session[image_param_name])}, model={session.get('model_id', 'Unknown')}, user_id={user_id}, urls={session[image_param_name][:2]}")
+            logger.debug(f"🔥🔥🔥 IMAGE ADDED TO SESSION: param={image_param_name}, count={len(session[image_param_name])}, model={session.get('model_id', 'Unknown')}, user_id={user_id}, urls={session[image_param_name][:2]}")
             
         except Exception as e:
             logger.error(f"❌❌❌ ERROR PROCESSING IMAGE: user_id={user_id}, error={str(e)}, error_type={type(e).__name__}", exc_info=True)
@@ -11096,11 +11096,11 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return INPUTTING_PARAMS
             
-            logger.info(f"🔥🔥🔥 IMAGE VERIFIED IN PARAMS: param={image_param_name}, count={len(session['params'][image_param_name])}, user_id={user_id}, model_id={model_id}, urls={session['params'][image_param_name][:1]}")
+            logger.debug(f"🔥🔥🔥 IMAGE VERIFIED IN PARAMS: param={image_param_name}, count={len(session['params'][image_param_name])}, user_id={user_id}, model_id={model_id}, urls={session['params'][image_param_name][:1]}")
             
             session['waiting_for'] = None
             session['current_param'] = None
-            logger.info(f"🔥🔥🔥 SESSION UPDATED: waiting_for=None, current_param=None, user_id={user_id}, model_id={model_id}")
+            logger.debug(f"🔥🔥🔥 SESSION UPDATED: waiting_for=None, current_param=None, user_id={user_id}, model_id={model_id}")
 
             next_param_result = await start_next_parameter(update, context, user_id)
             if next_param_result is None:
@@ -12484,18 +12484,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     start_time = time.time()
     query = update.callback_query
     user_id = update.effective_user.id
-    logger.info(f"🔥🔥🔥 CONFIRM_GENERATION ENTRY: user_id={user_id}, query_id={query.id if query else 'None'}, data={query.data if query else 'None'}")
+    logger.debug(f"🔥🔥🔥 CONFIRM_GENERATION ENTRY: user_id={user_id}, query_id={query.id if query else 'None'}, data={query.data if query else 'None'}")
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
     correlation_id = ensure_correlation_id(update, context)
     chat_id = query.message.chat_id if query and query.message else None
     guard.set_trace_context(
-        update.update_id,
-        correlation_id,
         user_id=user_id,
         chat_id=chat_id,
         update_id=update.update_id,
+        message_id=query.message.message_id if query and query.message else None,
         update_type="callback",
+        correlation_id=correlation_id,
         action="CONFIRM_GENERATE",
         action_path="confirm_generate",
         stage="UI_ROUTER",
@@ -25736,12 +25736,12 @@ async def _register_all_handlers_internal(application: Application):
         from app.observability.no_silence_guard import get_no_silence_guard
         guard = get_no_silence_guard()
         guard.set_trace_context(
-            update.update_id,
-            correlation_id,
             user_id=user_id,
             chat_id=chat_id,
             update_id=update.update_id,
+            message_id=query.message.message_id if query and query.message else None,
             update_type="callback",
+            correlation_id=correlation_id,
             action="UNKNOWN_CALLBACK",
             action_path=build_action_path(query.data if query else None),
             stage="UI_ROUTER",
