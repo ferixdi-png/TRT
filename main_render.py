@@ -1223,6 +1223,7 @@ def build_webhook_handler(application, settings):
     from aiohttp import web
     from telegram import Update
     import uuid
+    from app.observability.trace import set_correlation_id, reset_correlation_id
 
     secret_token = os.getenv("WEBHOOK_SECRET_TOKEN", "").strip()
 
@@ -1234,6 +1235,7 @@ def build_webhook_handler(application, settings):
         )
         start_ts = time.monotonic()
         status = 500
+        ack_status = 500
         method = request.method
         path = request.path
         content_length = request.content_length or 0
@@ -1283,43 +1285,68 @@ def build_webhook_handler(application, settings):
                 )
                 return web.Response(status=status)
 
+            ack_status = 200
             if smoke_no_process:
                 logger.info(
                     "[WEBHOOK] update_received=true smoke_no_process=true correlation_id=%s",
                     correlation_id,
                 )
-                return web.Response(status=200)
+                status = ack_status
+                return web.Response(status=status)
 
             logger.info("[WEBHOOK] update_received=true correlation_id=%s", correlation_id)
             try:
                 update = Update.de_json(payload, application.bot)
             except Exception as exc:
-                status = 400
                 logger.warning(
-                    "[WEBHOOK] update_received=false reason=invalid_update error=%s correlation_id=%s",
+                    "[WEBHOOK] update_received=true invalid_update=true error=%s correlation_id=%s",
                     exc,
                     correlation_id,
                 )
+                status = ack_status
                 return web.Response(status=status)
 
-            object.__setattr__(update, "correlation_id", correlation_id)
-
             async def _process() -> None:
+                token = set_correlation_id(correlation_id)
                 try:
                     await application.process_update(update)
+                    logger.info(
+                        "[WEBHOOK] handler_outcome=success correlation_id=%s",
+                        correlation_id,
+                    )
                 except Exception as exc:  # pragma: no cover - logging path
                     logger.exception(
-                        "[WEBHOOK] update_process_failed error=%s correlation_id=%s",
+                        "[WEBHOOK] handler_outcome=failed error=%s correlation_id=%s",
                         exc,
                         correlation_id,
                     )
+                finally:
+                    reset_correlation_id(token)
 
+            token = set_correlation_id(correlation_id)
             asyncio.create_task(_process())
             logger.info(
-                "[WEBHOOK] forwarded_to_ptb=true correlation_id=%s",
+                "[WEBHOOK] forwarded_to_ptb=true outcome=queued correlation_id=%s",
                 correlation_id,
             )
-            status = 200
+            status = ack_status
+            reset_correlation_id(token)
+            return web.Response(status=status)
+        except Exception as exc:
+            if ack_status == 200:
+                logger.exception(
+                    "[WEBHOOK] handler_error=exception_acked error=%s correlation_id=%s",
+                    exc,
+                    correlation_id,
+                )
+                status = ack_status
+                return web.Response(status=status)
+            logger.exception(
+                "[WEBHOOK] handler_error=exception_unacked error=%s correlation_id=%s",
+                exc,
+                correlation_id,
+            )
+            status = 500
             return web.Response(status=status)
         finally:
             latency_ms = int((time.monotonic() - start_ts) * 1000)
@@ -6802,7 +6829,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
 
 
 

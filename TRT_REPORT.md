@@ -1,5 +1,19 @@
 # TRT_REPORT.md
 
+## 2025-02-16: P0 webhook ACK + correlation via contextvars
+**Проблема:**
+- `/webhook` падал с 500 из‑за `object.__setattr__(update, "correlation_id", ...)` на `telegram.Update` (slots).
+- При падении PTB обработчика Telegram ретраил webhook → UX «молчит».
+
+**Исправления:**
+- Убрано добавление атрибутов в `Update`. Корреляция теперь хранится в contextvars (request‑scoped) и доступна через `app.observability.trace.get_correlation_id()`.
+- `/webhook` всегда возвращает 200 при валидном JSON и корректном секрет‑токене, даже если PTB обработка упала.
+- Добавлено логирование цепочки `update_received → forwarded_to_ptb (queued) → handler_outcome` без падений.
+
+**Как проверить:**
+- `python scripts/verify_project.py`
+- `pytest -q` (есть тест webhook ACK: POST /webhook ⇒ 200 + лог `forwarded_to_ptb`).
+
 ## Что нашёл в коммитах (последние 3 дня)
 - `app/kie_catalog/models_pricing.yaml` — расширения прайс-таблицы (commit `0ea378e5`, см. `git diff 0ea378e5^ 0ea378e5`).
 - Серия коммитов 2026-01-17 затрагивала startup/handlers/logging, но прайс/реестр моделей в корне остаётся `models/kie_models.yaml` + `app/kie_catalog/models_pricing.yaml`.

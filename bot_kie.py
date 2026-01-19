@@ -3318,6 +3318,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = query.message.chat_id if query and query.message else None
         message_id = query.message.message_id if query and query.message else None
         guard.set_trace_context(
+            update,
+            context,
             user_id=user_id,
             chat_id=chat_id,
             update_id=update_id,
@@ -9759,6 +9761,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         input_type = "document"
     chat_id = update.message.chat_id if update.message else None
     guard.set_trace_context(
+        update,
+        context,
         user_id=user_id,
         chat_id=chat_id,
         update_id=update_id,
@@ -12490,6 +12494,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     correlation_id = ensure_correlation_id(update, context)
     chat_id = query.message.chat_id if query and query.message else None
     guard.set_trace_context(
+        update,
+        context,
         user_id=user_id,
         chat_id=chat_id,
         update_id=update.update_id,
@@ -25736,6 +25742,8 @@ async def _register_all_handlers_internal(application: Application):
         from app.observability.no_silence_guard import get_no_silence_guard
         guard = get_no_silence_guard()
         guard.set_trace_context(
+            update,
+            context,
             user_id=user_id,
             chat_id=chat_id,
             update_id=update.update_id,
