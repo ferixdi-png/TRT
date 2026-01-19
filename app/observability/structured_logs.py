@@ -9,6 +9,8 @@ import logging
 import uuid
 from typing import Any, Optional
 
+from app.observability.trace import get_correlation_id as get_trace_correlation_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,8 +32,9 @@ def build_action_path(callback_data: Optional[str]) -> str:
 
 def log_structured_event(**fields: Any) -> None:
     """Emit a structured log line as JSON."""
+    correlation_id = fields.get("correlation_id") or get_trace_correlation_id()
     payload = {
-        "correlation_id": fields.get("correlation_id"),
+        "correlation_id": correlation_id,
         "user_id": fields.get("user_id"),
         "chat_id": fields.get("chat_id"),
         "update_id": fields.get("update_id"),
