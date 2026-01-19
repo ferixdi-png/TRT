@@ -7,17 +7,16 @@ TRANSLATIONS = {
     'ru': {
         'welcome_new': (
             '👋 <b>Добро пожаловать, {name}!</b>\n'
-            '🎁 <b>Подарок:</b> {free} бесплатных генераций\n'
-            '⚡️ <b>Что умеем:</b> {models} моделей · {types} типов\n'
-            '🧠 Текст → Фото • Фото → Фото • Видео • Аудио\n'
-            '🔒 Доступ без VPN и стабильная генерация'
+            '🧠 <b>70+ моделей</b> · {types} типов · {free_limit} бесплатных в час\n'
+            '💳 Оплата в рублях · без VPN · стабильная очередь\n'
+            '💡 Цена в ₽ округляется вверх до целого рубля'
         ),
         'welcome_returning': (
             '👋 <b>С возвращением, {name}!</b>\n'
             '👥 Сейчас активно: {online}\n'
-            '🎁 <b>Доступно:</b> {free} бесплатных генераций\n'
-            '⚡️ <b>Что умеем:</b> {models} моделей · {types} типов\n'
-            '🧠 Текст → Фото • Фото → Фото • Видео • Аудио'
+            '🧠 <b>70+ моделей</b> · {types} типов · {free_limit} бесплатных в час\n'
+            '💳 Оплата в рублях · без VPN · стабильная очередь\n'
+            '💡 Цена в ₽ округляется вверх до целого рубля'
         ),
         'select_language': (
             '🌍 <b>Выберите язык / Choose language</b>\n\n'
@@ -280,17 +279,16 @@ TRANSLATIONS = {
     'en': {
         'welcome_new': (
             '👋 <b>Welcome, {name}!</b>\n'
-            '🎁 <b>Gift:</b> {free} free generations\n'
-            '⚡️ <b>What we do:</b> {models} models · {types} types\n'
-            '🧠 Text → Image • Image → Image • Video • Audio\n'
-            '🔒 No VPN needed, stable generation'
+            '🧠 <b>70+ models</b> · {types} types · {free_limit} free per hour\n'
+            '💳 Pay in rubles · no VPN · stable queue\n'
+            '💡 Prices in ₽ are rounded up to the next whole ruble'
         ),
         'welcome_returning': (
             '👋 <b>Welcome back, {name}!</b>\n'
             '👥 Online now: {online}\n'
-            '🎁 <b>Available:</b> {free} free generations\n'
-            '⚡️ <b>What we do:</b> {models} models · {types} types\n'
-            '🧠 Text → Image • Image → Image • Video • Audio'
+            '🧠 <b>70+ models</b> · {types} types · {free_limit} free per hour\n'
+            '💳 Pay in rubles · no VPN · stable queue\n'
+            '💡 Prices in ₽ are rounded up to the next whole ruble'
         ),
         'select_language': (
             '🌍 <b>Choose language / Выберите язык</b>\n\n'
@@ -563,8 +561,6 @@ def t(key: str, lang: str = 'ru', **kwargs) -> str:
         return text.format(**kwargs)
     except KeyError:
         return text
-
-
 
 
 
