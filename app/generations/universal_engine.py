@@ -155,6 +155,7 @@ def parse_record_info(
             urls = normalize_result_urls(
                 urls,
                 base_url=base_url,
+                record_info=record,
                 correlation_id=correlation_id,
                 model_id=model_id,
                 stage="KIE_PARSE",

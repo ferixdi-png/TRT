@@ -12,7 +12,11 @@ from app.kie_catalog import ModelSpec
 from app.generations.universal_engine import JobResult
 from app.delivery.result_delivery import deliver_generation_result
 from app.generations.media_pipeline import resolve_and_prepare_telegram_payload
-from app.utils.url_normalizer import normalize_result_urls, ResultUrlNormalizationError
+from app.utils.url_normalizer import (
+    is_valid_result_url,
+    normalize_result_urls,
+    ResultUrlNormalizationError,
+)
 import aiohttp
 from app.services.free_tools_service import format_free_counter_block, get_free_counter_snapshot
 from app.observability.trace import trace_event, url_summary
@@ -49,7 +53,10 @@ async def deliver_result(
         logger.error("URL normalization failed: %s", exc)
         await bot.send_message(
             chat_id=chat_id,
-            text=f"❌ Ошибка результата: {exc}",
+            text=(
+                "⚠️ Результат получен, но ссылка битая. Попробуйте ещё раз или выберите другую модель.\n"
+                f"ID: {correlation_id or 'corr-na-na'}"
+            ),
         )
         return
 
@@ -65,6 +72,32 @@ async def deliver_result(
         outcome="start",
         param={"media_type": media_type, "urls_count": len(normalized_urls)},
     )
+
+    invalid_urls = [url for url in normalized_urls if not is_valid_result_url(url)]
+    if invalid_urls:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=chat_id,
+            chat_id=chat_id,
+            model_id=model_id,
+            gen_type=gen_type or media_type,
+            action="TG_DELIVER",
+            action_path="telegram_sender.deliver_result",
+            stage="TG_DELIVER",
+            waiting_for="URL_VALIDATE",
+            outcome="failed",
+            error_code="INVALID_RESULT_URL",
+            fix_hint="check_kie_response_url_fields",
+            param={"invalid_urls": [url_summary(url) for url in invalid_urls]},
+        )
+        await bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "⚠️ Результат получен, но ссылка битая. Попробуйте ещё раз или выберите другую модель.\n"
+                f"ID: {correlation_id or 'corr-na-na'}"
+            ),
+        )
+        return
 
     if media_type == "text":
         try:

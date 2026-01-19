@@ -1,4 +1,38 @@
+## 2026-02-08: Production-ready no-lock webhook + анти-мусор URL + no-silence
+**Было → стало (ключевые изменения):**
+- **Webhook без БД:** при `BOT_MODE=webhook` без `DATABASE_URL` требовался DB lock. **Стало:** разрешён старт при `STORAGE_MODE=github` или `DISABLE_DB_LOCKS=1` с “no-lock mode” и `LOCK_DISABLED_NO_DB`. 
+- **Анти-мусор URL:** странные URL (например, `tempfile.aiquickdraw.comhttps:///...`) ломали доставку. **Стало:** нормализация обрезает к первому http/https, восстанавливает host из `KIE_API_URL`, валидирует и даёт понятную ошибку пользователю. 
+- **No-silence callbacks:** неизвестные callback’и и ошибки теперь всегда дают ответ и видимое сообщение с correlation_id. 
 
+**Причина:** убрать молчание и падения в webhook без БД + защитить UX от битых ссылок результатов.
+
+**Затронутые файлы:**
+- `main_render.py`, `app/config.py`, `app/utils/singleton_lock.py`
+- `app/utils/url_normalizer.py`, `app/delivery/result_delivery.py`, `app/generations/telegram_sender.py`
+- `bot_kie.py`, `tests/test_main_menu.py`, `tests/test_url_normalizer.py`
+- `tests/test_webhook_without_db_github_storage.py`, `app/generations/universal_engine.py`
+
+**Проверка (команды):**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python scripts/verify_button_coverage.py`
+
+**Как проверить на Render (быстро):**
+1. Установить `BOT_MODE=webhook`, `STORAGE_MODE=github`, удалить `DATABASE_URL` (или `DISABLE_DB_LOCKS=1`).
+2. Убедиться, что `/health` возвращает `"webhook_route_registered": true`.
+3. Нажать любую кнопку — должна быть мгновенная реакция (без бесконечного “Loading…”).
+## 2026-02-07: Webhook без БД для GitHub storage + fallback lock
+**Было → стало (ключевые изменения):**
+- **Webhook + DATABASE_URL:** запуск падал с `CONFIG_DB_REQUIRED` при `BOT_MODE=webhook` без БД. **Стало:** при `STORAGE_MODE=github` webhook разрешён без БД и используется file lock (fallback). 
+- **Singleton lock:** ранее только PostgreSQL advisory lock. **Стало:** добавлен file lock для режима GitHub storage, строгий лог `LOCK_MODE` и фиксация деградации. 
+- **UX деградации:** пользователи не получали сообщения при снижении надёжности. **Стало:** добавлено UX-уведомление в главном меню при деградации lock. 
+- **Конфиг и тесты:** валидация больше не блокирует webhook в `github` режиме; тесты обновлены. 
+
+**Причина:** убрать стартовую смерть бота на Render без БД и дать понятную деградацию.
+
+**Затронутые файлы:**
+- `main_render.py`, `app/utils/singleton_lock.py`, `app/config.py`, `bot_kie.py`
+- `tests/test_webhook_db_requirement.py`
 ## 2026-02-05: P0 production readiness — locks, SSOT output media, UX back
 **Было → стало (ключевые изменения):**
 - **Unused handler retry_generate:** verify_button_coverage падал из-за неучтённой кнопки из failure UI. **Стало:** failure UI добавлен в сканирование + тест на успешную проверку покрытия. 
