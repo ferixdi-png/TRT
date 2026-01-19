@@ -58,6 +58,25 @@ class KIEJobFailed(RuntimeError):
         self.record_info = record_info or {}
 
 
+class KIERequestFailed(RuntimeError):
+    """Raised when KIE API returns a fatal request error."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: Optional[int] = None,
+        user_message: Optional[str] = None,
+        error_code: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.user_message = user_message
+        self.error_code = error_code
+        self.correlation_id = correlation_id
+
+
 def _parse_result_json(raw_value: Any) -> Dict[str, Any]:
     if raw_value is None:
         return {}
@@ -276,7 +295,13 @@ async def run_generation(
             error_code="KIE_CREATE_FAILED",
             duration_ms=create_duration_ms,
         )
-        raise RuntimeError(created.get("error", "create_task_failed"))
+        raise KIERequestFailed(
+            created.get("error", "create_task_failed"),
+            status=created.get("status"),
+            user_message=created.get("user_message"),
+            error_code=created.get("error_code"),
+            correlation_id=created.get("correlation_id") or correlation_id,
+        )
     task_id = created.get("taskId")
     log_structured_event(
         correlation_id=correlation_id,
@@ -363,6 +388,15 @@ async def run_generation(
             next_progress_at = time.monotonic() + progress_interval
 
         if record.get("ok") is False:
+            status = record.get("status")
+            if status in {401, 402, 422, 429, 500}:
+                raise KIERequestFailed(
+                    record.get("error", "KIE request failed"),
+                    status=status,
+                    user_message=record.get("user_message"),
+                    error_code=record.get("error_code"),
+                    correlation_id=record.get("correlation_id") or correlation_id,
+                )
             await asyncio.sleep(poll_delay)
             poll_delay = min(max_poll_delay, poll_delay * 1.5)
             continue
