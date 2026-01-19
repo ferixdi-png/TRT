@@ -367,7 +367,15 @@ def _normalize_enum_values(param_info: Dict[str, Any]) -> List[Any]:
         return []
     if isinstance(enum_values, str):
         return [enum_values]
-    return list(enum_values)
+    if isinstance(enum_values, dict):
+        return list(enum_values.values())
+    normalized: List[Any] = []
+    for value in enum_values:
+        if isinstance(value, dict):
+            normalized.append(value.get("value") or value.get("id") or value.get("name"))
+        else:
+            normalized.append(value)
+    return [value for value in normalized if value is not None]
 
 
 def _get_media_kind(param_name: str) -> Optional[str]:
@@ -3171,6 +3179,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
     user_id = update.effective_user.id if update.effective_user else None
     chat_id = update.effective_chat.id if update.effective_chat else None
+    correlation_id = ensure_correlation_id(update, context)
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="COMMAND_START",
+        action_path="command:/start",
+        outcome="received",
+    )
     if _should_dedupe_update(
         update,
         context,
@@ -3499,6 +3517,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=message_id,
             callback_data=data,
             route_decision="button_callback",
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="CALLBACK",
+            action_path=build_action_path(data),
+            outcome="received",
         )
         logger.debug(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
     except Exception as e:
@@ -5584,7 +5611,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             param_type = param_info.get('type', 'string')
 
             # 🔴 ВАЛИДАЦИЯ ENUM ЗНАЧЕНИЙ: Проверяем, что значение находится в списке допустимых
-            enum_values = param_info.get('enum')
+            enum_values = _normalize_enum_values(param_info)
             if enum_values and param_value not in enum_values and param_value not in {SKIP_PARAM_VALUE, "custom"}:
                 # Недопустимое enum значение
                 user_lang = get_user_language(user_id) if user_id else 'ru'
@@ -5652,6 +5679,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session['params'][param_name] = param_value
                 _record_param_history(session, param_name)
             session['current_param'] = None
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                update_id=update_id,
+                action="PARAM_SAVE",
+                action_path="button_callback.set_param",
+                param={"param_name": param_name, "source": "callback"},
+                outcome="saved" if not skip_param else "skipped",
+            )
             logger.info(
                 "🧩 PARAM_SET: action_path=button_set_param model_id=%s waiting_for=%s current_param=%s outcome=%s",
                 session.get('model_id'),
@@ -9323,7 +9360,7 @@ async def prompt_for_specific_param(
     properties = session.get('properties', {})
     param_info = properties.get(param_name, {})
     param_type = param_info.get('type', 'string')
-    enum_values = param_info.get('enum')
+    enum_values = _normalize_enum_values(param_info)
     user_lang = get_user_language(user_id)
     step_info = _get_step_info(session, param_name, user_lang)
     step_prefix = f"{step_info}: " if step_info else ""
@@ -9693,6 +9730,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             list_to_check=param_order[:15],
             selected_param=param_name,
             reason=reason,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            action="PARAM_SELECT",
+            action_path="start_next_parameter",
+            param={"param_name": param_name, "reason": reason},
+            outcome="selected",
         )
 
         chat_id = None
@@ -10072,6 +10118,16 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
             chat_id=chat_id,
             **summary,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="PARAM_SAVE",
+            action_path="input_parameters",
+            param=summary,
+            outcome="saved",
         )
     
     # CRITICAL: If photo is sent but session doesn't have waiting_for set, log warning
@@ -12733,6 +12789,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         chat_id=chat_id,
         message_id=query.message.message_id if query and query.message else None,
     )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="CONFIRM_GENERATE",
+        action_path="confirm_generate",
+        outcome="received",
+    )
     
     # Answer callback immediately if present
     if query:
@@ -12745,16 +12810,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Helper function to send/edit messages safely
     async def send_or_edit_message(text, parse_mode='HTML'):
+        result_message = None
         try:
             action_type = "send_message"
             if query:
                 try:
-                    await query.edit_message_text(text, parse_mode=parse_mode)
+                    result_message = await query.edit_message_text(text, parse_mode=parse_mode)
                     action_type = "edit_message_text"
                 except Exception as edit_error:
                     logger.warning(f"Could not edit message: {edit_error}, sending new")
                     try:
-                        await query.message.reply_text(text, parse_mode=parse_mode)
+                        result_message = await query.message.reply_text(text, parse_mode=parse_mode)
                         action_type = "reply_text"
                         try:
                             await query.message.delete()
@@ -12762,19 +12828,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             pass
                     except Exception as send_error:
                         logger.error(f"Could not send new message: {send_error}")
-                        await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                        result_message = await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
                         action_type = "send_message"
             else:
-                await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                result_message = await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
                 action_type = "send_message"
             track_outgoing_action(update.update_id, action_type=action_type)
         except Exception as e:
             logger.error(f"Error in send_or_edit_message: {e}", exc_info=True)
             try:
-                await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                result_message = await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
                 track_outgoing_action(update.update_id, action_type="send_message")
             except:
                 pass
+        return result_message
     
     # Check if user is blocked
     if not is_admin_user and is_user_blocked(user_id):
@@ -13013,7 +13080,23 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "🤖 <b>Model:</b> {model_name}\n\n"
         "💡 Usually takes a few seconds..."
     ).format(model_name=model_name)
-    await send_or_edit_message(loading_msg)
+    status_message = await send_or_edit_message(loading_msg)
+
+    accepted_msg = (
+        "✅ <b>Принято!</b>\n\n"
+        "Генерация запущена, ожидайте результат...\n"
+        f"🤖 <b>Модель:</b> {model_name}"
+        if user_lang == 'ru'
+        else (
+            "✅ <b>Accepted!</b>\n\n"
+            "Generation started, please wait...\n"
+            f"🤖 <b>Model:</b> {model_name}"
+        )
+    )
+
+    async def progress_callback(event: Dict[str, Any]) -> None:
+        if event.get("stage") == "KIE_CREATE":
+            await send_or_edit_message(accepted_msg)
 
     try:
         from app.generations.universal_engine import run_generation
@@ -13025,7 +13108,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await send_or_edit_message("❌ <b>Модель не найдена в каталоге</b>")
             return ConversationHandler.END
 
-        job_result = await run_generation(user_id, model_id, params, correlation_id=correlation_id)
+        job_result = await run_generation(
+            user_id,
+            model_id,
+            params,
+            correlation_id=correlation_id,
+            progress_callback=progress_callback,
+        )
         elapsed = job_result.raw.get("elapsed")
         await send_job_result(
             context.bot,
@@ -13037,9 +13126,30 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             user_lang=user_lang,
             correlation_id=correlation_id,
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GEN_COMPLETE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="sent",
+            duration_ms=int((time.time() - start_time) * 1000),
+        )
         return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GEN_ERROR",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code="KIE_FAIL_STATE",
+            fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
+        )
         await send_or_edit_message(
             "❌ <b>Ошибка генерации</b>\n\nПожалуйста, попробуйте позже.",
             parse_mode='HTML'
