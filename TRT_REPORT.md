@@ -1,3 +1,19 @@
+## 2026-02-04: P0/P1 — pricing transparency, multi-mode selection, universal engine UX
+**Было → стало (ключевые изменения):**
+- **P0 (price preview):** перед генерацией не было прозрачного экрана стоимости/баланса и правил округления. **Стало:** перед стартом платных моделей показывается стоимость (ceil ₽), баланс и остаток + кнопки действий при нехватке. 【F:bot_kie.py†L1120-L1215】【F:bot_kie.py†L14260-L14278】
+- **P0 (multi‑mode):** режимы моделей не выбирались, по умолчанию использовался mode_index=0, что ломало цену/списание. **Стало:** при нескольких режимах показывается выбор с сохранением mode_index в сессии, цены считают выбранный режим. 【F:bot_kie.py†L1036-L1063】【F:bot_kie.py†L9711-L9730】
+- **P0 (унификация генерации):** часть сценариев шла через legacy gateway. **Стало:** confirm_generate и автозапуск используют universal_engine, а 401/402/422/429/500 маппятся в понятные сообщения. 【F:app/generations/universal_engine.py†L61-L78】【F:bot_kie.py†L14362-L14598】
+- **P0 (seedream contract):** отсутствовал контрактный тест под bytedance/seedream. **Стало:** тест на payload и разбор resultUrls в recordInfo. 【F:tests/test_seedream_contract.py†L1-L33】
+- **P1 (main menu copy):** приветствие не содержало 70+ моделей/5 в час/рубли/округление. **Стало:** обновлено RU/EN приветствие с явным правилом округления. 【F:translations.py†L8-L20】【F:translations.py†L279-L292】
+- **P1 (mode flow test):** не было проверки выбора режима → цены → списания → запуска. **Стало:** добавлен тест с multi‑mode моделью. 【F:tests/test_mode_selection_flow.py†L1-L113】
+
+**Файлы изменены (основные):**
+- `bot_kie.py`, `app/generations/universal_engine.py`, `translations.py`
+- `tests/test_seedream_contract.py`, `tests/test_mode_selection_flow.py`
+
+**Команды проверки:**
+- `pytest -q`
+
 ## 2026-02-03: P0/P1 hardening — trace outcome fix, image_edit adapter, throttling, upload resilience
 **Было → стало (ключевые изменения):**
 - **P0 (outgoing crash):** `track_outgoing_action` мог падать на двойном `outcome` в `trace_event`. **Стало:** `outcome` исключён из распаковки контекста + тест на безопасный вызов. 【F:app/observability/no_silence_guard.py†L63-L92】【F:tests/test_no_silence_guard_trace_context.py†L1-L32】
@@ -513,3 +529,4 @@
 8. `help_menu` → справка
 9. `check_balance` → баланс
 10. `generate_again` → повтор генерации
+
