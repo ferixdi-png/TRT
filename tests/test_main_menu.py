@@ -96,6 +96,12 @@ async def test_unknown_callback_shows_main_menu(harness):
     assert result['success']
     edited = result['outbox']['edited_messages']
     messages = result['outbox']['messages']
+    callback_answers = result['outbox']['callback_answers']
+    assert callback_answers
+    assert any(
+        "Команда устарела" in answer.get("text", "") or "Command outdated" in answer.get("text", "")
+        for answer in callback_answers
+    )
     assert edited or messages
 
     payloads = edited + messages
