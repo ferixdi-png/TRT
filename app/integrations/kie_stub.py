@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from app.utils.logging_config import get_logger
+from app.observability.trace import trace_event, url_summary
 
 logger = get_logger(__name__)
 
@@ -27,7 +28,8 @@ class KIEStub:
         self,
         model_id: str,
         input_data: Dict[str, Any],
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Создать задачу (симуляция)
@@ -49,8 +51,18 @@ class KIEStub:
         
         # Запускаем симуляцию обработки (в фоне)
         asyncio.create_task(self._simulate_processing(task_id))
-        
+
         logger.info(f"[STUB] Task created: {task_id} for model {model_id}")
+        trace_event(
+            "info",
+            correlation_id or "corr-na-na",
+            event="TRACE_OUT",
+            stage="KIE_CREATE",
+            action="KIE_CREATE",
+            model_id=model_id,
+            task_id=task_id,
+            outcome="stub_created",
+        )
         
         return {
             'ok': True,
@@ -89,7 +101,7 @@ class KIEStub:
             self._tasks[task_id]['resultJson'] = json.dumps({'urls': result_urls})
             logger.debug(f"[STUB] Task {task_id} -> completed")
     
-    async def get_task_status(self, task_id: str) -> Dict[str, Any]:
+    async def get_task_status(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Получить статус задачи (симуляция)
         
@@ -122,6 +134,17 @@ class KIEStub:
         elif state == 'failed':
             result['failCode'] = 'STUB_ERROR'
             result['failMsg'] = 'Simulated error'
+
+        trace_event(
+            "info",
+            correlation_id or "corr-na-na",
+            event="TRACE_IN",
+            stage="KIE_POLL",
+            action="KIE_POLL",
+            task_id=task_id,
+            state=state,
+            result_url_summary=url_summary((result.get("resultUrls") or [None])[0]),
+        )
         
         return result
     
@@ -129,7 +152,8 @@ class KIEStub:
         self,
         task_id: str,
         timeout: int = 900,
-        poll_interval: int = 3
+        poll_interval: int = 3,
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Ждать завершения задачи (симуляция)"""
         start_time = asyncio.get_event_loop().time()
@@ -143,7 +167,7 @@ class KIEStub:
                     'error': f'Task timeout after {timeout}s'
                 }
             
-            status = await self.get_task_status(task_id)
+            status = await self.get_task_status(task_id, correlation_id=correlation_id)
             
             if not status.get('ok'):
                 await asyncio.sleep(poll_interval)
@@ -168,4 +192,3 @@ def get_kie_client_or_stub():
 
     from app.integrations.kie_client import KIEClient
     return KIEClient()
-

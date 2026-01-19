@@ -15,6 +15,7 @@ from uuid import uuid4
 import aiohttp
 
 from app.utils.logging_config import get_logger
+from app.observability.trace import trace_event, url_summary
 
 logger = get_logger(__name__)
 
@@ -141,9 +142,10 @@ class KIEClient:
         *,
         payload: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         if not self.api_key:
-            correlation_id = uuid4().hex[:8]
+            correlation_id = correlation_id or uuid4().hex[:8]
             error = self._classify_error(
                 status=401,
                 message="KIE_API_KEY not configured",
@@ -152,7 +154,7 @@ class KIEClient:
             return {"ok": False, "error": error.message, "user_message": error.user_message, "correlation_id": error.correlation_id}
 
         url = f"{self.base_url}{path}"
-        correlation_id = uuid4().hex[:8]
+        correlation_id = correlation_id or uuid4().hex[:8]
         session = await self._get_session()
         last_error: Optional[BaseException] = None
 
@@ -179,7 +181,13 @@ class KIEClient:
                     )
                     data = self._parse_json(text)
                     if status in (200, 201):
-                        return {"ok": True, "status": status, "data": data, "correlation_id": correlation_id}
+                        return {
+                            "ok": True,
+                            "status": status,
+                            "data": data,
+                            "correlation_id": correlation_id,
+                            "meta": {"attempt": attempt, "latency_ms": latency_ms},
+                        }
                     last_error = aiohttp.ClientResponseError(
                         request_info=response.request_info,
                         history=response.history,
@@ -198,6 +206,7 @@ class KIEClient:
                         "user_message": error.user_message,
                         "correlation_id": error.correlation_id,
                         "error_code": error.code,
+                        "meta": {"attempt": attempt, "latency_ms": latency_ms},
                     }
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                 last_error = exc
@@ -213,6 +222,7 @@ class KIEClient:
                     "user_message": error.user_message,
                     "correlation_id": error.correlation_id,
                     "error_code": error.code,
+                    "meta": {"attempt": attempt},
                 }
 
         message = str(last_error) if last_error else "Unknown error"
@@ -231,12 +241,43 @@ class KIEClient:
         model_id: str,
         input_data: Dict[str, Any],
         callback_url: Optional[str] = None,
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"model": model_id, "input": input_data}
         if callback_url:
             payload["callBackUrl"] = callback_url
 
-        result = await self._request_json("POST", "/api/v1/jobs/createTask", payload=payload)
+        input_keys = list(input_data.keys())
+        input_sizes: Dict[str, Any] = {}
+        for key, value in input_data.items():
+            if isinstance(value, str):
+                input_sizes[key] = len(value)
+            elif isinstance(value, list):
+                input_sizes[key] = len(value)
+            elif isinstance(value, dict):
+                input_sizes[key] = len(value.keys())
+            else:
+                input_sizes[key] = type(value).__name__
+
+        trace_event(
+            "info",
+            correlation_id or "corr-na-na",
+            event="TRACE_IN",
+            stage="KIE_CREATE",
+            action="KIE_CREATE",
+            endpoint="/api/v1/jobs/createTask",
+            model_id=model_id,
+            input_keys=input_keys,
+            input_sizes=input_sizes,
+            has_callback=bool(callback_url),
+        )
+
+        result = await self._request_json(
+            "POST",
+            "/api/v1/jobs/createTask",
+            payload=payload,
+            correlation_id=correlation_id,
+        )
         if not result.get("ok"):
             return result
 
@@ -263,10 +304,27 @@ class KIEClient:
                 "correlation_id": error.correlation_id,
                 "error_code": error.code,
             }
+        trace_event(
+            "info",
+            result["correlation_id"],
+            event="TRACE_OUT",
+            stage="KIE_CREATE",
+            action="KIE_CREATE",
+            endpoint="/api/v1/jobs/createTask",
+            http_status=result.get("status"),
+            attempt=result.get("meta", {}).get("attempt"),
+            latency_ms=result.get("meta", {}).get("latency_ms"),
+            task_id=task_id,
+        )
         return {"ok": True, "taskId": task_id, "correlation_id": result["correlation_id"]}
 
-    async def get_task_status(self, task_id: str) -> Dict[str, Any]:
-        result = await self._request_json("GET", "/api/v1/jobs/recordInfo", params={"taskId": task_id})
+    async def get_task_status(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+        result = await self._request_json(
+            "GET",
+            "/api/v1/jobs/recordInfo",
+            params={"taskId": task_id},
+            correlation_id=correlation_id,
+        )
         if not result.get("ok"):
             return result
 
@@ -283,7 +341,7 @@ class KIEClient:
                 "error_code": error.code,
             }
         task_data = data.get("data", {})
-        return {
+        response_payload = {
             "ok": True,
             "taskId": task_data.get("taskId"),
             "state": task_data.get("state"),
@@ -296,18 +354,36 @@ class KIEClient:
             "createTime": task_data.get("createTime"),
             "correlation_id": result["correlation_id"],
         }
+        trace_event(
+            "info",
+            result["correlation_id"],
+            event="TRACE_IN",
+            stage="KIE_POLL",
+            action="KIE_POLL",
+            endpoint="/api/v1/jobs/recordInfo",
+            http_status=result.get("status"),
+            attempt=result.get("meta", {}).get("attempt"),
+            latency_ms=result.get("meta", {}).get("latency_ms"),
+            task_id=task_id,
+            state=response_payload.get("state"),
+            fail_code=response_payload.get("failCode"),
+            fail_msg=response_payload.get("failMsg"),
+            result_url_summary=url_summary((response_payload.get("resultUrls") or [None])[0]),
+        )
+        return response_payload
 
     async def wait_for_task(
         self,
         task_id: str,
         timeout: int = 900,
         poll_interval: int = 3,
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         start_time = asyncio.get_event_loop().time()
         while True:
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed > timeout:
-                error = self._classify_error(status=408, message="Task timeout", correlation_id=uuid4().hex[:8])
+                error = self._classify_error(status=408, message="Task timeout", correlation_id=correlation_id or uuid4().hex[:8])
                 return {
                     "ok": False,
                     "status": 408,
@@ -316,7 +392,7 @@ class KIEClient:
                     "correlation_id": error.correlation_id,
                     "error_code": error.code,
                 }
-            status = await self.get_task_status(task_id)
+            status = await self.get_task_status(task_id, correlation_id=correlation_id)
             if not status.get("ok"):
                 await asyncio.sleep(poll_interval)
                 continue
@@ -332,11 +408,22 @@ class KIEClient:
         callback_url: Optional[str] = None,
         timeout: int = 900,
         poll_interval: int = 3,
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        submit = await self.create_task(model_id, input_data, callback_url=callback_url)
+        submit = await self.create_task(
+            model_id,
+            input_data,
+            callback_url=callback_url,
+            correlation_id=correlation_id,
+        )
         if not submit.get("ok"):
             return submit
-        return await self.wait_for_task(submit["taskId"], timeout=timeout, poll_interval=poll_interval)
+        return await self.wait_for_task(
+            submit["taskId"],
+            timeout=timeout,
+            poll_interval=poll_interval,
+            correlation_id=correlation_id,
+        )
 
     async def list_models(self) -> List[Dict[str, Any]]:
         result = await self._request_json("GET", "/api/v1/models")
