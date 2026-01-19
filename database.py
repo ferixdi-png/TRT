@@ -30,6 +30,11 @@ MAX_CONTEXT_LENGTH = 1000
 _connection_pool: Optional[SimpleConnectionPool] = None
 
 
+def is_database_configured() -> bool:
+    """Проверяет, что DATABASE_URL задан и не пустой."""
+    return bool(os.getenv("DATABASE_URL", "").strip())
+
+
 def get_connection_pool():
     """Создает и возвращает пул соединений с БД с retry логикой."""
     global _connection_pool
@@ -213,6 +218,9 @@ def create_operation(
     prompt: Optional[str] = None
 ) -> Optional[int]:
     """Создает запись об операции."""
+    if not is_database_configured():
+        logger.info("🗄️ DATABASE_URL not set - skipping create_operation")
+        return None
     try:
         # Обрезаем промпт до максимальной длины
         prompt_truncated = truncate_text(prompt, MAX_PROMPT_LENGTH)
@@ -271,6 +279,9 @@ def log_kie_operation(
     error_message: Optional[str] = None
 ) -> Optional[int]:
     """Логирует операцию KIE."""
+    if not is_database_configured():
+        logger.info("🗄️ DATABASE_URL not set - skipping log_kie_operation")
+        return None
     try:
         prompt_truncated = truncate_text(prompt, MAX_PROMPT_LENGTH)
         error_truncated = truncate_text(error_message, MAX_ERROR_MESSAGE_LENGTH)
@@ -299,6 +310,9 @@ def log_debug(
     context: Optional[Dict[str, Any]] = None
 ) -> Optional[int]:
     """Логирует debug сообщение."""
+    if not is_database_configured():
+        logger.info("🗄️ DATABASE_URL not set - skipping log_debug")
+        return None
     try:
         message_truncated = truncate_text(message, MAX_CONTEXT_LENGTH)
         
@@ -451,4 +465,3 @@ def release_advisory_lock(lock_key: int) -> None:
     except Exception as e:
         # Best-effort: не бросаем исключение, только логируем
         logger.warning(f"⚠️ Ошибка при освобождении advisory lock (игнорируется): {e}")
-
