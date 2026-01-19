@@ -1,5 +1,33 @@
 # TRT_REPORT.md
 
+## 2026-01-19: Production gate + universal media delivery + credits + session lifecycle + offline smoke
+**Root cause mapping (лог-инциденты → фиксы):**
+- `telegram.error.BadRequest: Wrong type of the web page content` → введён универсальный бинарный media pipeline c проверкой content-type, KIE download-url и fallback на InputFile.【F:app/generations/media_pipeline.py†L1-L250】
+- `KIE credits endpoint 404 (/api/v1/account/balance)` → фикс на `/api/v1/chat/credit` + UX “KIE credits temporarily unavailable”.【F:app/kie/kie_client.py†L479-L597】【F:helpers.py†L124-L176】
+- `aiohttp Unclosed client session/connector` → единый KIE ClientSession, закрытие в post_shutdown и тест-leak guard.【F:app/bootstrap.py†L82-L151】【F:tests/test_aiohttp_leak_check.py†L1-L19】
+- `GEN_ERROR KIE_FAIL_STATE` → редактирование recordInfo (redaction) + чистый UX с retry + структурные логи.【F:app/observability/redaction.py†L1-L35】【F:app/generations/failure_ui.py†L1-L18】【F:bot_kie.py†L13257-L13313】
+- `DATABASE_URL not set - skipping singleton lock` → детерминированная конкуренция через GitHub SHA-retry + per-user lock в балансах (no lost updates).【F:app/storage/github_storage.py†L240-L360】【F:app/services/user_service.py†L12-L48】
+
+**Было → стало (ключевые изменения):**
+- **Было:** Telegram получал URL, возвращающий HTML/JSON. **Стало:** resolve_and_prepare_telegram_payload проверяет content-type и всегда отдаёт бинарный InputFile/документ при HTML/unknown. 【F:app/generations/media_pipeline.py†L1-L250】
+- **Было:** KIE credits шёл на неактуальный endpoint и падал 404. **Стало:** `/api/v1/chat/credit` + UX “KIE credits temporarily unavailable” при сбое. 【F:app/kie/kie_client.py†L479-L597】【F:helpers.py†L124-L214】
+- **Было:** aiohttp сессии не закрывались. **Стало:** единый KIE client + close() на shutdown и leak-тест. 【F:app/bootstrap.py†L82-L151】【F:tests/test_kie_client_lifecycle.py†L1-L25】
+- **Было:** KIE fail state отдавал сырые детали без UX. **Стало:** редактированные логи + кнопка Retry + чистый текст с correlation_id. 【F:app/observability/redaction.py†L1-L35】【F:app/generations/failure_ui.py†L1-L18】【F:bot_kie.py†L13257-L13313】
+- **Было:** риск конфликтов без DB lock. **Стало:** per-user lock в user_service + GitHub sha retry. 【F:app/services/user_service.py†L12-L48】【F:app/storage/github_storage.py†L240-L360】
+- **Было:** отсутствовал универсальный release gate. **Стало:** scripts/production_gate.py + offline smoke всех 72 моделей. 【F:scripts/production_gate.py†L1-L44】【F:scripts/smoke_all_models_offline.py†L1-L170】
+
+**Файлы изменены (основные):**
+- `app/generations/media_pipeline.py`, `app/generations/telegram_sender.py`, `app/generations/failure_ui.py`
+- `app/kie/kie_client.py`, `app/bootstrap.py`, `app/services/user_service.py`, `app/observability/redaction.py`
+- `app/generations/universal_engine.py`, `app/generations/kie_job_runner.py`, `bot_kie.py`, `helpers.py`
+- `scripts/production_gate.py`, `scripts/smoke_all_models_offline.py`
+- `tests/test_media_pipeline.py`, `tests/test_telegram_sender_media.py`, `tests/test_kie_credits.py`, `tests/test_kie_fail_state.py`, `tests/test_aiohttp_leak_check.py`, `tests/test_user_balance_lock.py`, `tests/test_kie_client_lifecycle.py`, `tests/test_recordinfo_redaction.py`
+
+**Команды проверки (выполнены):**
+- `python scripts/verify_project.py` → OK
+- `pytest -q` → OK
+- `python scripts/production_gate.py` → OK
+
 ## 2026-01-19: P0/P1 hardening — webhook, KIE gating, media delivery, credits UX
 **Было (P0/P1):**
 - Webhook падал с 500 из‑за попыток обращаться к `correlation_id` на `telegram.Update` (slots), без гарантированного fallback‑ответа пользователю.

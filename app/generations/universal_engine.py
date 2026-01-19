@@ -48,11 +48,13 @@ class KIEJobFailed(RuntimeError):
         fail_code: Optional[str],
         fail_msg: Optional[str],
         correlation_id: Optional[str],
+        record_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(message)
         self.fail_code = fail_code
         self.fail_msg = fail_msg
         self.correlation_id = correlation_id
+        self.record_info = record_info or {}
 
 
 def _parse_result_json(raw_value: Any) -> Dict[str, Any]:
@@ -236,7 +238,9 @@ async def run_generation(
 
         client: Any = get_kie_client_or_stub()
     except Exception:
-        client = KIEClient()
+        from app.kie.kie_client import get_kie_client
+
+        client = get_kie_client()
     create_start = time.monotonic()
     create_fn = getattr(client, "create_task", None)
     if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
@@ -348,6 +352,7 @@ async def run_generation(
             fail_code=fail_code,
             fail_msg=fail_msg,
             correlation_id=correlation_id,
+            record_info=record,
         )
 
     parse_start = time.monotonic()

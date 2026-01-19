@@ -64,6 +64,10 @@ class SingletonLock:
         """
         if not self.dsn:
             logger.warning("DATABASE_URL not set, skipping singleton lock")
+            logger.warning(
+                "[LOCK] mitigation=github_sha_retry+per_user_lock "
+                "reason=database_url_missing"
+            )
             # In passive mode, allow startup without lock
             set_lock_acquired(False)
             return False
