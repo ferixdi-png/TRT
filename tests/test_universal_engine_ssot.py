@@ -7,6 +7,7 @@ from app.kie_catalog import get_model_map
 from app.kie_contract.payload_builder import build_kie_payload
 from app.generations.universal_engine import run_generation
 from app.generations.telegram_sender import send_job_result
+from app.delivery import result_delivery
 
 
 def _build_dummy_params(model_spec):
@@ -74,6 +75,47 @@ async def test_engine_integration_by_media_type(monkeypatch):
 
     result_json = {}
 
+    current_media = {"type": None}
+
+    async def fake_download(session, url, **kwargs):
+        media_type = current_media["type"]
+        if media_type == "image":
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"\x89PNG\r\n\x1a\nfake",
+                content_type="image/png",
+                size_bytes=16,
+            )
+        if media_type == "video":
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"\x00\x00\x00\x18ftypisom",
+                content_type="video/mp4",
+                size_bytes=16,
+            )
+        if media_type == "audio":
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"ID3fake",
+                content_type="audio/mpeg",
+                size_bytes=16,
+            )
+        if media_type == "voice":
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"OggSfake",
+                content_type="audio/ogg",
+                size_bytes=16,
+            )
+        return result_delivery.DeliveryTarget(
+            url=url,
+            data=b"PK\x03\x04fake",
+            content_type="application/zip",
+            size_bytes=16,
+        )
+
+    monkeypatch.setattr(result_delivery, "_download_with_retries", fake_download)
+
     async def run_for_media(media_type):
         model_id = media_targets.get(media_type)
         if not model_id:
@@ -85,6 +127,7 @@ async def test_engine_integration_by_media_type(monkeypatch):
             result_json = {"resultObject": "ok"}
         else:
             result_json = {"resultUrls": ["https://example.com/result"]}
+        current_media["type"] = media_type
 
         monkeypatch.setattr("app.generations.universal_engine.KIEClient", FakeClient)
         job_result = await run_generation(1, model_id, params)
