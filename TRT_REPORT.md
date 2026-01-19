@@ -1306,3 +1306,8 @@ tests/test_409_conflict_fix.py ........
 8. `help_menu` → справка
 9. `check_balance` → баланс
 10. `generate_again` → повтор генерации
+
+### STEP 8 — ROUTING + FALLBACK HARDENING
+- **Root cause:** generic text handlers/fallback intercepted messages before the generation flow, and `unhandled_update_fallback` referenced `model_info`/`params` that were undefined, causing NameError crashes.
+- **Fix:** added an early active-session router (SessionStore-based) to send active `waiting_for/current_param` messages into `input_parameters`, reordered handlers so the ConversationHandler precedes generic text handlers, and rewrote `unhandled_update_fallback` to only show main menu/help or relay “waiting for param” without undefined variables.
+- **How to verify:** check logs for `ROUTE_DECISION` lines with `waiting_for` and `chosen_handler` plus fallback `FIX_HINT` guidance; active sessions should log `active_session_router->input_parameters` and no longer emit `UNHANDLED_UPDATE` for prompt text.
