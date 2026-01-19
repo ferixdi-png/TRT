@@ -262,6 +262,29 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+def _default_mode_label(index: int, user_lang: str) -> str:
+    if user_lang == "ru":
+        fallbacks = ["Стандартный", "Высокое качество", "Быстрый", "Дополнительный"]
+    else:
+        fallbacks = ["Standard", "High quality", "Fast", "Extra"]
+    if index < len(fallbacks):
+        return fallbacks[index]
+    return fallbacks[-1]
+
+
+def _resolve_mode_label(mode: ModelSpec, index: int, user_lang: str) -> str:
+    mode_item = mode.modes[index] if mode.modes else None
+    if not mode_item:
+        return _default_mode_label(index, user_lang)
+    if user_lang == "ru":
+        title = mode_item.title_ru or _default_mode_label(index, user_lang)
+        hint = mode_item.short_hint_ru
+    else:
+        title = mode_item.notes or mode_item.title_ru or _default_mode_label(index, user_lang)
+        hint = mode_item.notes
+    return f"{title} · {hint}" if hint else title
+
+
 def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str = 'ru') -> Tuple[str, InlineKeyboardMarkup]:
     """
     Строит текст карточки модели и клавиатуру.
@@ -304,6 +327,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     example_text = "; ".join(examples) if examples else ("—" if user_lang == "ru" else "—")
     price_label = f"₽{int(price_rub)}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
     
+    mode_label = _resolve_mode_label(model, mode_index, user_lang)
     if user_lang == 'ru':
         type_name = _get_type_name_ru(model.type)
         
@@ -316,11 +340,12 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"╚═══════════════════════════════════════════╝\n"
         )
         
-        if mode.notes:
-            card_text += (
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚙️ <b>Режим:</b> <code>{mode.notes}</code>\n"
-            )
+        card_text += (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚙️ <b>Режим:</b> <code>{mode_label}</code>\n"
+        )
+        if model.description_ru:
+            card_text += f"📝 <b>Описание:</b> {model.description_ru}\n"
         
         card_text += (
             f"\n╔═══════════════════════════════════════════╗\n"
@@ -331,7 +356,8 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"🎫 Кредиты: <code>{mode.credits}</code>\n"
             f"📦 Единица: <code>{mode.unit}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🧩 <b>Обязательные поля:</b> {required_text}\n"
+            f"🧩 <b>Что нужно:</b> {', '.join(model.required_inputs_ru) if model.required_inputs_ru else required_text}\n"
+            f"📤 <b>Результат:</b> {model.output_type_ru or '—'}\n"
             f"📌 <b>Пример:</b> {example_text}\n"
         )
         
@@ -350,8 +376,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"📋 <b>Generation Type:</b> {model.type}\n"
         )
         
-        if mode.notes:
-            card_text += f"⚙️ <b>Mode:</b> <code>{mode.notes}</code>\n"
+        card_text += f"⚙️ <b>Mode:</b> <code>{mode_label}</code>\n"
         
         card_text += (
             f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
