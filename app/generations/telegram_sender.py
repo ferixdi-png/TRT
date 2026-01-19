@@ -8,6 +8,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 from app.kie_catalog import ModelSpec
 from app.generations.universal_engine import JobResult
+from app.observability.trace import trace_event, url_summary
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,86 @@ async def _send_media_group(bot, chat_id: int, media_type: str, urls: List[str])
             await bot.send_document(chat_id=chat_id, document=url)
 
 
+async def deliver_result(
+    bot,
+    chat_id: int,
+    media_type: str,
+    urls: List[str],
+    text: Optional[str],
+    *,
+    correlation_id: Optional[str] = None,
+) -> None:
+    """Deliver generation result to Telegram with trace logging and fallback."""
+    tg_method = None
+    try:
+        if media_type == "text":
+            tg_method = "send_message"
+            trace_event(
+                "info",
+                correlation_id or "corr-na-na",
+                event="TRACE_IN",
+                stage="TG_DELIVER",
+                action="TG_SEND",
+                tg_method=tg_method,
+                media_type=media_type,
+            )
+            await bot.send_message(chat_id=chat_id, text=text or "")
+        elif media_type == "image":
+            if len(urls) > 1:
+                tg_method = "send_media_group"
+                await _send_media_group(bot, chat_id, media_type, urls)
+            elif urls:
+                tg_method = "send_photo"
+                await bot.send_photo(chat_id=chat_id, photo=urls[0])
+        elif media_type == "video":
+            if len(urls) > 1:
+                tg_method = "send_media_group"
+                await _send_media_group(bot, chat_id, media_type, urls)
+            elif urls:
+                tg_method = "send_video"
+                await bot.send_video(chat_id=chat_id, video=urls[0])
+        elif media_type in {"audio", "voice"}:
+            if urls:
+                if media_type == "voice":
+                    tg_method = "send_voice"
+                    await bot.send_voice(chat_id=chat_id, voice=urls[0])
+                else:
+                    tg_method = "send_audio"
+                    await bot.send_audio(chat_id=chat_id, audio=urls[0])
+        else:
+            if urls:
+                tg_method = "send_document"
+                await bot.send_document(chat_id=chat_id, document=urls[0])
+
+        trace_event(
+            "info",
+            correlation_id or "corr-na-na",
+            event="TRACE_OUT",
+            stage="TG_DELIVER",
+            action="TG_SEND",
+            tg_method=tg_method,
+            media_type=media_type,
+            url_summary=url_summary(urls[0]) if urls else None,
+            outcome="success",
+        )
+    except Exception as exc:
+        logger.warning("Telegram media send failed, falling back to document: %s", exc)
+        trace_event(
+            "info",
+            correlation_id or "corr-na-na",
+            event="TRACE_OUT",
+            stage="TG_DELIVER",
+            action="TG_SEND",
+            tg_method=tg_method,
+            media_type=media_type,
+            url_summary=url_summary(urls[0]) if urls else None,
+            outcome="failed",
+            tg_error=str(exc),
+        )
+        if urls:
+            await bot.send_document(chat_id=chat_id, document=urls[0])
+
+
 async def send_job_result(
     bot,
     chat_id: int,
@@ -33,37 +114,20 @@ async def send_job_result(
     price_rub: Optional[float] = None,
     elapsed: Optional[float] = None,
     user_lang: str = "ru",
+    correlation_id: Optional[str] = None,
 ) -> None:
     """Send generation output to Telegram based on media_type."""
     media_type = job_result.media_type
     urls = job_result.urls
 
-    try:
-        if media_type == "text":
-            await bot.send_message(chat_id=chat_id, text=job_result.text or "")
-        elif media_type == "image":
-            if len(urls) > 1:
-                await _send_media_group(bot, chat_id, media_type, urls)
-            elif urls:
-                await bot.send_photo(chat_id=chat_id, photo=urls[0])
-        elif media_type == "video":
-            if len(urls) > 1:
-                await _send_media_group(bot, chat_id, media_type, urls)
-            elif urls:
-                await bot.send_video(chat_id=chat_id, video=urls[0])
-        elif media_type in {"audio", "voice"}:
-            if urls:
-                if media_type == "voice":
-                    await bot.send_voice(chat_id=chat_id, voice=urls[0])
-                else:
-                    await bot.send_audio(chat_id=chat_id, audio=urls[0])
-        else:
-            if urls:
-                await bot.send_document(chat_id=chat_id, document=urls[0])
-    except Exception as exc:
-        logger.warning("Telegram media send failed, falling back to document: %s", exc)
-        if urls:
-            await bot.send_document(chat_id=chat_id, document=urls[0])
+    await deliver_result(
+        bot,
+        chat_id,
+        media_type,
+        urls,
+        job_result.text,
+        correlation_id=correlation_id,
+    )
 
     price_text = ""
     if price_rub is not None:
@@ -103,4 +167,14 @@ async def send_job_result(
         text=summary,
         reply_markup=InlineKeyboardMarkup(buttons),
         parse_mode="HTML",
+    )
+    trace_event(
+        "info",
+        correlation_id or "corr-na-na",
+        event="TRACE_OUT",
+        stage="TG_DELIVER",
+        action="TG_SEND",
+        tg_method="send_message",
+        media_type="summary",
+        outcome="success",
     )
