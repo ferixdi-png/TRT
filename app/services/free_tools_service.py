@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from pricing.engine import load_config
 from app.kie_catalog.catalog import get_free_tools_model_ids as get_dynamic_free_tools_model_ids
 from app.storage import get_storage
+from app.observability.structured_logs import log_structured_event
 from app.services.user_service import get_is_admin
 
 
@@ -93,7 +94,35 @@ async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None
     }
 
 
-async def check_and_consume_free_generation(user_id: int, model_id: str) -> Dict[str, object]:
+def format_free_counter_block(
+    remaining: int,
+    limit_per_hour: int,
+    next_refill_in: int,
+    *,
+    user_lang: str,
+    now: Optional[datetime] = None,
+) -> str:
+    minutes = max(0, int(next_refill_in / 60))
+    local_now = now or datetime.now()
+    refill_at = local_now + timedelta(seconds=next_refill_in)
+    time_str = refill_at.strftime("%H:%M")
+    if user_lang == "en":
+        return (
+            f"🎁 Free remaining: {remaining} of {limit_per_hour}\n"
+            f"⏳ Next free in: {minutes} min (at {time_str} local)"
+        )
+    return (
+        f"🎁 Бесплатных осталось: {remaining} из {limit_per_hour}\n"
+        f"⏳ Следующая бесплатная через: {minutes} мин (в {time_str} по локальному времени)"
+    )
+
+
+async def check_and_consume_free_generation(
+    user_id: int,
+    model_id: str,
+    *,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, object]:
     cfg = get_free_tools_config()
     if model_id not in cfg.model_ids:
         return {"status": "not_free"}
@@ -119,6 +148,20 @@ async def check_and_consume_free_generation(user_id: int, model_id: str) -> Dict
             used_count,
         )
         referral_remaining = await storage.get_referral_free_bank(user_id)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="FREE_QUOTA_UPDATE",
+            action_path="free_tools_service.check_and_consume_free_generation",
+            stage="FREE_QUOTA",
+            outcome="consumed",
+            param={
+                "model_id": model_id,
+                "source": "hourly",
+                "base_remaining": max(0, cfg.base_per_hour - used_count),
+                "referral_remaining": max(0, referral_remaining),
+            },
+        )
         return {
             "status": "ok",
             "source": "hourly",
@@ -129,6 +172,20 @@ async def check_and_consume_free_generation(user_id: int, model_id: str) -> Dict
     referral_remaining = await storage.get_referral_free_bank(user_id)
     if referral_remaining > 0:
         await storage.set_referral_free_bank(user_id, referral_remaining - 1)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="FREE_QUOTA_UPDATE",
+            action_path="free_tools_service.check_and_consume_free_generation",
+            stage="FREE_QUOTA",
+            outcome="consumed",
+            param={
+                "model_id": model_id,
+                "source": "referral",
+                "base_remaining": 0,
+                "referral_remaining": max(0, referral_remaining - 1),
+            },
+        )
         return {
             "status": "ok",
             "source": "referral",

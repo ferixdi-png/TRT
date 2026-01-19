@@ -7,6 +7,7 @@ from app.kie_catalog import get_model_map
 from app.kie_contract.payload_builder import build_kie_payload
 from app.generations.universal_engine import parse_record_info
 from app.generations.telegram_sender import send_job_result
+from app.delivery import result_delivery
 from bot_kie import _determine_primary_input
 
 
@@ -84,24 +85,43 @@ async def test_telegram_sender_selects_correct_method(monkeypatch):
         "document": "send_document",
     }
 
-    async def fake_resolve(result, correlation_id, media_kind, **kwargs):
-        method = method_map.get(media_kind, "send_document")
-        if method == "send_message":
-            return method, {"text": "ok"}
-        if method == "send_photo":
-            return method, {"photo": "https://example.com/file.jpg"}
-        if method == "send_video":
-            return method, {"video": "https://example.com/file.mp4"}
-        if method == "send_audio":
-            return method, {"audio": "https://example.com/file.mp3"}
-        if method == "send_voice":
-            return method, {"voice": "https://example.com/file.ogg"}
-        return method, {"document": "https://example.com/file.bin"}
+    async def fake_download(session, url, **kwargs):
+        if url.endswith(".png"):
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"\x89PNG\r\n\x1a\nfake",
+                content_type="image/png",
+                size_bytes=16,
+            )
+        if url.endswith(".mp4"):
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"\x00\x00\x00\x18ftypisom",
+                content_type="video/mp4",
+                size_bytes=16,
+            )
+        if url.endswith(".mp3"):
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"ID3fake",
+                content_type="audio/mpeg",
+                size_bytes=16,
+            )
+        if url.endswith(".ogg"):
+            return result_delivery.DeliveryTarget(
+                url=url,
+                data=b"OggSfake",
+                content_type="audio/ogg",
+                size_bytes=16,
+            )
+        return result_delivery.DeliveryTarget(
+            url=url,
+            data=b"PK\x03\x04fake",
+            content_type="application/zip",
+            size_bytes=16,
+        )
 
-    monkeypatch.setattr(
-        "app.generations.telegram_sender.resolve_and_prepare_telegram_payload",
-        fake_resolve,
-    )
+    monkeypatch.setattr(result_delivery, "_download_with_retries", fake_download)
 
     for model_id, spec in catalog.items():
         media_kind = spec.output_media_type or "file"

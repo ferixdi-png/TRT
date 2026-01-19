@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 from app.generations.universal_engine import run_generation
 from app.generations.telegram_sender import send_job_result
 from app.kie_catalog import get_model_map
+from app.delivery import result_delivery
 
 
 def test_kie_pipeline_stub_trace(monkeypatch, test_env):
@@ -22,6 +23,16 @@ def test_kie_pipeline_stub_trace(monkeypatch, test_env):
         "app.generations.universal_engine.build_kie_payload",
         lambda spec, params: {"input": {"prompt": "test"}},
     )
+
+    async def fake_download(session, url, **kwargs):
+        return result_delivery.DeliveryTarget(
+            url=url,
+            data=b"\x89PNG\r\n\x1a\nfake",
+            content_type="image/png",
+            size_bytes=16,
+        )
+
+    monkeypatch.setattr(result_delivery, "_download_with_retries", fake_download)
 
     model_id = next(iter(get_model_map().keys()))
     correlation_id = "corr-test-1-1-abc123"

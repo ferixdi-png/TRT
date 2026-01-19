@@ -396,6 +396,7 @@ from app.models.registry import get_models_sync
 from app.services.free_tools_service import (
     add_referral_free_bonus,
     check_and_consume_free_generation,
+    format_free_counter_block,
     get_free_generation_status,
     get_free_counter_snapshot,
     get_free_tools_config,
@@ -1793,9 +1794,9 @@ async def get_user_free_generations_remaining(user_id: int) -> int:
     return int(status.get("total_remaining", 0))
 
 
-async def use_free_generation(user_id: int, model_id: str) -> bool:
+async def use_free_generation(user_id: int, model_id: str, *, correlation_id: Optional[str] = None) -> bool:
     """Consume a free generation if available."""
-    result = await check_and_consume_free_generation(user_id, model_id)
+    result = await check_and_consume_free_generation(user_id, model_id, correlation_id=correlation_id)
     return result.get("status") == "ok"
 
 
@@ -1808,20 +1809,18 @@ async def is_free_generation_available(user_id: int, model_id: str) -> bool:
 
 
 def _format_free_counter_line(remaining: int, limit_per_hour: int, next_refill_in: int, user_lang: str) -> str:
-    minutes = max(0, int(next_refill_in / 60))
-    if user_lang == "en":
-        if remaining > 0:
-            return f"Free: {remaining}/{limit_per_hour} • refresh in {minutes} min"
-        return f"Next free in {minutes} min"
-    if remaining > 0:
-        return f"Бесплатные: {remaining}/{limit_per_hour} • обновится через {minutes} мин"
-    return f"Следующая бесплатная через {minutes} мин"
+    return format_free_counter_block(
+        remaining,
+        limit_per_hour,
+        next_refill_in,
+        user_lang=user_lang,
+    )
 
 
 def _append_free_counter_text(text: str, line: str) -> str:
     if not line:
         return text
-    return f"{text}\n\n🆓 {line}"
+    return f"{text}\n\n{line}"
 
 
 async def get_free_counter_line(
@@ -12982,7 +12981,11 @@ async def start_generation_directly(
         return ConversationHandler.END
     
     # Check if this is a free generation (consume hourly/referral quota)
-    free_result = await check_and_consume_free_generation(user_id, model_id)
+    free_result = await check_and_consume_free_generation(
+        user_id,
+        model_id,
+        correlation_id=correlation_id,
+    )
     if free_result.get("status") == "deny":
         user_lang = get_user_language(user_id)
         reset_in = free_result.get("reset_in_minutes", 0)
@@ -26112,7 +26115,11 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     
                     if is_free:
                         # Use free generation
-                        if await use_free_generation(user_id, model_id):
+                        if await use_free_generation(
+                            user_id,
+                            model_id,
+                            correlation_id=ensure_correlation_id(update, context),
+                        ):
                             price = 0.0
                         else:
                             # Free generation limit reached, treat as paid
@@ -26215,235 +26222,51 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     if result_urls:
-                        # Send media (video or image) directly
-                        session_http = await get_http_client()
-                        for i, url in enumerate(result_urls[:5]):  # Limit to 5 items
-                            try:
-                                # Try to download media and send it
-                                async with session_http.get(url) as resp:
-                                        if resp.status == 200:
-                                            media_data = await resp.read()
-                                            
-                                            # Add buttons only to the last item
-                                            is_last = (i == len(result_urls[:5]) - 1)
-                                            # Get model name for caption
-                                            model_name_display = model_name if model_name else model_id
-                                            
-                                            caption = (
-                                                "✅ <b>Генерация завершена!</b>\n\n"
-                                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                                "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                f"🤖 <b>Модель:</b> {model_name_display}\n"
-                                                f"📊 <b>Результат:</b> {i + 1} из {len(result_urls[:5])}\n\n"
-                                                "💡 Наслаждайтесь созданным контентом!"
-                                            ) if i == 0 and user_lang == 'ru' else (
-                                                "✅ <b>Generation Completed!</b>\n\n"
-                                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                                "🎉 <b>Your result is ready!</b>\n\n"
-                                                f"🤖 <b>Model:</b> {model_name_display}\n"
-                                                f"📊 <b>Result:</b> {i + 1} of {len(result_urls[:5])}\n\n"
-                                                "💡 Enjoy your generated content!"
-                                            ) if i == 0 else None
-
-                                            if caption and free_counter_line:
-                                                caption = _append_free_counter_text(caption, free_counter_line)
-                                            
-                                            if is_video_model:
-                                                # Send as video
-                                                video_file = io.BytesIO(media_data)
-                                                video_file.name = f"generated_video_{i+1}.mp4"
-                                                
-                                                if is_last:
-                                                    last_message = await _send_with_log(
-                                                        "send_video",
-                                                        chat_id=chat_id,
-                                                        video=video_file,
-                                                        caption=caption,
-                                                        reply_markup=reply_markup,
-                                                        parse_mode='HTML'
-                                                    )
-                                                else:
-                                                    await _send_with_log(
-                                                        "send_video",
-                                                        chat_id=chat_id,
-                                                        video=video_file,
-                                                        caption=caption,
-                                                        parse_mode='HTML'
-                                                    )
-                                            else:
-                                                # Send as image
-                                                photo_file = io.BytesIO(media_data)
-                                                photo_file.name = f"generated_image_{i+1}.png"
-                                                
-                                                if is_last:
-                                                    last_message = await _send_with_log(
-                                                        "send_photo",
-                                                        chat_id=chat_id,
-                                                        photo=photo_file,
-                                                        caption=caption,
-                                                        reply_markup=reply_markup,
-                                                        parse_mode='HTML'
-                                                    )
-                                                else:
-                                                    await _send_with_log(
-                                                        "send_photo",
-                                                        chat_id=chat_id,
-                                                        photo=photo_file,
-                                                        caption=caption,
-                                                        parse_mode='HTML'
-                                                    )
-                                        else:
-                                            # If download fails, try sending URL directly
-                                            url_direct = os.getenv("TELEGRAM_URL_DIRECT", "0") == "1"
-                                            if is_video_model:
-                                                if url_direct:
-                                                    if i == len(result_urls[:5]) - 1:
-                                                        last_message = await _send_with_log(
-                                                            "send_video",
-                                                            chat_id=chat_id,
-                                                            video=url,
-                                                            caption=(
-                                                                "✅ <b>Генерация завершена!</b>\n\n"
-                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                            ) if i == 0 and user_lang == 'ru' else (
-                                                                "✅ <b>Generation Completed!</b>\n\n"
-                                                                "🎉 <b>Your result is ready!</b>\n\n"
-                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                            ) if i == 0 else None,
-                                                            reply_markup=reply_markup,
-                                                            parse_mode='HTML'
-                                                        )
-                                                    else:
-                                                        await _send_with_log(
-                                                            "send_video",
-                                                            chat_id=chat_id,
-                                                            video=url,
-                                                            caption=(
-                                                                "✅ <b>Генерация завершена!</b>\n\n"
-                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                            ) if i == 0 and user_lang == 'ru' else (
-                                                                "✅ <b>Generation Completed!</b>\n\n"
-                                                                "🎉 <b>Your result is ready!</b>\n\n"
-                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                            ) if i == 0 else None,
-                                                            parse_mode='HTML'
-                                                        )
-                                                else:
-                                                    await _send_with_log(
-                                                        "send_message",
-                                                        chat_id=chat_id,
-                                                        text=f"⚠️ Не удалось загрузить видео: {url}",
-                                                        parse_mode='HTML',
-                                                    )
-                                            else:
-                                                if url_direct:
-                                                    if i == len(result_urls[:5]) - 1:
-                                                        last_message = await _send_with_log(
-                                                            "send_photo",
-                                                            chat_id=chat_id,
-                                                            photo=url,
-                                                            caption=(
-                                                                "✅ <b>Генерация завершена!</b>\n\n"
-                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                            ) if i == 0 and user_lang == 'ru' else (
-                                                                "✅ <b>Generation Completed!</b>\n\n"
-                                                                "🎉 <b>Your result is ready!</b>\n\n"
-                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                            ) if i == 0 else None,
-                                                            reply_markup=reply_markup,
-                                                            parse_mode='HTML'
-                                                        )
-                                                    else:
-                                                        await _send_with_log(
-                                                            "send_photo",
-                                                            chat_id=chat_id,
-                                                            photo=url,
-                                                            caption=(
-                                                                "✅ <b>Генерация завершена!</b>\n\n"
-                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                            ) if i == 0 and user_lang == 'ru' else (
-                                                                "✅ <b>Generation Completed!</b>\n\n"
-                                                                "🎉 <b>Your result is ready!</b>\n\n"
-                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                            ) if i == 0 else None,
-                                                            parse_mode='HTML'
-                                                        )
-                                                else:
-                                                    await _send_with_log(
-                                                        "send_message",
-                                                        chat_id=chat_id,
-                                                        text=f"⚠️ Не удалось загрузить изображение: {url}",
-                                                        parse_mode='HTML',
-                                                    )
-                            except Exception as e:
-                                # If all methods fail, try sending URL directly as last resort
-                                media_type = "video" if is_video_model else "photo"
-                                logger.warning(f"Failed to send {media_type} {url}: {e}")
-                                try:
-                                    is_last = (i == len(result_urls[:5]) - 1)
-                                    url_direct = os.getenv("TELEGRAM_URL_DIRECT", "0") == "1"
-                                    if is_video_model:
-                                        if url_direct:
-                                            if is_last:
-                                                last_message = await _send_with_log(
-                                                    "send_video",
-                                                    chat_id=chat_id,
-                                                    video=url,
-                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                    reply_markup=reply_markup,
-                                                    parse_mode='HTML'
-                                                )
-                                            else:
-                                                await _send_with_log(
-                                                    "send_video",
-                                                    chat_id=chat_id,
-                                                    video=url,
-                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                    parse_mode='HTML'
-                                                )
-                                    else:
-                                        if url_direct:
-                                            if is_last:
-                                                last_message = await _send_with_log(
-                                                    "send_photo",
-                                                    chat_id=chat_id,
-                                                    photo=url,
-                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                    reply_markup=reply_markup,
-                                                    parse_mode='HTML'
-                                                )
-                                            else:
-                                                await _send_with_log(
-                                                    "send_photo",
-                                                    chat_id=chat_id,
-                                                    photo=url,
-                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                    parse_mode='HTML'
-                                                )
-                                except Exception as e2:
-                                    logger.error(f"Failed to send {media_type} even via URL: {e2}")
-                                    # Last resort: send as message
-                                    is_last = (i == len(result_urls[:5]) - 1)
-                                    media_name = "Видео" if is_video_model else "Изображение"
-                                    if is_last:
-                                        last_message = await _send_with_log(
-                                            "send_message",
-                                            chat_id=chat_id,
-                                            text=f"✅ <b>Генерация завершена!</b>\n\n{media_name}: {url}",
-                                            reply_markup=reply_markup,
-                                            parse_mode='HTML'
-                                        )
-                                    else:
-                                        await _send_with_log(
-                                            "send_message",
-                                            chat_id=chat_id,
-                                            text=f"✅ <b>Генерация завершена!</b>\n\n{media_name}: {url}",
-                                            parse_mode='HTML'
-                                        )
+                        from app.delivery.result_delivery import deliver_generation_result
+                        model_info = saved_session_data.get('model_info', {}) if saved_session_data else {}
+                        model_name_display = model_name if model_name else model_id
+                        if user_lang == 'ru':
+                            caption = (
+                                "✅ <b>Генерация завершена!</b>\n\n"
+                                f"🤖 <b>Модель:</b> {model_name_display}"
+                            )
+                        else:
+                            caption = (
+                                "✅ <b>Generation Completed!</b>\n\n"
+                                f"🤖 <b>Model:</b> {model_name_display}"
+                            )
+                        await deliver_generation_result(
+                            context,
+                            chat_id,
+                            ensure_correlation_id(update, context),
+                            model_id,
+                            model_info.get('model_mode') if model_info else None,
+                            result_urls[:5],
+                            caption,
+                            prefer_upload=True,
+                        )
+                        free_counter_line = ""
+                        try:
+                            free_counter_line = await get_free_counter_line(
+                                user_id,
+                                user_lang=user_lang,
+                                correlation_id=ensure_correlation_id(update, context),
+                                action_path="gen_done",
+                            )
+                        except Exception:
+                            free_counter_line = ""
+                        summary_text = (
+                            "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
+                            if user_lang == 'ru'
+                            else "✅ <b>Generation Completed!</b>\n\nResult is ready."
+                        )
+                        last_message = await _send_with_log(
+                            "send_message",
+                            chat_id=chat_id,
+                            text=_append_free_counter_text(summary_text, free_counter_line),
+                            reply_markup=reply_markup,
+                            parse_mode='HTML'
+                        )
                     else:
                         last_message = await _send_with_log(
                             "send_message",
