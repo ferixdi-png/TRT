@@ -7,6 +7,7 @@ from app.generations.telegram_sender import deliver_result
 from app.generations.universal_engine import JobResult, parse_record_info
 from app.kie.kie_client import KIEClient, get_kie_client
 from app.kie_catalog import ModelSpec
+from app.config import get_settings
 
 
 def _get_media_type(model_meta: ModelSpec | Dict[str, Any]) -> str:
@@ -65,11 +66,13 @@ def parse_result(
 ) -> JobResult:
     media_type = _get_media_type(model_meta)
     model_id = model_meta.id if isinstance(model_meta, ModelSpec) else model_meta.get("id", "unknown")
+    base_url = get_settings().kie_result_cdn_base_url
     return parse_record_info(
         record,
         media_type,
         model_id,
         correlation_id=correlation_id,
+        base_url=base_url,
     )
 
 

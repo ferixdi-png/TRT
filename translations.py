@@ -6,17 +6,16 @@ Provides translations for Russian and English
 TRANSLATIONS = {
     'ru': {
         'welcome_new': (
-            '👋 <b>Добро пожаловать, {name}!</b>\n'
-            '🧠 <b>70+ моделей</b> · {types} типов · {free_limit} бесплатных в час\n'
-            '💳 Оплата в рублях · без VPN · стабильная очередь\n'
-            '💡 Цена в ₽ округляется вверх до целого рубля'
+            '👋 <b>Привет, {name}!</b>\n'
+            '🖼️ Фото · 🎥 Видео · 🔊 Аудио · 🪄 Апскейл · 🧼 Удаление фона\n'
+            '💳 Оплата в рублях · быстрый результат · много моделей\n'
+            '➡️ Как начать: выберите модель → введите параметры → подтвердите'
         ),
         'welcome_returning': (
             '👋 <b>С возвращением, {name}!</b>\n'
-            '👥 Сейчас активно: {online}\n'
-            '🧠 <b>70+ моделей</b> · {types} типов · {free_limit} бесплатных в час\n'
-            '💳 Оплата в рублях · без VPN · стабильная очередь\n'
-            '💡 Цена в ₽ округляется вверх до целого рубля'
+            '🖼️ Фото · 🎥 Видео · 🔊 Аудио · 🪄 Апскейл · 🧼 Удаление фона\n'
+            '💳 Оплата в рублях · быстрый результат · много моделей\n'
+            '➡️ Как начать: выберите модель → введите параметры → подтвердите'
         ),
         'select_language': (
             '🌍 <b>Выберите язык / Choose language</b>\n\n'
@@ -279,16 +278,15 @@ TRANSLATIONS = {
     'en': {
         'welcome_new': (
             '👋 <b>Welcome, {name}!</b>\n'
-            '🧠 <b>70+ models</b> · {types} types · {free_limit} free per hour\n'
-            '💳 Pay in rubles · no VPN · stable queue\n'
-            '💡 Prices in ₽ are rounded up to the next whole ruble'
+            '🖼️ Photos · 🎥 Video · 🔊 Audio · 🪄 Upscale · 🧼 Background remove\n'
+            '💳 Pay in rubles · fast results · many models\n'
+            '➡️ Start: choose a model → enter params → confirm'
         ),
         'welcome_returning': (
             '👋 <b>Welcome back, {name}!</b>\n'
-            '👥 Online now: {online}\n'
-            '🧠 <b>70+ models</b> · {types} types · {free_limit} free per hour\n'
-            '💳 Pay in rubles · no VPN · stable queue\n'
-            '💡 Prices in ₽ are rounded up to the next whole ruble'
+            '🖼️ Photos · 🎥 Video · 🔊 Audio · 🪄 Upscale · 🧼 Background remove\n'
+            '💳 Pay in rubles · fast results · many models\n'
+            '➡️ Start: choose a model → enter params → confirm'
         ),
         'select_language': (
             '🌍 <b>Choose language / Выберите язык</b>\n\n'
@@ -561,7 +559,6 @@ def t(key: str, lang: str = 'ru', **kwargs) -> str:
         return text.format(**kwargs)
     except KeyError:
         return text
-
 
 
 

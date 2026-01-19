@@ -36,7 +36,7 @@ async def test_start_command(harness):
     assert messages, "Bot should send a message"
     header_message = messages[0]
     assert 'text' in header_message, "Message should have text"
-    assert "Добро пожаловать" in header_message['text']
+    assert "Привет" in header_message['text'] or "Welcome" in header_message['text']
     assert 'reply_markup' in header_message
     assert header_message['reply_markup'] is not None, "Should have reply_markup"
     keyboard = header_message['reply_markup'].inline_keyboard
@@ -99,7 +99,7 @@ async def test_unknown_callback_shows_main_menu(harness):
     assert edited or messages
 
     payloads = edited + messages
-    assert any("Добро пожаловать" in payload["text"] for payload in payloads)
+    assert any("Привет" in payload["text"] or "Welcome" in payload["text"] for payload in payloads)
     header_payload = next(payload for payload in payloads if payload.get("reply_markup"))
     keyboard = header_payload['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [
