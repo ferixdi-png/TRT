@@ -278,6 +278,7 @@ from app.services.free_tools_service import (
     add_referral_free_bonus,
     check_and_consume_free_generation,
     get_free_generation_status,
+    get_free_counter_snapshot,
     get_free_tools_config,
     get_free_tools_model_ids,
 )
@@ -486,6 +487,59 @@ def _first_required_media_param(properties: Dict[str, Any]) -> Optional[str]:
     for param_name, info in properties.items():
         if info.get("required", False) and _get_media_kind(param_name):
             return param_name
+    return None
+
+
+def _detect_ssot_conflicts(model_spec: ModelSpec) -> list[str]:
+    conflicts: list[str] = []
+    model_type = (model_spec.model_type or "").lower()
+    properties = model_spec.schema_properties or {}
+    required_media = [
+        name for name, info in properties.items()
+        if info.get("required", False) and _get_media_kind(name)
+    ]
+    if model_type in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"} and required_media:
+        conflicts.append("SSOT_CONFLICT_TEXT_MODEL_REQUIRES_IMAGE")
+    if model_type in {"image_edit", "image_to_image", "image_to_video", "outpaint", "upscale", "video_upscale"}:
+        if not required_media:
+            conflicts.append("SSOT_CONFLICT_IMAGE_MODEL_MISSING_IMAGE_INPUT")
+    return conflicts
+
+
+def _is_missing_media_error(error: str) -> bool:
+    if not error:
+        return False
+    lowered = error.lower()
+    if "image" in lowered or "mask" in lowered:
+        return any(token in lowered for token in ["required", "missing", "must", "need"])
+    return False
+
+
+def _select_next_param(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    properties = session.get("properties", {})
+    params = session.get("params", {})
+    param_order = session.get("param_order") or _build_param_order(properties)
+    session["param_order"] = param_order
+    for param_name in param_order:
+        if param_name in params:
+            continue
+        param_info = properties.get(param_name, {})
+        param_type = param_info.get("type", "string")
+        enum_values = _normalize_enum_values(param_info)
+        is_optional = not param_info.get("required", False)
+        media_kind = _get_media_kind(param_name)
+        reason = "missing_required" if param_name in session.get("required", []) else "optional_next"
+        if enum_values:
+            reason = "enum_buttons"
+        return {
+            "param_name": param_name,
+            "param_info": param_info,
+            "param_type": param_type,
+            "enum_values": enum_values,
+            "is_optional": is_optional,
+            "media_kind": media_kind,
+            "reason": reason,
+        }
     return None
 import json
 import aiohttp
@@ -1601,6 +1655,57 @@ async def is_free_generation_available(user_id: int, model_id: str) -> bool:
         return False
     status = await get_free_generation_status(user_id)
     return int(status.get("total_remaining", 0)) > 0
+
+
+def _format_free_counter_line(remaining: int, limit_per_hour: int, next_refill_in: int, user_lang: str) -> str:
+    minutes = max(0, int(next_refill_in / 60))
+    if user_lang == "en":
+        if remaining > 0:
+            return f"Free: {remaining}/{limit_per_hour} • refresh in {minutes} min"
+        return f"Next free in {minutes} min"
+    if remaining > 0:
+        return f"Бесплатные: {remaining}/{limit_per_hour} • обновится через {minutes} мин"
+    return f"Следующая бесплатная через {minutes} мин"
+
+
+def _append_free_counter_text(text: str, line: str) -> str:
+    if not line:
+        return text
+    return f"{text}\n\n🆓 {line}"
+
+
+async def get_free_counter_line(
+    user_id: int,
+    *,
+    user_lang: str,
+    correlation_id: Optional[str],
+    action_path: str,
+) -> str:
+    if not user_id:
+        return ""
+    snapshot = await get_free_counter_snapshot(user_id)
+    line = _format_free_counter_line(
+        snapshot["remaining"],
+        snapshot["limit_per_hour"],
+        snapshot["next_refill_in"],
+        user_lang,
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        action="FREE_COUNTER_VIEW",
+        action_path=action_path,
+        outcome="shown",
+        error_code="FREE_COUNTER_VIEW_OK",
+        fix_hint="Показан счетчик бесплатных генераций.",
+        param={
+            "remaining": snapshot["remaining"],
+            "limit_per_hour": snapshot["limit_per_hour"],
+            "used_in_current_window": snapshot["used_in_current_window"],
+            "next_refill_in": snapshot["next_refill_in"],
+        },
+    )
+    return line
 
 
 # ==================== Referral System ====================
@@ -2930,7 +3035,7 @@ def _build_release_block(user_lang: str) -> str:
     )
 
 
-async def _build_main_menu_sections(update: Update) -> tuple[str, str]:
+async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[str] = None) -> tuple[str, str]:
     user = update.effective_user
     user_id = user.id if user else None
     user_lang = "ru"
@@ -2945,12 +3050,22 @@ async def _build_main_menu_sections(update: Update) -> tuple[str, str]:
     generation_types = get_generation_types()
     total_models = len(get_models_sync())
     remaining_free = FREE_GENERATIONS_PER_DAY
+    free_counter_line = ""
     if user_id:
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
             remaining_free = await get_free_remaining_async(user_id)
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
+        try:
+            free_counter_line = await get_free_counter_line(
+                user_id,
+                user_lang=user_lang,
+                correlation_id=correlation_id,
+                action_path="main_menu",
+            )
+        except Exception as exc:
+            logger.warning("Failed to resolve free counter line: %s", exc)
 
     is_new = await is_new_user_async(user_id) if user_id else True
     referral_link = get_user_referral_link(user_id) if user_id else ""
@@ -2999,6 +3114,9 @@ async def _build_main_menu_sections(update: Update) -> tuple[str, str]:
         header_text += "\n👇 Select a section from the menu below."
     else:
         header_text += "\n👇 Выберите раздел в меню ниже."
+
+    if free_counter_line:
+        header_text += f"\n\n🆓 {free_counter_line}"
 
     details_parts = []
     if referral_bonus_text:
@@ -3239,10 +3357,11 @@ async def show_main_menu(
             user_lang = await get_user_language_async(user_id)
         except Exception as exc:
             logger.warning("Failed to resolve user language: %s", exc)
+    correlation_id = ensure_correlation_id(update, context)
     reply_markup = InlineKeyboardMarkup(
         await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
     )
-    header_text, _details_text = await _build_main_menu_sections(update)
+    header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
     chat_id = None
@@ -3666,6 +3785,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "callback_data": data,
             },
             outcome="received",
+            error_code="UX_CLICK_OK",
+            fix_hint="Обработано нажатие кнопки.",
         )
         logger.debug(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
     except Exception as e:
@@ -4360,7 +4481,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 
                 await query.edit_message_text(
-                    insufficient_msg,
+                    _append_free_counter_text(insufficient_msg, free_counter_line),
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -4525,17 +4646,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 is_audio = is_audio_model(model_id)
                 
                 if has_image_input:
+                    ref_hint = "реф-картинку" if user_sessions[user_id].get("image_ref_prompt") else "изображение"
                     if is_video:
                         prompt_text += (
                             f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
                             f"Опишите видео, которое хотите сгенерировать.\n\n"
-                            f"💡 <i>После ввода промпта вы сможете добавить изображение (опционально)</i>"
+                            f"💡 <i>После ввода промпта вы сможете добавить {ref_hint} (опционально)</i>"
                         )
                     else:
                         prompt_text += (
                             f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
                             f"Опишите изображение, которое хотите сгенерировать.\n\n"
-                            f"💡 <i>После ввода промпта вы сможете добавить изображение (опционально)</i>"
+                            f"💡 <i>После ввода промпта вы сможете добавить {ref_hint} (опционально)</i>"
                         )
                 else:
                     if is_video:
@@ -4706,6 +4828,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Show generation type info and models with marketing text
             remaining_free = await get_user_free_generations_remaining(user_id)
             user_lang = get_user_language(user_id)
+            free_counter_line = ""
+            try:
+                free_counter_line = await get_free_counter_line(
+                    user_id,
+                    user_lang=user_lang,
+                    correlation_id=correlation_id,
+                    action_path="gen_type_menu",
+                )
+            except Exception as exc:
+                logger.warning("Failed to resolve free counter line: %s", exc)
             
             # Get translated name and description
             gen_type_key = f'gen_type_{gen_type.replace("-", "_")}'
@@ -4730,6 +4862,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"{t('msg_gen_type_models_available', lang=user_lang, count=len(models))}\n\n"
                 f"{t('msg_gen_type_select_model', lang=user_lang)}"
             )
+            gen_type_text = _append_free_counter_text(gen_type_text, free_counter_line)
             
             # Create keyboard with models (2 per row for compact display)
             keyboard = []
@@ -5043,6 +5176,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             user_lang = get_user_language(user_id)
+            free_counter_line = ""
+            try:
+                free_counter_line = await get_free_counter_line(
+                    user_id,
+                    user_lang=user_lang,
+                    correlation_id=correlation_id,
+                    action_path="free_tools_menu",
+                )
+            except Exception as exc:
+                logger.warning("Failed to resolve free counter line: %s", exc)
             if user_lang == 'ru':
                 free_tools_text = (
                     f"🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ</b>\n\n"
@@ -5059,6 +5202,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🤖 <b>Available tools ({len(free_models)}):</b>\n\n"
                     f"💡 <b>Select a tool below</b>"
                 )
+            free_tools_text = _append_free_counter_text(free_tools_text, free_counter_line)
             
             # Create keyboard with free models (2 per row)
             keyboard = []
@@ -5136,6 +5280,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Show generation types instead of all models with marketing text
             generation_types = get_generation_types()
             remaining_free = await get_user_free_generations_remaining(user_id)
+            user_lang = get_user_language(user_id)
+            free_counter_line = ""
+            try:
+                free_counter_line = await get_free_counter_line(
+                    user_id,
+                    user_lang=user_lang,
+                    correlation_id=correlation_id,
+                    action_path="models_menu",
+                )
+            except Exception as exc:
+                logger.warning("Failed to resolve free counter line: %s", exc)
             
             models_text = (
                 f"🤖 <b>ВЫБЕРИТЕ НЕЙРОСЕТЬ</b> 🤖\n\n"
@@ -5157,10 +5312,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📦 <b>Доступно:</b> {len(generation_types)} типов генерации\n"
                 f"🤖 <b>Моделей:</b> {len(get_models_sync())} топовых нейросетей"
             )
+            models_text = _append_free_counter_text(models_text, free_counter_line)
             
             keyboard = []
             
-            user_lang = get_user_language(user_id)
             if user_lang == 'ru':
                 button_text = f"🆓 Бесплатные модели ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
             else:
@@ -5426,10 +5581,44 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str}"
+
+                    free_counter_line = ""
+                    try:
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
+                            correlation_id=correlation_id,
+                            action_path="confirm_screen",
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to resolve free counter line: %s", exc)
+
+                    free_counter_line = ""
+                    try:
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
+                            correlation_id=correlation_id,
+                            action_path="confirm_screen",
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to resolve free counter line: %s", exc)
+
+                    free_counter_line = ""
+                    try:
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
+                            correlation_id=correlation_id,
+                            action_path="confirm_screen",
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to resolve free counter line: %s", exc)
                     
                     # Format improved confirmation message with price
                     if user_lang == 'ru':
-                        confirm_msg = (
+                        confirm_msg = _append_free_counter_text(
+                            (
                             f"📋 <b>Подтверждение генерации</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Модель:</b> {model_name}\n\n"
@@ -5442,10 +5631,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"• Результат придет автоматически\n"
                             f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
                             f"🚀 <b>Готовы начать?</b>"
+                            ),
+                            free_counter_line,
                         )
                     else:
                         price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
-                        confirm_msg = (
+                        confirm_msg = _append_free_counter_text(
+                            (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Model:</b> {model_name}\n\n"
@@ -5458,6 +5650,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"• Result will come automatically\n"
                             f"• Usually takes from 10 seconds to 2 minutes\n\n"
                             f"🚀 <b>Ready to start?</b>"
+                            ),
+                            free_counter_line,
                         )
                     
                     logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
@@ -5558,7 +5752,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Format improved confirmation message with price
                     if user_lang == 'ru':
-                        confirm_msg = (
+                        confirm_msg = _append_free_counter_text(
+                            (
                             f"📋 <b>Подтверждение генерации</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Модель:</b> {model_name}\n\n"
@@ -5571,10 +5766,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"• Результат придет автоматически\n"
                             f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
                             f"🚀 <b>Готовы начать?</b>"
+                            ),
+                            free_counter_line,
                         )
                     else:
                         price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
-                        confirm_msg = (
+                        confirm_msg = _append_free_counter_text(
+                            (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                             f"🤖 <b>Model:</b> {model_name}\n\n"
@@ -5587,6 +5785,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"• Result will come automatically\n"
                             f"• Usually takes from 10 seconds to 2 minutes\n\n"
                             f"🚀 <b>Ready to start?</b>"
+                            ),
+                            free_counter_line,
                         )
                     
                     logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
@@ -5620,6 +5820,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
                     
                     user_lang = get_user_language(user_id)
+                    free_counter_line = ""
+                    try:
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
+                            correlation_id=correlation_id,
+                            action_path="confirm_screen",
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to resolve free counter line: %s", exc)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
                         [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
@@ -5631,10 +5841,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                 
                 await query.edit_message_text(
-                    f"📋 <b>Подтверждение:</b>\n\n"
-                    f"Модель: <b>{model_name}</b>\n"
-                    f"Параметры:\n{params_text}\n\n"
-                    f"Продолжить генерацию?",
+                    _append_free_counter_text(
+                        (
+                            f"📋 <b>Подтверждение:</b>\n\n"
+                            f"Модель: <b>{model_name}</b>\n"
+                            f"Параметры:\n{params_text}\n\n"
+                            f"Продолжить генерацию?"
+                        ),
+                        free_counter_line,
+                    ),
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
@@ -9159,6 +9374,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"<i>{model_desc}</i>\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
             )
+            free_counter_line = ""
+            try:
+                free_counter_line = await get_free_counter_line(
+                    user_id,
+                    user_lang=user_lang,
+                    correlation_id=correlation_id,
+                    action_path="model_select_info",
+                )
+            except Exception as exc:
+                logger.warning("Failed to resolve free counter line: %s", exc)
             
             # Format price text properly (optimize for mobile display)
             import re
@@ -9229,6 +9454,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"💰 <b>Требуется:</b> {format_price_rub(min_price, is_admin)}\n\n"
                         f"💡 Пополните баланс для генерации"
                     )
+
+                    if free_counter_line:
+                        model_info_text = _append_free_counter_text(model_info_text, free_counter_line)
                     
                     keyboard = [
                         [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang), callback_data="topup_balance")],
@@ -9241,6 +9469,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         parse_mode='HTML'
                     )
                     return ConversationHandler.END
+
+            if free_counter_line:
+                model_info_text = _append_free_counter_text(model_info_text, free_counter_line)
             
             # Check balance before starting generation (but allow free generations)
             if not is_admin and not is_free_available and user_balance < min_price:
@@ -9343,10 +9574,39 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_sessions[user_id]['params'] = {}
             user_sessions[user_id]['properties'] = input_params
             user_sessions[user_id]['required'] = model_spec.schema_required or []
+            user_sessions[user_id]['required_original'] = (model_spec.schema_required or []).copy()
             user_sessions[user_id]['current_param'] = None
             user_sessions[user_id]['param_history'] = []
             user_sessions[user_id]['model_spec'] = model_spec
             user_sessions[user_id]['param_order'] = _build_param_order(input_params)
+            user_sessions[user_id]['ssot_conflicts'] = _detect_ssot_conflicts(model_spec)
+            user_sessions[user_id]['optional_media_params'] = []
+            user_sessions[user_id]['image_ref_prompt'] = False
+            model_info.setdefault("input_params", input_params)
+            if model_spec.model_type in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}:
+                if "image_input" in input_params or "image_urls" in input_params:
+                    user_sessions[user_id]['image_ref_prompt'] = True
+            if "SSOT_CONFLICT_TEXT_MODEL_REQUIRES_IMAGE" in user_sessions[user_id]['ssot_conflicts']:
+                media_param = _first_required_media_param(input_params)
+                if media_param:
+                    user_sessions[user_id]['optional_media_params'] = [media_param]
+                    user_sessions[user_id]['required'] = [
+                        name for name in user_sessions[user_id]['required'] if name != media_param
+                    ]
+            if user_sessions[user_id]['ssot_conflicts']:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update.update_id,
+                    action="SSOT_CONFLICT",
+                    action_path="select_model",
+                    model_id=model_id,
+                    outcome="detected",
+                    error_code="SSOT_CONFLICT_DETECTED",
+                    fix_hint="Проверьте модельный SSOT на противоречия.",
+                    param={"conflicts": user_sessions[user_id]['ssot_conflicts']},
+                )
             logger.info(
                 "✅ SELECT_MODEL: Parameter order determined: %s, user_id=%s",
                 user_sessions[user_id]['param_order'],
@@ -9763,6 +10023,7 @@ async def send_confirmation_message(
 ) -> int | None:
     if user_id not in user_sessions:
         return None
+    correlation_id = ensure_correlation_id(update, context)
     session = user_sessions[user_id]
     model_id = session.get('model_id', '')
     model_name = session.get('model_info', {}).get('name', 'Unknown')
@@ -9789,6 +10050,17 @@ async def send_confirmation_message(
             else f"💰 <b>Cost:</b> {price_str}"
         )
 
+    free_counter_line = ""
+    try:
+        free_counter_line = await get_free_counter_line(
+            user_id,
+            user_lang=user_lang,
+            correlation_id=correlation_id,
+            action_path="confirm_screen",
+        )
+    except Exception as exc:
+        logger.warning("Failed to resolve free counter line: %s", exc)
+
     settings_label = _get_settings_label(user_lang)
     keyboard = [
         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
@@ -9800,34 +10072,37 @@ async def send_confirmation_message(
         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
     ]
 
-    confirm_msg = (
-        f"📋 <b>Подтверждение генерации</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🤖 <b>Модель:</b> {model_name}\n\n"
-        f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{price_info}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"💡 <b>Что будет дальше:</b>\n"
-        f"• Генерация начнется после подтверждения\n"
-        f"• Результат придет автоматически\n"
-        f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-        f"🚀 <b>Готовы начать?</b>"
-        if user_lang == 'ru'
-        else (
-            f"📋 <b>Generation Confirmation</b>\n\n"
+    confirm_msg = _append_free_counter_text(
+        (
+            f"📋 <b>Подтверждение генерации</b>\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🤖 <b>Model:</b> {model_name}\n\n"
-            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+            f"🤖 <b>Модель:</b> {model_name}\n\n"
+            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"{price_info}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"💡 <b>What's next:</b>\n"
-            f"• Generation will start after confirmation\n"
-            f"• Result will come automatically\n"
-            f"• Usually takes from 10 seconds to 2 minutes\n\n"
-            f"🚀 <b>Ready to start?</b>"
-        )
+            f"💡 <b>Что будет дальше:</b>\n"
+            f"• Генерация начнется после подтверждения\n"
+            f"• Результат придет автоматически\n"
+            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+            f"🚀 <b>Готовы начать?</b>"
+            if user_lang == 'ru'
+            else (
+                f"📋 <b>Generation Confirmation</b>\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🤖 <b>Model:</b> {model_name}\n\n"
+                f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{price_info}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"💡 <b>What's next:</b>\n"
+                f"• Generation will start after confirmation\n"
+                f"• Result will come automatically\n"
+                f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                f"🚀 <b>Ready to start?</b>"
+            )
+        ),
+        free_counter_line,
     )
 
     logger.info(
@@ -11998,6 +12273,9 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         image_required = input_params['image_urls'].get('required', False)
                     elif 'image_input' in input_params:
                         image_required = input_params['image_input'].get('required', False)
+                    optional_media = session.get("optional_media_params", [])
+                    if optional_media:
+                        image_required = False
                     
                     if image_required:
                         keyboard = [
@@ -12017,17 +12295,32 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session['current_param'] = image_param_name
                         return INPUTTING_PARAMS
                     else:
-                        keyboard = [
-                            [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
-                            [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")]
-                        ]
-                        await update.message.reply_text(
-                            "📷 <b>Хотите добавить изображение?</b>\n\n"
-                            "Вы можете загрузить изображение для использования как референс или для трансформации.\n"
-                            "Или пропустите этот шаг.",
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='HTML'
-                        )
+                        if session.get("image_ref_prompt"):
+                            keyboard = [
+                                [
+                                    InlineKeyboardButton("✅ Да", callback_data="add_image"),
+                                    InlineKeyboardButton("❌ Нет", callback_data="skip_image"),
+                                ],
+                            ]
+                            await update.message.reply_text(
+                                "📷 <b>Добавить реф-картинку?</b>\n\n"
+                                "Реф-картинка поможет уточнить стиль или детали.\n"
+                                "Вы можете пропустить этот шаг.",
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                                parse_mode='HTML'
+                            )
+                        else:
+                            keyboard = [
+                                [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
+                                [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")]
+                            ]
+                            await update.message.reply_text(
+                                "📷 <b>Хотите добавить изображение?</b>\n\n"
+                                "Вы можете загрузить изображение для использования как референс или для трансформации.\n"
+                                "Или пропустите этот шаг.",
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                                parse_mode='HTML'
+                            )
                         session['waiting_for'] = None
                         return INPUTTING_PARAMS
                 
@@ -12141,6 +12434,17 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             free_info = f"\n\n💰 <b>Стоимость:</b> {price_str}"
                     
                     user_lang = get_user_language(user_id)
+                    correlation_id = ensure_correlation_id(update, context)
+                    free_counter_line = ""
+                    try:
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
+                            correlation_id=correlation_id,
+                            action_path="confirm_screen",
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to resolve free counter line: %s", exc)
                     keyboard = [
                         [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
                         [
@@ -12151,10 +12455,15 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     
                     await update.message.reply_text(
-                        f"📋 <b>Подтверждение:</b>\n\n"
-                        f"Модель: <b>{model_name}</b>\n"
-                        f"Параметры:\n{params_text}{free_info}\n\n"
-                        f"Продолжить генерацию?",
+                        _append_free_counter_text(
+                            (
+                                f"📋 <b>Подтверждение:</b>\n\n"
+                                f"Модель: <b>{model_name}</b>\n"
+                                f"Параметры:\n{params_text}{free_info}\n\n"
+                                f"Продолжить генерацию?"
+                            ),
+                            free_counter_line,
+                        ),
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
@@ -12836,6 +13145,19 @@ async def start_generation_directly(
     import json
     logger.info(f"event=kie.create_task_start model={model_id} user_id={user_id}")
     logger.debug(f"API Parameters: model={model_id}, input_keys={list(api_params.keys())}")
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        action="KIE_TASK_CREATE",
+        action_path="confirm_generate",
+        model_id=model_id,
+        stage="KIE_TASK_CREATE",
+        outcome="attempt",
+        error_code="KIE_TASK_CREATE_ATTEMPT",
+        fix_hint="Создание задачи в KIE.",
+        param={"input_keys": list(api_params.keys())},
+    )
     
     # 🔴 API CALL: KIE API - create_task через gateway
     try:
@@ -12881,6 +13203,19 @@ async def start_generation_directly(
     
     if result.get('ok'):
         task_id = result.get('taskId')
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="KIE_TASK_CREATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_TASK_CREATE",
+            outcome="success",
+            error_code="KIE_TASK_CREATE_OK",
+            fix_hint="Задача создана успешно.",
+            param={"task_id": task_id},
+        )
         
         # Get session
         if user_id not in user_sessions:
@@ -12954,6 +13289,61 @@ async def start_generation_directly(
     else:
         error = result.get('error', 'Unknown error')
         status_code = result.get('status')
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="KIE_TASK_CREATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_TASK_CREATE",
+            outcome="failed",
+            error_code=result.get("error_code") or "KIE_TASK_CREATE_FAILED",
+            fix_hint="Проверьте параметры и доступность KIE.",
+            param={"status": status_code, "error": error},
+        )
+
+        if _is_missing_media_error(error) and user_id in user_sessions:
+            session = user_sessions[user_id]
+            properties = session.get("properties", {})
+            image_param_name = None
+            if "image_urls" in properties:
+                image_param_name = "image_urls"
+            elif "image_input" in properties:
+                image_param_name = "image_input"
+            if image_param_name:
+                user_lang = get_user_language(user_id)
+                session["waiting_for"] = image_param_name
+                session["current_param"] = image_param_name
+                if image_param_name not in session:
+                    session[image_param_name] = []
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="WIZARD_RECOVER",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    outcome="prompt_image",
+                    error_code="KIE_MISSING_MEDIA",
+                    fix_hint="Запросите у пользователя изображение и повторите генерацию.",
+                    param={"missing_param": image_param_name, "error": error},
+                )
+                await send_or_edit_message(
+                    (
+                        "📷 <b>Нужна реф-картинка</b>\n\n"
+                        "KIE сообщил, что требуется изображение.\n"
+                        "Пожалуйста, загрузите картинку для продолжения."
+                        if user_lang == "ru"
+                        else (
+                            "📷 <b>Image required</b>\n\n"
+                            "KIE reported a missing image input.\n"
+                            "Please upload an image to continue."
+                        )
+                    )
+                )
+                return INPUTTING_PARAMS
         
         # Используем обработчик ошибок для получения понятного сообщения
         try:
@@ -13380,6 +13770,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     model_name = model_info.get('name', model_id) if model_info else model_id
     user_lang = get_user_language(user_id) if user_id else 'ru'
+    free_counter_line = ""
+    try:
+        free_counter_line = await get_free_counter_line(
+            user_id,
+            user_lang=user_lang,
+            correlation_id=correlation_id,
+            action_path="confirm_generate",
+        )
+    except Exception as exc:
+        logger.warning("Failed to resolve free counter line: %s", exc)
     loading_msg = (
         "🔄 <b>Создаю задачу генерации...</b>\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -13393,6 +13793,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "🤖 <b>Model:</b> {model_name}\n\n"
         "💡 Usually takes a few seconds..."
     ).format(model_name=model_name)
+    loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
     status_message = await send_or_edit_message(loading_msg)
 
     accepted_msg = (
@@ -13406,6 +13807,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"🤖 <b>Model:</b> {model_name}"
         )
     )
+    accepted_msg = _append_free_counter_text(accepted_msg, free_counter_line)
 
     last_progress_ts = 0.0
 
@@ -13426,7 +13828,33 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 progress_text = f"⏳ Generating… {elapsed}s elapsed."
             try:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="TG_SEND_ATTEMPT",
+                    action_path="confirm_generate.progress",
+                    model_id=model_id,
+                    stage="TG_SEND",
+                    outcome="attempt",
+                    error_code="TG_SEND_ATTEMPT",
+                    fix_hint="Прогресс-апдейт генерации.",
+                    param={"tg_method": "send_message"},
+                )
                 await context.bot.send_message(chat_id=chat_id, text=progress_text)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="TG_SEND_OK",
+                    action_path="confirm_generate.progress",
+                    model_id=model_id,
+                    stage="TG_SEND",
+                    outcome="success",
+                    error_code="TG_SEND_OK",
+                    fix_hint="Прогресс-апдейт доставлен.",
+                    param={"tg_method": "send_message"},
+                )
             except Exception as send_exc:
                 logger.warning("Progress update failed: %s", send_exc)
 
@@ -13507,7 +13935,10 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "Что сделать: попробуйте снова чуть позже.\n"
             "Код: <code>ERR_KIE_TIMEOUT</code>"
         )
-        await send_or_edit_message(timeout_text, parse_mode="HTML")
+        await send_or_edit_message(
+            _append_free_counter_text(timeout_text, free_counter_line),
+            parse_mode="HTML",
+        )
         return ConversationHandler.END
     except KIEJobFailed as exc:
         from app.observability.redaction import redact_payload
@@ -13534,7 +13965,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         fail_text, retry_keyboard = build_kie_fail_ui(correlation_id or "corr-na-na", model_id)
         await send_or_edit_message(
-            fail_text,
+            _append_free_counter_text(fail_text, free_counter_line),
             parse_mode='HTML',
             reply_markup=retry_keyboard,
         )
@@ -13553,11 +13984,14 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
         )
         await send_or_edit_message(
-            (
-                "❌ <b>Ошибка генерации</b>\n\n"
-                "Пожалуйста, попробуйте позже.\n"
-                f"ID: {correlation_id}\n"
-                "Код: <code>ERR_GEN_UNKNOWN</code>"
+            _append_free_counter_text(
+                (
+                    "❌ <b>Ошибка генерации</b>\n\n"
+                    "Пожалуйста, попробуйте позже.\n"
+                    f"ID: {correlation_id}\n"
+                    "Код: <code>ERR_GEN_UNKNOWN</code>"
+                ),
+                free_counter_line,
             ),
             parse_mode='HTML'
         )
@@ -25235,6 +25669,55 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
     start_time = asyncio.get_event_loop().time()
     last_status_message = None
     last_state = None
+    last_progress_update = 0.0
+    status_message = update.message if update and hasattr(update, "message") else None
+
+    async def _send_with_log(tg_method: str, **kwargs):
+        correlation_id = ensure_correlation_id(update, context)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=kwargs.get("chat_id"),
+            action="TG_SEND_ATTEMPT",
+            action_path="poll_task_status",
+            model_id=kwargs.get("model_id"),
+            stage="TG_SEND",
+            outcome="attempt",
+            error_code="TG_SEND_ATTEMPT",
+            fix_hint="Отправка сообщения пользователю.",
+            param={"tg_method": tg_method},
+        )
+        try:
+            result = await getattr(context.bot, tg_method)(**kwargs)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=kwargs.get("chat_id"),
+                action="TG_SEND_OK",
+                action_path="poll_task_status",
+                model_id=kwargs.get("model_id"),
+                stage="TG_SEND",
+                outcome="success",
+                error_code="TG_SEND_OK",
+                fix_hint="Сообщение доставлено.",
+                param={"tg_method": tg_method},
+            )
+            return result
+        except Exception as exc:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=kwargs.get("chat_id"),
+                action="TG_SEND_FAIL",
+                action_path="poll_task_status",
+                model_id=kwargs.get("model_id"),
+                stage="TG_SEND",
+                outcome="failed",
+                error_code="TG_SEND_FAIL",
+                fix_hint="Проверьте параметры отправки Telegram.",
+                param={"tg_method": tg_method, "error": str(exc)},
+            )
+            raise
     
     # CRITICAL: Get chat_id from update or use user_id (for private chats, chat_id == user_id)
     chat_id = user_id
@@ -25248,6 +25731,16 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
     while attempt < max_attempts:
         await asyncio.sleep(5)  # Wait 5 seconds between polls
         attempt += 1
+        elapsed = asyncio.get_event_loop().time() - start_time
+        if status_message and elapsed > 30 and (elapsed - last_progress_update) >= 20:
+            last_progress_update = elapsed
+            try:
+                await status_message.edit_text(
+                    f"⏳ Генерирую… {int(elapsed)} сек",
+                    parse_mode='HTML'
+                )
+            except Exception:
+                pass
         
         try:
             gateway = get_kie_gateway()
@@ -25255,10 +25748,26 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
             
             if not status_result.get('ok'):
                 error = status_result.get('error', 'Unknown error')
-                await context.bot.send_message(
+                user_lang = get_user_language(user_id)
+                free_counter_line = ""
+                try:
+                    free_counter_line = await get_free_counter_line(
+                        user_id,
+                        user_lang=user_lang,
+                        correlation_id=ensure_correlation_id(update, context),
+                        action_path="gen_error",
+                    )
+                except Exception:
+                    free_counter_line = ""
+                await _send_with_log(
+                    "send_message",
                     chat_id=chat_id,
-                    text=f"❌ <b>Ошибка проверки статуса:</b>\n\n{error}",
-                    parse_mode='HTML'
+                    text=_append_free_counter_text(
+                        f"❌ <b>Ошибка проверки статуса:</b>\n\n{error}",
+                        free_counter_line,
+                    ),
+                    parse_mode='HTML',
+                    model_id=None,
                 )
                 # Clean up active generation on error
                 generation_key = (user_id, task_id)
@@ -25282,32 +25791,61 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 last_state = state
             
             if state == 'success':
+                log_structured_event(
+                    correlation_id=ensure_correlation_id(update, context),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="KIE_TASK_DONE",
+                    action_path="poll_task_status",
+                    model_id=model_id if 'model_id' in locals() else None,
+                    outcome="success",
+                    error_code="KIE_TASK_DONE_OK",
+                    fix_hint="Задача завершена успешно.",
+                    param={"task_id": task_id},
+                )
                 # Send notification immediately when generation completes
+                free_counter_line = ""
                 try:
-                    await context.bot.send_message(
+                    free_counter_line = await get_free_counter_line(
+                        user_id,
+                        user_lang=user_lang,
+                        correlation_id=ensure_correlation_id(update, context),
+                        action_path="gen_done",
+                    )
+                except Exception:
+                    free_counter_line = ""
+                try:
+                    await _send_with_log(
+                        "send_message",
                         chat_id=chat_id,
-                        text=(
-                            "✅ <b>Генерация завершена!</b>\n\n"
-                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            "🎉 <b>Результат готов!</b>\n\n"
-                            "⏳ <b>Загружаю результат...</b>\n\n"
-                            "💡 <b>Что дальше:</b>\n"
-                            "• Результат будет показан ниже\n"
-                            "• Вы сможете сохранить или поделиться им\n"
-                            "• Можете создать новую генерацию\n\n"
-                            "✨ Скоро вы увидите созданный контент!"
-                        ) if user_lang == 'ru' else (
-                            "✅ <b>Generation Completed!</b>\n\n"
-                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            "🎉 <b>Result is ready!</b>\n\n"
-                            "⏳ <b>Loading result...</b>\n\n"
-                            "💡 <b>What's next:</b>\n"
-                            "• Result will be shown below\n"
-                            "• You can save or share it\n"
-                            "• You can create a new generation\n\n"
-                            "✨ You'll see the created content shortly!"
+                        text=_append_free_counter_text(
+                            (
+                                "✅ <b>Генерация завершена!</b>\n\n"
+                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                "🎉 <b>Результат готов!</b>\n\n"
+                                "⏳ <b>Загружаю результат...</b>\n\n"
+                                "💡 <b>Что дальше:</b>\n"
+                                "• Результат будет показан ниже\n"
+                                "• Вы сможете сохранить или поделиться им\n"
+                                "• Можете создать новую генерацию\n\n"
+                                "✨ Скоро вы увидите созданный контент!"
+                                if user_lang == 'ru'
+                                else (
+                                    "✅ <b>Generation Completed!</b>\n\n"
+                                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                    "🎉 <b>Result is ready!</b>\n\n"
+                                    "⏳ <b>Loading result...</b>\n\n"
+                                    "💡 <b>What's next:</b>\n"
+                                    "• Result will be shown below\n"
+                                    "• You can save or share it\n"
+                                    "• You can create a new generation\n\n"
+                                    "✨ You'll see the created content shortly!"
+                                )
+                            ),
+                            free_counter_line,
                         ),
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        model_id=model_id,
                     )
                 except Exception as e:
                     logger.warning(f"Could not send completion notification: {e}")
@@ -25475,6 +26013,9 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                 f"📊 <b>Result:</b> {i + 1} of {len(result_urls[:5])}\n\n"
                                                 "💡 Enjoy your generated content!"
                                             ) if i == 0 else None
+
+                                            if caption and free_counter_line:
+                                                caption = _append_free_counter_text(caption, free_counter_line)
                                             
                                             if is_video_model:
                                                 # Send as video
@@ -25482,7 +26023,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                 video_file.name = f"generated_video_{i+1}.mp4"
                                                 
                                                 if is_last:
-                                                    last_message = await context.bot.send_video(
+                                                    last_message = await _send_with_log(
+                                                        "send_video",
                                                         chat_id=chat_id,
                                                         video=video_file,
                                                         caption=caption,
@@ -25490,7 +26032,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                         parse_mode='HTML'
                                                     )
                                                 else:
-                                                    await context.bot.send_video(
+                                                    await _send_with_log(
+                                                        "send_video",
                                                         chat_id=chat_id,
                                                         video=video_file,
                                                         caption=caption,
@@ -25502,7 +26045,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                 photo_file.name = f"generated_image_{i+1}.png"
                                                 
                                                 if is_last:
-                                                    last_message = await context.bot.send_photo(
+                                                    last_message = await _send_with_log(
+                                                        "send_photo",
                                                         chat_id=chat_id,
                                                         photo=photo_file,
                                                         caption=caption,
@@ -25510,7 +26054,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                         parse_mode='HTML'
                                                     )
                                                 else:
-                                                    await context.bot.send_photo(
+                                                    await _send_with_log(
+                                                        "send_photo",
                                                         chat_id=chat_id,
                                                         photo=photo_file,
                                                         caption=caption,
@@ -25518,69 +26063,90 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                                     )
                                         else:
                                             # If download fails, try sending URL directly
+                                            url_direct = os.getenv("TELEGRAM_URL_DIRECT", "0") == "1"
                                             if is_video_model:
-                                                if i == len(result_urls[:5]) - 1:
-                                                    last_message = await context.bot.send_video(
-                                                        chat_id=chat_id,
-                                                        video=url,
-                                                        caption=(
-                                                            "✅ <b>Генерация завершена!</b>\n\n"
-                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                        ) if i == 0 and user_lang == 'ru' else (
-                                                            "✅ <b>Generation Completed!</b>\n\n"
-                                                            "🎉 <b>Your result is ready!</b>\n\n"
-                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                        ) if i == 0 else None,
-                                                        reply_markup=reply_markup,
-                                                        parse_mode='HTML'
-                                                    )
+                                                if url_direct:
+                                                    if i == len(result_urls[:5]) - 1:
+                                                        last_message = await _send_with_log(
+                                                            "send_video",
+                                                            chat_id=chat_id,
+                                                            video=url,
+                                                            caption=(
+                                                                "✅ <b>Генерация завершена!</b>\n\n"
+                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                            ) if i == 0 and user_lang == 'ru' else (
+                                                                "✅ <b>Generation Completed!</b>\n\n"
+                                                                "🎉 <b>Your result is ready!</b>\n\n"
+                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                            ) if i == 0 else None,
+                                                            reply_markup=reply_markup,
+                                                            parse_mode='HTML'
+                                                        )
+                                                    else:
+                                                        await _send_with_log(
+                                                            "send_video",
+                                                            chat_id=chat_id,
+                                                            video=url,
+                                                            caption=(
+                                                                "✅ <b>Генерация завершена!</b>\n\n"
+                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                            ) if i == 0 and user_lang == 'ru' else (
+                                                                "✅ <b>Generation Completed!</b>\n\n"
+                                                                "🎉 <b>Your result is ready!</b>\n\n"
+                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                            ) if i == 0 else None,
+                                                            parse_mode='HTML'
+                                                        )
                                                 else:
-                                                    await context.bot.send_video(
+                                                    await _send_with_log(
+                                                        "send_message",
                                                         chat_id=chat_id,
-                                                        video=url,
-                                                        caption=(
-                                                            "✅ <b>Генерация завершена!</b>\n\n"
-                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                        ) if i == 0 and user_lang == 'ru' else (
-                                                            "✅ <b>Generation Completed!</b>\n\n"
-                                                            "🎉 <b>Your result is ready!</b>\n\n"
-                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                        ) if i == 0 else None,
-                                                        parse_mode='HTML'
+                                                        text=f"⚠️ Не удалось загрузить видео: {url}",
+                                                        parse_mode='HTML',
                                                     )
                                             else:
-                                                if i == len(result_urls[:5]) - 1:
-                                                    last_message = await context.bot.send_photo(
-                                                        chat_id=chat_id,
-                                                        photo=url,
-                                                        caption=(
-                                                            "✅ <b>Генерация завершена!</b>\n\n"
-                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                        ) if i == 0 and user_lang == 'ru' else (
-                                                            "✅ <b>Generation Completed!</b>\n\n"
-                                                            "🎉 <b>Your result is ready!</b>\n\n"
-                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                        ) if i == 0 else None,
-                                                        reply_markup=reply_markup,
-                                                        parse_mode='HTML'
-                                                    )
+                                                if url_direct:
+                                                    if i == len(result_urls[:5]) - 1:
+                                                        last_message = await _send_with_log(
+                                                            "send_photo",
+                                                            chat_id=chat_id,
+                                                            photo=url,
+                                                            caption=(
+                                                                "✅ <b>Генерация завершена!</b>\n\n"
+                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                            ) if i == 0 and user_lang == 'ru' else (
+                                                                "✅ <b>Generation Completed!</b>\n\n"
+                                                                "🎉 <b>Your result is ready!</b>\n\n"
+                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                            ) if i == 0 else None,
+                                                            reply_markup=reply_markup,
+                                                            parse_mode='HTML'
+                                                        )
+                                                    else:
+                                                        await _send_with_log(
+                                                            "send_photo",
+                                                            chat_id=chat_id,
+                                                            photo=url,
+                                                            caption=(
+                                                                "✅ <b>Генерация завершена!</b>\n\n"
+                                                                "🎉 <b>Ваш результат готов!</b>\n\n"
+                                                                f"📊 Результат {i + 1} из {len(result_urls[:5])}"
+                                                            ) if i == 0 and user_lang == 'ru' else (
+                                                                "✅ <b>Generation Completed!</b>\n\n"
+                                                                "🎉 <b>Your result is ready!</b>\n\n"
+                                                                f"📊 Result {i + 1} of {len(result_urls[:5])}"
+                                                            ) if i == 0 else None,
+                                                            parse_mode='HTML'
+                                                        )
                                                 else:
-                                                    await context.bot.send_photo(
+                                                    await _send_with_log(
+                                                        "send_message",
                                                         chat_id=chat_id,
-                                                        photo=url,
-                                                        caption=(
-                                                            "✅ <b>Генерация завершена!</b>\n\n"
-                                                            "🎉 <b>Ваш результат готов!</b>\n\n"
-                                                            f"📊 Результат {i + 1} из {len(result_urls[:5])}"
-                                                        ) if i == 0 and user_lang == 'ru' else (
-                                                            "✅ <b>Generation Completed!</b>\n\n"
-                                                            "🎉 <b>Your result is ready!</b>\n\n"
-                                                            f"📊 Result {i + 1} of {len(result_urls[:5])}"
-                                                        ) if i == 0 else None,
-                                                        parse_mode='HTML'
+                                                        text=f"⚠️ Не удалось загрузить изображение: {url}",
+                                                        parse_mode='HTML',
                                                     )
                             except Exception as e:
                                 # If all methods fail, try sending URL directly as last resort
@@ -25588,67 +26154,84 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                 logger.warning(f"Failed to send {media_type} {url}: {e}")
                                 try:
                                     is_last = (i == len(result_urls[:5]) - 1)
+                                    url_direct = os.getenv("TELEGRAM_URL_DIRECT", "0") == "1"
                                     if is_video_model:
-                                        if is_last:
-                                            last_message = await context.bot.send_video(
-                                                chat_id=chat_id,
-                                                video=url,
-                                                caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                reply_markup=reply_markup,
-                                                parse_mode='HTML'
-                                            )
-                                        else:
-                                            await context.bot.send_video(
-                                                chat_id=chat_id,
-                                                video=url,
-                                                caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                parse_mode='HTML'
-                                            )
+                                        if url_direct:
+                                            if is_last:
+                                                last_message = await _send_with_log(
+                                                    "send_video",
+                                                    chat_id=chat_id,
+                                                    video=url,
+                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                    reply_markup=reply_markup,
+                                                    parse_mode='HTML'
+                                                )
+                                            else:
+                                                await _send_with_log(
+                                                    "send_video",
+                                                    chat_id=chat_id,
+                                                    video=url,
+                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                    parse_mode='HTML'
+                                                )
                                     else:
-                                        if is_last:
-                                            last_message = await context.bot.send_photo(
-                                                chat_id=chat_id,
-                                                photo=url,
-                                                caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                reply_markup=reply_markup,
-                                                parse_mode='HTML'
-                                            )
-                                        else:
-                                            await context.bot.send_photo(
-                                                chat_id=chat_id,
-                                                photo=url,
-                                                caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
-                                                parse_mode='HTML'
-                                            )
+                                        if url_direct:
+                                            if is_last:
+                                                last_message = await _send_with_log(
+                                                    "send_photo",
+                                                    chat_id=chat_id,
+                                                    photo=url,
+                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                    reply_markup=reply_markup,
+                                                    parse_mode='HTML'
+                                                )
+                                            else:
+                                                await _send_with_log(
+                                                    "send_photo",
+                                                    chat_id=chat_id,
+                                                    photo=url,
+                                                    caption="✅ <b>Генерация завершена!</b>" if i == 0 else None,
+                                                    parse_mode='HTML'
+                                                )
                                 except Exception as e2:
                                     logger.error(f"Failed to send {media_type} even via URL: {e2}")
                                     # Last resort: send as message
                                     is_last = (i == len(result_urls[:5]) - 1)
                                     media_name = "Видео" if is_video_model else "Изображение"
                                     if is_last:
-                                        last_message = await context.bot.send_message(
+                                        last_message = await _send_with_log(
+                                            "send_message",
                                             chat_id=chat_id,
                                             text=f"✅ <b>Генерация завершена!</b>\n\n{media_name}: {url}",
                                             reply_markup=reply_markup,
                                             parse_mode='HTML'
                                         )
                                     else:
-                                        await context.bot.send_message(
+                                        await _send_with_log(
+                                            "send_message",
                                             chat_id=chat_id,
                                             text=f"✅ <b>Генерация завершена!</b>\n\n{media_name}: {url}",
                                             parse_mode='HTML'
                                         )
                     else:
-                        last_message = await context.bot.send_message(
+                        last_message = await _send_with_log(
+                            "send_message",
                             chat_id=chat_id,
-                            text="✅ <b>Генерация завершена!</b>\n\nРезультат готов.",
+                            text=_append_free_counter_text(
+                                "✅ <b>Генерация завершена!</b>\n\nРезультат готов.",
+                                free_counter_line,
+                            ),
                             reply_markup=reply_markup,
                             parse_mode='HTML'
                         )
                 except json.JSONDecodeError:
-                    last_message = await context.bot.send_message(
+                    last_message = await _send_with_log(
+                        "send_message",
                         chat_id=chat_id,
-                        text=f"✅ <b>Генерация завершена!</b>\n\nРезультат: {result_json[:500]}",
+                        text=_append_free_counter_text(
+                            f"✅ <b>Генерация завершена!</b>\n\nРезультат: {result_json[:500]}",
+                            free_counter_line,
+                        ),
                         reply_markup=reply_markup,
                         parse_mode='HTML'
                     )
@@ -25664,6 +26247,18 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 # Task failed - auto-refund if charge was made
                 fail_msg = status_result.get('failMsg', 'Unknown error')
                 fail_code = status_result.get('failCode', '')
+                log_structured_event(
+                    correlation_id=ensure_correlation_id(update, context),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="KIE_TASK_DONE",
+                    action_path="poll_task_status",
+                    model_id=model_id if 'model_id' in locals() else None,
+                    outcome="failed",
+                    error_code=fail_code or "KIE_TASK_FAIL",
+                    fix_hint="Проверьте параметры и повторите генерацию.",
+                    param={"task_id": task_id, "fail_msg": fail_msg},
+                )
                 
                 # CRITICAL: Log full error details for debugging
                 logger.error(f"❌ Task {task_id} failed: code={fail_code}, msg={fail_msg}")
@@ -25721,10 +26316,21 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         "Пожалуйста, попробуйте позже."
                     )
                 
+                free_counter_line = ""
+                try:
+                    free_counter_line = await get_free_counter_line(
+                        user_id,
+                        user_lang=get_user_language(user_id),
+                        correlation_id=ensure_correlation_id(update, context),
+                        action_path="gen_error",
+                    )
+                except Exception:
+                    free_counter_line = ""
                 # Отправляем понятное сообщение пользователю
-                await context.bot.send_message(
+                await _send_with_log(
+                    "send_message",
                     chat_id=chat_id,
-                    text=user_message,
+                    text=_append_free_counter_text(user_message, free_counter_line),
                     parse_mode='HTML'
                 )
                 
@@ -25737,7 +26343,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 continue
             else:
                 # Unknown state
-                await context.bot.send_message(
+                await _send_with_log(
+                    "send_message",
                     chat_id=chat_id,
                     text=f"⚠️ Неизвестный статус: {state}\nПродолжаю ожидание...",
                     parse_mode='HTML'
@@ -25768,7 +26375,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         
                         del active_generations[generation_key]
                 
-                await context.bot.send_message(
+                await _send_with_log(
+                    "send_message",
                     chat_id=chat_id,
                     text=f"❌ Превышено время ожидания. Попробуйте начать генерацию заново.",
                     parse_mode='HTML'
@@ -25799,7 +26407,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 
                 del active_generations[generation_key]
         
-        await context.bot.send_message(
+        await _send_with_log(
+            "send_message",
             chat_id=chat_id,
             text=f"⏰ Время ожидания истекло. Попробуйте начать генерацию заново.",
             parse_mode='HTML'

@@ -28,9 +28,11 @@ class DummySession:
     def __init__(self, get_factory):
         self._get_factory = get_factory
         self.last_get_url = None
+        self.last_get_kwargs = None
 
     def get(self, url, *args, **kwargs):
         self.last_get_url = url
+        self.last_get_kwargs = kwargs
         return self._get_factory()
 
 
@@ -94,7 +96,7 @@ def test_unknown_content_type_goes_to_document():
     assert "document" in payload
 
 
-def test_html_content_type_sends_document():
+def test_html_content_type_returns_message():
     get_response = DummyResponse(headers={"Content-Type": "text/html"}, body=b"<html>ok</html>")
     session = DummySession(lambda: get_response)
 
@@ -108,8 +110,8 @@ def test_html_content_type_sends_document():
         )
     )
 
-    assert tg_method == "send_document"
-    assert isinstance(payload["document"], InputFile)
+    assert tg_method == "send_message"
+    assert "страниц" in payload.get("text", "").lower()
 
 
 def test_oversized_media_returns_message_without_preview(monkeypatch):
@@ -129,3 +131,21 @@ def test_oversized_media_returns_message_without_preview(monkeypatch):
 
     assert tg_method == "send_message"
     assert payload["disable_web_page_preview"] is True
+
+
+def test_redirect_chain_is_followed():
+    get_response = DummyResponse(headers={"Content-Type": "image/png"}, body=b"data", history=["/redirect"])
+    session = DummySession(lambda: get_response)
+
+    tg_method, _ = asyncio.run(
+        resolve_and_prepare_telegram_payload(
+            {"urls": ["https://example.com/redirect.png"], "text": None},
+            "corr-6",
+            "image",
+            kie_client=None,
+            http_client=session,
+        )
+    )
+
+    assert tg_method == "send_photo"
+    assert session.last_get_kwargs.get("allow_redirects") is True

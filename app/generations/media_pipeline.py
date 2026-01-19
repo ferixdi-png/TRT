@@ -17,6 +17,9 @@ from app.observability.structured_logs import log_structured_event
 logger = logging.getLogger(__name__)
 
 TELEGRAM_MAX_BYTES = int(os.getenv("TELEGRAM_MAX_FILE_BYTES", str(50 * 1024 * 1024)))
+TELEGRAM_URL_DIRECT = os.getenv("TELEGRAM_URL_DIRECT", "0") == "1"
+
+HTML_SNIPPET_LIMIT = 1024
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,16 @@ class ResolvedMedia:
     method: str
     used_download: bool
     too_large: bool
+    is_media: bool
+    error_code: Optional[str]
+
+
+class MediaNotMediaError(RuntimeError):
+    def __init__(self, url: str, content_type: str, reason: str) -> None:
+        super().__init__(reason)
+        self.url = url
+        self.content_type = content_type
+        self.reason = reason
 
 
 def _strip_url_query(raw_url: str) -> str:
@@ -52,13 +65,24 @@ def _is_textual(content_type: str) -> bool:
     return False
 
 
-def _media_method_from_type(media_kind: str, content_type: str) -> str:
+def _media_method_from_type(media_kind: str, content_type: str, url: str) -> str:
     normalized = (content_type or "").lower()
+    if normalized == "image/gif":
+        return "send_animation"
     if media_kind in {"document", "file"}:
         return "send_document"
     if _is_textual(normalized):
         return "send_document"
     if normalized in {"application/octet-stream", ""}:
+        extension = os.path.splitext(urlparse(url).path)[1].lower()
+        if extension == ".gif":
+            return "send_animation"
+        if extension in {".png", ".jpg", ".jpeg", ".webp"}:
+            return "send_photo"
+        if extension in {".mp4", ".mov", ".webm"}:
+            return "send_video"
+        if extension in {".mp3", ".wav", ".ogg"}:
+            return "send_audio"
         return "send_document"
     if normalized.startswith("image/"):
         return "send_photo"
@@ -92,6 +116,35 @@ def _infer_filename(url: str, content_type: str, media_kind: str) -> str:
         extension = fallback.get(media_kind, ".bin")
     return f"result{extension}"
 
+
+def _sniff_content_type(data: bytes, declared_type: str, url: str) -> str:
+    normalized = (declared_type or "").lower()
+    if normalized and normalized != "application/octet-stream":
+        return normalized
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data[:6] in {b"GIF87a", b"GIF89a"}:
+        return "image/gif"
+    if data.startswith(b"\x00\x00\x00") and b"ftyp" in data[:16]:
+        return "video/mp4"
+    guessed_type, _ = mimetypes.guess_type(url)
+    return (guessed_type or normalized or "").lower()
+
+
+def _is_probably_html(data: bytes, content_type: str) -> bool:
+    normalized = (content_type or "").lower()
+    if normalized == "text/html":
+        return True
+    snippet = data[:HTML_SNIPPET_LIMIT].lstrip()
+    if not snippet:
+        return False
+    if snippet.startswith(b"<!doctype html") or snippet.startswith(b"<html"):
+        return True
+    if b"<html" in snippet or b"<body" in snippet:
+        return True
+    return False
 
 async def _download_with_retries(session: aiohttp.ClientSession, url: str, retries: int = 2) -> Tuple[bytes, str, Optional[int]]:
     last_error: Optional[Exception] = None
@@ -144,29 +197,48 @@ async def _resolve_single_media(
         resolved_url = await _resolve_kie_download_url(url, kie_client, correlation_id)
 
     data, dl_type, dl_length = await _download_with_retries(http_client, resolved_url)
+    sniffed_type = _sniff_content_type(data, dl_type, resolved_url)
+    if _is_probably_html(data, sniffed_type):
+        raise MediaNotMediaError(resolved_url, sniffed_type, "HTML payload returned")
     too_large = bool(dl_length and dl_length > TELEGRAM_MAX_BYTES)
-    method = _media_method_from_type(media_kind, dl_type)
+    method = _media_method_from_type(media_kind, sniffed_type, resolved_url)
     if too_large:
+        if TELEGRAM_URL_DIRECT:
+            return ResolvedMedia(
+                url=resolved_url,
+                payload=resolved_url,
+                content_type=sniffed_type,
+                content_length=dl_length,
+                method=method,
+                used_download=True,
+                too_large=True,
+                is_media=True,
+                error_code=None,
+            )
         return ResolvedMedia(
             url=resolved_url,
             payload=resolved_url,
-            content_type=dl_type,
+            content_type=sniffed_type,
             content_length=dl_length,
-            method=method,
+            method="send_message",
             used_download=True,
             too_large=True,
+            is_media=False,
+            error_code="TG_MEDIA_TOO_LARGE",
         )
 
-    filename = _infer_filename(resolved_url, dl_type, media_kind)
+    filename = _infer_filename(resolved_url, sniffed_type, media_kind)
     payload = InputFile(io.BytesIO(data), filename=filename)
     return ResolvedMedia(
         url=resolved_url,
         payload=payload,
-        content_type=dl_type,
+        content_type=sniffed_type,
         content_length=dl_length,
         method=method,
         used_download=True,
         too_large=False,
+        is_media=True,
+        error_code=None,
     )
 
 
@@ -200,9 +272,32 @@ async def resolve_and_prepare_telegram_payload(
             "text": f"⚠️ Нет результата для отправки. ID: {correlation_id or 'corr-na-na'}",
         }
 
-    resolved_items = [
-        await _resolve_single_media(url, media_kind, correlation_id, kie_client, http_client) for url in urls
-    ]
+    resolved_items: List[ResolvedMedia] = []
+    invalid_urls: List[str] = []
+    for url in urls:
+        try:
+            resolved_items.append(
+                await _resolve_single_media(url, media_kind, correlation_id, kie_client, http_client)
+            )
+        except MediaNotMediaError as exc:
+            invalid_urls.append(exc.url)
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="MEDIA_RESOLVE",
+                action_path="media_pipeline.resolve_and_prepare_telegram_payload",
+                stage="MEDIA_RESOLVE",
+                outcome="failed",
+                error_code="KIE_MEDIA_URL_NOT_MEDIA",
+                fix_hint="Проверьте URL результата: ожидался медиа-файл.",
+                param={
+                    "media_kind": media_kind,
+                    "resolved_domain": _safe_domain(exc.url),
+                    "content_type": exc.content_type,
+                    "resolved_url": _strip_url_query(exc.url),
+                    "reason": exc.reason,
+                },
+            )
+            continue
     for item in resolved_items:
         fallback_reason = None
         if item.used_download:
@@ -218,8 +313,18 @@ async def resolve_and_prepare_telegram_payload(
             tg_method=item.method,
             fallback_reason=fallback_reason,
         )
+    if invalid_urls and not resolved_items:
+        links_text = "\n".join(f"• {url}" for url in invalid_urls)
+        return "send_message", {
+            "text": (
+                "⚠️ Ссылка вернула веб-страницу вместо медиа.\n"
+                f"ID: {correlation_id or 'corr-na-na'}\n\n"
+                f"{links_text}"
+            ),
+            "disable_web_page_preview": True,
+        }
     oversized_items = [item for item in resolved_items if item.too_large]
-    if oversized_items:
+    if oversized_items and not TELEGRAM_URL_DIRECT:
         links_text = "\n".join(f"• {item.url}" for item in oversized_items)
         return "send_message", {
             "text": (
@@ -248,6 +353,7 @@ async def resolve_and_prepare_telegram_payload(
         "send_video": "video",
         "send_audio": "audio",
         "send_voice": "voice",
+        "send_animation": "animation",
     }.get(first_item.method, "document")
     return first_item.method, {payload_key: first_item.payload, "caption": caption}
 
