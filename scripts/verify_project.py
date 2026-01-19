@@ -15,6 +15,8 @@ Fails if any 0-byte files exist under app/, bot/, models/, pricing/, tests/, scr
 """
 from __future__ import annotations
 
+import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECK_DIRS = ["app", "bot", "models", "pricing", "tests", "scripts"]
+REQUIRED_MODULES = {
+    "telegram": "python-telegram-bot",
+    "yaml": "PyYAML",
+}
 
 
 def run_command(cmd: str) -> bool:
@@ -30,6 +36,25 @@ def run_command(cmd: str) -> bool:
     if result.returncode != 0:
         print(f"❌ Command failed: {cmd}")
     return result.returncode == 0
+
+
+def _module_available(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
+
+
+def ensure_dependencies() -> None:
+    bootstrap_enabled = os.getenv("VERIFY_BOOTSTRAP", "1").lower() not in ("0", "false", "no")
+    if not bootstrap_enabled:
+        return
+    missing = [name for name in REQUIRED_MODULES if not _module_available(name)]
+    if not missing:
+        return
+    print(f"ℹ️ Missing modules detected: {', '.join(missing)}. Installing requirements...")
+    requirements_file = ROOT / "requirements.txt"
+    subprocess.check_call(
+        f"{sys.executable} -m pip install -r {requirements_file}",
+        shell=True,
+    )
 
 
 def run_secrets_scan() -> bool:
@@ -67,6 +92,7 @@ def find_zero_byte_files() -> list[Path]:
 def main() -> int:
     ok = True
     print("ℹ️ Runtime SSOT: root /models + /app. Folder 5656-main is deprecated/ignored.")
+    ensure_dependencies()
     ok &= run_command("python -m compileall .")
     ok &= run_command("pytest -q")
     ok &= run_command("python scripts/verify_ssot.py")

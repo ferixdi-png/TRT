@@ -1311,3 +1311,17 @@ tests/test_409_conflict_fix.py ........
 - **Root cause:** generic text handlers/fallback intercepted messages before the generation flow, and `unhandled_update_fallback` referenced `model_info`/`params` that were undefined, causing NameError crashes.
 - **Fix:** added an early active-session router (SessionStore-based) to send active `waiting_for/current_param` messages into `input_parameters`, reordered handlers so the ConversationHandler precedes generic text handlers, and rewrote `unhandled_update_fallback` to only show main menu/help or relay “waiting for param” without undefined variables.
 - **How to verify:** check logs for `ROUTE_DECISION` lines with `waiting_for` and `chosen_handler` plus fallback `FIX_HINT` guidance; active sessions should log `active_session_router->input_parameters` and no longer emit `UNHANDLED_UPDATE` for prompt text.
+
+### STEP 9 — FALLBACK SAFETY + TEXT ROUTING + VERIFY BOOTSTRAP
+**Было → Стало**
+- **Было:** `unhandled_update_fallback` логировал `UNHANDLED_UPDATE` даже для ожидаемого ввода и мог падать при обращении к неинициализированным данным; тексты иногда уходили в общий обработчик, а UI показывал “режим деградации” обычным пользователям.  
+  **Стало:** fallback безопасно маршрутизирует ожидаемый текст в `input_parameters` без `UNHANDLED_UPDATE`, всегда показывает главное меню без падений и пишет структурированное событие `UNHANDLED_UPDATE_FALLBACK_SAFE`; активный текстовый роутер блокирует общий handler при `waiting_for/current_param`; уведомление о LOCK_DISABLED_NO_DB скрыто от обычных пользователей и показывается нейтрально только админам.
+
+**Причина**
+- Логи Render фиксировали `UNHANDLED_UPDATE` на ожидаемом тексте и NameError из fallback, плюс предупреждение lock-дефекта отображалось пользователю.
+
+**Как проверил**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python scripts/verify_button_coverage.py`
+- Ручной сценарий через PTB harness (TEST_MODE/DRY_RUN, STORAGE_MODE=json): `/start` → `Из текста в фото` → `bytedance/seedream` → режим → текст `котик` (в harness update_id фиксирован и срабатывает dedupe; корректное принятие prompt покрыто тестом `test_active_session_router_routes_prompt_text`).
