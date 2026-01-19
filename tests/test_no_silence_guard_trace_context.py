@@ -19,3 +19,18 @@ def test_set_trace_context_keyword_only():
     trace_context = guard.trace_contexts[33]
     assert trace_context["correlation_id"] == "corr-11-22"
     assert trace_context["user_id"] == 11
+
+
+def test_track_outgoing_action_allows_outcome_in_context():
+    guard = NoSilenceGuard()
+    guard.set_trace_context(
+        None,
+        None,
+        user_id=101,
+        chat_id=202,
+        update_id=303,
+        correlation_id="corr-101-202",
+        outcome="responded",
+    )
+
+    guard.track_outgoing_action(303, action_type="send_message")

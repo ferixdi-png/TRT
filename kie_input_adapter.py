@@ -20,6 +20,8 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Shared adapter for image_input mappings
+from app.kie_contract.image_adapter import adapt_image_input
 # Путь к YAML файлу
 MODELS_YAML_PATH = Path("models/kie_models.yaml")
 
@@ -200,7 +202,8 @@ def adapt_to_api(model_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         Параметры в формате API
     """
     schema = get_schema(model_id) or {}
-    return {key: params[key] for key in schema if key in params}
+    api_params = {key: params[key] for key in schema if key in params}
+    return adapt_image_input(model_id, api_params)
 
 
 def normalize_for_generation(model_id: str, params: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
