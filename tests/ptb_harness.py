@@ -197,6 +197,11 @@ class PTBHarness:
         """Создает моковый Update для callback."""
         callback_query = self.create_mock_callback_query(callback_data, user_id=user_id)
         return Update(update_id=1, callback_query=callback_query)
+
+    def create_mock_update_message(self, text: str, user_id: int = 12345) -> Update:
+        """Создает моковый Update для текстового сообщения."""
+        message = self.create_mock_message(text=text, user_id=user_id)
+        return Update(update_id=1, message=message)
     
     async def process_command(self, command: str, user_id: int = 12345) -> Dict[str, Any]:
         """
@@ -260,6 +265,40 @@ class PTBHarness:
             }
         except Exception as e:
             logger.error(f"Error processing callback: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e),
+                'outbox': {
+                    'messages': self.outbox.messages.copy(),
+                    'edited_messages': self.outbox.edited_messages.copy(),
+                    'callback_answers': self.outbox.callback_answers.copy()
+                }
+            }
+
+    async def process_message(self, text: str, user_id: int = 12345) -> Dict[str, Any]:
+        """
+        Обрабатывает текстовое сообщение и возвращает результат.
+        """
+        if not self.application:
+            await self.setup()
+
+        self.outbox.clear()
+
+        update = self.create_mock_update_message(text, user_id=user_id)
+        self._attach_bot(update)
+
+        try:
+            await self.application.process_update(update)
+            return {
+                'success': True,
+                'outbox': {
+                    'messages': self.outbox.messages.copy(),
+                    'edited_messages': self.outbox.edited_messages.copy(),
+                    'callback_answers': self.outbox.callback_answers.copy()
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error processing message: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e),

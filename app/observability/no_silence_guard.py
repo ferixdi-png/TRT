@@ -32,12 +32,28 @@ class NoSilenceGuard:
         self.processed_updates: Set[int] = set()
         self.trace_contexts: Dict[int, Dict[str, Any]] = {}
 
-    def set_trace_context(self, update_id: int, correlation_id: str, **fields: Any) -> None:
+    def set_trace_context(
+        self,
+        *,
+        user_id: Optional[int],
+        chat_id: Optional[int],
+        update_id: int,
+        message_id: Optional[int] = None,
+        update_type: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        **extra: Any,
+    ) -> None:
         """Attach trace context to an update for TRACE_OUT logging."""
-        self.trace_contexts[update_id] = {
+        trace_context = {
             "correlation_id": correlation_id,
-            **fields,
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "update_id": update_id,
+            "message_id": message_id,
+            "update_type": update_type,
         }
+        trace_context.update({k: v for k, v in extra.items() if k not in trace_context})
+        self.trace_contexts[update_id] = trace_context
     
     def track_outgoing_action(self, update_id: int, action_type: Optional[str] = None):
         """Отслеживает исходящее действие (send/edit/media)"""
@@ -202,6 +218,5 @@ def track_outgoing_action(update_id: int, action_type: Optional[str] = None):
     """Удобная функция для отслеживания исходящего действия"""
     guard = get_no_silence_guard()
     guard.track_outgoing_action(update_id, action_type=action_type)
-
 
 

@@ -51,10 +51,13 @@ def ensure_correlation_id(update: Any, context: Any) -> str:
     elif getattr(update, "callback_query", None) and update.callback_query.from_user:
         user_id = update.callback_query.from_user.id
 
-    correlation_id = None
+    correlation_id = getattr(update, "correlation_id", None)
     if context and getattr(context, "user_data", None) is not None:
         if context.user_data.get("correlation_update_id") == update_id:
             correlation_id = context.user_data.get("correlation_id")
+        if correlation_id and context.user_data.get("correlation_id") != correlation_id:
+            context.user_data["correlation_id"] = correlation_id
+            context.user_data["correlation_update_id"] = update_id
         if not correlation_id:
             correlation_id = make_correlation_id(update)
             context.user_data["correlation_id"] = correlation_id
@@ -62,6 +65,9 @@ def ensure_correlation_id(update: Any, context: Any) -> str:
     elif context and getattr(context, "chat_data", None) is not None:
         if context.chat_data.get("correlation_update_id") == update_id:
             correlation_id = context.chat_data.get("correlation_id")
+        if correlation_id and context.chat_data.get("correlation_id") != correlation_id:
+            context.chat_data["correlation_id"] = correlation_id
+            context.chat_data["correlation_update_id"] = update_id
         if not correlation_id:
             correlation_id = make_correlation_id(update)
             context.chat_data["correlation_id"] = correlation_id
@@ -108,6 +114,8 @@ def _sanitize_fields(fields: Dict[str, Any]) -> Dict[str, Any]:
 def trace_event(level: str, correlation_id: str, **fields: Any) -> None:
     """Emit a structured trace event."""
     trace_verbose = _get_env_flag("TRACE_VERBOSE", "false")
+    trace_payloads = _get_env_flag("TRACE_PAYLOADS", "false")
+    trace_pricing = _get_env_flag("TRACE_PRICING", "false")
     log_level = _get_log_level(os.getenv("LOG_LEVEL", "INFO"))
     desired_level = _get_log_level(level)
     if desired_level < log_level:
@@ -126,6 +134,27 @@ def trace_event(level: str, correlation_id: str, **fields: Any) -> None:
     }
 
     extra_fields = {k: v for k, v in fields.items() if k not in base_fields}
+    if not trace_payloads:
+        payload_keys = {
+            "payload",
+            "input",
+            "params",
+            "result",
+            "result_json",
+            "raw_response",
+            "response_payload",
+        }
+        extra_fields = {
+            k: v
+            for k, v in extra_fields.items()
+            if k not in payload_keys and "payload" not in k.lower()
+        }
+    if not trace_pricing:
+        extra_fields = {
+            k: v
+            for k, v in extra_fields.items()
+            if all(token not in k.lower() for token in ("price", "pricing", "credits", "official_usd"))
+        }
     payload = base_fields
     if trace_verbose:
         payload.update(extra_fields)
