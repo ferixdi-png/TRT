@@ -1,5 +1,20 @@
 # TRT_REPORT.md
 
+## 2026-01-19: P0/P1 production hardening — media delivery, free tools, pricing, modality contract
+**Было → стало (ключевые изменения):**
+- **Было:** Telegram получал прямые URL и падал на HTML/403/redirect. **Стало:** медиа всегда скачивается сервером, проверяется content-type/size и отправляется как InputFile; для oversized — безопасная ссылка без preview. 【F:app/generations/media_pipeline.py†L1-L278】【F:app/generations/telegram_sender.py†L1-L180】
+- **Было:** Wizard иногда просил фото в text→image и смешивал модальности. **Стало:** введён `model_mode`, авто-нормализация required для image/text и корректный первичный ввод; Nano Banana Pro выведен из text→image. 【F:models/kie_models.yaml†L1-L2170】【F:app/models/yaml_registry.py†L1-L167】【F:bot_kie.py†L313-L452】【F:kie_models.py†L2736-L2837】
+- **Было:** цены округлялись до int и минимум 1 ₽. **Стало:** фикс курс 77.83, маржа x2, ceil до 0.01 без min=1. 【F:pricing/config.yaml†L1-L42】【F:app/config.py†L79-L141】【F:app/services/pricing_service.py†L1-L102】
+- **Было:** free tools “плавающие” и смешивались с категориями. **Стало:** 5 самых дешёвых моделей фиксированы в pricing config, исключены из остальных категорий; лимит 5/час + referral банк. 【F:pricing/config.yaml†L1-L42】【F:app/services/free_tools_service.py†L1-L120】【F:bot_kie.py†L1532-L5166】【F:kie_models.py†L2736-L2837】
+- **Было:** кнопка “Баланс” шумела 404. **Стало:** 404 кэшируется на 6 часов, UX “KIE недоступен” без ошибок. 【F:helpers.py†L96-L220】
+- **Было:** базовый smoke зависел от GitHub storage env. **Стало:** run_smoke использует JSON storage по умолчанию. 【F:scripts/run_smoke.py†L14-L110】
+
+**Тесты/проверки:**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python -m compileall .`
+- `python scripts/run_smoke.py`
+
 ## 2026-01-19: Production gate + universal media delivery + credits + session lifecycle + offline smoke
 **Root cause mapping (лог-инциденты → фиксы):**
 - `telegram.error.BadRequest: Wrong type of the web page content` → введён универсальный бинарный media pipeline c проверкой content-type, KIE download-url и fallback на InputFile.【F:app/generations/media_pipeline.py†L1-L250】

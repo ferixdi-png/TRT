@@ -5,6 +5,7 @@
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
 
@@ -29,6 +30,7 @@ _get_generation_types = None
 _get_models_by_generation_type = None
 _get_generation_type_info = None
 _get_client = None
+_KIE_CREDITS_UNAVAILABLE_UNTIL: Optional[datetime] = None
 
 # Константы (будут установлены из bot_kie.py)
 FREE_GENERATIONS_PER_DAY = 3
@@ -158,6 +160,11 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
     
     # Get KIE credits for main admin
     if is_main_admin:
+        now = datetime.now(timezone.utc)
+        global _KIE_CREDITS_UNAVAILABLE_UNTIL
+        if _KIE_CREDITS_UNAVAILABLE_UNTIL and now < _KIE_CREDITS_UNAVAILABLE_UNTIL:
+            result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> Недоступен"
+            return result
         try:
             kie = _get_client()
             get_credits = getattr(kie, "get_credits", None)
@@ -174,7 +181,10 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
                     result['kie_credits_rub_str'] = credits_rub_str
                 else:
                     status = balance_result.get("status") if balance_result else None
-                    result["kie_credits_error"] = "KIE credits temporarily unavailable"
+                    if status == 404:
+                        _KIE_CREDITS_UNAVAILABLE_UNTIL = now + timedelta(hours=6)
+                        logger.warning("KIE credits endpoint unavailable (404). Suppressing for 6 hours.")
+                    result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> Недоступен"
                     from app.observability.structured_logs import log_structured_event
 
                     log_structured_event(
@@ -232,7 +242,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
         if user_lang == 'en':
             free_info = ""
             if remaining_free > 0:
-                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per day (Z-Image model)"
+                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per hour (free tools)"
             
             balance_message = (
                 f"╔═══════════════════════════════════╗\n"
@@ -254,7 +264,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             )
             
             if remaining_free > 0:
-                balance_message += f"✅ Free Z-Image generations ({remaining_free} available)\n"
+                balance_message += f"✅ Free tools generations ({remaining_free} available)\n"
             
             balance_message += (
                 f"✅ Invite a friend and get bonuses\n\n"
@@ -266,7 +276,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             # Russian version
             free_info = ""
             if remaining_free > 0:
-                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день (модель Z-Image)"
+                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в час (пул free tools)"
             
             balance_message = (
                 f"╔═══════════════════════════════════════════╗\n"
@@ -297,7 +307,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             )
             
             if remaining_free > 0:
-                balance_message += f"✅ Бесплатные генерации Z-Image ({remaining_free} доступно)\n"
+                balance_message += f"✅ Бесплатные генерации free tools ({remaining_free} доступно)\n"
             
             balance_message += (
                 f"✅ Пригласить друга и получить бонусы\n"

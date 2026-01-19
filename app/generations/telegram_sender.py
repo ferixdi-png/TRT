@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import aiohttp
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.error import BadRequest
 
 from app.kie_catalog import ModelSpec
@@ -20,6 +21,45 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_MAX_BYTES = int(os.getenv("TELEGRAM_MAX_FILE_BYTES", str(50 * 1024 * 1024)))
 DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=float(os.getenv("KIE_MEDIA_DOWNLOAD_TIMEOUT", "30")))
+
+
+def _payload_contains_url(text: Optional[str]) -> bool:
+    if not text:
+        return False
+    return bool(re.search(r"https?://", text))
+
+
+def _input_file_size(value: object) -> Optional[int]:
+    if isinstance(value, InputFile):
+        fp = getattr(value, "input_file", None) or getattr(value, "fp", None) or getattr(value, "file", None)
+        if hasattr(fp, "getbuffer"):
+            return fp.getbuffer().nbytes
+        if hasattr(fp, "getvalue"):
+            return len(fp.getvalue())
+    return None
+
+
+def _payload_metadata(tg_method: Optional[str], payload: dict) -> Tuple[str, Optional[int]]:
+    if tg_method == "send_message":
+        return "text", None
+    if tg_method == "send_media_group":
+        total = 0
+        for item in payload.get("media", []):
+            media = getattr(item, "media", None)
+            size = _input_file_size(media)
+            if size is not None:
+                total += size
+        return "media_group", total or None
+    for key in ("photo", "video", "audio", "voice", "document"):
+        if key in payload:
+            value = payload.get(key)
+            size = _input_file_size(value)
+            if isinstance(value, InputFile):
+                return "input_file", size
+            if isinstance(value, str):
+                return "url", size
+            return "file", size
+    return "unknown", None
 
 
 async def deliver_result(
@@ -36,6 +76,8 @@ async def deliver_result(
     """Deliver generation result to Telegram with trace logging and fallback."""
     media_type = (media_type or "").lower()
     tg_method = None
+    payload_type = "unknown"
+    bytes_size = None
     start_ts = time.monotonic()
     try:
         async with aiohttp.ClientSession(timeout=DOWNLOAD_TIMEOUT) as session:
@@ -46,6 +88,9 @@ async def deliver_result(
                 kie_client=kie_client,
                 http_client=session,
             )
+            if tg_method == "send_message" and _payload_contains_url(payload.get("text")):
+                payload.setdefault("disable_web_page_preview", True)
+            payload_type, bytes_size = _payload_metadata(tg_method, payload)
             trace_event(
                 "info",
                 correlation_id or "corr-na-na",
@@ -62,7 +107,12 @@ async def deliver_result(
                 model_id=model_id,
                 stage="TG_SEND",
                 outcome="attempt",
-                param={"tg_method": tg_method, "media_type": media_type},
+                param={
+                    "tg_method": tg_method,
+                    "media_type": media_type,
+                    "payload_type": payload_type,
+                    "bytes_size": bytes_size,
+                },
             )
             send_fn = getattr(bot, tg_method)
             await send_fn(chat_id=chat_id, **payload)
@@ -86,7 +136,12 @@ async def deliver_result(
             stage="TG_SEND",
             outcome="success",
             duration_ms=int((time.monotonic() - start_ts) * 1000),
-            param={"tg_method": tg_method, "media_type": media_type},
+            param={
+                "tg_method": tg_method,
+                "media_type": media_type,
+                "payload_type": payload_type,
+                "bytes_size": bytes_size,
+            },
         )
     except BadRequest as exc:
         logger.warning("Telegram media send failed, falling back to document: %s", exc)
@@ -100,7 +155,12 @@ async def deliver_result(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             error_code="TG_BAD_REQUEST",
             fix_hint="Fallback to send_document for Telegram.",
-            param={"tg_method": tg_method, "media_type": media_type},
+            param={
+                "tg_method": tg_method,
+                "media_type": media_type,
+                "payload_type": payload_type,
+                "bytes_size": bytes_size,
+            },
         )
         try:
             async with aiohttp.ClientSession(timeout=DOWNLOAD_TIMEOUT) as session:
@@ -111,6 +171,8 @@ async def deliver_result(
                     kie_client=kie_client,
                     http_client=session,
                 )
+                if tg_method == "send_message" and _payload_contains_url(payload.get("text")):
+                    payload.setdefault("disable_web_page_preview", True)
                 send_fn = getattr(bot, tg_method)
                 await send_fn(chat_id=chat_id, **payload)
         except Exception as send_exc:  # pragma: no cover - best effort
@@ -140,7 +202,12 @@ async def deliver_result(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             error_code="TG_SEND_FAIL",
             fix_hint="Проверьте параметры отправки в Telegram.",
-            param={"tg_method": tg_method, "media_type": media_type},
+            param={
+                "tg_method": tg_method,
+                "media_type": media_type,
+                "payload_type": payload_type,
+                "bytes_size": bytes_size,
+            },
         )
         try:
             async with aiohttp.ClientSession(timeout=DOWNLOAD_TIMEOUT) as session:
@@ -151,6 +218,8 @@ async def deliver_result(
                     kie_client=kie_client,
                     http_client=session,
                 )
+                if tg_method == "send_message" and _payload_contains_url(payload.get("text")):
+                    payload.setdefault("disable_web_page_preview", True)
                 send_fn = getattr(bot, tg_method)
                 await send_fn(chat_id=chat_id, **payload)
         except Exception as send_exc:  # pragma: no cover - best effort
@@ -186,7 +255,7 @@ async def send_job_result(
 
     price_text = ""
     if price_rub is not None:
-        price_display = f"{price_rub:.2f}".rstrip("0").rstrip(".")
+        price_display = f"{price_rub:.2f}"
         price_text = f"\n💰 <b>Цена:</b> {price_display} ₽"
 
     elapsed_text = ""

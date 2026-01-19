@@ -234,7 +234,13 @@ from helpers import (
 )
 # Используем registry как единый источник моделей
 from app.models.registry import get_models_sync
-from app.kie_catalog import get_free_model_ids
+from app.services.free_tools_service import (
+    add_referral_free_bonus,
+    check_and_consume_free_generation,
+    get_free_generation_status,
+    get_free_tools_config,
+    get_free_tools_model_ids,
+)
 from kie_models import (
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
@@ -260,21 +266,20 @@ def ensure_source_of_truth():
 
     pricing_settings_info = get_settings_source_info()
     pricing_settings = pricing_settings_info.get("settings", {})
-    usd_to_rub_env = os.getenv("USD_TO_RUB", "").strip()
     price_multiplier_env = os.getenv("PRICE_MULTIPLIER", "").strip()
     if not pricing_settings_info.get("path") or pricing_settings_info.get("path") == "unknown":
-        if not usd_to_rub_env or not price_multiplier_env:
+        if not price_multiplier_env:
             logger.error("❌ FATAL: pricing settings file not found and env overrides missing")
             sys.exit(1)
 
-    if not usd_to_rub_env and "usd_to_rub" not in pricing_settings:
+    if "usd_to_rub" not in pricing_settings:
         logger.error("❌ FATAL: usd_to_rub missing in pricing settings and USD_TO_RUB env not set")
         sys.exit(1)
     if not price_multiplier_env and "markup_multiplier" not in pricing_settings:
         logger.error("❌ FATAL: markup_multiplier missing in pricing settings and PRICE_MULTIPLIER env not set")
         sys.exit(1)
 
-    usd_to_rub_value = float(usd_to_rub_env or pricing_settings.get("usd_to_rub"))
+    usd_to_rub_value = float(pricing_settings.get("usd_to_rub"))
     markup_multiplier_value = float(price_multiplier_env or pricing_settings.get("markup_multiplier"))
 
     registry_ids = set(registry_models.keys())
@@ -313,7 +318,8 @@ def get_model_by_id_from_registry(model_id: str) -> Optional[Dict[str, Any]]:
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
     models = get_models_sync()
-    return [m for m in models if m.get('category') == category]
+    free_ids = set(get_free_tools_model_ids())
+    return [m for m in models if m.get('category') == category and m.get('id') not in free_ids]
 
 def get_categories_from_registry() -> List[str]:
     """Получает список категорий из реестра"""
@@ -331,7 +337,7 @@ def _determine_primary_input(
     input_params: Dict[str, Any],
 ) -> Optional[Dict[str, str]]:
     """Determine which input should be requested first based on model_type + schema."""
-    model_type = (model_info.get("model_type") or "").lower()
+    model_type = (model_info.get("model_mode") or model_info.get("model_type") or "").lower()
     image_param = None
     if "image_input" in input_params:
         image_param = "image_input"
@@ -876,10 +882,8 @@ WAITING_CURRENCY_RATE = 7
 
 
 def format_price_rub(price: float, is_admin: bool = False) -> str:
-    """Format price in rubles with appropriate text (rounded to 2 decimal places)."""
-    # Always round to 2 decimal places
-    price_rounded = round(price, 2)
-    price_str = f"{price_rounded:.2f}"
+    """Format price in rubles with appropriate text (always 2 decimals)."""
+    price_str = f"{price:.2f}"
     if is_admin:
         return f"💰 <b>Безлимит</b> (цена: {price_str} ₽)"
     else:
@@ -981,8 +985,10 @@ REFERRALS_FILE = get_data_file_path("referrals.json")  # File to store referral 
 BROADCASTS_FILE = get_data_file_path("broadcasts.json")  # File to store broadcast statistics
 GENERATIONS_HISTORY_FILE = get_data_file_path("generations_history.json")  # File to store user generation history
 
-# Free generation settings
-FREE_MODEL_ID = "z-image"  # Model that is free for users
+# Free tools settings
+FREE_TOOLS_CONFIG = get_free_tools_config()
+FREE_TOOL_MODEL_IDS = get_free_tools_model_ids()
+FREE_MODEL_ID = FREE_TOOL_MODEL_IDS[0] if FREE_TOOL_MODEL_IDS else "z-image"
 
 def is_video_model(model_id: str) -> bool:
     """Check if model is a video generation model"""
@@ -993,8 +999,8 @@ def is_audio_model(model_id: str) -> bool:
     """Check if model is an audio processing model"""
     audio_keywords = ['speech-to-text', 'audio', 'transcribe']
     return any(keyword in model_id.lower() for keyword in audio_keywords)
-FREE_GENERATIONS_PER_DAY = 5  # Number of free generations per day per user
-REFERRAL_BONUS_GENERATIONS = 5  # Bonus generations for inviting a user
+FREE_GENERATIONS_PER_DAY = FREE_TOOLS_CONFIG.base_per_hour  # Backward-compatible name (per hour)
+REFERRAL_BONUS_GENERATIONS = FREE_TOOLS_CONFIG.referral_bonus  # Bonus generations for inviting a user
 
 # Инициализация констант в helpers
 set_constants(FREE_GENERATIONS_PER_DAY, REFERRAL_BONUS_GENERATIONS, ADMIN_ID)
@@ -1525,64 +1531,24 @@ def get_user_free_generations_today(user_id: int) -> int:
         return 0
 
 
-def get_user_free_generations_remaining(user_id: int) -> int:
-    """Get remaining free generations for user today (including bonus)."""
-    used = get_user_free_generations_today(user_id)
-    data = get_free_generations_data()
-    user_key = str(user_id)
-    bonus = data.get(user_key, {}).get('bonus', 0)
-    total_available = FREE_GENERATIONS_PER_DAY + bonus
-    remaining = total_available - used
-    return max(0, remaining)
+async def get_user_free_generations_remaining(user_id: int) -> int:
+    """Get remaining free generations for user in the current hour (including referral bank)."""
+    status = await get_free_generation_status(user_id)
+    return int(status.get("total_remaining", 0))
 
 
-def use_free_generation(user_id: int) -> bool:
-    """Use one free generation. Returns True if successful, False if limit reached."""
-    from datetime import datetime
-    
-    data = get_free_generations_data()
-    user_key = str(user_id)
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    if user_key not in data:
-        data[user_key] = {'date': today, 'count': 0, 'bonus': 0}
-    
-    user_data = data[user_key]
-    
-    # Reset if new day (but keep bonus)
-    if user_data.get('date') != today:
-        old_bonus = user_data.get('bonus', 0)
-        user_data['date'] = today
-        user_data['count'] = 0
-        user_data['bonus'] = old_bonus  # Keep bonus across days
-    
-    # Get total available (base + bonus)
-    bonus = user_data.get('bonus', 0)
-    total_available = FREE_GENERATIONS_PER_DAY + bonus
-    
-    # Check limit (including bonus)
-    if user_data.get('count', 0) >= total_available:
-        return False
-    
-    # Increment count
-    user_data['count'] = user_data.get('count', 0) + 1
-    save_free_generations_data(data)
-    return True
+async def use_free_generation(user_id: int, model_id: str) -> bool:
+    """Consume a free generation if available."""
+    result = await check_and_consume_free_generation(user_id, model_id)
+    return result.get("status") == "ok"
 
 
-def is_free_generation_available(user_id: int, model_id: str) -> bool:
+async def is_free_generation_available(user_id: int, model_id: str) -> bool:
     """Check if free generation is available for this user and model."""
-    # Only for regular users (not admins)
-    if get_is_admin(user_id):
+    if model_id not in FREE_TOOL_MODEL_IDS:
         return False
-    
-    # Only for free model
-    if model_id != FREE_MODEL_ID:
-        return False
-    
-    # Check if user has remaining free generations
-    remaining = get_user_free_generations_remaining(user_id)
-    return remaining > 0
+    status = await get_free_generation_status(user_id)
+    return int(status.get("total_remaining", 0)) > 0
 
 
 # ==================== Referral System ====================
@@ -1640,32 +1606,26 @@ def add_referral(referrer_id: int, referred_id: int):
     save_referrals_data(data)
     
     # Give bonus generations to referrer
-    give_bonus_generations(referrer_id, REFERRAL_BONUS_GENERATIONS)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        loop.create_task(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
+    else:
+        asyncio.run(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
 
 
 def give_bonus_generations(user_id: int, bonus_count: int):
-    """Give bonus free generations to a user."""
-    from datetime import datetime
-    
-    data = get_free_generations_data()
-    user_key = str(user_id)
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    if user_key not in data:
-        data[user_key] = {'date': today, 'count': 0, 'bonus': 0}
-    
-    user_data = data[user_key]
-    
-    # Reset if new day (but keep bonus)
-    if user_data.get('date') != today:
-        old_bonus = user_data.get('bonus', 0)
-        user_data['date'] = today
-        user_data['count'] = 0
-        user_data['bonus'] = old_bonus + bonus_count
+    """Give bonus free generations to a user (legacy wrapper)."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        loop.create_task(add_referral_free_bonus(user_id, bonus_count))
     else:
-        user_data['bonus'] = user_data.get('bonus', 0) + bonus_count
-    
-    save_free_generations_data(data)
+        asyncio.run(add_referral_free_bonus(user_id, bonus_count))
 
 
 def get_user_referral_link(user_id: int, bot_username: str = None) -> str:
@@ -2360,7 +2320,7 @@ def build_manual_payment_instructions(
     method_label: str,
 ) -> str:
     """Build manual payment instructions for SBP/card transfers."""
-    examples_count = int(amount / 0.62)  # Z-Image price
+    examples_count = int(amount / 0.62)  # free tools price
     video_count = int(amount / 3.86)  # Basic video price
     if user_lang == 'ru':
         return (
@@ -2370,7 +2330,7 @@ def build_manual_payment_instructions(
             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
             f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
-            f'• ~{examples_count} изображений Z-Image\n'
+            f'• ~{examples_count} изображений (free tools)\n'
             f'• ~{video_count} видео (базовая модель)\n'
             f'• Или комбинацию разных моделей!\n\n'
             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -2388,7 +2348,7 @@ def build_manual_payment_instructions(
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
         f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
         f'🎯 <b>WHAT YOU WILL GET:</b>\n'
-        f'• ~{examples_count} Z-Image images\n'
+        f'• ~{examples_count} images (free tools)\n'
         f'• ~{video_count} videos (basic model)\n'
         f'• Or a combination of different models!\n\n'
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -3483,7 +3443,7 @@ async def show_payment_screenshot(query, payment: dict, current_index: int, tota
             return
         
         # Format payment info
-        amount_str = f"{amount:.2f}".rstrip('0').rstrip('.')
+        amount_str = f"{amount:.2f}"
         if timestamp:
             dt = datetime.datetime.fromtimestamp(timestamp)
             date_str = dt.strftime("%d.%m.%Y %H:%M")
@@ -3611,6 +3571,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             update_id=update_id,
             action="CALLBACK",
             action_path=build_action_path(data),
+            outcome="received",
+        )
+        session = user_sessions.get(user_id, {}) if user_id is not None else {}
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="UX_CLICK",
+            action_path=build_action_path(data),
+            model_id=session.get("model_id") if isinstance(session, dict) else None,
+            param={
+                "waiting_for": session.get("waiting_for") if isinstance(session, dict) else None,
+                "current_param": session.get("current_param") if isinstance(session, dict) else None,
+                "callback_data": data,
+            },
             outcome="received",
         )
         logger.debug(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
@@ -3942,10 +3918,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 categories = get_categories_from_registry()
                 total_models = len(get_models_sync())
                 
-                remaining_free = get_user_free_generations_remaining(user_id)
+                remaining_free = await get_user_free_generations_remaining(user_id)
                 free_info = ""
                 if remaining_free > 0:
-                    free_info = f"\n🎁 <b>Бесплатно:</b> {remaining_free} генераций Z-Image\n"
+                    free_info = f"\n🎁 <b>Бесплатно:</b> {remaining_free} генераций free tools\n"
                 
                 welcome_text = (
                     f'✨ <b>ПРЕМИУМ AI MARKETPLACE</b> ✨\n\n'
@@ -4263,8 +4239,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 
                 needed = min_price - user_balance
-                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
-                remaining_free = get_user_free_generations_remaining(user_id)
+                needed_str = f"{needed:.2f}"
+                remaining_free = await get_user_free_generations_remaining(user_id)
                 
                 if user_lang == 'ru':
                     insufficient_msg = (
@@ -4279,7 +4255,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Используйте бесплатные генерации Z-Image ({remaining_free} доступно)\n"
+                        insufficient_msg += f"• Используйте бесплатные генерации free tools ({remaining_free} доступно)\n"
                     
                     insufficient_msg += (
                         f"• Пригласите друга и получите бонусы\n\n"
@@ -4298,7 +4274,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Use free Z-Image generations ({remaining_free} available)\n"
+                        insufficient_msg += f"• Use free tools generations ({remaining_free} available)\n"
                     
                     insufficient_msg += (
                         f"• Invite a friend and get bonuses\n\n"
@@ -4650,7 +4626,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_admin = get_is_admin(user_id)
             
             # Show generation type info and models with marketing text
-            remaining_free = get_user_free_generations_remaining(user_id)
+            remaining_free = await get_user_free_generations_remaining(user_id)
             user_lang = get_user_language(user_id)
             
             # Get translated name and description
@@ -4680,16 +4656,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Create keyboard with models (2 per row for compact display)
             keyboard = []
             
-            # Free generation button if available and this is text-to-image
-            # Always show button with count, even if 0
             if gen_type == "text-to-image":
                 user_lang = get_user_language(user_id)
                 if user_lang == 'ru':
-                    button_text = f"🎁 Генерировать бесплатно ({remaining_free}/{FREE_GENERATIONS_PER_DAY} осталось)"
+                    button_text = f"🆓 Бесплатные модели ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
                 else:
-                    button_text = f"🎁 Generate free ({remaining_free}/{FREE_GENERATIONS_PER_DAY} left)"
+                    button_text = f"🆓 Free tools ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
                 keyboard.append([
-                    InlineKeyboardButton(button_text, callback_data="select_model:z-image")
+                    InlineKeyboardButton(button_text, callback_data="free_tools")
                 ])
                 
                 # Add referral button
@@ -4964,9 +4938,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reset_session_on_navigation(user_id, reason="free_tools")
             logger.info(f"User {user_id} clicked 'free_tools' button")
             
-            # Get free tools from SSOT (pricing catalog)
-            free_ids = set(get_free_model_ids())
-            free_models = [model for model in get_models_sync() if model.get('id') in free_ids]
+            # Get free tools from pricing config (fixed order)
+            free_ids = get_free_tools_model_ids()
+            models_map = {model.get('id'): model for model in get_models_sync()}
+            free_models = [models_map[model_id] for model_id in free_ids if model_id in models_map]
             
             if not free_models:
                 user_lang = get_user_language(user_id)
@@ -5082,7 +5057,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Show generation types instead of all models with marketing text
             generation_types = get_generation_types()
-            remaining_free = get_user_free_generations_remaining(user_id)
+            remaining_free = await get_user_free_generations_remaining(user_id)
             
             models_text = (
                 f"🤖 <b>ВЫБЕРИТЕ НЕЙРОСЕТЬ</b> 🤖\n\n"
@@ -5096,7 +5071,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if remaining_free > 0:
                 models_text += (
-                    f"🎁 <b>БЕСПЛАТНО:</b> {remaining_free} генераций Z-Image доступно!\n"
+                    f"🎁 <b>БЕСПЛАТНО:</b> {remaining_free} генераций free tools доступно!\n"
                     f"💡 Пригласи друга → получи +{REFERRAL_BONUS_GENERATIONS} генераций\n\n"
                 )
             
@@ -5107,14 +5082,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             keyboard = []
             
-            # Free generation button - always show with count
             user_lang = get_user_language(user_id)
             if user_lang == 'ru':
-                button_text = f"🎁 Генерировать бесплатно ({remaining_free}/{FREE_GENERATIONS_PER_DAY} осталось)"
+                button_text = f"🆓 Бесплатные модели ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
             else:
-                button_text = f"🎁 Generate free ({remaining_free}/{FREE_GENERATIONS_PER_DAY} left)"
+                button_text = f"🆓 Free tools ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
             keyboard.append([
-                InlineKeyboardButton(button_text, callback_data="select_model:z-image")
+                InlineKeyboardButton(button_text, callback_data="free_tools")
             ])
             
             # Add referral button
@@ -5362,16 +5336,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Calculate price for confirmation message
                     is_admin_user = get_is_admin(user_id)
-                    is_free = is_free_generation_available(user_id, model_id)
+                    is_free = await is_free_generation_available(user_id, model_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
                         price = 0.0
-                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                    price_str = f"{price:.2f}"
                     
                     # Prepare price info
                     if is_free:
-                        remaining = get_user_free_generations_remaining(user_id)
-                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                        remaining = await get_user_free_generations_remaining(user_id)
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
                     
@@ -5392,7 +5366,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -5491,16 +5465,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Calculate price for confirmation message
                     is_admin_user = get_is_admin(user_id)
-                    is_free = is_free_generation_available(user_id, model_id)
+                    is_free = await is_free_generation_available(user_id, model_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
                         price = 0.0
-                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                    price_str = f"{price:.2f}"
                     
                     # Prepare price info
                     if is_free:
-                        remaining = get_user_free_generations_remaining(user_id)
-                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                        remaining = await get_user_free_generations_remaining(user_id)
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
                     
@@ -5521,7 +5495,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -5817,16 +5791,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Calculate price for confirmation message
             is_admin_user = get_is_admin(user_id)
-            is_free = is_free_generation_available(user_id, model_id)
+            is_free = await is_free_generation_available(user_id, model_id)
             price = calculate_price_rub(model_id, params, is_admin_user)
             if is_free:
                 price = 0.0
-            price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+            price_str = f"{price:.2f}"
 
             # Prepare price info
             if is_free:
-                remaining = get_user_free_generations_remaining(user_id)
-                price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                remaining = await get_user_free_generations_remaining(user_id)
+                price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
             else:
                 price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
 
@@ -5847,7 +5821,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🚀 <b>Готовы начать?</b>"
                 )
             else:
-                price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                 confirm_msg = (
                     f"📋 <b>Generation Confirmation</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -6007,7 +5981,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             
             current_balance = await get_user_balance_async(user_id)
-            balance_str = f"{current_balance:.2f}".rstrip('0').rstrip('.')
+            balance_str = f"{current_balance:.2f}"
             
             await query.edit_message_text(
                 f'💳 <b>ПОПОЛНЕНИЕ БАЛАНСА</b> 💳\n\n'
@@ -6045,7 +6019,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_lang = get_user_language(user_id)
             
             # Calculate what user can generate
-            examples_count = int(amount / 0.62)  # Z-Image price
+            examples_count = int(amount / 0.62)  # free tools price
             video_count = int(amount / 3.86)  # Basic video price
             
             # Show payment method selection
@@ -6055,7 +6029,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
                     f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
-                    f'• ~{examples_count} изображений Z-Image\n'
+                    f'• ~{examples_count} изображений (free tools)\n'
                     f'• ~{video_count} видео (базовая модель)\n'
                     f'• Или комбинацию разных моделей!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -6067,7 +6041,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
                     f'🎯 <b>WHAT YOU WILL GET:</b>\n'
-                    f'• ~{examples_count} Z-Image images\n'
+                    f'• ~{examples_count} images (free tools)\n'
                     f'• ~{video_count} videos (basic model)\n'
                     f'• Or a combination of different models!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -6380,7 +6354,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if balance_result.get('ok'):
                         balance = balance_result.get('credits', 0)
                         balance_rub = balance * CREDIT_TO_USD * get_usd_to_rub_rate()
-                        balance_rub_str = f"{balance_rub:.2f}".rstrip('0').rstrip('.')
+                        balance_rub_str = f"{balance_rub:.2f}"
                         kie_balance_info = f"💰 <b>Баланс KIE API:</b> {balance_rub_str} ₽ ({balance} кредитов)\n\n"
                     else:
                         status = balance_result.get("status")
@@ -7226,13 +7200,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🎯 <b>У нас {total_models} моделей в {len(categories)} категориях:</b>\n\n'
                     f'🖼️ <b>Изображения</b>\n'
-                    f'• Z-Image - быстрая генерация (бесплатно 5 раз в день!)\n'
+                    f'• free tools - бесплатные модели (5 раз в час)\n'
                     f'• Nano Banana Pro - качество 2K/4K\n'
                     f'• Imagen 4 Ultra - новейшая от Google\n\n'
                     f'🎬 <b>Видео</b>\n'
                     f'• Sora 2 - реалистичные видео\n'
                     f'• Grok Imagine - мультимодальная модель\n\n'
-                    f'💡 <b>Совет:</b> Начните с Z-Image - она бесплатная!'
+                    f'💡 <b>Совет:</b> Начните с free tools - это бесплатно!'
                 )
                 
                 keyboard = [
@@ -7285,7 +7259,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     '━━━━━━━━━━━━━━━━━━━━\n\n'
                     '📝 <b>Простой процесс:</b>\n\n'
                     '1️⃣ Нажмите "📋 Все модели"\n'
-                    '2️⃣ Выберите модель (например, Z-Image)\n'
+                    '2️⃣ Выберите модель из free tools\n'
                     '3️⃣ Введите описание (промпт)\n'
                     '   Пример: "Красивый закат над океаном"\n'
                     '4️⃣ Выберите параметры (размер, стиль и т.д.)\n'
@@ -7340,14 +7314,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             try:
-                remaining_free = get_user_free_generations_remaining(user_id)
+                remaining_free = await get_user_free_generations_remaining(user_id)
                 tutorial_text = (
                     '📖 <b>ШАГ 4: Баланс и оплата</b>\n\n'
                     '━━━━━━━━━━━━━━━━━━━━\n\n'
                     '💰 <b>Как это работает:</b>\n\n'
                     '🎁 <b>Бесплатно:</b>\n'
-                    f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} генераций Z-Image в день\n'
-                    '• Пригласите друга - получите +5 генераций!\n\n'
+                    f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} генераций free tools в час\n'
+                    f'• Пригласите друга - получите +{REFERRAL_BONUS_GENERATIONS} генераций!\n\n'
                     '💳 <b>Пополнение баланса:</b>\n'
                     '• Минимальная сумма: 50 ₽\n'
                     '• Быстрый выбор: 50, 100, 150 ₽\n'
@@ -7411,13 +7385,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 '• Как пополнить баланс\n\n'
                 '🚀 <b>Готовы начать?</b>\n\n'
                 '💡 <b>Рекомендация:</b>\n'
-                'Начните с бесплатной генерации Z-Image!\n'
+                'Начните с бесплатной генерации в free tools!\n'
                 'Просто выберите модель и опишите, что хотите создать.'
             )
             
                 keyboard = [
                     [InlineKeyboardButton("📋 Все модели", callback_data="all_models")],
-                    [InlineKeyboardButton("🖼️ Z-Image (бесплатно)", callback_data="select_model:z-image")],
+                    [InlineKeyboardButton("🆓 Бесплатные модели", callback_data="free_tools")],
                     [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")]
                 ]
                 
@@ -7471,7 +7445,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         '👋 <b>Добро пожаловать!</b>\n\n'
                         '🎯 <b>Быстрый старт:</b>\n'
                         '1. Нажмите "📋 Все модели"\n'
-                        '2. Выберите "🖼️ Z-Image" (она бесплатная!)\n'
+                        '2. Выберите "🆓 Бесплатные модели" (это бесплатно!)\n'
                         '3. Введите описание, например: "Кот в космосе"\n'
                         '4. Нажмите "✅ Генерировать"\n'
                         '5. Получите результат через 10-30 секунд!\n\n'
@@ -7491,7 +7465,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         '👋 <b>Welcome!</b>\n\n'
                         '🎯 <b>Quick Start:</b>\n'
                         '1. Click "📋 All Models"\n'
-                        '2. Select "🖼️ Z-Image" (it\'s free!)\n'
+                        '2. Select "🆓 Free tools" (it\'s free!)\n'
                         '3. Enter description, e.g.: "Cat in space"\n'
                         '4. Click "✅ Generate"\n'
                         '5. Get result in 10-30 seconds!\n\n'
@@ -7733,7 +7707,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Show referral information
             referral_link = get_user_referral_link(user_id)
             referrals_count = len(get_user_referrals(user_id))
-            remaining_free = get_user_free_generations_remaining(user_id)
+            remaining_free = await get_user_free_generations_remaining(user_id)
             
             user_lang = get_user_language(user_id)
             
@@ -9066,15 +9040,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
             
             # Check for free generations for z-image
-            is_free_available = is_free_generation_available(user_id, model_id)
-            remaining_free = get_user_free_generations_remaining(user_id) if model_id == FREE_MODEL_ID else 0
+            is_free_available = await is_free_generation_available(user_id, model_id)
+            remaining_free = (
+                await get_user_free_generations_remaining(user_id)
+                if model_id in FREE_TOOL_MODEL_IDS
+                else 0
+            )
             
             # Calculate how many generations available
             if is_admin:
                 available_count = "Безлимит"
             elif is_free_available:
                 # For z-image with free generations, show free count
-                available_count = f"🎁 {remaining_free} бесплатно в день"
+                available_count = f"🎁 {remaining_free} бесплатно в час"
             elif user_balance >= min_price:
                 available_count = int(user_balance / min_price)
             else:
@@ -9134,10 +9112,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info_text += f"💰 <b>Цена:</b> {price_display}\n"
             
             # Add hint for new users
-            if is_new and model_id == FREE_MODEL_ID:
+            if is_new and model_id in FREE_TOOL_MODEL_IDS:
                 model_info_text += (
                     f"\n💡 <b>Отлично для начала!</b>\n"
-                    f"Эта модель бесплатна для первых {FREE_GENERATIONS_PER_DAY} генераций в день.\n"
+                    f"Эта модель бесплатна для первых {FREE_GENERATIONS_PER_DAY} генераций в час.\n"
                     f"Просто опишите, что хотите создать, и нажмите \"Генерировать\"!\n\n"
                 )
             
@@ -9151,7 +9129,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Для обычных пользователей всегда показываем цену и баланс
                 if is_free_available:
                     model_info_text += (
-                        f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день\n"
+                        f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в час\n"
                     )
                     if user_balance >= min_price:
                         paid_count = int(user_balance / min_price)
@@ -9192,8 +9170,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 
                 needed = min_price - user_balance
-                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
-                remaining_free = get_user_free_generations_remaining(user_id)
+                needed_str = f"{needed:.2f}"
+                remaining_free = await get_user_free_generations_remaining(user_id)
                 
                 if user_lang == 'ru':
                     insufficient_msg = (
@@ -9208,7 +9186,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Используйте бесплатные генерации Z-Image ({remaining_free} доступно)\n"
+                        insufficient_msg += f"• Используйте бесплатные генерации free tools ({remaining_free} доступно)\n"
                     
                     insufficient_msg += (
                         f"• Пригласите друга и получите бонусы\n\n"
@@ -9227,7 +9205,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Use free Z-Image generations ({remaining_free} available)\n"
+                        insufficient_msg += f"• Use free tools generations ({remaining_free} available)\n"
                     
                     insufficient_msg += (
                         f"• Invite a friend and get bonuses\n\n"
@@ -9490,8 +9468,19 @@ async def prompt_for_specific_param(
         return None
 
     if param_name in ['image_input', 'image_urls', 'image', 'mask_input', 'reference_image_input']:
+        old_waiting_for = session.get("waiting_for")
         session['current_param'] = param_name
         session['waiting_for'] = param_name
+        log_structured_event(
+            correlation_id=ensure_correlation_id(update, context),
+            user_id=user_id,
+            chat_id=chat_id,
+            action="WIZARD_TRANSITION",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            param={"from": old_waiting_for, "to": param_name, "reason": "image_prompt"},
+            outcome="updated",
+        )
         if param_name not in session:
             session[param_name] = []
         skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
@@ -9521,8 +9510,19 @@ async def prompt_for_specific_param(
         return INPUTTING_PARAMS
 
     if param_name in ['audio_url', 'audio_input']:
+        old_waiting_for = session.get("waiting_for")
         session['current_param'] = param_name
         session['waiting_for'] = param_name
+        log_structured_event(
+            correlation_id=ensure_correlation_id(update, context),
+            user_id=user_id,
+            chat_id=chat_id,
+            action="WIZARD_TRANSITION",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            param={"from": old_waiting_for, "to": param_name, "reason": "audio_prompt"},
+            outcome="updated",
+        )
         skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
         keyboard = [
             [
@@ -9676,17 +9676,17 @@ async def send_confirmation_message(
     params_text = "\n".join([f"  • {k}: {str(v)[:50]}{'...' if len(str(v)) > 50 else ''}" for k, v in params.items()])
     user_lang = get_user_language(user_id)
     is_admin_user = get_is_admin(user_id)
-    is_free = is_free_generation_available(user_id, model_id)
+    is_free = await is_free_generation_available(user_id, model_id)
     price = calculate_price_rub(model_id, params, is_admin_user)
     if is_free:
         price = 0.0
-    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+    price_str = f"{price:.2f}"
     if is_free:
-        remaining = get_user_free_generations_remaining(user_id)
+        remaining = await get_user_free_generations_remaining(user_id)
         price_info = (
-            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
             if user_lang == 'ru'
-            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day"
+            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour"
         )
     else:
         price_info = (
@@ -9860,7 +9860,22 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             return None
 
         if media_kind:
+            old_waiting_for = session.get("waiting_for")
             session['waiting_for'] = param_name
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="WIZARD_TRANSITION",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                param={
+                    "from": old_waiting_for,
+                    "to": param_name,
+                    "reason": "media_input",
+                },
+                outcome="updated",
+            )
             param_desc = param_info.get('description', '')
             step_info = _get_step_info(session, param_name, user_lang)
             step_prefix = f"{step_info}: " if step_info else ""
@@ -10135,6 +10150,22 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         input_type=input_type,
         message_id=update.message.message_id if update.message else None,
+    )
+    session = user_sessions.get(user_id, {})
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="UX_INPUT",
+        action_path="input_parameters",
+        model_id=session.get("model_id") if isinstance(session, dict) else None,
+        param={
+            "waiting_for": session.get("waiting_for") if isinstance(session, dict) else None,
+            "current_param": session.get("current_param") if isinstance(session, dict) else None,
+            "input_type": input_type,
+        },
+        outcome="received",
     )
     
     # CRITICAL: Log photo details if photo is present
@@ -10708,7 +10739,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Add payment and auto-credit balance
                 payment = await add_payment_async(user_id, amount, screenshot_file_id)
                 new_balance = await get_user_balance_async(user_id)
-                balance_str = f"{new_balance:.2f}".rstrip('0').rstrip('.')
+                balance_str = f"{new_balance:.2f}"
                 
                 # Delete analysis message (if exists)
                 if analysis_msg:
@@ -10808,7 +10839,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return SELECTING_AMOUNT
             
             # Calculate what user can generate
-            examples_count = int(amount / 0.62)  # Z-Image price
+            examples_count = int(amount / 0.62)  # free tools price
             video_count = int(amount / 3.86)  # Basic video price
             
             # Show payment method selection
@@ -10818,7 +10849,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
                     f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
-                    f'• ~{examples_count} изображений Z-Image\n'
+                    f'• ~{examples_count} изображений (free tools)\n'
                     f'• ~{video_count} видео (базовая модель)\n'
                     f'• Или комбинацию разных моделей!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -10830,7 +10861,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
                     f'🎯 <b>WHAT YOU WILL GET:</b>\n'
-                    f'• ~{examples_count} Z-Image images\n'
+                    f'• ~{examples_count} images (free tools)\n'
                     f'• ~{video_count} videos (basic model)\n'
                     f'• Or a combination of different models!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -11531,21 +11562,21 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         
                         # Calculate price for confirmation
-                        is_free = is_free_generation_available(user_id, model_id)
+                        is_free = await is_free_generation_available(user_id, model_id)
                         price = calculate_price_rub(model_id, params, is_admin_user)
                         if is_free:
                             price = 0.0
-                        price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                        price_str = f"{price:.2f}"
                         
                         # Prepare price info
                         if is_free:
-                            remaining = get_user_free_generations_remaining(user_id)
-                            price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                            remaining = await get_user_free_generations_remaining(user_id)
+                            price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                         else:
                             price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
                         
                         if user_lang == 'en':
-                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
                             confirm_text = (
                                 f"📋 <b>Generation Confirmation</b>\n\n"
                                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -11998,16 +12029,16 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # КРИТИЧНО: Всегда показываем цену или информацию о бесплатной генерации
                     is_admin_user = get_is_admin(user_id)
-                    is_free = is_free_generation_available(user_id, model_id)
+                    is_free = await is_free_generation_available(user_id, model_id)
                     free_info = ""
                     if is_free:
-                        remaining = get_user_free_generations_remaining(user_id)
+                        remaining = await get_user_free_generations_remaining(user_id)
                         free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
-                        free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                        free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                     else:
                         # КРИТИЧНО: Всегда показываем цену
                         price = calculate_price_rub(model_id, params, is_admin_user)
-                        price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                        price_str = f"{price:.2f}"
                         if is_admin_user:
                             free_info = f"\n\n💰 <b>Стоимость:</b> Безлимит (цена: {price_str} ₽)"
                         else:
@@ -12115,15 +12146,15 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
                         
                         is_admin_user = get_is_admin(user_id)
-                        is_free = is_free_generation_available(user_id, model_id)
+                        is_free = await is_free_generation_available(user_id, model_id)
                         free_info = ""
                         if is_free:
-                            remaining = get_user_free_generations_remaining(user_id)
+                            remaining = await get_user_free_generations_remaining(user_id)
                             free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
-                            free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                            free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                         else:
                             price = calculate_price_rub(model_id, params, is_admin_user)
-                            price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+                            price_str = f"{price:.2f}"
                             free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
                         
                         user_lang = get_user_language(user_id)
@@ -12348,8 +12379,23 @@ async def start_generation_directly(
         )
         return ConversationHandler.END
     
-    # Check if this is a free generation
-    is_free = is_free_generation_available(user_id, model_id)
+    # Check if this is a free generation (consume hourly/referral quota)
+    free_result = await check_and_consume_free_generation(user_id, model_id)
+    if free_result.get("status") == "deny":
+        user_lang = get_user_language(user_id)
+        reset_in = free_result.get("reset_in_minutes", 0)
+        deny_text = (
+            f"❌ <b>Лимит бесплатных генераций исчерпан</b>\n\n"
+            f"Доступно снова через {reset_in} мин."
+            if user_lang == 'ru'
+            else (
+                f"❌ <b>Free generation limit reached</b>\n\n"
+                f"Available again in {reset_in} min."
+            )
+        )
+        await send_or_edit_message(deny_text)
+        return ConversationHandler.END
+    is_free = free_result.get("status") == "ok"
     
     # Calculate price
     price = calculate_price_rub(model_id, params, is_admin_user)
@@ -12361,11 +12407,11 @@ async def start_generation_directly(
         if not is_free:
             user_balance = await get_user_balance_async(user_id)
             if user_balance < price:
-                price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                balance_str = f"{user_balance:.2f}".rstrip('0').rstrip('.')
+                price_str = f"{price:.2f}"
+                balance_str = f"{user_balance:.2f}"
                 user_lang_check = get_user_language(user_id)
                 needed = price - user_balance
-                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                needed_str = f"{needed:.2f}"
                 
                 if user_lang_check == 'ru':
                     insufficient_msg = (
@@ -12377,7 +12423,7 @@ async def start_generation_directly(
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>Что делать:</b>\n"
                         f"• Пополните баланс через главное меню\n"
-                        f"• Используйте бесплатные генерации Z-Image\n\n"
+                        f"• Используйте бесплатные генерации free tools\n\n"
                         f"🔄 После пополнения попробуйте генерацию снова."
                     )
                 else:
@@ -12390,7 +12436,7 @@ async def start_generation_directly(
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>What to do:</b>\n"
                         f"• Top up balance via main menu\n"
-                        f"• Use free Z-Image generations\n\n"
+                        f"• Use free tools generations\n\n"
                         f"🔄 After topping up, try generation again."
                     )
                 
@@ -12630,11 +12676,11 @@ async def start_generation_directly(
         # Проверяем баланс (но НЕ списываем - списание только при success)
         user_balance_check = await get_user_balance_async(user_id)
         if user_balance_check < price_rub_catalog:
-            price_str = f"{price_rub_catalog:.2f}".rstrip('0').rstrip('.')
-            balance_str = f"{user_balance_check:.2f}".rstrip('0').rstrip('.')
+            price_str = f"{price_rub_catalog:.2f}"
+            balance_str = f"{user_balance_check:.2f}"
             user_lang_check = get_user_language(user_id)
             needed = price_rub_catalog - user_balance_check
-            needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+            needed_str = f"{needed:.2f}"
             
             if user_lang_check == 'ru':
                 insufficient_msg = (
@@ -13064,7 +13110,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     
     # Check if this is a free generation
-    is_free = is_free_generation_available(user_id, model_id)
+    is_free = await is_free_generation_available(user_id, model_id)
     
     # Calculate price (admins pay admin price, users pay user price)
     price = calculate_price_rub(model_id, params, is_admin_user)
@@ -13114,13 +13160,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not is_free:
             user_balance = await get_user_balance_async(user_id)
             if user_balance < price:
-                price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                balance_str = f"{user_balance:.2f}".rstrip('0').rstrip('.')
-                remaining_free = get_user_free_generations_remaining(user_id)
+                price_str = f"{price:.2f}"
+                balance_str = f"{user_balance:.2f}"
+                remaining_free = await get_user_free_generations_remaining(user_id)
                 
                 user_lang = get_user_language(user_id)
                 needed = price - user_balance
-                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                needed_str = f"{needed:.2f}"
                 
                 if user_lang == 'ru':
                     error_text = (
@@ -13132,7 +13178,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     )
                     
-                    if model_id == FREE_MODEL_ID and remaining_free > 0:
+                    if model_id in FREE_TOOL_MODEL_IDS and remaining_free > 0:
                         error_text += (
                             f"🎁 <b>Но у вас есть {remaining_free} бесплатных генераций!</b>\n\n"
                             f"💡 Попробуйте снова - бесплатная генерация будет использована автоматически."
@@ -13141,7 +13187,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         error_text += (
                             f"💡 <b>Что делать:</b>\n"
                             f"• Пополните баланс через кнопку «💳 Пополнить баланс»\n"
-                            f"• Используйте бесплатные генерации Z-Image (5 в день)\n"
+                            f"• Используйте бесплатные генерации free tools (5 в час)\n"
                             f"• Пригласите друга и получите бонусы\n\n"
                             f"🔄 После пополнения попробуйте генерацию снова."
                         )
@@ -13155,7 +13201,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     )
                     
-                    if model_id == FREE_MODEL_ID and remaining_free > 0:
+                    if model_id in FREE_TOOL_MODEL_IDS and remaining_free > 0:
                         error_text += (
                             f"🎁 <b>But you have {remaining_free} free generations!</b>\n\n"
                             f"💡 Try again - free generation will be used automatically."
@@ -13164,7 +13210,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         error_text += (
                             f"💡 <b>What to do:</b>\n"
                             f"• Top up balance via «💳 Top Up Balance» button\n"
-                            f"• Use free Z-Image generations (5 per day)\n"
+                            f"• Use free tools generations (5 per hour)\n"
                             f"• Invite a friend and get bonuses\n\n"
                             f"🔄 After topping up, try generation again."
                         )
@@ -13175,8 +13221,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Limited admin - check limit
         remaining = get_admin_remaining(user_id)
         if remaining < price:
-            price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-            remaining_str = f"{remaining:.2f}".rstrip('0').rstrip('.')
+            price_str = f"{price:.2f}"
+            remaining_str = f"{remaining:.2f}"
             limit = get_admin_limit(user_id)
             spent = get_admin_spent(user_id)
             await send_or_edit_message(
@@ -24683,11 +24729,11 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             # Проверяем баланс
             user_balance_check = await get_user_balance_async(user_id)
             if user_balance_check < price_rub_catalog:
-                price_str = f"{price_rub_catalog:.2f}".rstrip('0').rstrip('.')
-                balance_str = f"{user_balance_check:.2f}".rstrip('0').rstrip('.')
+                price_str = f"{price_rub_catalog:.2f}"
+                balance_str = f"{user_balance_check:.2f}"
                 user_lang_check = get_user_language(user_id)
                 needed = price_rub_catalog - user_balance_check
-                needed_str = f"{needed:.2f}".rstrip('0').rstrip('.')
+                needed_str = f"{needed:.2f}"
                 
                 if user_lang_check == 'ru':
                     insufficient_msg = (
@@ -24988,6 +25034,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
     attempt = 0
     start_time = asyncio.get_event_loop().time()
     last_status_message = None
+    last_state = None
     
     # CRITICAL: Get chat_id from update or use user_id (for private chats, chat_id == user_id)
     chat_id = user_id
@@ -25021,6 +25068,18 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 break
             
             state = status_result.get('state')
+            if state and state != last_state:
+                log_structured_event(
+                    correlation_id=ensure_correlation_id(update, context),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="KIE_STATUS",
+                    action_path="poll_task_status",
+                    model_id=model_id if 'model_id' in locals() else None,
+                    param={"from": last_state, "to": state, "task_id": task_id},
+                    outcome="transition",
+                )
+                last_state = state
             
             if state == 'success':
                 # Send notification immediately when generation completes
@@ -25084,7 +25143,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     
                     if is_free:
                         # Use free generation
-                        if use_free_generation(user_id):
+                        if await use_free_generation(user_id, model_id):
                             price = 0.0
                         else:
                             # Free generation limit reached, treat as paid
@@ -25804,7 +25863,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
             logger.error(f"❌ Failed to save Stars payment file after {max_retries} retries: {PAYMENTS_FILE} does not exist after save!")
     
     # Send confirmation message
-    balance_str = f"{await get_user_balance_async(user_id):.2f}".rstrip('0').rstrip('.')
+    balance_str = f"{await get_user_balance_async(user_id):.2f}"
     
     if user_lang == 'ru':
         success_text = (
@@ -26997,7 +27056,7 @@ async def main():
         # Show last 10 payments
         total_amount = stats['total_amount']
         total_count = stats['total_count']
-        total_str = f"{total_amount:.2f}".rstrip('0').rstrip('.')
+        total_str = f"{total_amount:.2f}"
         
         text = f"📊 <b>Статистика платежей:</b>\n\n"
         text += f"💰 <b>Всего:</b> {total_str} ₽\n"
@@ -27010,7 +27069,7 @@ async def main():
             user_id_payment = payment.get('user_id', 0)
             amount = payment.get('amount', 0)
             timestamp = payment.get('timestamp', 0)
-            amount_str = f"{amount:.2f}".rstrip('0').rstrip('.')
+            amount_str = f"{amount:.2f}"
             
             if timestamp:
                 dt = datetime.datetime.fromtimestamp(timestamp)
@@ -27091,14 +27150,14 @@ async def main():
         try:
             user_id = int(context.args[0])
             balance = await get_user_balance_async(user_id)
-            balance_str = f"{balance:.2f}".rstrip('0').rstrip('.')
+            balance_str = f"{balance:.2f}"
             is_blocked = is_user_blocked(user_id)
             blocked_text = "🔒 Заблокирован" if is_blocked else "✅ Активен"
             
             # Get user payments
             user_payments = get_user_payments(user_id)
             total_paid = sum(p.get('amount', 0) for p in user_payments)
-            total_paid_str = f"{total_paid:.2f}".rstrip('0').rstrip('.')
+            total_paid_str = f"{total_paid:.2f}"
             
             # Check if user is limited admin
             admin_info = ""

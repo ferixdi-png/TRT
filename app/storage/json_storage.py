@@ -38,6 +38,8 @@ class JsonStorage(BaseStorage):
         self.languages_file = self.data_dir / "user_languages.json"
         self.gift_claimed_file = self.data_dir / "gift_claimed.json"
         self.free_generations_file = self.data_dir / "daily_free_generations.json"
+        self.hourly_free_usage_file = self.data_dir / "hourly_free_usage.json"
+        self.referral_free_bank_file = self.data_dir / "referral_free_bank.json"
         self.admin_limits_file = self.data_dir / "admin_limits.json"
         self.generations_history_file = self.data_dir / "generations_history.json"
         self.payments_file = self.data_dir / "payments.json"
@@ -54,6 +56,8 @@ class JsonStorage(BaseStorage):
             self.languages_file,
             self.gift_claimed_file,
             self.free_generations_file,
+            self.hourly_free_usage_file,
+            self.referral_free_bank_file,
             self.admin_limits_file,
             self.generations_history_file,
             self.payments_file,
@@ -226,6 +230,27 @@ class JsonStorage(BaseStorage):
         
         user_data['count'] = user_data.get('count', 0) + 1
         await self._save_json(self.free_generations_file, data)
+
+    async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
+        data = await self._load_json(self.hourly_free_usage_file)
+        return data.get(str(user_id), {})
+
+    async def set_hourly_free_usage(self, user_id: int, window_start_iso: str, used_count: int) -> None:
+        data = await self._load_json(self.hourly_free_usage_file)
+        data[str(user_id)] = {
+            "window_start_iso": window_start_iso,
+            "used_count": int(used_count),
+        }
+        await self._save_json(self.hourly_free_usage_file, data)
+
+    async def get_referral_free_bank(self, user_id: int) -> int:
+        data = await self._load_json(self.referral_free_bank_file)
+        return int(data.get(str(user_id), 0))
+
+    async def set_referral_free_bank(self, user_id: int, remaining_count: int) -> None:
+        data = await self._load_json(self.referral_free_bank_file)
+        data[str(user_id)] = int(max(0, remaining_count))
+        await self._save_json(self.referral_free_bank_file, data)
     
     async def get_admin_limit(self, user_id: int) -> float:
         """Получить лимит админа"""

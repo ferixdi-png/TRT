@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.kie_catalog import load_catalog, get_model, ModelSpec
+from app.kie_catalog import load_catalog, get_model, get_free_tools_model_ids, ModelSpec
 from app.services.pricing_service import price_for_model_rub
 from app.config import get_settings
 
@@ -167,9 +167,12 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
     catalog = load_catalog()
     settings = get_settings()
     
+    free_tool_ids = set(get_free_tools_model_ids())
     # Группируем по типам
     models_by_type: Dict[str, List[ModelSpec]] = defaultdict(list)
     for model in catalog:
+        if model.id in free_tool_ids:
+            continue
         models_by_type[model.type].append(model)
     
     keyboard = []
@@ -233,7 +236,7 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
                 type_emoji = _get_type_emoji(model.type)
                 
                 # Формируем текст кнопки с эмодзи и ценой
-                button_text = f"{type_emoji} {model.title_ru} • ₽{price_rub}"
+                button_text = f"{type_emoji} {model.title_ru} • ₽{price_rub:.2f}"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
