@@ -1302,6 +1302,8 @@ def build_webhook_handler(application, settings):
                 )
                 return web.Response(status=status)
 
+            object.__setattr__(update, "correlation_id", correlation_id)
+
             async def _process() -> None:
                 try:
                     await application.process_update(update)
@@ -6800,7 +6802,6 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
 
 
 

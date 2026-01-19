@@ -4,6 +4,7 @@ KIE AI Models Catalog - загрузка и кеширование катало�
 
 import yaml
 import logging
+import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Глобальный кеш
 _catalog_cache: Optional[List['ModelSpec']] = None
+_catalog_cache_key: Optional[str] = None
 
 
 def _get_catalog_path() -> Path:
@@ -53,6 +55,7 @@ class ModelSpec:
     schema_required: List[str] = field(default_factory=list)
     schema_properties: Dict[str, Any] = field(default_factory=dict)
     output_media_type: str = "image"  # image|video|audio|voice|text|file
+    free: bool = False
     kie_model: str = ""  # if differs from id
     modes: List[ModelMode] = field(default_factory=list)
 
@@ -174,6 +177,7 @@ def _parse_model_spec(
         schema_required=_schema_required(schema),
         schema_properties=schema,
         output_media_type=output_media_type or "",
+        free=_is_free_model_data(model_data),
         kie_model=registry_data.get("kie_model", model_id),
         modes=modes
     )
@@ -190,10 +194,16 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
         Список ModelSpec
     """
     global _catalog_cache
+    global _catalog_cache_key
+
+    cache_key = _compute_catalog_cache_key()
     
-    if _catalog_cache is not None and not force_reload:
+    if _catalog_cache is not None and not force_reload and _catalog_cache_key == cache_key:
+        logger.info("CATALOG_CACHE hit cache_key=%s models=%s", cache_key, len(_catalog_cache))
         return _catalog_cache
     
+    logger.info("CATALOG_CACHE miss cache_key=%s force_reload=%s", cache_key, force_reload)
+    start_time = time.monotonic()
     logger.info("Loading KIE models catalog...")
     raw_models = _load_yaml_catalog()
     registry_models = _load_registry_models()
@@ -211,6 +221,9 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
             continue
     
     _catalog_cache = models
+    _catalog_cache_key = cache_key
+    load_ms = int((time.monotonic() - start_time) * 1000)
+    logger.info("CATALOG_CACHE loaded models=%s load_ms=%s", len(models), load_ms)
     logger.info(f"Loaded {len(models)} models from catalog")
     
     # Проверяем каталог при загрузке (только предупреждения, не останавливаем)
@@ -224,14 +237,7 @@ def get_free_model_ids() -> List[str]:
     Возвращает список ID бесплатных моделей из каталога.
     Бесплатность определяется только по данным каталога (free=true или 0 credits).
     """
-    free_ids = []
-    for model_data in _load_yaml_catalog():
-        model_id = model_data.get("id")
-        if not model_id:
-            continue
-        if _is_free_model_data(model_data):
-            free_ids.append(model_id)
-    return free_ids
+    return [model.id for model in load_catalog() if model.free]
 
 
 def _verify_catalog_internal(models: List[ModelSpec]) -> None:
@@ -313,5 +319,13 @@ def list_models() -> List[ModelSpec]:
 def reset_catalog_cache():
     """Сбрасывает кеш каталога (для тестов)."""
     global _catalog_cache
+    global _catalog_cache_key
     _catalog_cache = None
+    _catalog_cache_key = None
     logger.debug("Catalog cache reset")
+def _compute_catalog_cache_key() -> str:
+    catalog_file = _get_catalog_path()
+    registry_file = REGISTRY_PATH
+    catalog_mtime = catalog_file.stat().st_mtime if catalog_file.exists() else 0
+    registry_mtime = registry_file.stat().st_mtime if registry_file.exists() else 0
+    return f"{catalog_mtime:.6f}:{registry_mtime:.6f}"

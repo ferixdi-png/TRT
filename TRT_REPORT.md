@@ -209,3 +209,68 @@
 **Как проверил:**
 - `python scripts/verify_project.py`
 - `pytest -q`
+
+## 2025-02-14: P0 set_trace_context + TRACE unification + catalog cache
+
+### STEP 0 — FULL AUDIT
+**Где вызывался guard.set_trace_context:**
+- `bot_kie.py` → `button_callback` (≈L3320).
+- `bot_kie.py` → `input_parameters` (≈L9761).
+- `bot_kie.py` → `confirm_generation` (≈L12492).
+- `bot_kie.py` → `unknown_callback_handler` (≈L25738).
+
+**Текущая сигнатура NoSilenceGuard.set_trace_context:**
+- `app/observability/no_silence_guard.py`:
+  `def set_trace_context(self, *, user_id, chat_id, update_id, message_id=None, update_type=None, correlation_id=None, **extra)`
+
+**Где update_id передавался дважды (и падал на бою):**
+- `button_callback`: `guard.set_trace_context(update_id, correlation_id, update_id=update_id, ...)` — позиционный + keyword.
+- `input_parameters`: `guard.set_trace_context(update_id, correlation_id, update_id=update_id, ...)` — позиционный + keyword.
+- `confirm_generation` и `unknown_callback_handler` — аналогичный паттерн.
+
+**Почему тесты не ловили:**
+- Большинство unit-тестов вызывали обработчики напрямую или через harness без реального callback→input потока, поэтому конфликт аргументов возникал только при боевом пути Telegram callback + message (Render webhook), где вызывался `button_callback`/`input_parameters` с positional+keyword аргументами.
+
+**Какие пути боевые падали:**
+- Любой callback → `button_callback` или вход текста → `input_parameters`, когда `update_id` передавался дважды.
+- На Render это проявлялось при клике любой кнопки (callback) и при вводе параметра (message).
+
+### STEP 1 — FIX P0
+- `set_trace_context` переведён на keyword-only и все вызовы исправлены на именованные аргументы.
+- Исключены все дубли `update_id` (позиционный + keyword).
+
+### STEP 2 — TESTS
+- Добавлен e2e тест: `/start -> callback gen_type:text-to-image -> callback select_model:z-image -> user sends prompt`.
+- Добавлен тест на `set_trace_context` с keyword-only вызовом.
+
+### STEP 3 — TRACE UNIFICATION
+- `TRACE_VERBOSE`, `TRACE_PAYLOADS`, `TRACE_PRICING` подключены в `trace_event`.
+- Корреляция: webhook correlation_id теперь пробрасывается в PTB handlers через `update.correlation_id`.
+- Все логи `🔥🔥🔥` переведены на DEBUG.
+
+### STEP 4 — PERFORMANCE
+- Добавлен process-level cache по mtime ключу для каталога `models_pricing.yaml` + registry `models/kie_models.yaml`.
+- Логируются `CATALOG_CACHE hit/miss + load_ms`.
+- `get_free_model_ids()` использует кеш `load_catalog()`.
+
+### STEP 7 — REPORT + PROOF
+**Как включить расширенные логи:**
+- `LOG_LEVEL=DEBUG`
+- `TRACE_VERBOSE=true`
+- `TRACE_PAYLOADS=true` (если нужно видеть payload)
+- `TRACE_PRICING=true` (если нужно видеть цены)
+
+**grep по correlation_id:**
+- `rg "correlation_id=<id>" -n`
+
+**E2E ручные сценарии (10 кликов):**
+1. `/start` → главное меню
+2. `gen_type:text-to-image` → список моделей
+3. `select_model:z-image` → запрос prompt
+4. Ввести prompt → запрос следующего параметра
+5. `back_to_previous_step` → возврат шага
+6. `back_to_menu` → сброс сессии и главное меню
+7. `free_tools` → список бесплатных
+8. `help_menu` → справка
+9. `check_balance` → баланс
+10. `generate_again` → повтор генерации
