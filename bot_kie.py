@@ -408,6 +408,7 @@ from app.services.free_tools_service import (
 from kie_models import (
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
+from app.session_store import get_session_store
 
 
 def ensure_source_of_truth():
@@ -902,8 +903,8 @@ kie = None
 # PostgreSQL advisory lock connection (global для keep-alive задачи)
 # lock_conn и lock_key_int удалены - используется app.locking.single_instance
 
-# Store user sessions
-user_sessions = {}
+# Store user sessions (SSOT via SessionStore)
+user_sessions = get_session_store()
 
 # Deduplicate update_id to prevent double-processing bursts
 _processed_update_ids: dict[int, float] = {}
@@ -1993,6 +1994,24 @@ def _append_free_counter_text(text: str, line: str) -> str:
     if not line:
         return text
     return f"{text}\n\n{line}"
+
+
+async def _resolve_free_counter_line(
+    user_id: int,
+    user_lang: str,
+    correlation_id: Optional[str],
+    action_path: str,
+) -> str:
+    try:
+        return await get_free_counter_line(
+            user_id,
+            user_lang=user_lang,
+            correlation_id=correlation_id,
+            action_path=action_path,
+        )
+    except Exception as exc:
+        logger.warning("Failed to resolve free counter line: %s", exc)
+        return ""
 
 
 async def get_free_counter_line(
@@ -4164,6 +4183,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = None
     user_lang = 'ru'
     is_admin_user = False
+    session_store = get_session_store(context)
     
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
@@ -4216,7 +4236,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_path=build_action_path(data),
             outcome="received",
         )
-        session = user_sessions.get(user_id, {}) if user_id is not None else {}
+        session = session_store.get(user_id, {}) if user_id is not None else {}
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -4290,15 +4310,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             user_lang = 'ru'
 
+        if data == "reset_step":
+            session_store.clear(user_id)
+            await show_main_menu(update, context, source="reset_step")
+            track_outgoing_action(update_id, action_type="edit_message_text")
+            return ConversationHandler.END
+
         if data == "reset_wizard":
-            clear_user_session(user_id, reason="reset_wizard")
+            session_store.clear(user_id)
             await show_main_menu(update, context, source="reset_wizard")
             track_outgoing_action(update_id, action_type="edit_message_text")
             return ConversationHandler.END
 
         # 🔥🔥🔥 SUPER-DETAILED CONTEXT LOGGING
         try:
-            session = user_sessions.get(user_id) if user_id else None
+            session = session_store.get(user_id) if user_id else None
             session_keys = list(session.keys()) if session else []
             session_model_id = session.get('model_id') if session else None
             session_waiting_for = session.get('waiting_for') if session else None
@@ -4555,11 +4581,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
-            if user_id not in user_sessions:
-                user_sessions[user_id] = {}
+            session = session_store.ensure(user_id)
             
-            current_mode = user_sessions[user_id].get('admin_user_mode', False)
-            user_sessions[user_id]['admin_user_mode'] = not current_mode
+            current_mode = session.get('admin_user_mode', False)
+            session['admin_user_mode'] = not current_mode
             
             if not current_mode:
                 # Switching to user mode - send new message directly
@@ -4622,7 +4647,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             else:
                 # Switching back to admin mode - send new message with full admin panel
-                user_sessions[user_id]['admin_user_mode'] = False
+                session = session_store.ensure(user_id)
+                session['admin_user_mode'] = False
                 user_lang = get_user_language(user_id)
                 await query.answer(t('msg_returning_to_admin', lang=user_lang))
                 user = update.effective_user
@@ -4707,8 +4733,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
-            if user_id in user_sessions:
-                user_sessions[user_id]['admin_user_mode'] = False
+            session = session_store.ensure(user_id)
+            session['admin_user_mode'] = False
             await query.answer("Возврат в админ-панель")
             user = update.effective_user
             categories = get_categories_from_registry()
@@ -4790,14 +4816,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"Restoring generation data for user {user_id}, model: {saved_data.get('model_id')}")
             
             # Restore session with model info, but clear params to start fresh
-            if user_id not in user_sessions:
-                user_sessions[user_id] = {}
+            session = session_store.ensure(user_id)
             
             model_id = saved_data['model_id']
             model_info = saved_data['model_info']
             
             # Restore model info but clear params - user will enter new prompt
-            user_sessions[user_id].update({
+            session.update({
                 'model_id': model_id,
                 'model_info': model_info,
                 'properties': saved_data['properties'].copy(),
@@ -4949,15 +4974,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Введите текст для генерации:",
                     parse_mode='HTML'
                 )
-                user_sessions[user_id]['params'] = {}
-                user_sessions[user_id]['waiting_for'] = 'text'
+                session['params'] = {}
+                session['waiting_for'] = 'text'
                 return INPUTTING_PARAMS
             
             # Store session data
-            user_sessions[user_id]['params'] = {}
-            user_sessions[user_id]['properties'] = input_params
-            user_sessions[user_id]['required'] = [p for p, info in input_params.items() if info.get('required', False)]
-            user_sessions[user_id]['current_param'] = None
+            session['params'] = {}
+            session['properties'] = input_params
+            session['required'] = [p for p, info in input_params.items() if info.get('required', False)]
+            session['current_param'] = None
             # NOTE: model_id and model_info are already stored above at lines 8449-8450
             
             primary_input = _determine_primary_input(model_info, input_params)
@@ -4978,6 +5003,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
+                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 if user_lang == 'en':
@@ -5005,15 +5031,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if 'prompt' in input_params:
                         step_text += "\n\n✅ <b>После загрузки:</b> вы сможете ввести промпт"
 
+                free_counter_line = await _resolve_free_counter_line(
+                    user_id,
+                    user_lang,
+                    correlation_id,
+                    action_path=f"param_prompt:{image_param_name}",
+                )
+                step_text = _append_free_counter_text(step_text, free_counter_line)
                 await query.edit_message_text(
                     f"{model_info_text}\n\n{step_text}",
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
-                user_sessions[user_id]['current_param'] = image_param_name
-                user_sessions[user_id]['waiting_for'] = image_param_name
-                if image_param_name not in user_sessions[user_id]:
-                    user_sessions[user_id][image_param_name] = []
+                session['current_param'] = image_param_name
+                session['waiting_for'] = image_param_name
+                if image_param_name not in session:
+                    session[image_param_name] = []
                 await query.answer()
                 logger.info(
                     "🔥🔥🔥 SELECT_MODEL: Image input setup complete! model_id=%s user_id=%s waiting_for=%s",
@@ -5034,6 +5067,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
+                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 if user_lang == 'en':
@@ -5050,13 +5084,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
                         f"Максимальный размер: 200 MB"
                     )
+                free_counter_line = await _resolve_free_counter_line(
+                    user_id,
+                    user_lang,
+                    correlation_id,
+                    action_path=f"param_prompt:{audio_param_name}",
+                )
+                audio_text = _append_free_counter_text(audio_text, free_counter_line)
                 await query.edit_message_text(
                     audio_text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
-                user_sessions[user_id]['current_param'] = audio_param_name
-                user_sessions[user_id]['waiting_for'] = audio_param_name
+                session['current_param'] = audio_param_name
+                session['waiting_for'] = audio_param_name
                 await query.answer()
                 return INPUTTING_PARAMS
             
@@ -5065,17 +5106,36 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Start with image_urls first for sora-2-pro-image-to-video
                 has_image_input = True
                 image_param_name = 'image_urls'
-                await query.edit_message_text(
+                keyboard = [
+                    [
+                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                    ],
+                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
+                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+                ]
+                image_text = (
                     f"{model_info_text}\n\n"
                     f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
                     f"Отправьте фото, которое будет использовано как первый кадр видео.\n\n"
-                    f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>",
+                    f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>"
+                )
+                free_counter_line = await _resolve_free_counter_line(
+                    user_id,
+                    user_lang,
+                    correlation_id,
+                    action_path=f"param_prompt:{image_param_name}",
+                )
+                image_text = _append_free_counter_text(image_text, free_counter_line)
+                await query.edit_message_text(
+                    image_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
-                user_sessions[user_id]['current_param'] = 'image_urls'
-                user_sessions[user_id]['waiting_for'] = 'image_urls'
-                if 'image_urls' not in user_sessions[user_id]:
-                    user_sessions[user_id]['image_urls'] = []  # Initialize as array
+                session['current_param'] = 'image_urls'
+                session['waiting_for'] = 'image_urls'
+                if 'image_urls' not in session:
+                    session['image_urls'] = []  # Initialize as array
                 await query.answer()
                 return INPUTTING_PARAMS
             
@@ -5098,7 +5158,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 is_audio = is_audio_model(model_id)
                 
                 if has_image_input:
-                    ref_hint = "реф-картинку" if user_sessions[user_id].get("image_ref_prompt") else "изображение"
+                    ref_hint = "реф-картинку" if session.get("image_ref_prompt") else "изображение"
                     if is_video:
                         prompt_text += (
                             f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
@@ -5129,11 +5189,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                 
                 # Add keyboard with "Главное меню" and "Отмена" buttons
+                free_counter_line = await _resolve_free_counter_line(
+                    user_id,
+                    user_lang,
+                    correlation_id,
+                    action_path="param_prompt:prompt",
+                )
+                prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
                 keyboard = [
                     [
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
+                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 
@@ -5142,9 +5210,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
-                user_sessions[user_id]['current_param'] = 'prompt'
-                user_sessions[user_id]['waiting_for'] = 'prompt'
-                user_sessions[user_id]['has_image_input'] = has_image_input
+                session['current_param'] = 'prompt'
+                session['waiting_for'] = 'prompt'
+                session['has_image_input'] = has_image_input
             else:
                 # If no prompt, start with first required parameter
                 await start_next_parameter(update, context, user_id)
@@ -5172,8 +5240,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "cancel":
             user_lang = get_user_language(user_id)
             await query.answer(t('btn_cancel', lang=user_lang).replace('❌ ', ''))
-            if user_id in user_sessions:
-                del user_sessions[user_id]
+            session_store.clear(user_id)
             try:
                 keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
                 await query.edit_message_text(
@@ -5196,11 +5263,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Retry generation with same parameters
             await query.answer("Повторяю попытку...")
             
-            if user_id not in user_sessions:
+            session = session_store.get(user_id)
+            if not session:
                 await query.edit_message_text("❌ Сессия не найдена. Начните заново.")
                 return ConversationHandler.END
-            
-            session = user_sessions[user_id]
             
             # Show confirmation again with same parameters
             model_name = session.get('model_info', {}).get('name', 'Unknown')
@@ -5877,6 +5943,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
             ])
+            keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
             
             try:
@@ -5954,11 +6021,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['current_param'] = image_param_name
             if image_param_name not in session:
                 session[image_param_name] = []  # Initialize as array
-            
-            await query.edit_message_text(
+            free_counter_line = await _resolve_free_counter_line(
+                user_id,
+                user_lang,
+                correlation_id,
+                action_path=f"param_prompt:{image_param_name}",
+            )
+            prompt_text = _append_free_counter_text(
                 "📷 <b>Загрузите изображение</b>\n\n"
                 "Отправьте фото, которое хотите использовать как референс или для трансформации.\n"
                 "Можно загрузить до 8 изображений.",
+                free_counter_line,
+            )
+            keyboard = [
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                ],
+                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
+                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            ]
+            await query.edit_message_text(
+                prompt_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
             return INPUTTING_PARAMS
@@ -10058,12 +10143,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             # Store selected model
-            if user_id not in user_sessions:
-                user_sessions[user_id] = {}
-                logger.debug(f"🔥🔥🔥 SELECT_MODEL: Created new session for user_id={user_id}")
-            user_sessions[user_id]['model_id'] = model_id
-            user_sessions[user_id]['model_info'] = model_info
-            logger.debug(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(user_sessions[user_id].keys())}")
+            session = session_store.ensure(user_id)
+            logger.debug(f"🔥🔥🔥 SELECT_MODEL: Created new session for user_id={user_id}")
+            session['model_id'] = model_id
+            session['model_info'] = model_info
+            logger.debug(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(session.keys())}")
 
             log_structured_event(
                 correlation_id=correlation_id,
@@ -10087,29 +10171,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             # Store session data
-            user_sessions[user_id]['params'] = {}
-            user_sessions[user_id]['properties'] = input_params
-            user_sessions[user_id]['required'] = model_spec.schema_required or []
-            user_sessions[user_id]['required_original'] = (model_spec.schema_required or []).copy()
-            user_sessions[user_id]['current_param'] = None
-            user_sessions[user_id]['param_history'] = []
-            user_sessions[user_id]['model_spec'] = model_spec
-            user_sessions[user_id]['param_order'] = _build_param_order(input_params)
-            user_sessions[user_id]['ssot_conflicts'] = _detect_ssot_conflicts(model_spec)
-            user_sessions[user_id]['optional_media_params'] = []
-            user_sessions[user_id]['image_ref_prompt'] = False
+            session['params'] = {}
+            session['properties'] = input_params
+            session['required'] = model_spec.schema_required or []
+            session['required_original'] = (model_spec.schema_required or []).copy()
+            session['current_param'] = None
+            session['param_history'] = []
+            session['model_spec'] = model_spec
+            session['param_order'] = _build_param_order(input_params)
+            session['ssot_conflicts'] = _detect_ssot_conflicts(model_spec)
+            session['optional_media_params'] = []
+            session['image_ref_prompt'] = False
             model_info.setdefault("input_params", input_params)
             if model_spec.model_type in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}:
                 if "image_input" in input_params or "image_urls" in input_params:
-                    user_sessions[user_id]['image_ref_prompt'] = True
-            if "SSOT_CONFLICT_TEXT_MODEL_REQUIRES_IMAGE" in user_sessions[user_id]['ssot_conflicts']:
+                    session['image_ref_prompt'] = True
+            if "SSOT_CONFLICT_TEXT_MODEL_REQUIRES_IMAGE" in session['ssot_conflicts']:
                 media_param = _first_required_media_param(input_params)
                 if media_param:
-                    user_sessions[user_id]['optional_media_params'] = [media_param]
-                    user_sessions[user_id]['required'] = [
-                        name for name in user_sessions[user_id]['required'] if name != media_param
+                    session['optional_media_params'] = [media_param]
+                    session['required'] = [
+                        name for name in session['required'] if name != media_param
                     ]
-            if user_sessions[user_id]['ssot_conflicts']:
+            if session['ssot_conflicts']:
                 log_structured_event(
                     correlation_id=correlation_id,
                     user_id=user_id,
@@ -10121,11 +10205,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     outcome="detected",
                     error_code="SSOT_CONFLICT_DETECTED",
                     fix_hint="Проверьте модельный SSOT на противоречия.",
-                    param={"conflicts": user_sessions[user_id]['ssot_conflicts']},
+                    param={"conflicts": session['ssot_conflicts']},
                 )
             logger.info(
                 "✅ SELECT_MODEL: Parameter order determined: %s, user_id=%s",
-                user_sessions[user_id]['param_order'],
+                session['param_order'],
                 user_id,
             )
 
@@ -10318,6 +10402,10 @@ def _get_settings_label(user_lang: str) -> str:
     return "⚙️ Параметры" if user_lang == 'ru' else "⚙️ Parameters"
 
 
+def _get_reset_step_label(user_lang: str) -> str:
+    return "🔄 Сбросить шаг" if user_lang == 'ru' else "🔄 Reset step"
+
+
 async def prompt_for_specific_param(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -10341,6 +10429,13 @@ async def prompt_for_specific_param(
     format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
     example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
     chat_id = _get_chat_id_from_update(update)
+    correlation_id = ensure_correlation_id(update, context)
+    free_counter_line = await _resolve_free_counter_line(
+        user_id,
+        user_lang,
+        correlation_id,
+        action_path=f"param_prompt:{param_name}",
+    )
 
     logger.info(
         "🧭 PARAM_PROMPT: action_path=%s model_id=%s param=%s waiting_for=%s current_param=%s outcome=prompt",
@@ -10360,7 +10455,7 @@ async def prompt_for_specific_param(
         session['current_param'] = param_name
         session['waiting_for'] = param_name
         log_structured_event(
-            correlation_id=ensure_correlation_id(update, context),
+            correlation_id=correlation_id,
             user_id=user_id,
             chat_id=chat_id,
             action="WIZARD_TRANSITION",
@@ -10380,6 +10475,7 @@ async def prompt_for_specific_param(
         ]
         if is_optional:
             keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         prompt_text = (
             f"📷 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
@@ -10389,6 +10485,7 @@ async def prompt_for_specific_param(
         if example_hint:
             prompt_text += f"🧪 {example_hint}\n"
         prompt_text += "📏 Максимальный размер: 10 MB" if user_lang == 'ru' else "📏 Max size: 10 MB"
+        prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
         await context.bot.send_message(
             chat_id=chat_id,
             text=prompt_text,
@@ -10402,7 +10499,7 @@ async def prompt_for_specific_param(
         session['current_param'] = param_name
         session['waiting_for'] = param_name
         log_structured_event(
-            correlation_id=ensure_correlation_id(update, context),
+            correlation_id=correlation_id,
             user_id=user_id,
             chat_id=chat_id,
             action="WIZARD_TRANSITION",
@@ -10420,6 +10517,7 @@ async def prompt_for_specific_param(
         ]
         if is_optional:
             keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         prompt_text = (
             f"🎤 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
@@ -10431,6 +10529,7 @@ async def prompt_for_specific_param(
         prompt_text += (
             "Максимальный размер: 200 MB" if user_lang == 'ru' else "Max size: 200 MB"
         )
+        prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
         await context.bot.send_message(
             chat_id=chat_id,
             text=prompt_text,
@@ -10457,19 +10556,24 @@ async def prompt_for_specific_param(
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
         ])
+        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         description = param_info.get('description', '')
         detail_lines = [format_hint]
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=(
+        message_text = _append_free_counter_text(
+            (
                 f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
                 f"{description}\n\n"
                 f"💡 {detail_text}"
             ),
+            free_counter_line,
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
@@ -10496,19 +10600,24 @@ async def prompt_for_specific_param(
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
         ])
+        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         description = param_info.get('description', '')
         detail_lines = [format_hint]
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=(
+        message_text = _append_free_counter_text(
+            (
                 f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
                 f"{description}\n\n"
                 f"💡 {detail_text}"
             ),
+            free_counter_line,
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
@@ -10528,19 +10637,24 @@ async def prompt_for_specific_param(
         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
     ])
+    keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
     keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
     description = param_info.get('description', '')
     detail_lines = [format_hint]
     if example_hint:
         detail_lines.append(example_hint)
     detail_text = "\n".join(detail_lines)
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=(
+    message_text = _append_free_counter_text(
+        (
             f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
             f"{description}\n\n"
             f"💡 {detail_text}"
         ),
+        free_counter_line,
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=message_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML'
     )
@@ -10785,6 +10899,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
             example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
             example_line = f"🧪 {example_hint}\n" if example_hint else ""
+            free_counter_line = await _resolve_free_counter_line(
+                user_id,
+                user_lang,
+                correlation_id,
+                action_path=f"param_prompt:{param_name}",
+            )
             title_map = {
                 "image": "Загрузите изображение",
                 "video": "Загрузите видео",
@@ -10798,6 +10918,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"{example_line}"
                 f"📏 Максимальный размер: 30 MB"
             )
+            prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
             keyboard = [[
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -10805,6 +10926,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             if is_optional:
                 skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
                 keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+            keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
             await context.bot.send_message(
@@ -10833,6 +10955,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
             ])
+            keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
             param_desc = param_info.get('description', '')
@@ -10845,13 +10968,23 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
             example_line = f"🧪 {example_hint}\n" if example_hint else ""
             details_text = "\n".join([format_hint, example_hint] if example_hint else [format_hint])
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=(
+            free_counter_line = await _resolve_free_counter_line(
+                user_id,
+                user_lang,
+                correlation_id,
+                action_path=f"param_prompt:{param_name}",
+            )
+            message_text = _append_free_counter_text(
+                (
                     f"📝 <b>{step_prefix}Выберите {param_name}:</b>\n\n"
                     f"{param_desc}{default_text}\n\n"
                     f"💡 {details_text}\n{example_line}"
                 ),
+                free_counter_line,
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
@@ -10894,14 +11027,23 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     if user_lang == 'ru'
                     else f"\n\n💡 Default: <b>{default_value}</b>"
                 )
-
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=(
+            free_counter_line = await _resolve_free_counter_line(
+                user_id,
+                user_lang,
+                correlation_id,
+                action_path=f"param_prompt:{param_name}",
+            )
+            message_text = _append_free_counter_text(
+                (
                     f"📝 <b>Выберите {param_name}:</b>\n\n"
                     f"{param_desc}{default_info}\n\n"
                     f"💡 Нажмите одну из кнопок ниже"
                 ),
+                free_counter_line,
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
@@ -10928,6 +11070,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
         ])
+        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
         default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
@@ -10949,14 +11092,23 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 action_hint = "• Send the value as text"
 
-        message_text = (
-            f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
-            f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
-            f"💡 {format_hint}\n"
-            f"{example_line}\n"
-            f"💡 <b>Что делать:</b>\n"
-            f"• Введите значение в текстовом сообщении\n"
-            f"{action_hint}"
+        free_counter_line = await _resolve_free_counter_line(
+            user_id,
+            user_lang,
+            correlation_id,
+            action_path=f"param_prompt:{param_name}",
+        )
+        message_text = _append_free_counter_text(
+            (
+                f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
+                f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
+                f"💡 {format_hint}\n"
+                f"{example_line}\n"
+                f"💡 <b>Что делать:</b>\n"
+                f"• Введите значение в текстовом сообщении\n"
+                f"{action_hint}"
+            ),
+            free_counter_line,
         )
 
         await context.bot.send_message(
@@ -12740,12 +12892,23 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                         if audio_required:
                             keyboard = [
-                                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                                [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                             ]
-                            await update.message.reply_text(
+                            free_counter_line = await _resolve_free_counter_line(
+                                user_id,
+                                user_lang,
+                                correlation_id,
+                                action_path=f"param_prompt:{audio_param_name}",
+                            )
+                            audio_text = _append_free_counter_text(
                                 "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
                                 "Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
                                 "Максимальный размер: 200 MB",
+                                free_counter_line,
+                            )
+                            await update.message.reply_text(
+                                audio_text,
                                 reply_markup=InlineKeyboardMarkup(keyboard),
                                 parse_mode='HTML'
                             )
@@ -12774,12 +12937,23 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     if audio_required:
                         keyboard = [
-                            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                            [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                         ]
-                        await update.message.reply_text(
+                        free_counter_line = await _resolve_free_counter_line(
+                            user_id,
+                            user_lang,
+                            correlation_id,
+                            action_path=f"param_prompt:{audio_param_name}",
+                        )
+                        audio_text = _append_free_counter_text(
                             "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
                             "Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
                             "Максимальный размер: 200 MB",
+                            free_counter_line,
+                        )
+                        await update.message.reply_text(
+                            audio_text,
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
@@ -12790,11 +12964,22 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         keyboard = [
                             [InlineKeyboardButton("🎤 Загрузить аудио (опционально)", callback_data="add_audio")],
                             [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_audio")],
-                            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]
+                            [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+                            [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")]
                         ]
-                        await update.message.reply_text(
+                        free_counter_line = await _resolve_free_counter_line(
+                            user_id,
+                            user_lang,
+                            correlation_id,
+                            action_path=f"param_prompt:{audio_param_name}",
+                        )
+                        audio_prompt = _append_free_counter_text(
                             "🎤 <b>Вы можете загрузить аудио-файл (опционально)</b>\n\n"
                             "Отправьте аудио-файл или нажмите 'Пропустить', чтобы продолжить.",
+                            free_counter_line,
+                        )
+                        await update.message.reply_text(
+                            audio_prompt,
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
@@ -12813,18 +12998,26 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     if image_required:
                         keyboard = [
-                            [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")]
+                            [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")],
+                            [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                         ]
-                        await update.message.reply_text(
+                        image_param_name = 'image_urls' if 'image_urls' in input_params else 'image_input'
+                        free_counter_line = await _resolve_free_counter_line(
+                            user_id,
+                            user_lang,
+                            correlation_id,
+                            action_path=f"param_prompt:{image_param_name}",
+                        )
+                        image_text = _append_free_counter_text(
                             "📷 <b>Загрузите изображение для редактирования</b>\n\n"
                             "Отправьте фото, которое хотите отредактировать.",
+                            free_counter_line,
+                        )
+                        await update.message.reply_text(
+                            image_text,
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='HTML'
                         )
-                        if 'image_urls' in input_params:
-                            image_param_name = 'image_urls'
-                        else:
-                            image_param_name = 'image_input'
                         session['waiting_for'] = image_param_name
                         session['current_param'] = image_param_name
                         return INPUTTING_PARAMS
@@ -12835,23 +13028,45 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     InlineKeyboardButton("✅ Да", callback_data="add_image"),
                                     InlineKeyboardButton("❌ Нет", callback_data="skip_image"),
                                 ],
+                                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                             ]
-                            await update.message.reply_text(
+                            free_counter_line = await _resolve_free_counter_line(
+                                user_id,
+                                user_lang,
+                                correlation_id,
+                                action_path="param_prompt:image_ref",
+                            )
+                            image_prompt = _append_free_counter_text(
                                 "📷 <b>Добавить реф-картинку?</b>\n\n"
                                 "Реф-картинка поможет уточнить стиль или детали.\n"
                                 "Вы можете пропустить этот шаг.",
+                                free_counter_line,
+                            )
+                            await update.message.reply_text(
+                                image_prompt,
                                 reply_markup=InlineKeyboardMarkup(keyboard),
                                 parse_mode='HTML'
                             )
                         else:
                             keyboard = [
                                 [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
-                                [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")]
+                                [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")],
+                                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")]
                             ]
-                            await update.message.reply_text(
+                            free_counter_line = await _resolve_free_counter_line(
+                                user_id,
+                                user_lang,
+                                correlation_id,
+                                action_path="param_prompt:image_optional",
+                            )
+                            image_prompt = _append_free_counter_text(
                                 "📷 <b>Хотите добавить изображение?</b>\n\n"
                                 "Вы можете загрузить изображение для использования как референс или для трансформации.\n"
                                 "Или пропустите этот шаг.",
+                                free_counter_line,
+                            )
+                            await update.message.reply_text(
+                                image_prompt,
                                 reply_markup=InlineKeyboardMarkup(keyboard),
                                 parse_mode='HTML'
                             )
@@ -13236,6 +13451,80 @@ async def start_generation_directly(
             parse_mode='HTML'
         )
         return ConversationHandler.END
+
+
+async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Final fallback for any text/photo/audio/document update to prevent silence."""
+    from app.observability.no_silence_guard import track_outgoing_action
+
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    correlation_id = ensure_correlation_id(update, context)
+    session_store = get_session_store(context)
+    session_snapshot = session_store.snapshot(user_id)
+
+    update_type = "unknown"
+    if update.message:
+        if update.message.text:
+            update_type = "text"
+        elif update.message.photo:
+            update_type = "photo"
+        elif update.message.audio or update.message.voice:
+            update_type = "audio"
+        elif update.message.document:
+            update_type = "document"
+
+    logger.warning(
+        "UNHANDLED_UPDATE correlation_id=%s user_id=%s update_type=%s session=%s",
+        correlation_id,
+        user_id,
+        update_type,
+        session_snapshot,
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="UNHANDLED_UPDATE",
+        action_path="fallback",
+        stage="UI_ROUTER",
+        outcome="fallback",
+        param={"update_type": update_type, "session": session_snapshot},
+    )
+
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    keyboard = [
+        [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
+        [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
+    ]
+    message_text = (
+        "⚠️ <b>Похоже, мы потеряли контекст.</b>\n\n"
+        "Вы можете:\n"
+        "• Вернуться в главное меню\n"
+        "• Сбросить шаг и начать заново"
+        if user_lang == "ru"
+        else (
+            "⚠️ <b>Looks like we lost the context.</b>\n\n"
+            "You can:\n"
+            "• Return to the main menu\n"
+            "• Reset the step and start over"
+        )
+    )
+    if update.message:
+        await update.message.reply_text(
+            message_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    elif chat_id:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    track_outgoing_action(update.update_id, action_type="fallback")
     
     # Apply default values for parameters that are not set
     input_params = model_info.get('input_params', {})
@@ -15878,6 +16167,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
             CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
             CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+            CallbackQueryHandler(button_callback, pattern='^reset_step$'),
             CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
             CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
             CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
@@ -15903,6 +16193,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, pattern='^gen_type:'),
                 CallbackQueryHandler(button_callback, pattern='^free_tools$'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
@@ -15940,6 +16231,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
                 CallbackQueryHandler(button_callback, pattern='^retry_generate:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
@@ -15986,6 +16278,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, pattern='^info:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
@@ -16118,19 +16411,16 @@ async def _register_all_handlers_internal(application: Application):
                 )
         await show_main_menu(update, context, source="unknown_callback_handler")
     
-    # Fallback handler for non-text messages (photo/video/audio/document) when not in conversation
-    async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Fallback handler for non-text messages when not in conversation - ensures no silence"""
-        if not update.message:
-            return
-        await show_main_menu(update, context, source="unknown_message_handler")
-    
     # Add fallback handlers with lowest priority (group=100, added last)
     application.add_handler(CallbackQueryHandler(unknown_callback_handler), group=100)
-    application.add_handler(MessageHandler(
-        filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
-        unknown_message_handler
-    ), group=100)
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT | filters.PHOTO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
+            unhandled_update_fallback,
+            block=False,
+        ),
+        group=100,
+    )
     
     logger.info("✅ Basic handlers registered (full registration happens in main())")
 
@@ -16370,6 +16660,7 @@ async def main():
             CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
             CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
             CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+            CallbackQueryHandler(button_callback, pattern='^reset_step$'),
             CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
             CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
             CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
@@ -16395,6 +16686,7 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^gen_type:'),
                 CallbackQueryHandler(button_callback, pattern='^free_tools$'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
@@ -16437,6 +16729,7 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^example:'),
                 CallbackQueryHandler(button_callback, pattern='^info:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
@@ -16488,6 +16781,7 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^example:'),
                 CallbackQueryHandler(button_callback, pattern='^info:'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
@@ -16642,12 +16936,14 @@ async def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
                 MessageHandler(filters.PHOTO, input_parameters),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^check_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
             ],
             WAITING_CURRENCY_RATE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
                 CallbackQueryHandler(button_callback, pattern='^cancel$')
             ]
@@ -17161,6 +17457,14 @@ async def main():
     # Дубликат error_handler удален - используется обработчик выше (строка 24313)
     
     application.add_handler(generation_handler)
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT | filters.PHOTO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
+            unhandled_update_fallback,
+            block=False,
+        ),
+        group=100,
+    )
     application.add_handler(CommandHandler("models", list_models))
     
     # HTTP server already started at the beginning of main()
