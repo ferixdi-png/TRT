@@ -138,6 +138,50 @@ def _truncate_log_value(value: Optional[str], limit: int = 160) -> Optional[str]
     return f"{value[:limit]}...<truncated>"
 
 
+def _resolve_update_type(update: Update) -> str:
+    if update.message:
+        if update.message.text:
+            return "text"
+        if update.message.photo:
+            return "photo"
+        if update.message.audio or update.message.voice:
+            return "audio"
+        if update.message.document:
+            return "document"
+    return "unknown"
+
+
+def _log_route_decision_once(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    waiting_for: Optional[str],
+    chosen_handler: str,
+    reason: str,
+) -> None:
+    if not update.message:
+        return
+    update_id = getattr(update, "update_id", None)
+    log_key = update_id if update_id is not None else id(update)
+    app = getattr(context, "application", None)
+    if app is None:
+        return
+    logged = app.bot_data.setdefault("_route_decision_logged", set())
+    if log_key in logged:
+        return
+    logged.add(log_key)
+    correlation_id = ensure_correlation_id(update, context)
+    update_type = _resolve_update_type(update)
+    logger.info(
+        "ROUTE_DECISION update_type=%s waiting_for=%s chosen_handler=%s reason=%s correlation_id=%s",
+        update_type,
+        waiting_for,
+        chosen_handler,
+        reason,
+        correlation_id,
+    )
+
+
 async def inbound_update_logger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log every inbound Telegram update and set contextvars for propagation."""
     from app.observability.context import set_update_context
@@ -11260,6 +11304,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = user_sessions[user_id]
     model_id = session.get('model_id', 'Unknown')
     waiting_for = session.get('waiting_for', 'None')
+    _log_route_decision_once(
+        update,
+        context,
+        waiting_for=waiting_for if waiting_for != "None" else None,
+        chosen_handler="input_parameters",
+        reason="conversation_handler",
+    )
     properties = session.get('properties', {})
     params = session.get('params', {})
     has_image_input = 'image_input' in properties
@@ -13453,26 +13504,207 @@ async def start_generation_directly(
         return ConversationHandler.END
 
 
+async def active_session_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route active sessions to input_parameters before generic handlers."""
+    from telegram.ext import ApplicationHandlerStop
+    from app.observability.no_silence_guard import get_no_silence_guard
+
+    if not update.message:
+        return
+    user_id = update.effective_user.id if update.effective_user else None
+    if not user_id:
+        return
+    session_store = get_session_store(context)
+    session = session_store.get(user_id)
+    waiting_for = session.get("waiting_for") if isinstance(session, dict) else None
+    current_param = session.get("current_param") if isinstance(session, dict) else None
+    if not waiting_for and not current_param:
+        return
+
+    _log_route_decision_once(
+        update,
+        context,
+        waiting_for=waiting_for or current_param,
+        chosen_handler="active_session_router->input_parameters",
+        reason="waiting_for_active",
+    )
+    guard = get_no_silence_guard()
+    try:
+        await input_parameters(update, context)
+    except Exception as exc:
+        logger.error("Active session router failed: %s", exc, exc_info=True)
+        await guard.check_and_ensure_response(update, context)
+    raise ApplicationHandlerStop
+
+
+async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global router for TEXT messages - shows main menu when no active session."""
+    from telegram.ext import ApplicationHandlerStop
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+
+    guard = get_no_silence_guard()
+    update_id = update.update_id
+    user_id = update.effective_user.id if update.effective_user else None
+    if _should_dedupe_update(
+        update,
+        context,
+        action="TEXT_ROUTER",
+        action_path="global_text_router",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+    ):
+        return
+
+    session_store = get_session_store(context)
+    session = session_store.get(user_id) if user_id else None
+    waiting_for = session.get("waiting_for") if isinstance(session, dict) else None
+    if waiting_for:
+        return
+
+    _log_route_decision_once(
+        update,
+        context,
+        waiting_for=None,
+        chosen_handler="global_text_router->main_menu",
+        reason="no_active_session",
+    )
+    logger.info("🔀 GLOBAL_TEXT_ROUTER: No waiting_for, showing main menu")
+    try:
+        await show_main_menu(update, context, source="global_text_router")
+        track_outgoing_action(update_id)
+    except Exception as exc:
+        logger.error("Error in global_text_router fallback: %s", exc, exc_info=True)
+        await guard.check_and_ensure_response(update, context)
+    raise ApplicationHandlerStop
+
+
+async def global_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global router for PHOTO messages - routes to input_parameters if waiting_for expects image."""
+    from telegram.ext import ApplicationHandlerStop
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+
+    guard = get_no_silence_guard()
+    update_id = update.update_id
+    user_id = update.effective_user.id if update.effective_user else None
+    if _should_dedupe_update(
+        update,
+        context,
+        action="PHOTO_ROUTER",
+        action_path="global_photo_router",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+    ):
+        return
+
+    session_store = get_session_store(context)
+    session = session_store.get(user_id) if user_id else None
+    if isinstance(session, dict):
+        waiting_for = session.get('waiting_for')
+        current_param = session.get('current_param', waiting_for)
+        if waiting_for and current_param in ['image_input', 'image_urls', 'mask_input', 'reference_image_input']:
+            try:
+                await update.message.reply_text("⏳ Принято. Обрабатываю фото…", parse_mode='HTML')
+                track_outgoing_action(update_id)
+            except Exception as exc:
+                logger.warning("Could not send instant ACK: %s", exc)
+            logger.info("🔀 GLOBAL_PHOTO_ROUTER: Routing to input_parameters (waiting_for=%s)", waiting_for)
+            _log_route_decision_once(
+                update,
+                context,
+                waiting_for=waiting_for,
+                chosen_handler="global_photo_router->input_parameters",
+                reason="waiting_for_image",
+            )
+            await input_parameters(update, context)
+            raise ApplicationHandlerStop
+
+    _log_route_decision_once(
+        update,
+        context,
+        waiting_for=None,
+        chosen_handler="global_photo_router->main_menu",
+        reason="no_active_session",
+    )
+    logger.info("🔀 GLOBAL_PHOTO_ROUTER: Not expecting photo, showing guidance")
+    try:
+        await show_main_menu(update, context, source="global_photo_router")
+        track_outgoing_action(update_id)
+    except Exception as exc:
+        logger.error("Error in global_photo_router fallback: %s", exc, exc_info=True)
+        await guard.check_and_ensure_response(update, context)
+    raise ApplicationHandlerStop
+
+
+async def global_audio_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global router for AUDIO/VOICE messages - routes to input_parameters if waiting_for expects audio."""
+    from telegram.ext import ApplicationHandlerStop
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+
+    guard = get_no_silence_guard()
+    update_id = update.update_id
+    user_id = update.effective_user.id if update.effective_user else None
+    if _should_dedupe_update(
+        update,
+        context,
+        action="AUDIO_ROUTER",
+        action_path="global_audio_router",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+    ):
+        return
+
+    session_store = get_session_store(context)
+    session = session_store.get(user_id) if user_id else None
+    if isinstance(session, dict):
+        waiting_for = session.get('waiting_for')
+        current_param = session.get('current_param', waiting_for)
+        if waiting_for and current_param in ['audio_url', 'audio_input']:
+            try:
+                await update.message.reply_text("⏳ Принято. Обрабатываю аудио…", parse_mode='HTML')
+                track_outgoing_action(update_id)
+            except Exception as exc:
+                logger.warning("Could not send instant ACK: %s", exc)
+            logger.info("🔀 GLOBAL_AUDIO_ROUTER: Routing to input_parameters (waiting_for=%s)", waiting_for)
+            _log_route_decision_once(
+                update,
+                context,
+                waiting_for=waiting_for,
+                chosen_handler="global_audio_router->input_parameters",
+                reason="waiting_for_audio",
+            )
+            await input_parameters(update, context)
+            raise ApplicationHandlerStop
+
+    _log_route_decision_once(
+        update,
+        context,
+        waiting_for=None,
+        chosen_handler="global_audio_router->main_menu",
+        reason="no_active_session",
+    )
+    logger.info("🔀 GLOBAL_AUDIO_ROUTER: Not expecting audio, showing guidance")
+    try:
+        await show_main_menu(update, context, source="global_audio_router")
+        track_outgoing_action(update_id)
+    except Exception as exc:
+        logger.error("Error in global_audio_router fallback: %s", exc, exc_info=True)
+        await guard.check_and_ensure_response(update, context)
+    raise ApplicationHandlerStop
+
+
 async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Final fallback for any text/photo/audio/document update to prevent silence."""
-    from app.observability.no_silence_guard import track_outgoing_action
+    from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
 
     user_id = update.effective_user.id if update.effective_user else None
     chat_id = update.effective_chat.id if update.effective_chat else None
     correlation_id = ensure_correlation_id(update, context)
     session_store = get_session_store(context)
     session_snapshot = session_store.snapshot(user_id)
-
-    update_type = "unknown"
-    if update.message:
-        if update.message.text:
-            update_type = "text"
-        elif update.message.photo:
-            update_type = "photo"
-        elif update.message.audio or update.message.voice:
-            update_type = "audio"
-        elif update.message.document:
-            update_type = "document"
+    session = session_store.get(user_id) if user_id else None
+    waiting_for = session.get("waiting_for") if isinstance(session, dict) else None
+    current_param = session.get("current_param") if isinstance(session, dict) else None
+    update_type = _resolve_update_type(update)
 
     logger.warning(
         "UNHANDLED_UPDATE correlation_id=%s user_id=%s update_type=%s session=%s",
@@ -13490,841 +13722,62 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
         action_path="fallback",
         stage="UI_ROUTER",
         outcome="fallback",
-        param={"update_type": update_type, "session": session_snapshot},
+        fix_hint="Ensure ConversationHandler and active-session router precede fallback handlers",
+        param={
+            "update_type": update_type,
+            "session": session_snapshot,
+            "waiting_for": waiting_for,
+            "current_param": current_param,
+        },
     )
 
-    user_lang = get_user_language(user_id) if user_id else "ru"
-    keyboard = [
-        [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-        [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
-    ]
-    message_text = (
-        "⚠️ <b>Похоже, мы потеряли контекст.</b>\n\n"
-        "Вы можете:\n"
-        "• Вернуться в главное меню\n"
-        "• Сбросить шаг и начать заново"
-        if user_lang == "ru"
-        else (
-            "⚠️ <b>Looks like we lost the context.</b>\n\n"
-            "You can:\n"
-            "• Return to the main menu\n"
-            "• Reset the step and start over"
-        )
-    )
-    if update.message:
-        await update.message.reply_text(
-            message_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='HTML'
-        )
-    elif chat_id:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=message_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='HTML'
-        )
-    track_outgoing_action(update.update_id, action_type="fallback")
-    
-    # Apply default values for parameters that are not set
-    input_params = model_info.get('input_params', {})
-    for param_name, param_info in input_params.items():
-        if param_name not in params:
-            default_value = param_info.get('default')
-            if default_value is not None:
-                params[param_name] = default_value
-    
-    # Convert string boolean values to actual booleans
-    for param_name, param_value in params.items():
-        if param_name in input_params:
-            param_info = input_params[param_name]
-            if param_info.get('type') == 'boolean':
-                if isinstance(param_value, str):
-                    if param_value.lower() == 'true':
-                        params[param_name] = True
-                    elif param_value.lower() == 'false':
-                        params[param_name] = False
-    
-    # 🔴 ВАЛИДАЦИЯ ПАРАМЕТРОВ: Проверяем, что все параметры имеют допустимые значения
-    user_lang = get_user_language(user_id) if user_id else 'ru'
-    validation_errors = []
-    
-    for param_name, param_value in params.items():
-        if param_name in input_params:
-            param_info = input_params[param_name]
-            param_type = param_info.get('type', 'string')
-            
-            # Валидация enum значений
-            enum_values = param_info.get('enum')
-            if enum_values:
-                # Преобразуем значение в строку для сравнения
-                param_value_str = str(param_value)
-                if param_value_str not in enum_values:
-                    # Недопустимое enum значение - используем default или отклоняем
-                    default_value = param_info.get('default')
-                    if default_value and default_value in enum_values:
-                        params[param_name] = default_value
-                        logger.warning(f"Invalid enum value for {param_name}: {param_value_str}, using default: {default_value}")
-                    else:
-                        validation_errors.append(
-                            f"❌ <b>Недопустимое значение параметра {param_name}</b>\n\n"
-                            f"Допустимые значения: {', '.join(enum_values)}\n"
-                            f"Введено: {param_value_str}"
-                        )
-            
-            # Валидация текстовых параметров (max_length)
-            if param_type == 'string' and isinstance(param_value, str):
-                max_length = param_info.get('max_length')
-                if max_length and len(param_value) > max_length:
-                    validation_errors.append(
-                        f"❌ <b>Превышена максимальная длина параметра {param_name}</b>\n\n"
-                        f"Максимум: {max_length} символов\n"
-                        f"Введено: {len(param_value)} символов"
-                    )
-            
-            # Валидация массивов (min_items/max_items)
-            if param_type == 'array' and isinstance(param_value, list):
-                min_items = param_info.get('min_items')
-                max_items = param_info.get('max_items')
-                if min_items is not None and len(param_value) < min_items:
-                    validation_errors.append(
-                        f"❌ <b>Недостаточно элементов в параметре {param_name}</b>\n\n"
-                        f"Минимум: {min_items} элементов\n"
-                        f"Введено: {len(param_value)} элементов"
-                    )
-                if max_items is not None and len(param_value) > max_items:
-                    validation_errors.append(
-                        f"❌ <b>Слишком много элементов в параметре {param_name}</b>\n\n"
-                        f"Максимум: {max_items} элементов\n"
-                        f"Введено: {len(param_value)} элементов"
-                    )
-    
-    # Если есть ошибки валидации, показываем их пользователю
-    if validation_errors:
-        error_text = "\n\n".join(validation_errors)
-        await status_message.edit_text(
-            f"❌ <b>Ошибки валидации параметров:</b>\n\n{error_text}\n\n"
-            f"Пожалуйста, исправьте параметры и попробуйте снова.",
-            parse_mode='HTML'
-        )
-        return ConversationHandler.END
-    
-    # Check if this is a free generation (consume hourly/referral quota)
-    free_result = await check_and_consume_free_generation(
-        user_id,
-        model_id,
-        correlation_id=correlation_id,
-    )
-    if free_result.get("status") == "deny":
-        user_lang = get_user_language(user_id)
-        reset_in = free_result.get("reset_in_minutes", 0)
-        deny_text = (
-            f"❌ <b>Лимит бесплатных генераций исчерпан</b>\n\n"
-            f"Доступно снова через {reset_in} мин."
-            if user_lang == 'ru'
-            else (
-                f"❌ <b>Free generation limit reached</b>\n\n"
-                f"Available again in {reset_in} min."
+    if waiting_for or current_param:
+        if update.message:
+            _log_route_decision_once(
+                update,
+                context,
+                waiting_for=waiting_for or current_param,
+                chosen_handler="unhandled_update_fallback->input_parameters",
+                reason="waiting_for_in_fallback",
             )
-        )
-        await send_or_edit_message(deny_text)
-        return ConversationHandler.END
-    is_free = free_result.get("status") == "ok"
-    
-    # Calculate price
-    price = calculate_price_rub(model_id, params, is_admin_user)
-    if is_free:
-        price = 0.0
-    
-    # Check balance/limit before generation
-    if not is_admin_user:
-        if not is_free:
-            user_balance = await get_user_balance_async(user_id)
-            if user_balance < price:
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    update_id=None,
-                    action="BALANCE_GATE",
-                    action_path="confirm_generate",
-                    model_id=model_id,
-                    gen_type=model_info.get("model_mode") if isinstance(model_info, dict) else None,
-                    stage="BALANCE_GATE",
-                    outcome="failed",
-                    error_code="ERR_BALANCE_LOW",
-                    fix_hint="Пополните баланс или используйте бесплатные генерации.",
-                    param={"price_rub": price, "balance_rub": user_balance},
-                )
-                user_lang_check = get_user_language(user_id)
-                await status_message.edit_text(
-                    _build_insufficient_funds_text(user_lang_check, price, user_balance),
-                    reply_markup=_build_insufficient_funds_keyboard(user_lang_check),
-                    parse_mode='HTML'
-                )
-                return ConversationHandler.END
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                update_id=None,
-                action="BALANCE_GATE",
-                action_path="confirm_generate",
-                model_id=model_id,
-                gen_type=model_info.get("model_mode") if isinstance(model_info, dict) else None,
-                stage="BALANCE_GATE",
-                outcome="passed",
-                param={"price_rub": price, "balance_rub": user_balance},
-            )
-    elif user_id != ADMIN_ID:
-        remaining = get_admin_remaining(user_id)
-        if remaining < price:
-            await status_message.edit_text(
-                f"❌ <b>Превышен лимит</b>\n\n"
-                f"Обратитесь к главному администратору для увеличения лимита.",
-                parse_mode='HTML'
-            )
-            return ConversationHandler.END
-
-    if not is_admin_user and not is_free:
-        user_lang = get_user_language(user_id)
-        await status_message.edit_text(
-            _build_price_preview_text(user_lang, price, user_balance),
-            parse_mode='HTML'
-        )
-    
-    # Отправляем уведомление о начале генерации
-    user_lang = get_user_language(user_id) if user_id else 'ru'
-    model_name = model_info.get('name', model_id)
-    notification_text = (
-        "╔═══════════════════════════════════╗\n"
-        "║  🚀 ГЕНЕРАЦИЯ ЗАПУЩЕНА! 🚀        ║\n"
-        "╚═══════════════════════════════════╝\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✅ <b>Ваш запрос принят и обрабатывается</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🤖 <b>Модель:</b> <code>{model_name}</code>\n"
-        f"💰 <b>Стоимость:</b> <b>{format_rub_amount(price)}</b>\n"
-        f"⏱️ <b>Ожидаемое время:</b> 10-60 секунд\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💡 <b>Что происходит:</b>\n"
-        "• Нейросеть анализирует запрос\n"
-        "• Идет создание контента\n"
-        "• Обычно 10-60 секунд\n\n"
-        "✨ <b>Результат появится автоматически!</b>"
-    ) if user_lang == 'ru' else (
-        "╔═══════════════════════════════════╗\n"
-        "║  🚀 GENERATION STARTED! 🚀        ║\n"
-        "╚═══════════════════════════════════╝\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✅ <b>Your request is accepted and processing</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🤖 <b>Model:</b> <code>{model_name}</code>\n"
-        f"💰 <b>Cost:</b> <b>{format_rub_amount(price)}</b>\n"
-        f"⏱️ <b>Expected time:</b> 10-60 seconds\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💡 <b>What's happening:</b>\n"
-        "• AI is analyzing your request\n"
-        "• Content creation in progress\n"
-        "• Usually 10-60 seconds\n\n"
-        "✨ <b>Result will appear automatically!</b>"
-    )
-    await status_message.edit_text(notification_text, parse_mode='HTML')
-
-    try:
-        from app.generations.telegram_sender import deliver_result
-        from app.generations.universal_engine import (
-            run_generation,
-            KIEJobFailed,
-            KIEResultError,
-            KIERequestFailed,
-        )
-        from app.kie_catalog import get_model
-        from app.ux.navigation import build_back_to_menu_keyboard
-
-        model_spec = get_model(model_id)
-        if not model_spec:
-            await status_message.edit_text(
-                "❌ <b>Модель не найдена в каталоге</b>",
-                parse_mode='HTML'
-            )
-            return ConversationHandler.END
-
-        dry_run = is_dry_run() or not allow_real_generation()
-        if dry_run:
-            is_video = any(kw in model_id.lower() for kw in ['video', 'sora', 'kling', 'wan', 'hailuo'])
-            ext = '.mp4' if is_video else '.png'
-            task_id = f"dry_run_{uuid.uuid4().hex[:12]}"
-            mock_url = f"https://example.com/mock/{model_id.replace('/', '_')}/{task_id}{ext}"
-            dry_run_text = "🔧 DRY-RUN: Генерация симулирована" if user_lang == 'ru' else "🔧 DRY-RUN: Generation simulated"
-            await status_message.edit_text(
-                f"✅ <b>{dry_run_text}</b>\n\n🔗 {mock_url}",
-                parse_mode='HTML'
-            )
-            return ConversationHandler.END
-
-        timeout_seconds = get_generation_timeout_seconds(model_spec)
-        poll_interval = int(os.getenv("KIE_POLL_INTERVAL", "3"))
-        job_result = await run_generation(
-            user_id,
-            model_id,
-            params,
-            correlation_id=correlation_id,
-            timeout=timeout_seconds,
-            poll_interval=poll_interval,
-        )
-        task_id = job_result.task_id
-
-        if user_id != ADMIN_ID and not dry_run:
-            if is_free:
-                price = 0.0
-            elif is_admin_user:
-                add_admin_spent(user_id, price)
-            else:
-                await subtract_user_balance_async(user_id, price)
-
-        if job_result.urls or job_result.text:
-            model_name_display = model_info.get('name', model_id)
-            caption = (
-                f"✅ <b>Генерация завершена!</b>\n\n🤖 <b>Модель:</b> {model_name_display}"
-                if user_lang == 'ru'
-                else f"✅ <b>Generation completed!</b>\n\n🤖 <b>Model:</b> {model_name_display}"
-            )
-            await deliver_result(
-                context.bot,
-                user_id,
-                job_result.media_type,
-                job_result.urls,
-                job_result.text or caption,
-                model_id=model_id,
-                gen_type=model_spec.model_mode,
-                correlation_id=correlation_id,
-            )
-
-        if job_result.urls:
-            save_generation_to_history(
-                user_id=user_id,
-                model_id=model_id,
-                model_name=model_info.get('name', model_id),
-                params=params.copy(),
-                result_urls=job_result.urls.copy(),
-                task_id=task_id,
-                price=price,
-                is_free=is_free,
-                correlation_id=correlation_id,
-            )
-
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("🔄 Сгенерировать еще", callback_data="generate_again")],
-                [InlineKeyboardButton("📚 Мои генерации", callback_data="my_generations")],
-                [InlineKeyboardButton("◀️ Вернуться в меню", callback_data="back_to_menu")],
-            ]
-        )
-        summary_text = (
-            "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
-            if user_lang == 'ru'
-            else "✅ <b>Generation completed!</b>\n\nResult is ready."
-        )
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=summary_text,
-            reply_markup=keyboard,
-            parse_mode='HTML'
-        )
-        return ConversationHandler.END
-    except KIERequestFailed as exc:
-        await status_message.edit_text(
-            _build_kie_request_failed_message(exc.status, user_lang, exc.user_message),
-            reply_markup=build_back_to_menu_keyboard(user_lang),
-            parse_mode='HTML'
-        )
-        return ConversationHandler.END
-    except (KIEResultError, KIEJobFailed, TimeoutError):
-        await status_message.edit_text(
-            (
-                "❌ <b>Генерация не завершилась</b>\n\nПопробуйте позже."
-                if user_lang == 'ru'
-                else "❌ <b>Generation did not finish</b>\n\nPlease try again later."
-            ),
-            reply_markup=build_back_to_menu_keyboard(user_lang),
-            parse_mode='HTML'
-        )
-        return ConversationHandler.END
-    
-    # Prepare params for API
-    api_params = params.copy()
-    
-    # 🔴 КРИТИЧЕСКОЕ ПРАВИЛО: ВСЕ модели ДОЛЖНЫ использовать API Endpoints строго по официальной документации
-    # 📚 ИСТОЧНИКИ:
-    # - https://docs.kie.ai/ - Comprehensive API Documentation
-    # - https://docs.kie.ai/market - Market Documentation (все модели: Image, Video, Audio)
-    # - https://kie.ai/ru - Русская версия сайта
-    # НИКАКИХ отклонений от официальной документации API Endpoints!
-    # Все параметры, конвертации и валидации должны соответствовать официальной документации
-    
-    # CRITICAL: KIE API compliance - recraft/remove-background requires input.image (string URL)
-    # Documentation: https://docs.kie.ai/market/recraft/remove-background
-    # API expects: {"model": "recraft/remove-background", "input": {"image": "https://..."}}
-    if model_id == "recraft/remove-background" and 'image_input' in api_params:
-        image_input = api_params.pop('image_input')
-        if isinstance(image_input, list) and len(image_input) > 0:
-            api_params['image'] = image_input[0]  # Take first URL from array
-        elif isinstance(image_input, str):
-            api_params['image'] = image_input  # Use string URL directly
-    elif model_id == "recraft/crisp-upscale" and 'image_input' in api_params:
-        image_input = api_params.pop('image_input')
-        if isinstance(image_input, list) and len(image_input) > 0:
-            api_params['image'] = image_input[0]
-        elif isinstance(image_input, str):
-            api_params['image'] = image_input
-    elif model_id == "ideogram/v3-reframe" and 'image_input' in api_params:
-        image_input = api_params.pop('image_input')
-        if isinstance(image_input, list) and len(image_input) > 0:
-            api_params['image_url'] = image_input[0]
-        elif isinstance(image_input, str):
-            api_params['image_url'] = image_input
-    elif model_id == "topaz/image-upscale" and 'image_input' in api_params:
-        image_input = api_params.pop('image_input')
-        if isinstance(image_input, list) and len(image_input) > 0:
-            api_params['image_url'] = image_input[0]
-        elif isinstance(image_input, str):
-            api_params['image_url'] = image_input
-    
-    # Check maximum concurrent generations
-    async with active_generations_lock:
-        user_active_count = sum(1 for (uid, _) in active_generations.keys() if uid == user_id)
-        if user_active_count >= MAX_CONCURRENT_GENERATIONS_PER_USER:
-            await status_message.edit_text(
-                f"⚠️ <b>Превышен лимит одновременных генераций</b>\n\n"
-                f"У вас уже запущено {user_active_count} генераций.\n"
-                f"Максимум: {MAX_CONCURRENT_GENERATIONS_PER_USER}.",
-                parse_mode='HTML'
-            )
-            return ConversationHandler.END
-        
-        # 🔴 ПРОВЕРКА НА ДУБЛИ ЗАДАЧ: Проверяем, нет ли уже активной генерации с такими же параметрами
-        # Создаем хеш параметров для проверки дублей
-        import hashlib
-        import json
-        params_hash = hashlib.md5(
-            json.dumps({
-                'model_id': model_id,
-                'params': sorted(api_params.items()) if isinstance(api_params, dict) else str(api_params)
-            }, sort_keys=True).encode('utf-8')
-        ).hexdigest()
-        
-        # Проверяем активные генерации пользователя на дубли
-        for (uid, existing_task_id), existing_session in active_generations.items():
-            if uid == user_id:
-                existing_model = existing_session.get('model_id')
-                existing_params = existing_session.get('params', {})
-                existing_params_hash = hashlib.md5(
-                    json.dumps({
-                        'model_id': existing_model,
-                        'params': sorted(existing_params.items()) if isinstance(existing_params, dict) else str(existing_params)
-                    }, sort_keys=True).encode('utf-8')
-                ).hexdigest()
-                
-                if existing_params_hash == params_hash:
-                    logger.warning(f"⚠️⚠️⚠️ DUPLICATE TASK DETECTED: user {user_id}, model {model_id}, existing task_id={existing_task_id}")
-                    user_lang = get_user_language(user_id) if user_id else 'ru'
-                    error_msg = (
-                        "⚠️ <b>Дублирующая генерация</b>\n\n"
-                        f"У вас уже запущена генерация с такими же параметрами.\n"
-                        f"Task ID: <code>{existing_task_id}</code>\n\n"
-                        "Дождитесь завершения текущей генерации."
-                    ) if user_lang == 'ru' else (
-                        "⚠️ <b>Duplicate generation</b>\n\n"
-                        f"You already have a generation running with the same parameters.\n"
-                        f"Task ID: <code>{existing_task_id}</code>\n\n"
-                        "Please wait for the current generation to complete."
-                    )
-                    await status_message.edit_text(error_msg, parse_mode='HTML')
-                    return ConversationHandler.END
-    
-    # DRY-RUN GUARD: Проверяем, нужно ли реально генерировать
-    dry_run = is_dry_run() or not allow_real_generation()
-    
-    if dry_run:
-        logger.info(f"🔧 DRY-RUN: Simulating generation for model {model_id}, user {user_id}")
-        # Создаем моковый task_id
-        import hashlib
-        task_id = f"dry_run_{hashlib.md5(f'{model_id}:{user_id}:{time.time()}'.encode()).hexdigest()[:12]}"
-        
-        # Получаем gateway для генерации мокового результата
-        gateway = get_kie_gateway()
-        
-        # Создаем моковую задачу через gateway (он вернет моковый результат)
-        try:
-            result = await gateway.create_task(model_id, api_params)
-            logger.info(f"🔧 DRY-RUN: Mock task created: {result.get('taskId')}")
-        except Exception as e:
-            logger.error(f"❌ DRY-RUN: Error creating mock task: {e}")
-            result = {'ok': True, 'taskId': task_id}
-        
-        # Генерируем моковый URL результата
-        is_video = any(kw in model_id.lower() for kw in ['video', 'sora', 'kling', 'wan', 'hailuo'])
-        ext = '.mp4' if is_video else '.png'
-        mock_url = f"https://example.com/mock/{model_id.replace('/', '_')}/{task_id}{ext}"
-        
-        # Обновляем сообщение с пометкой DRY-RUN
-        user_lang = get_user_language(user_id) if user_id else 'ru'
-        dry_run_text = "🔧 DRY-RUN: Генерация симулирована" if user_lang == 'ru' else "🔧 DRY-RUN: Generation simulated"
-        
-        if is_admin_user:
-            message_text = (
-                f"✅ <b>{dry_run_text}</b>\n\n"
-                f"Task ID: <code>{task_id}</code>\n"
-                f"Model: <code>{model_id}</code>\n\n"
-                f"🔗 Mock URL: {mock_url}\n\n"
-                f"⚠️ Баланс НЕ списан (DRY-RUN режим)"
-            )
-        else:
-            message_text = (
-                f"✅ <b>{dry_run_text}</b>\n\n"
-                f"🔗 Результат: {mock_url}"
-            )
-        
-        await status_message.edit_text(message_text, parse_mode='HTML')
-        
-        # НЕ списываем баланс в DRY-RUN
-        # НЕ создаем реальную операцию, только логируем
-        logger.info(f"🔧 DRY-RUN: Would deduct {price} from user {user_id} (NOT DEDUCTED)")
-        if create_operation:
+            guard = get_no_silence_guard()
             try:
-                # Создаем операцию с пометкой dry_run (если таблица поддерживает)
-                create_operation(user_id, "dry_run_generation", Decimal('0.00'), model_id, mock_url, None)
-            except:
-                pass
-        
-        return ConversationHandler.END
-    
-    # REAL GENERATION: Используем gateway
-    gateway = get_kie_gateway()
-    
-    # Валидация уже выполнена в normalize_for_generation выше
-    # Дополнительная валидация через kie_validator не нужна, т.к. она валидирует по YAML,
-    # а параметры уже адаптированы к API формату
-    
-    # 🔴 КРИТИЧНО: Проверяем баланс ДО создания задачи, но НЕ списываем
-    # Списание произойдет ТОЛЬКО после успешной генерации (commit_charge)
-    # Используем цену из каталога (official_usd * курс * 2)
-    if not is_admin_user and not is_free:
-        # Получаем цену из каталога
-        from app.services.pricing_service import price_for_model_rub, get_model_price_info
-        from app.config import get_settings
-        
-        settings = get_settings()
-        mode_index = _resolve_mode_index(model_id, params, user_id)
-        price_rub_catalog = price_for_model_rub(model_id, mode_index, settings)
-        
-        if price_rub_catalog is None:
-            logger.error(f"Price not found in catalog for model {model_id}, using calculated price")
-            price_rub_catalog = price
-        
-        # Логируем информацию о цене
-        price_info = get_model_price_info(model_id, mode_index, settings)
-        if price_info:
-            logger.info(
-                f"PRICE_RUB={price_rub_catalog} OFFICIAL_USD={price_info['official_usd']:.4f} "
-                f"MULT={price_info['price_multiplier']} RATE={price_info['usd_to_rub']} "
-                f"MODEL={model_id} USER={user_id}"
-            )
-        
-        # Проверяем баланс (но НЕ списываем - списание только при success)
-        user_balance_check = await get_user_balance_async(user_id)
-        if user_balance_check < price_rub_catalog:
-            price_str = format_rub_amount(price_rub_catalog)
-            balance_str = format_rub_amount(user_balance_check)
-            user_lang_check = get_user_language(user_id)
-            needed = price_rub_catalog - user_balance_check
-            needed_str = format_rub_amount(needed)
-            
-            if user_lang_check == 'ru':
-                insufficient_msg = (
-                    f"❌ <b>Недостаточно средств</b>\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💳 <b>Ваш баланс:</b> {balance_str}\n"
-                    f"💰 <b>Требуется:</b> {price_str}\n"
-                    f"❌ <b>Не хватает:</b> {needed_str}\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💡 Пополните баланс для генерации"
-                )
-            else:
-                insufficient_msg = (
-                    f"❌ <b>Insufficient funds</b>\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💳 <b>Your balance:</b> {balance_str}\n"
-                    f"💰 <b>Required:</b> {price_str}\n"
-                    f"❌ <b>Missing:</b> {needed_str}\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💡 Top up balance to generate"
-                )
-            
-            keyboard = [
-                [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang_check), callback_data="topup_balance")],
-                [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang_check), callback_data="back_to_menu")]
-            ]
-            
-            await status_message.edit_text(insufficient_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
-            return ConversationHandler.END
-        
-        # Логируем проверку баланса (списание будет после success)
-        logger.info(
-            f"BALANCE CHECKED: user_id={user_id} required={price_rub_catalog} "
-            f"balance={user_balance_check:.2f} model={model_id} (will charge on success only)"
-        )
-        
-        # Обновляем price для дальнейшего использования
-        price = price_rub_catalog
-    
-    # Create task
-    # CRITICAL: Log exact API parameters being sent (for KIE API compliance)
-    import json
-    logger.info(f"event=kie.create_task_start model={model_id} user_id={user_id}")
-    logger.debug(f"API Parameters: model={model_id}, input_keys={list(api_params.keys())}")
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        chat_id=chat_id,
-        action="KIE_TASK_CREATE",
-        action_path="confirm_generate",
-        model_id=model_id,
-        stage="KIE_TASK_CREATE",
-        outcome="attempt",
-        error_code="KIE_TASK_CREATE_ATTEMPT",
-        fix_hint="Создание задачи в KIE.",
-        param={"input_keys": list(api_params.keys())},
-    )
-    
-    # 🔴 API CALL: KIE API - create_task через gateway
-    try:
-        import time
-        start_time = time.time()
-        
-        # Получаем callback URL если настроен
-        callback_url = None
-        try:
-            from app.services.kie_input_builder import get_callback_url
-            callback_url = get_callback_url()
-        except:
-            pass
-        
-        result = await gateway.create_task(model_id, api_params, callback_url=callback_url)
-        elapsed = time.time() - start_time
-        
-        # Логируем время отклика
-        try:
-            from optimization_helpers import log_api_response_time
-            log_api_response_time(f"KIE API create_task (model={model_id})", elapsed)
-        except ImportError:
-            if elapsed > 2.0:
-                logger.warning(f"⏱️ create_task заняло {elapsed:.2f}с (медленно)")
-            else:
-                logger.debug(f"⏱️ create_task заняло {elapsed:.2f}с")
-        
-        logger.info(f"📋 Task creation result: ok={result.get('ok')}, taskId={result.get('taskId')}, error={result.get('error')}")
-    except Exception as e:
-        logger.error(f"event=kie.create_task_exception model={model_id} error={str(e)}", exc_info=True)
-        try:
-            user_lang = get_user_language(user_id) if user_id else 'ru'
-            error_msg = "Ошибка сервера, попробуйте позже" if user_lang == 'ru' else "Server error, please try later"
-            from app.ux.navigation import build_back_to_menu_keyboard
-            await status_message.edit_text(
-                f"❌ <b>{error_msg}</b>\n\n"
-                f"Не удалось создать задачу генерации.\n"
-                f"Попробуйте еще раз через несколько секунд.",
-                parse_mode='HTML',
-                reply_markup=build_back_to_menu_keyboard(user_lang),
-            )
-        except:
-            pass
-        return ConversationHandler.END
-    
-    if result.get('ok'):
-        task_id = result.get('taskId')
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            action="KIE_TASK_CREATE",
-            action_path="confirm_generate",
-            model_id=model_id,
-            stage="KIE_TASK_CREATE",
-            outcome="success",
-            error_code="KIE_TASK_CREATE_OK",
-            fix_hint="Задача создана успешно.",
-            param={"task_id": task_id},
-        )
-        
-        # Get session
-        if user_id not in user_sessions:
-            logger.error(f"Session not found for user {user_id}")
-            await status_message.edit_text("❌ Сессия не найдена.", parse_mode='HTML')
-            return ConversationHandler.END
-        
-        session = user_sessions[user_id]
-        generation_key = (user_id, task_id)
-        
-        # Store task data
-        session['task_id'] = task_id
-        session['poll_attempts'] = 0
-        session['max_poll_attempts'] = 60
-        session['is_free_generation'] = is_free
-        session['model_id'] = model_id
-        session['model_info'] = model_info
-        session['params'] = api_params.copy()
-        
-        # Move to active_generations
-        async with active_generations_lock:
-            user_active_count_now = sum(1 for (uid, _) in active_generations.keys() if uid == user_id)
-            if user_active_count_now >= MAX_CONCURRENT_GENERATIONS_PER_USER:
-                await status_message.edit_text(
-                    f"⚠️ <b>Превышен лимит одновременных генераций</b>",
-                    parse_mode='HTML'
-                )
-                return ConversationHandler.END
-            
-            active_generations[generation_key] = session.copy()
-            final_count = user_active_count_now + 1
-        
-        # Remove from user_sessions
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        
-        # Update status message
-        if is_admin_user:
-            message_text = (
-                f"✅ <b>Задача создана!</b>\n\n"
-                f"Task ID: <code>{task_id}</code>\n\n"
-                f"⏳ Ожидаю завершения генерации...\n\n"
-                f"📊 Активных генераций: {final_count}/{MAX_CONCURRENT_GENERATIONS_PER_USER}"
-            )
-        else:
-            message_text = (
-                f"✅ <b>Задача создана!</b>\n\n"
-                f"⏳ Ожидаю завершения генерации..."
-            )
-        
-        await status_message.edit_text(message_text, parse_mode='HTML')
-        
-        # Start polling - create mock update for poll_task_status
-        class MockUpdate:
-            def __init__(self, user_id, message):
-                self.effective_user = type('obj', (object,), {'id': user_id})()
-                self.message = message
-        
-        mock_update = MockUpdate(user_id, status_message)
-        logger.info(f"🚀🚀🚀 Starting polling for task {task_id}, user {user_id}, model {model_id}")
-        asyncio.create_task(poll_task_status(mock_update, context, task_id, user_id))
-        logger.info(f"✅✅✅ Polling task created for task {task_id}")
-        
-        # ⚠️ ВАЖНО: Баланс НЕ списывается здесь!
-        # Баланс будет списан только ПОСЛЕ успешной генерации в poll_task_status (commit_charge)
-        # При fail/timeout/cancel будет выполнен auto-refund (если был предварительный hold)
-        # Это гарантирует, что пользователь платит только за успешные генерации
-        logger.info(f"💰 Balance will be deducted after successful generation only (commit_charge on success, task_id={task_id})")
-        
-        return ConversationHandler.END
-    else:
-        error = result.get('error', 'Unknown error')
-        status_code = result.get('status')
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            action="KIE_TASK_CREATE",
-            action_path="confirm_generate",
-            model_id=model_id,
-            stage="KIE_TASK_CREATE",
-            outcome="failed",
-            error_code=result.get("error_code") or "KIE_TASK_CREATE_FAILED",
-            fix_hint="Проверьте параметры и доступность KIE.",
-            param={"status": status_code, "error": error},
-        )
-
-        if _is_missing_media_error(error) and user_id in user_sessions:
-            session = user_sessions[user_id]
-            properties = session.get("properties", {})
-            image_param_name = None
-            if "image_urls" in properties:
-                image_param_name = "image_urls"
-            elif "image_input" in properties:
-                image_param_name = "image_input"
-            if image_param_name:
-                user_lang = get_user_language(user_id)
-                session["waiting_for"] = image_param_name
-                session["current_param"] = image_param_name
-                if image_param_name not in session:
-                    session[image_param_name] = []
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    update_id=update.update_id,
-                    action="WIZARD_RECOVER",
-                    action_path="confirm_generate",
-                    model_id=model_id,
-                    outcome="prompt_image",
-                    error_code="KIE_MISSING_MEDIA",
-                    fix_hint="Запросите у пользователя изображение и повторите генерацию.",
-                    param={"missing_param": image_param_name, "error": error},
-                )
-                await send_or_edit_message(
-                    (
-                        "📷 <b>Нужна реф-картинка</b>\n\n"
-                        "KIE сообщил, что требуется изображение.\n"
-                        "Пожалуйста, загрузите картинку для продолжения."
-                        if user_lang == "ru"
-                        else (
-                            "📷 <b>Image required</b>\n\n"
-                            "KIE reported a missing image input.\n"
-                            "Please upload an image to continue."
-                        )
-                    )
-                )
-                return INPUTTING_PARAMS
-        
-        # Используем обработчик ошибок для получения понятного сообщения
-        try:
-            from error_handler_providers import get_error_handler
-            handler = get_error_handler()
-            if status_code:
-                user_message, error_details = handler.handle_api_error(
-                    status_code=status_code,
-                    response_data={"error": error},
-                    request_details={
-                        "model_id": model_id,
-                        "params": api_params
-                    }
-                )
-            else:
-                user_message, error_details = handler.handle_task_creation_error(
-                    model_id=model_id,
-                    error=Exception(error),
-                    request_params=api_params
-                )
-        except ImportError:
-            user_message = (
-                f"❌ <b>Ошибка создания задачи</b>\n\n"
-                f"Произошла ошибка: {error}\n\n"
-                "Пожалуйста, попробуйте позже."
-            )
+                await input_parameters(update, context)
+                return
+            except Exception as exc:
+                logger.error("Fallback routing failed: %s", exc, exc_info=True)
+                await guard.check_and_ensure_response(update, context)
+                return
         user_lang = get_user_language(user_id) if user_id else "ru"
-        next_steps = (
-            "\n\n💡 Попробуйте ещё раз через несколько секунд или вернитесь в меню."
+        param_label = waiting_for or current_param or "параметр"
+        message_text = (
+            f"Я жду ввод параметра <b>{param_label}</b>."
             if user_lang == "ru"
-            else "\n\n💡 Try again in a few seconds or return to the main menu."
+            else f"I'm waiting for parameter <b>{param_label}</b>."
         )
-        from app.ux.navigation import build_back_to_menu_keyboard
+        if chat_id:
+            await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode="HTML")
+            track_outgoing_action(update.update_id, action_type="fallback")
+        return
 
-        await status_message.edit_text(
-            user_message + next_steps,
-            parse_mode='HTML',
-            reply_markup=build_back_to_menu_keyboard(user_lang),
-        )
-        return ConversationHandler.END
+    _log_route_decision_once(
+        update,
+        context,
+        waiting_for=None,
+        chosen_handler="unhandled_update_fallback->main_menu",
+        reason="no_active_session",
+    )
+    logger.warning(
+        "FIX_HINT fallback_triggered check handler order and session waiting_for state"
+    )
+    guard = get_no_silence_guard()
+    try:
+        await show_main_menu(update, context, source="unhandled_update_fallback")
+        track_outgoing_action(update.update_id, action_type="fallback")
+    except Exception as exc:
+        logger.error("Error in unhandled_update_fallback: %s", exc, exc_info=True)
+        await guard.check_and_ensure_response(update, context)
+    return
 
 
 async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -16324,8 +15777,27 @@ async def _register_all_handlers_internal(application: Application):
     # через app.telegram_error_handler.ensure_error_handler_registered
     
     # Регистрируем generation_handler
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT
+            | filters.PHOTO
+            | filters.AUDIO
+            | filters.VOICE
+            | filters.Document.ALL,
+            active_session_router,
+        ),
+        group=-2,
+    )
     application.add_handler(generation_handler)
-    
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_text_router), group=1)
+    application.add_handler(MessageHandler(filters.PHOTO, global_photo_router), group=1)
+    application.add_handler(
+        MessageHandler(
+            filters.AUDIO | filters.VOICE | (filters.Document.MimeType("audio/*")),
+            global_audio_router,
+        ),
+        group=1,
+    )
     # Базовые command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_wizard_command))
@@ -16965,130 +16437,6 @@ async def main():
     # These routers catch TEXT/PHOTO/AUDIO OUTSIDE conversation and route to input_parameters if waiting_for exists
     # This ensures NO SILENCE even if ConversationHandler doesn't catch the message
     
-    async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Global router for TEXT messages - routes to input_parameters if waiting_for exists"""
-        from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
-        guard = get_no_silence_guard()
-        update_id = update.update_id
-        user_id = update.effective_user.id if update.effective_user else None
-        if _should_dedupe_update(
-            update,
-            context,
-            action="TEXT_ROUTER",
-            action_path="global_text_router",
-            user_id=user_id,
-            chat_id=update.effective_chat.id if update.effective_chat else None,
-        ):
-            return
-        
-        # Check if user has active session with waiting_for
-        if user_id and user_id in user_sessions:
-            session = user_sessions[user_id]
-            waiting_for = session.get('waiting_for')
-            if waiting_for:
-                try:
-                    await update.message.reply_text("⏳ Принято. Обрабатываю…", parse_mode='HTML')
-                    track_outgoing_action(update_id)
-                except Exception as e:
-                    logger.warning(f"Could not send instant ACK: {e}")
-                # Route to input_parameters
-                logger.info(f"🔀 GLOBAL_TEXT_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
-                return await input_parameters(update, context)
-        
-        # No waiting_for - show main menu
-        logger.info(f"🔀 GLOBAL_TEXT_ROUTER: No waiting_for, showing main menu")
-        try:
-            await show_main_menu(update, context, source="global_text_router")
-            track_outgoing_action(update_id)
-        except Exception as e:
-            logger.error(f"Error in global_text_router fallback: {e}", exc_info=True)
-            await guard.check_and_ensure_response(update, context)
-    
-    async def global_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Global router for PHOTO messages - routes to input_parameters if waiting_for expects image"""
-        from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
-        guard = get_no_silence_guard()
-        update_id = update.update_id
-        user_id = update.effective_user.id if update.effective_user else None
-        if _should_dedupe_update(
-            update,
-            context,
-            action="PHOTO_ROUTER",
-            action_path="global_photo_router",
-            user_id=user_id,
-            chat_id=update.effective_chat.id if update.effective_chat else None,
-        ):
-            return
-        
-        # Check if user has active session expecting image
-        if user_id and user_id in user_sessions:
-            session = user_sessions[user_id]
-            waiting_for = session.get('waiting_for')
-            current_param = session.get('current_param', waiting_for)
-            # Check if waiting for image-related parameter
-            if waiting_for and current_param in ['image_input', 'image_urls', 'mask_input', 'reference_image_input']:
-                try:
-                    await update.message.reply_text("⏳ Принято. Обрабатываю фото…", parse_mode='HTML')
-                    track_outgoing_action(update_id)
-                except Exception as e:
-                    logger.warning(f"Could not send instant ACK: {e}")
-                logger.info(f"🔀 GLOBAL_PHOTO_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
-                return await input_parameters(update, context)
-        
-        # Not expecting photo - show guidance
-        logger.info(f"🔀 GLOBAL_PHOTO_ROUTER: Not expecting photo, showing guidance")
-        try:
-            await show_main_menu(update, context, source="global_photo_router")
-            track_outgoing_action(update_id)
-        except Exception as e:
-            logger.error(f"Error in global_photo_router fallback: {e}", exc_info=True)
-            await guard.check_and_ensure_response(update, context)
-    
-    async def global_audio_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Global router for AUDIO/VOICE messages - routes to input_parameters if waiting_for expects audio"""
-        from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
-        guard = get_no_silence_guard()
-        update_id = update.update_id
-        user_id = update.effective_user.id if update.effective_user else None
-        if _should_dedupe_update(
-            update,
-            context,
-            action="AUDIO_ROUTER",
-            action_path="global_audio_router",
-            user_id=user_id,
-            chat_id=update.effective_chat.id if update.effective_chat else None,
-        ):
-            return
-        
-        # Check if user has active session expecting audio
-        if user_id and user_id in user_sessions:
-            session = user_sessions[user_id]
-            waiting_for = session.get('waiting_for')
-            current_param = session.get('current_param', waiting_for)
-            # Check if waiting for audio-related parameter
-            if waiting_for and current_param in ['audio_url', 'audio_input']:
-                try:
-                    await update.message.reply_text("⏳ Принято. Обрабатываю аудио…", parse_mode='HTML')
-                    track_outgoing_action(update_id)
-                except Exception as e:
-                    logger.warning(f"Could not send instant ACK: {e}")
-                logger.info(f"🔀 GLOBAL_AUDIO_ROUTER: Routing to input_parameters (waiting_for={waiting_for})")
-                return await input_parameters(update, context)
-        
-        # Not expecting audio - show guidance
-        logger.info(f"🔀 GLOBAL_AUDIO_ROUTER: Not expecting audio, showing guidance")
-        try:
-            await show_main_menu(update, context, source="global_audio_router")
-            track_outgoing_action(update_id)
-        except Exception as e:
-            logger.error(f"Error in global_audio_router fallback: {e}", exc_info=True)
-            await guard.check_and_ensure_response(update, context)
-    
-    # Add global routers BEFORE ConversationHandler (higher priority)
-    # These catch messages even if ConversationHandler doesn't
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_text_router), group=-1)
-    application.add_handler(MessageHandler(filters.PHOTO, global_photo_router), group=-1)
-    application.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | (filters.Document.MimeType("audio/*")), global_audio_router), group=-1)
     # ==================== END PHASE 1: GLOBAL INPUT ROUTERS ====================
     
     # Add command handlers separately (not in conversation, as # D) per_message=True removed to avoid PTBUserWarning
@@ -17456,7 +16804,27 @@ async def main():
     # 🔴 ГЛОБАЛЬНЫЙ ERROR HANDLER
     # Дубликат error_handler удален - используется обработчик выше (строка 24313)
     
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT
+            | filters.PHOTO
+            | filters.AUDIO
+            | filters.VOICE
+            | filters.Document.ALL,
+            active_session_router,
+        ),
+        group=-2,
+    )
     application.add_handler(generation_handler)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_text_router), group=1)
+    application.add_handler(MessageHandler(filters.PHOTO, global_photo_router), group=1)
+    application.add_handler(
+        MessageHandler(
+            filters.AUDIO | filters.VOICE | (filters.Document.MimeType("audio/*")),
+            global_audio_router,
+        ),
+        group=1,
+    )
     application.add_handler(
         MessageHandler(
             filters.TEXT | filters.PHOTO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
