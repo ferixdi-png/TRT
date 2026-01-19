@@ -36,6 +36,7 @@ async def deliver_result(
 ) -> None:
     """Deliver generation result to Telegram with trace logging and fallback."""
     tg_method = None
+    fallback_caption = f"Result type: {media_type or 'unknown'} (sent as document)"
     try:
         if media_type == "text":
             tg_method = "send_message"
@@ -74,7 +75,7 @@ async def deliver_result(
         else:
             if urls:
                 tg_method = "send_document"
-                await bot.send_document(chat_id=chat_id, document=urls[0])
+                await bot.send_document(chat_id=chat_id, document=urls[0], caption=fallback_caption)
 
         trace_event(
             "info",
@@ -102,7 +103,7 @@ async def deliver_result(
             tg_error=str(exc),
         )
         if urls:
-            await bot.send_document(chat_id=chat_id, document=urls[0])
+            await bot.send_document(chat_id=chat_id, document=urls[0], caption=fallback_caption)
 
 
 async def send_job_result(

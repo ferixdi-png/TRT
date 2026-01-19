@@ -29,7 +29,7 @@ async def test_z_image_aspect_ratio_flow_no_unknown_menu(harness):
         session = bot_kie.user_sessions[user_id]
         assert session["waiting_for"] == "aspect_ratio"
 
-        result = await harness.process_callback("set_param:aspect_ratio:1:1", user_id=user_id)
+        result = await harness.process_callback("set_param:aspect_ratio:9:16", user_id=user_id)
         assert result["success"], result.get("error")
 
         session = bot_kie.user_sessions[user_id]
