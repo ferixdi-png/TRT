@@ -174,10 +174,19 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
                     result['kie_credits_rub_str'] = credits_rub_str
                 else:
                     status = balance_result.get("status") if balance_result else None
-                    if status == 404:
-                        result["kie_credits_error"] = "Баланс KIE недоступен (endpoint 404)"
-                    else:
-                        result["kie_credits_error"] = "Баланс KIE недоступен"
+                    result["kie_credits_error"] = "KIE credits temporarily unavailable"
+                    from app.observability.structured_logs import log_structured_event
+
+                    log_structured_event(
+                        correlation_id=balance_result.get("correlation_id") if balance_result else None,
+                        action="KIE_CREDITS",
+                        action_path="helpers.get_balance_info",
+                        stage="KIE_CREDITS",
+                        outcome="failed",
+                        error_code="CREDITS_UNAVAILABLE",
+                        fix_hint="Проверьте доступность /api/v1/chat/credit",
+                        param={"status": status},
+                    )
         except Exception as e:
             logger.error(f"❌❌❌ KIE API ERROR in get_credits (get_balance_info): {e}", exc_info=True)
     
