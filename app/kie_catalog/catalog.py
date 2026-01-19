@@ -257,7 +257,7 @@ def get_free_model_ids() -> List[str]:
     return [model.id for model in load_catalog() if model.free]
 
 
-def get_free_tools_model_ids() -> List[str]:
+def get_free_tools_model_ids(*, log_selection: bool = True) -> List[str]:
     """Return the 5 cheapest non-audio models based on catalog + registry defaults."""
     from app.config import get_settings
     from app.models.registry import get_models_sync
@@ -318,13 +318,14 @@ def get_free_tools_model_ids() -> List[str]:
     candidates.sort(key=lambda item: (item[0], item[1]))
     selected = [model_id for _, model_id in candidates[:5]]
 
-    log_structured_event(
-        action="FREE_TOOLS_SELECT",
-        action_path="kie_catalog.get_free_tools_model_ids",
-        stage="FREE_TOOLS",
-        outcome="selected",
-        param={"selected_count": len(selected), "model_ids": selected},
-    )
+    if log_selection:
+        log_structured_event(
+            action="FREE_TOOLS_SELECT",
+            action_path="kie_catalog.get_free_tools_model_ids",
+            stage="FREE_TOOLS",
+            outcome="selected",
+            param={"selected_count": len(selected), "model_ids": selected},
+        )
     return selected
 
 
