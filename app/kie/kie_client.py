@@ -476,10 +476,19 @@ class KIEClient:
 
     async def get_credits(self) -> Dict[str, Any]:
         """Best-effort credits check. Returns ok=False with credits=None on unsupported endpoints."""
-        result = await self._request_json("GET", "/api/v1/account/balance")
+        result = await self._request_json("GET", "/api/v1/chat/credit")
         if not result.get("ok"):
             status = result.get("status")
             if status in (404, 0):
+                log_structured_event(
+                    correlation_id=result.get("correlation_id"),
+                    action="KIE_CREDITS",
+                    action_path="kie_client.get_credits",
+                    stage="KIE_CREDITS",
+                    outcome="endpoint_unavailable",
+                    error_code="KIE_CREDITS_ENDPOINT_MISSING",
+                    fix_hint="Проверьте endpoint /api/v1/chat/credit или план KIE API.",
+                )
                 logger.warning(
                     "KIE credits endpoint unavailable (status=%s). Hint: verify KIE API plan or endpoint.",
                     status,
@@ -489,6 +498,7 @@ class KIEClient:
                     "credits": None,
                     "status": status,
                     "error": result.get("error"),
+                    "user_message": f"Баланс KIE недоступен (endpoint {status})",
                     "correlation_id": result.get("correlation_id"),
                 }
             logger.warning(
@@ -501,15 +511,30 @@ class KIEClient:
                 "credits": None,
                 "status": status,
                 "error": result.get("error"),
+                "user_message": "Баланс KIE недоступен",
                 "correlation_id": result.get("correlation_id"),
             }
 
         data = result.get("data", {})
         if isinstance(data, dict):
-            credits = data.get("credits") or data.get("data", {}).get("credits")
+            credits = (
+                data.get("credits")
+                or data.get("credit")
+                or data.get("data", {}).get("credits")
+                or data.get("data", {}).get("credit")
+            )
         else:
             credits = None
         if credits is None:
+            log_structured_event(
+                correlation_id=result.get("correlation_id"),
+                action="KIE_CREDITS",
+                action_path="kie_client.get_credits",
+                stage="KIE_CREDITS",
+                outcome="missing_field",
+                error_code="KIE_CREDITS_MISSING_FIELD",
+                fix_hint="Проверьте схему ответа KIE /api/v1/chat/credit.",
+            )
             logger.warning(
                 "KIE credits response missing credits field. Hint: confirm API response schema.",
             )
@@ -518,6 +543,7 @@ class KIEClient:
                 "credits": None,
                 "status": result.get("status"),
                 "error": "missing_credits",
+                "user_message": "Баланс KIE недоступен",
                 "correlation_id": result.get("correlation_id"),
             }
         return {

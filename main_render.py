@@ -1307,6 +1307,43 @@ def build_webhook_handler(application, settings):
                 status = ack_status
                 return web.Response(status=status)
 
+            async def _send_fallback_message() -> None:
+                chat_id = None
+                try:
+                    if update.effective_chat:
+                        chat_id = update.effective_chat.id
+                    elif update.message:
+                        chat_id = update.message.chat_id
+                    elif update.callback_query and update.callback_query.message:
+                        chat_id = update.callback_query.message.chat_id
+                except Exception:
+                    chat_id = None
+
+                if not chat_id:
+                    return
+
+                try:
+                    if update.callback_query:
+                        try:
+                            await update.callback_query.answer()
+                        except Exception:
+                            pass
+                    await application.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            "❌ <b>Ошибка обработки запроса</b>\n\n"
+                            "Мы уже знаем о проблеме и работаем над ней.\n"
+                            f"ID: {correlation_id}"
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception as send_exc:  # pragma: no cover - best effort
+                    logger.warning(
+                        "[WEBHOOK] fallback_send_failed error=%s correlation_id=%s",
+                        send_exc,
+                        correlation_id,
+                    )
+
             async def _process() -> None:
                 token = set_correlation_id(correlation_id)
                 try:
@@ -1329,6 +1366,7 @@ def build_webhook_handler(application, settings):
                         error_code="INTERNAL_EXCEPTION",
                         fix_hint="Проверьте stacktrace и логи.",
                     )
+                    await _send_fallback_message()
                 finally:
                     reset_correlation_id(token)
 
@@ -6854,5 +6892,3 @@ if __name__ == "__main__":
 
 
         sys.exit(1)
-
-

@@ -7,6 +7,12 @@
 *.md
 !README.md
 
+# Large/non-runtime directories
+5656-main/
+BB_Scanner/
+artifacts/
+storage/
+
 # Environment files
 .env
 .env.local
@@ -76,6 +82,14 @@ admin_limits.json
 *.tmp
 *.temp
 .cache/
+
+# Archives/dumps
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
 
 # Test files (keep for smoke tests)
 # test/
