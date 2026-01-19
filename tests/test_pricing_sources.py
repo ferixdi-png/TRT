@@ -1,5 +1,6 @@
 from app.kie_catalog.catalog import get_catalog_source_info
 from pricing.engine import get_settings_source_info
+from app.config import get_settings
 
 
 def test_pricing_source_is_explicit_not_unknown():
@@ -11,3 +12,8 @@ def test_pricing_source_is_explicit_not_unknown():
     assert settings_info["path"] != "unknown"
     assert "usd_to_rub" in settings_info["settings"]
     assert "markup_multiplier" in settings_info["settings"]
+
+
+def test_usd_to_rub_rate_is_fixed():
+    settings = get_settings()
+    assert settings.usd_to_rub == 77.83

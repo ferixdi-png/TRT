@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from pricing.engine import load_config
+from app.kie_catalog.catalog import get_free_tools_model_ids as get_dynamic_free_tools_model_ids
 from app.storage import get_storage
 from app.services.user_service import get_is_admin
 
@@ -20,9 +21,7 @@ class FreeToolsConfig:
 def get_free_tools_config() -> FreeToolsConfig:
     config = load_config()
     free_tools = config.get("free_tools", {}) if isinstance(config, dict) else {}
-    model_ids = free_tools.get("model_ids", [])
-    if not isinstance(model_ids, list):
-        model_ids = []
+    model_ids = get_dynamic_free_tools_model_ids()
     base_per_hour = int(free_tools.get("base_per_hour", 5))
     referral_bonus = int(free_tools.get("referral_bonus", 10))
     return FreeToolsConfig(

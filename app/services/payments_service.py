@@ -19,7 +19,7 @@ def get_usd_to_rub_rate() -> float:
     Пока возвращает дефолтное значение, можно расширить для чтения из storage
     """
     settings = get_settings()
-    return getattr(settings, "usd_to_rub", 77.22)
+    return getattr(settings, "usd_to_rub", 77.83)
 
 
 def set_usd_to_rub_rate(rate: float) -> None:
@@ -27,8 +27,7 @@ def set_usd_to_rub_rate(rate: float) -> None:
     Установить курс USD к RUB
     Пока заглушка, можно расширить для сохранения в storage
     """
-        # NOTE: можно сохранять в storage если нужно динамическое обновление
-    logger.info(f"USD to RUB rate set to {rate}")
+    logger.warning("USD to RUB rate is locked from pricing config; ignored update: %s", rate)
 
 
 def credit_to_rub(credits: float) -> float:

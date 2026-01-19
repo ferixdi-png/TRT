@@ -23,7 +23,7 @@ DEFAULT_CONFIG_PATH_YAML = Path(__file__).parent / "config.yaml"
 DEFAULT_CONFIG_PATH_JSON = Path(__file__).parent / "config.json"
 
 # Global settings
-USD_TO_RUB = 77.2222  # 1 USD = 77.2222 RUB (calculated from 6.95 / 0.09)
+USD_TO_RUB = 77.83  # 1 USD = 77.83 RUB (fixed from pricing config)
 MARKUP_MULTIPLIER = 2.0  # Multiplier for regular users
 
 
@@ -159,12 +159,15 @@ def calc_model_price_rub(
     
     # Convert USD to RUB
     price_rub = cost_usd * usd_to_rub
-    
+
     # Apply markup for regular users
     if not is_admin:
         price_rub *= markup_multiplier
-    
-    return price_rub
+
+    # Round up to whole RUB to preserve margin
+    import math
+
+    return float(math.ceil(price_rub))
 
 
 def get_model_credits(

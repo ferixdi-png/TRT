@@ -21,7 +21,7 @@ def get_usd_to_rub(settings: Settings) -> float:
     Returns:
         Курс USD к RUB (по умолчанию 100.0)
     """
-    return getattr(settings, 'usd_to_rub', 100.0)
+    return getattr(settings, 'usd_to_rub', 77.83)
 
 
 def _ceil_decimal(value: Decimal, places: int) -> Decimal:
@@ -29,7 +29,13 @@ def _ceil_decimal(value: Decimal, places: int) -> Decimal:
     return value.quantize(quant, rounding=ROUND_CEILING)
 
 
-def user_price_rub(official_usd: float, usd_to_rub: float, price_multiplier: float = 2.0) -> float:
+def user_price_rub(
+    official_usd: float,
+    usd_to_rub: float,
+    price_multiplier: float = 2.0,
+    *,
+    is_admin: bool = False,
+) -> int:
     """
     Рассчитывает цену для пользователя в рублях.
     
@@ -41,18 +47,25 @@ def user_price_rub(official_usd: float, usd_to_rub: float, price_multiplier: flo
         price_multiplier: Множитель цены (по умолчанию 2.0)
     
     Returns:
-        Цена в рублях (округление вверх до 2 знаков)
+        Цена в рублях (округление вверх до целого рубля)
     """
+    effective_multiplier = 1.0 if is_admin else price_multiplier
     price = (
         Decimal(str(official_usd))
         * Decimal(str(usd_to_rub))
-        * Decimal(str(price_multiplier))
+        * Decimal(str(effective_multiplier))
     )
-    price_ceiled = _ceil_decimal(price, 2)
-    return float(price_ceiled)
+    price_ceiled = _ceil_decimal(price, 0)
+    return int(price_ceiled)
 
 
-def price_for_model_rub(model_id: str, mode_index: int, settings: Settings) -> Optional[float]:
+def price_for_model_rub(
+    model_id: str,
+    mode_index: int,
+    settings: Settings,
+    *,
+    is_admin: bool = False,
+) -> Optional[int]:
     """
     Рассчитывает цену для конкретной модели и режима в рублях.
     
@@ -77,10 +90,16 @@ def price_for_model_rub(model_id: str, mode_index: int, settings: Settings) -> O
     usd_to_rub = get_usd_to_rub(settings)
     price_multiplier = getattr(settings, 'price_multiplier', 2.0)
     
-    return user_price_rub(mode.official_usd, usd_to_rub, price_multiplier)
+    return user_price_rub(mode.official_usd, usd_to_rub, price_multiplier, is_admin=is_admin)
 
 
-def get_model_price_info(model_id: str, mode_index: int, settings: Settings) -> Optional[Dict]:
+def get_model_price_info(
+    model_id: str,
+    mode_index: int,
+    settings: Settings,
+    *,
+    is_admin: bool = False,
+) -> Optional[Dict]:
     """
     Получает полную информацию о цене модели.
     
@@ -102,7 +121,7 @@ def get_model_price_info(model_id: str, mode_index: int, settings: Settings) -> 
     mode = model.modes[mode_index]
     usd_to_rub = get_usd_to_rub(settings)
     price_multiplier = getattr(settings, 'price_multiplier', 2.0)
-    price_rub = user_price_rub(mode.official_usd, usd_to_rub, price_multiplier)
+    price_rub = user_price_rub(mode.official_usd, usd_to_rub, price_multiplier, is_admin=is_admin)
     
     return {
         "model_id": model_id,
@@ -113,6 +132,6 @@ def get_model_price_info(model_id: str, mode_index: int, settings: Settings) -> 
         "credits": mode.credits,
         "official_usd": mode.official_usd,
         "usd_to_rub": usd_to_rub,
-        "price_multiplier": price_multiplier,
+        "price_multiplier": 1.0 if is_admin else price_multiplier,
         "price_rub": price_rub
     }
