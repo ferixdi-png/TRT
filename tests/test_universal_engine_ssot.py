@@ -47,7 +47,7 @@ def test_catalog_coverage():
         assert spec.schema_properties is not None, f"{model_id} missing schema_properties"
         assert spec.schema_required is not None, f"{model_id} missing schema_required"
         assert set(spec.schema_required).issubset(set(spec.schema_properties.keys()))
-        assert spec.output_media_type in {"image", "video", "audio", "voice", "text", "file"}
+        assert spec.output_media_type in {"image", "video", "audio", "text", "document"}
 
 
 def test_wizard_smoke_all_models():
@@ -100,13 +100,6 @@ async def test_engine_integration_by_media_type(monkeypatch):
                 content_type="audio/mpeg",
                 size_bytes=16,
             )
-        if media_type == "voice":
-            return result_delivery.DeliveryTarget(
-                url=url,
-                data=b"OggSfake",
-                content_type="audio/ogg",
-                size_bytes=16,
-            )
         return result_delivery.DeliveryTarget(
             url=url,
             data=b"PK\x03\x04fake",
@@ -137,7 +130,6 @@ async def test_engine_integration_by_media_type(monkeypatch):
         bot.send_photo = AsyncMock()
         bot.send_video = AsyncMock()
         bot.send_audio = AsyncMock()
-        bot.send_voice = AsyncMock()
         bot.send_document = AsyncMock()
         bot.send_media_group = AsyncMock()
 
@@ -151,8 +143,8 @@ async def test_engine_integration_by_media_type(monkeypatch):
             bot.send_video.assert_called()
         elif media_type == "audio":
             bot.send_audio.assert_called()
-        elif media_type == "voice":
-            bot.send_voice.assert_called()
+        elif media_type == "document":
+            bot.send_document.assert_called()
 
-    for media_type in ["image", "video", "audio", "voice", "text"]:
+    for media_type in ["image", "video", "audio", "document", "text"]:
         await run_for_media(media_type)

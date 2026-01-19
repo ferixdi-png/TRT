@@ -157,6 +157,11 @@ class Settings:
         
         if not self.telegram_bot_token:
             errors.append("TELEGRAM_BOT_TOKEN is required")
+        if self.bot_mode == "webhook" and not self.database_url:
+            errors.append("DATABASE_URL is required for webhook mode")
+            logger.error(
+                "[CONFIG] error_code=CONFIG_DB_REQUIRED fix_hint=set_DATABASE_URL_or_use_BOT_MODE=polling"
+            )
         
         if errors:
             error_msg = "\n".join(f"  - {err}" for err in errors)

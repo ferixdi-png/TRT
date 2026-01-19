@@ -70,6 +70,7 @@ def main() -> int:
     ok &= run_command("python -m compileall .")
     ok &= run_command("pytest -q")
     ok &= run_command("python scripts/verify_ssot.py")
+    ok &= run_command("python scripts/verify_output_media_type.py")
     ok &= run_command("python scripts/verify_no_placeholders.py")
     ok &= run_command("python scripts/verify_button_coverage.py")
     ok &= run_command("python scripts/verify_kie_single_entrypoint.py")

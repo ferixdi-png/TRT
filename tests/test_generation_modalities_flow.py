@@ -135,7 +135,7 @@ async def test_generation_flow_audio(monkeypatch):
         object.__setattr__(harness.application.bot, "send_document", AsyncMock())
         object.__setattr__(harness.application.bot, "send_media_group", AsyncMock())
 
-        spec = _pick_model(lambda model: model.output_media_type in {"audio", "voice"}, "audio")
+        spec = _pick_model(lambda model: model.output_media_type == "audio", "audio")
         media_type = spec.output_media_type or "audio"
         job_result = JobResult(
             task_id="task-3",
@@ -145,8 +145,7 @@ async def test_generation_flow_audio(monkeypatch):
             text=None,
             raw={"elapsed": 0.1},
         )
-        expected_method = "send_voice" if media_type == "voice" else "send_audio"
-        await _run_flow(monkeypatch, harness, spec, job_result, expected_method)
+        await _run_flow(monkeypatch, harness, spec, job_result, "send_audio")
     finally:
         await harness.teardown()
 

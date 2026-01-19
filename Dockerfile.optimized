@@ -20,10 +20,6 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY bot_kie.py run_bot.py config.py translations.py kie_models.py kie_client.py knowledge_storage.py ./
 
 # Create directories with empty __init__.py files
-RUN mkdir -p ./bot_kie_services ./bot_kie_utils && \
-    echo '"""Empty - modules not available in build context"""' > ./bot_kie_services/__init__.py && \
-    echo '"""Empty - modules not available in build context"""' > ./bot_kie_utils/__init__.py
-
 COPY validate_*.py ./
 
 # Copy index.js if it exists (for health check)
@@ -35,7 +31,6 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 # Start the bot directly with Python (faster than npm)
 CMD ["python3", "run_bot.py"]
-
 
 
 

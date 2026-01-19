@@ -6607,14 +6607,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         session.get('waiting_for'),
                         session.get('current_param'),
                     )
-                    next_param_result = await start_next_parameter(update, context, user_id)
-                    if next_param_result:
-                        return next_param_result
+                    log_structured_event(
+                        correlation_id=ensure_correlation_id(update, context),
+                        user_id=user_id,
+                        chat_id=query.message.chat_id if query and query.message else None,
+                        update_id=update.update_id,
+                        action="BACK_TO_PREVIOUS_STEP",
+                        action_path="back_to_previous_step",
+                        model_id=session.get("model_id"),
+                        stage="UI_ROUTER",
+                        outcome="no_history",
+                        error_code="UX_NO_HISTORY",
+                        fix_hint="No previous steps in history; show menu options or continue current step.",
+                        param={"waiting_for": session.get("waiting_for"), "current_param": session.get("current_param")},
+                    )
+                    no_history_text = (
+                        "ℹ️ <b>Нечего возвращать</b>\n\n"
+                        "Вы на первом шаге.\n"
+                        "Код: <code>UX_NO_HISTORY</code>\n\n"
+                        "Выберите действие ниже."
+                        if user_lang == "ru"
+                        else (
+                            "ℹ️ <b>Nothing to return</b>\n\n"
+                            "You are on the first step.\n"
+                            "Code: <code>UX_NO_HISTORY</code>\n\n"
+                            "Choose an action below."
+                        )
+                    )
+                    keyboard = InlineKeyboardMarkup(
+                        [
+                            [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")],
+                            [InlineKeyboardButton(t('btn_all_models_short', lang=user_lang), callback_data="show_models")],
+                            [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")],
+                        ]
+                    )
                     await query.edit_message_text(
-                        t('error_try_start', lang=user_lang),
+                        no_history_text,
+                        reply_markup=keyboard,
                         parse_mode='HTML'
                     )
-                    return ConversationHandler.END
+                    return INPUTTING_PARAMS
 
                 previous_param = history.pop()
                 if previous_param in params:
