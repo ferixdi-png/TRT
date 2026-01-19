@@ -1,5 +1,33 @@
 # TRT_REPORT.md
 
+## 2025-02-16: Production-ready generation pipeline (stub/real, media, logs, tests)
+**Было:**
+- KIE stub возвращал `state=completed` и `resultJson.urls`, что ломало `universal_engine` (ожидает `state=success` и `resultUrls`).
+- Реальный KIE выключался из-за дефолта `KIE_STUB=1`, что оставляло прод на stub.
+- `wait_for_task()` ожидал только `completed`, из-за чего `success` не завершал poll.
+- Парсер результатов плохо различал text/image/video/audio и не логировал структурно пустые ответы.
+- UX после подтверждения мог быть «тихим» до финального результата.
+
+**Стало:**
+- Stub возвращает `state=success` и корректный `resultJson` (urls/text) + структурные логи.
+- Реальный KIE используется только при `KIE_ALLOW_REAL=1`/`ALLOW_REAL_GENERATION=1` и наличии `KIE_API_KEY`; stub включается явно.
+- `wait_for_task()` обрабатывает `success`/`completed`.
+- Парсер результата определяет media type по данным/SSOT, поддерживает text/image/video/audio/voice/document, логирует пустые ответы с `error_code`.
+- После confirm пользователь сразу получает «✅ Принято / Генерирую…», плюс структурные логи по всем этапам (create/poll/parse/tg).
+
+**Root cause:**
+- Несоответствие контрактов stub ↔ universal_engine и дефолтный `KIE_STUB=1` скрывали реальный KIE, а poll ждал неверное состояние.
+
+**Файлы изменены:**
+- `app/integrations/kie_stub.py`, `app/kie/kie_client.py`, `app/generations/universal_engine.py`, `app/generations/telegram_sender.py`
+- `app/observability/error_catalog.py`, `main_render.py`, `bot_kie.py`
+- `tests/test_kie_stub_success.py`, `tests/test_generation_modalities_flow.py`, `tests/test_universal_engine_ssot.py`
+- `TRT_REPORT.md`
+
+**Как проверил:**
+- `python scripts/verify_project.py`
+- `pytest -q`
+
 ## 2025-02-16: P0/P1 hardening (trace, callbacks, async balance, dedup, KIE e2e)
 **Было:**
 - `trace_event()` падал на дублирующемся `stage` → ломал `answerCallbackQuery` и UX.

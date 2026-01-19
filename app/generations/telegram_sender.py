@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from app.kie_catalog import ModelSpec
 from app.generations.universal_engine import JobResult
 from app.observability.trace import trace_event, url_summary
+from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,13 @@ async def deliver_result(
                 tg_method=tg_method,
                 media_type=media_type,
             )
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="TG_SEND",
+                action_path="telegram_sender.deliver_result",
+                outcome="attempt",
+                param={"tg_method": tg_method, "media_type": media_type},
+            )
             await bot.send_message(chat_id=chat_id, text=text or "")
         elif media_type == "image":
             if len(urls) > 1:
@@ -88,6 +96,13 @@ async def deliver_result(
             url_summary=url_summary(urls[0]) if urls else None,
             outcome="success",
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="TG_SEND",
+            action_path="telegram_sender.deliver_result",
+            outcome="success",
+            param={"tg_method": tg_method, "media_type": media_type},
+        )
     except Exception as exc:
         logger.warning("Telegram media send failed, falling back to document: %s", exc)
         trace_event(
@@ -101,6 +116,15 @@ async def deliver_result(
             url_summary=url_summary(urls[0]) if urls else None,
             outcome="failed",
             tg_error=str(exc),
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="TG_SEND",
+            action_path="telegram_sender.deliver_result",
+            outcome="failed",
+            error_code="TG_SEND_FAIL",
+            fix_hint="Проверьте параметры отправки в Telegram.",
+            param={"tg_method": tg_method, "media_type": media_type},
         )
         if urls:
             await bot.send_document(chat_id=chat_id, document=urls[0], caption=fallback_caption)
@@ -178,4 +202,12 @@ async def send_job_result(
         tg_method="send_message",
         media_type="summary",
         outcome="success",
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="GEN_COMPLETE",
+        action_path="telegram_sender.send_job_result",
+        model_id=spec.id,
+        outcome="sent",
+        param={"summary_sent": True},
     )
