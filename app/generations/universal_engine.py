@@ -6,6 +6,7 @@ import logging
 import time
 import inspect
 import asyncio
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,8 @@ from app.observability.structured_logs import log_structured_event
 from app.observability.error_catalog import ERROR_CATALOG
 from app.kie_catalog import get_model_map, ModelSpec
 from app.kie_contract.payload_builder import build_kie_payload, PayloadBuildError
+from app.utils.url_normalizer import normalize_result_urls, ResultUrlNormalizationError
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -106,12 +109,20 @@ def _extract_urls(record: Dict[str, Any], result_json: Dict[str, Any]) -> List[s
 
 
 def _extract_text(record: Dict[str, Any], result_json: Dict[str, Any]) -> Optional[str]:
-    return (
+    value = (
         record.get("resultText")
         or result_json.get("resultText")
         or result_json.get("resultObject")
         or result_json.get("text")
     )
+    if isinstance(value, (dict, list)):
+        try:
+            return json.dumps(value, ensure_ascii=False, indent=2)
+        except TypeError:
+            return str(value)
+    if value is None:
+        return None
+    return str(value)
 
 
 def _infer_media_from_urls(urls: List[str], fallback: str) -> str:
@@ -134,9 +145,38 @@ def parse_record_info(
     model_id: str,
     correlation_id: Optional[str] = None,
     duration_ms: Optional[int] = None,
+    *,
+    base_url: Optional[str] = None,
 ) -> JobResult:
     result_json = _parse_result_json(record.get("resultJson"))
     urls = _extract_urls(record, result_json)
+    if urls:
+        try:
+            urls = normalize_result_urls(
+                urls,
+                base_url=base_url,
+                correlation_id=correlation_id,
+                model_id=model_id,
+                stage="KIE_PARSE",
+            )
+        except ResultUrlNormalizationError as exc:
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="KIE_PARSE",
+                action_path="universal_engine.parse_record_info",
+                model_id=model_id,
+                task_id=record.get("taskId"),
+                stage="KIE_PARSE",
+                outcome="failed",
+                error_code="KIE_RESULT_URL_INVALID",
+                fix_hint=str(exc),
+                duration_ms=duration_ms,
+            )
+            raise KIEResultError(
+                "KIE_RESULT_URL_INVALID",
+                error_code="KIE_RESULT_URL_INVALID",
+                fix_hint=str(exc),
+            ) from exc
     text = _extract_text(record, result_json)
 
     supported_media = {"image", "video", "audio", "voice", "file", "text"}
@@ -276,6 +316,16 @@ async def run_generation(
         waiting_for="KIE_CREATE",
         outcome="start",
     )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        action="KIE_CREATE",
+        action_path="universal_engine.run_generation",
+        model_id=model_id,
+        gen_type=spec.model_mode,
+        stage="KIE_CREATE",
+        outcome="start",
+    )
     create_fn = getattr(client, "create_task", None)
     if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
         created = await client.create_task(spec.kie_model, payload["input"], correlation_id=correlation_id)
@@ -283,6 +333,19 @@ async def run_generation(
         created = await client.create_task(spec.kie_model, payload["input"])
     create_duration_ms = int((time.monotonic() - create_start) * 1000)
     if not created.get("ok"):
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_CREATE",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            gen_type=spec.model_mode,
+            stage="KIE_CREATE",
+            outcome="failed",
+            error_code=created.get("error_code") or "KIE_CREATE_FAILED",
+            fix_hint=created.get("user_message"),
+            duration_ms=create_duration_ms,
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -306,6 +369,18 @@ async def run_generation(
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
+        action="KIE_CREATE",
+        action_path="universal_engine.run_generation",
+        model_id=model_id,
+        gen_type=spec.model_mode,
+        task_id=task_id,
+        stage="KIE_CREATE",
+        outcome="success",
+        duration_ms=create_duration_ms,
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
         action="KIE_SUBMIT",
         action_path="universal_engine.run_generation",
         model_id=model_id,
@@ -322,6 +397,8 @@ async def run_generation(
     attempt = 0
     poll_delay = poll_interval
     max_poll_delay = max(poll_interval, 12)
+    error_attempts = 0
+    error_retry_limit = int(os.getenv("KIE_POLL_ERROR_RETRIES", "3"))
     progress_interval = 25
     next_progress_at = poll_start + progress_interval
     get_status_fn = getattr(client, "get_task_status", None)
@@ -389,7 +466,7 @@ async def run_generation(
 
         if record.get("ok") is False:
             status = record.get("status")
-            if status in {401, 402, 422, 429, 500}:
+            if status in {401, 402, 422}:
                 raise KIERequestFailed(
                     record.get("error", "KIE request failed"),
                     status=status,
@@ -397,6 +474,37 @@ async def run_generation(
                     error_code=record.get("error_code"),
                     correlation_id=record.get("correlation_id") or correlation_id,
                 )
+            if status in {429, 500}:
+                error_attempts += 1
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    action="KIE_POLL",
+                    action_path="universal_engine.run_generation",
+                    model_id=model_id,
+                    gen_type=spec.model_mode,
+                    task_id=task_id,
+                    stage="KIE_POLL",
+                    outcome="retry",
+                    error_code=record.get("error_code") or f"KIE_POLL_{status}",
+                    fix_hint=record.get("user_message"),
+                    param={
+                        "status": status,
+                        "attempt": error_attempts,
+                        "retry_limit": error_retry_limit,
+                    },
+                )
+                if error_attempts > error_retry_limit:
+                    raise KIERequestFailed(
+                        record.get("error", "KIE request failed"),
+                        status=status,
+                        user_message=record.get("user_message"),
+                        error_code=record.get("error_code"),
+                        correlation_id=record.get("correlation_id") or correlation_id,
+                    )
+                await asyncio.sleep(poll_delay)
+                poll_delay = min(max_poll_delay, poll_delay * 1.5)
+                continue
             await asyncio.sleep(poll_delay)
             poll_delay = min(max_poll_delay, poll_delay * 1.5)
             continue
@@ -464,11 +572,13 @@ async def run_generation(
 
     parse_start = time.monotonic()
     try:
+        base_url = get_settings().kie_result_cdn_base_url
         result = parse_record_info(
             record,
             spec.output_media_type,
             model_id,
             correlation_id=correlation_id,
+            base_url=base_url,
         )
         log_structured_event(
             correlation_id=correlation_id,

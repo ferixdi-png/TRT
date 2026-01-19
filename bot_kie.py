@@ -1247,22 +1247,22 @@ def _build_kie_request_failed_message(
         return user_message
     if status == 401:
         return (
-            "❌ <b>Проблема с авторизацией</b>\n\n"
-            "Сервис временно недоступен. Мы уже разбираемся."
+            "❌ <b>Неверный ключ</b>\n\n"
+            "Проверьте KIE API ключ. Сервис временно недоступен."
             if user_lang == "ru"
             else "❌ <b>Authorization issue</b>\n\nService is temporarily unavailable. We're on it."
         )
     if status == 402:
         return (
-            "⚠️ <b>Провайдер временно недоступен</b>\n\n"
-            "Попробуйте позже или выберите другую модель."
+            "⚠️ <b>Недостаточно средств на KIE аккаунте</b>\n\n"
+            "Это проблема баланса KIE. Попробуйте позже или выберите другую модель."
             if user_lang == "ru"
             else "⚠️ <b>Provider temporarily unavailable</b>\n\nTry later or choose another model."
         )
     if status == 422:
         return (
-            "⚠️ <b>Проверьте параметры</b>\n\n"
-            "Некоторые значения не прошли проверку. Попробуйте изменить запрос."
+            "⚠️ <b>Ошибка параметров модели</b>\n\n"
+            "Проверьте значения параметров и попробуйте снова."
             if user_lang == "ru"
             else "⚠️ <b>Check the parameters</b>\n\nSome values are invalid. Please adjust your request."
         )
@@ -2214,7 +2214,17 @@ def get_broadcast(broadcast_id: int) -> dict:
 
 # ==================== Generations History System ====================
 
-def save_generation_to_history(user_id: int, model_id: str, model_name: str, params: dict, result_urls: list, task_id: str, price: float = 0.0, is_free: bool = False):
+def save_generation_to_history(
+    user_id: int,
+    model_id: str,
+    model_name: str,
+    params: dict,
+    result_urls: list,
+    task_id: str,
+    price: float = 0.0,
+    is_free: bool = False,
+    correlation_id: Optional[str] = None,
+):
     """Save generation to user history (save to DB or JSON fallback)."""
     import time
     
@@ -2241,6 +2251,17 @@ def save_generation_to_history(user_id: int, model_id: str, model_name: str, par
             
             if operation_id:
                 logger.info(f"✅ Saved generation to DB: user_id={user_id}, model_id={model_id}, operation_id={operation_id}")
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    action="PERSIST",
+                    action_path="save_generation_to_history",
+                    model_id=model_id,
+                    task_id=task_id,
+                    stage="PERSIST",
+                    outcome="success",
+                    param={"storage": "db", "operation_id": operation_id},
+                )
                 # Return operation_id as generation_id for compatibility
                 return operation_id
             else:
@@ -2298,6 +2319,17 @@ def save_generation_to_history(user_id: int, model_id: str, model_name: str, par
             logger.info(f"✅ Created directory for history file: {dir_path}")
         
         save_json_file(GENERATIONS_HISTORY_FILE, history, use_cache=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="PERSIST",
+            action_path="save_generation_to_history",
+            model_id=model_id,
+            task_id=task_id,
+            stage="PERSIST",
+            outcome="success",
+            param={"storage": "json", "generation_id": generation_entry.get("id")},
+        )
         
         # Verify file was saved and data is correct (with retry)
         max_retries = 3
@@ -2325,6 +2357,18 @@ def save_generation_to_history(user_id: int, model_id: str, model_name: str, par
         return generation_entry['id']
     except Exception as e:
         logger.error(f"Error saving generation to history: {e}", exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="PERSIST",
+            action_path="save_generation_to_history",
+            model_id=model_id,
+            task_id=task_id,
+            stage="PERSIST",
+            outcome="failed",
+            error_code="PERSIST_FAILED",
+            fix_hint=str(e),
+        )
         return None
 
 
@@ -3362,6 +3406,14 @@ def _get_whats_new_lines(user_lang: str) -> list[str]:
     ]
 
 
+def _format_refill_eta(seconds: int, user_lang: str) -> str:
+    safe_seconds = max(0, int(seconds))
+    if safe_seconds < 60:
+        return f"{safe_seconds} сек" if user_lang == "ru" else f"{safe_seconds}s"
+    minutes = int((safe_seconds + 59) / 60)
+    return f"{minutes} мин" if user_lang == "ru" else f"{minutes} min"
+
+
 def _build_release_block(user_lang: str) -> str:
     version_label = "Version" if user_lang == "en" else "Версия"
     date_label = "Date" if user_lang == "en" else "Дата"
@@ -3394,6 +3446,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     total_models = len(get_models_sync())
     remaining_free = FREE_GENERATIONS_PER_DAY
     free_counter_line = ""
+    balance_status_line = ""
     if user_id:
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
@@ -3409,6 +3462,26 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
             )
         except Exception as exc:
             logger.warning("Failed to resolve free counter line: %s", exc)
+        try:
+            from app.services.user_service import get_user_balance as get_user_balance_async
+            from app.services.free_tools_service import get_free_counter_snapshot
+
+            balance_value = await get_user_balance_async(user_id)
+            balance_str = format_rub_amount(balance_value)
+            snapshot = await get_free_counter_snapshot(user_id)
+            refill_eta = _format_refill_eta(snapshot.get("next_refill_in", 0), user_lang)
+            if user_lang == "en":
+                balance_status_line = (
+                    f"Balance: {balance_str} | Free: {snapshot.get('remaining', 0)} "
+                    f"(refill in {refill_eta})"
+                )
+            else:
+                balance_status_line = (
+                    f"Баланс: {balance_str} | Бесплатных: {snapshot.get('remaining', 0)} "
+                    f"(пополнение через {refill_eta})"
+                )
+        except Exception as exc:
+            logger.warning("Failed to resolve balance status line: %s", exc)
 
     is_new = await is_new_user_async(user_id) if user_id else True
     referral_link = get_user_referral_link(user_id) if user_id else ""
@@ -3459,6 +3532,9 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
         header_text += "\n👇 Select a section from the menu below."
     else:
         header_text += "\n👇 Выберите раздел в меню ниже."
+
+    if balance_status_line:
+        header_text += f"\n\n{balance_status_line}"
 
     if free_counter_line:
         header_text += f"\n\n🆓 {free_counter_line}"
@@ -13225,11 +13301,11 @@ async def start_generation_directly(
                     user_id=user_id,
                     chat_id=chat_id,
                     update_id=None,
-                    action="BALANCE_CHECK",
+                    action="BALANCE_GATE",
                     action_path="confirm_generate",
                     model_id=model_id,
-                    gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
-                    stage="BALANCE_CHECK",
+                    gen_type=model_info.get("model_mode") if isinstance(model_info, dict) else None,
+                    stage="BALANCE_GATE",
                     outcome="failed",
                     error_code="ERR_BALANCE_LOW",
                     fix_hint="Пополните баланс или используйте бесплатные генерации.",
@@ -13242,6 +13318,19 @@ async def start_generation_directly(
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=None,
+                action="BALANCE_GATE",
+                action_path="confirm_generate",
+                model_id=model_id,
+                gen_type=model_info.get("model_mode") if isinstance(model_info, dict) else None,
+                stage="BALANCE_GATE",
+                outcome="passed",
+                param={"price_rub": price, "balance_rub": user_balance},
+            )
     elif user_id != ADMIN_ID:
         remaining = get_admin_remaining(user_id)
         if remaining < price:
@@ -13298,7 +13387,7 @@ async def start_generation_directly(
     await status_message.edit_text(notification_text, parse_mode='HTML')
 
     try:
-        from app.delivery.result_delivery import deliver_generation_result
+        from app.generations.telegram_sender import deliver_result
         from app.generations.universal_engine import (
             run_generation,
             KIEJobFailed,
@@ -13356,15 +13445,15 @@ async def start_generation_directly(
                 if user_lang == 'ru'
                 else f"✅ <b>Generation completed!</b>\n\n🤖 <b>Model:</b> {model_name_display}"
             )
-            await deliver_generation_result(
-                context,
+            await deliver_result(
+                context.bot,
                 user_id,
-                correlation_id,
-                model_id,
-                model_spec.model_mode,
+                job_result.media_type,
                 job_result.urls,
                 job_result.text or caption,
-                prefer_upload=True,
+                model_id=model_id,
+                gen_type=model_spec.model_mode,
+                correlation_id=correlation_id,
             )
 
         if job_result.urls:
@@ -13377,6 +13466,7 @@ async def start_generation_directly(
                 task_id=task_id,
                 price=price,
                 is_free=is_free,
+                correlation_id=correlation_id,
             )
 
         keyboard = InlineKeyboardMarkup(
@@ -14148,8 +14238,27 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         list(params.keys()),
     )
     
-    # Check if this is a free generation
-    is_free = await is_free_generation_available(user_id, model_id)
+    # Check if this is a free generation (consume quota upfront)
+    free_result = await check_and_consume_free_generation(
+        user_id,
+        model_id,
+        correlation_id=correlation_id,
+    )
+    if free_result.get("status") == "deny":
+        user_lang = get_user_language(user_id)
+        reset_in = free_result.get("reset_in_minutes", 0)
+        deny_text = (
+            f"❌ <b>Лимит бесплатных генераций исчерпан</b>\n\n"
+            f"Доступно снова через {reset_in} мин."
+            if user_lang == "ru"
+            else (
+                f"❌ <b>Free generation limit reached</b>\n\n"
+                f"Available again in {reset_in} min."
+            )
+        )
+        await send_or_edit_message(deny_text)
+        return ConversationHandler.END
+    is_free = free_result.get("status") == "ok"
     
     # Calculate price (admins pay admin price, users pay user price)
     price = calculate_price_rub(model_id, params, is_admin_user)
@@ -14220,6 +14329,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not is_free:
             user_balance = await get_user_balance_async(user_id)
             if user_balance < price:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="BALANCE_GATE",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+                    stage="BALANCE_GATE",
+                    outcome="failed",
+                    error_code="ERR_BALANCE_LOW",
+                    fix_hint="Пополните баланс или используйте бесплатные генерации.",
+                    param={"price_rub": price, "balance_rub": user_balance},
+                )
                 user_lang = get_user_language(user_id)
                 await send_or_edit_message(
                     _build_insufficient_funds_text(user_lang, price, user_balance),
@@ -14231,12 +14355,12 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 user_id=user_id,
                 chat_id=chat_id,
                 update_id=update.update_id,
-                action="BALANCE_CHECK",
+                action="BALANCE_GATE",
                 action_path="confirm_generate",
                 model_id=model_id,
                 gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
-                stage="BALANCE_CHECK",
-                outcome="ok",
+                stage="BALANCE_GATE",
+                outcome="passed",
                 param={"price_rub": price, "balance_rub": user_balance},
             )
     elif user_id != ADMIN_ID:
@@ -14356,7 +14480,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 logger.warning("Progress update failed: %s", send_exc)
 
     try:
-        from app.delivery.result_delivery import deliver_generation_result
+        from app.generations.telegram_sender import deliver_result
         from app.generations.universal_engine import (
             run_generation,
             KIEJobFailed,
@@ -14399,15 +14523,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         task_id = job_result.task_id
 
-        if is_free:
-            used = await use_free_generation(
-                user_id,
-                model_id,
-                correlation_id=correlation_id,
-            )
-            if not used:
-                is_free = False
-
         if user_id != ADMIN_ID and not dry_run:
             if is_free:
                 price = 0.0
@@ -14435,15 +14550,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if user_lang == "ru"
                 else f"✅ <b>Generation completed!</b>\n\n🤖 <b>Model:</b> {model_name_display}"
             )
-            await deliver_generation_result(
-                context,
+            await deliver_result(
+                context.bot,
                 user_id,
-                correlation_id,
-                model_id,
-                model_spec.model_mode,
+                job_result.media_type,
                 job_result.urls,
                 job_result.text or caption,
-                prefer_upload=True,
+                model_id=model_id,
+                gen_type=model_spec.model_mode,
+                correlation_id=correlation_id,
             )
 
         if job_result.urls:
@@ -14456,6 +14571,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=task_id,
                 price=price,
                 is_free=is_free,
+                correlation_id=correlation_id,
             )
 
         keyboard = InlineKeyboardMarkup(
@@ -14933,7 +15049,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             result_urls=result_urls.copy(),
                             task_id=task_id,
                             price=price,
-                            is_free=is_free
+                            is_free=is_free,
+                            correlation_id=ensure_correlation_id(update, context),
                         )
                     
                     # Prepare buttons for last message
@@ -14951,7 +15068,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     if result_urls:
-                        from app.delivery.result_delivery import deliver_generation_result
+                        from app.generations.telegram_sender import deliver_result
                         model_info = saved_session_data.get('model_info', {}) if saved_session_data else {}
                         model_name_display = model_name if model_name else model_id
                         if user_lang == 'ru':
@@ -14964,15 +15081,15 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                 "✅ <b>Generation Completed!</b>\n\n"
                                 f"🤖 <b>Model:</b> {model_name_display}"
                             )
-                        await deliver_generation_result(
-                            context,
+                        await deliver_result(
+                            context.bot,
                             chat_id,
-                            ensure_correlation_id(update, context),
-                            model_id,
-                            model_info.get('model_mode') if model_info else None,
+                            (model_info.get("output_media_type") if model_info else None) or "document",
                             result_urls[:5],
                             caption,
-                            prefer_upload=True,
+                            model_id=model_id,
+                            gen_type=model_info.get('model_mode') if model_info else None,
+                            correlation_id=ensure_correlation_id(update, context),
                         )
                         free_counter_line = ""
                         try:

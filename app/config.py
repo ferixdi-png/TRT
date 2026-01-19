@@ -118,6 +118,9 @@ class Settings:
         except ValueError:
             self.credit_to_rub_rate = 0.1
             logger.warning(f"Invalid CREDIT_TO_RUB_RATE: {credit_rate_str}, using 0.1")
+
+        # Result delivery CDN (optional)
+        self.kie_result_cdn_base_url = os.getenv("KIE_RESULT_CDN_BASE_URL", "").strip()
         
         # Currency conversion
         pricing_settings = get_settings_source_info().get("settings", {})
