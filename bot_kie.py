@@ -12915,18 +12915,26 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     is_admin_user = get_is_admin(user_id)
     
     # Helper function to send/edit messages safely
-    async def send_or_edit_message(text, parse_mode='HTML'):
+    async def send_or_edit_message(text, parse_mode='HTML', reply_markup=None):
         result_message = None
         try:
             action_type = "send_message"
             if query:
                 try:
-                    result_message = await query.edit_message_text(text, parse_mode=parse_mode)
+                    result_message = await query.edit_message_text(
+                        text,
+                        parse_mode=parse_mode,
+                        reply_markup=reply_markup,
+                    )
                     action_type = "edit_message_text"
                 except Exception as edit_error:
                     logger.warning(f"Could not edit message: {edit_error}, sending new")
                     try:
-                        result_message = await query.message.reply_text(text, parse_mode=parse_mode)
+                        result_message = await query.message.reply_text(
+                            text,
+                            parse_mode=parse_mode,
+                            reply_markup=reply_markup,
+                        )
                         action_type = "reply_text"
                         try:
                             await query.message.delete()
@@ -12934,10 +12942,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             pass
                     except Exception as send_error:
                         logger.error(f"Could not send new message: {send_error}")
-                        result_message = await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                        result_message = await context.bot.send_message(
+                            chat_id=user_id,
+                            text=text,
+                            parse_mode=parse_mode,
+                            reply_markup=reply_markup,
+                        )
                         action_type = "send_message"
             else:
-                result_message = await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+                result_message = await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
                 action_type = "send_message"
             track_outgoing_action(update.update_id, action_type=action_type)
         except Exception as e:
@@ -13222,6 +13240,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             progress_callback=progress_callback,
         )
         elapsed = job_result.raw.get("elapsed")
+        from app.utils.deps import get_kie_client_from_context
+
         await send_job_result(
             context.bot,
             user_id,
@@ -13231,6 +13251,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             elapsed=elapsed,
             user_lang=user_lang,
             correlation_id=correlation_id,
+            kie_client=get_kie_client_from_context(context),
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -13244,7 +13265,10 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
     except KIEJobFailed as exc:
+        from app.observability.redaction import redact_payload
+
         logger.error(f"❌ Generation failed: {exc}", exc_info=True)
+        redacted_record = redact_payload(exc.record_info or {})
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -13255,23 +13279,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             outcome="failed",
             error_code=exc.fail_code or "KIE_FAIL_STATE",
             fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
-            param={"fail_code": exc.fail_code, "fail_msg": exc.fail_msg},
+            param={
+                "fail_code": exc.fail_code,
+                "fail_msg": exc.fail_msg,
+                "record_info": redacted_record,
+            },
         )
-        details_lines = []
-        if exc.fail_msg:
-            details_lines.append(f"Причина: {exc.fail_msg}")
-        if exc.fail_code:
-            details_lines.append(f"Код: {exc.fail_code}")
-        fail_details = "\n".join(details_lines)
-        if fail_details:
-            fail_details = f"{fail_details}\n"
+        from app.generations.failure_ui import build_kie_fail_ui
+
+        fail_text, retry_keyboard = build_kie_fail_ui(correlation_id or "corr-na-na", model_id)
         await send_or_edit_message(
-            (
-                "❌ <b>Ошибка генерации</b>\n\n"
-                f"{fail_details}"
-                f"ID: {correlation_id}"
-            ),
-            parse_mode='HTML'
+            fail_text,
+            parse_mode='HTML',
+            reply_markup=retry_keyboard,
         )
         return ConversationHandler.END
     except Exception as e:

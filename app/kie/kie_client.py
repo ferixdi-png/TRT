@@ -553,6 +553,41 @@ class KIEClient:
             "correlation_id": result.get("correlation_id"),
         }
 
+    async def get_download_url(
+        self,
+        source_url: str,
+        *,
+        correlation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Resolve a KIE download URL into a direct binary link."""
+        payload = {"url": source_url}
+        result = await self._request_json(
+            "POST",
+            "/api/v1/common/download-url",
+            payload=payload,
+            correlation_id=correlation_id,
+        )
+        if not result.get("ok"):
+            return result
+        data = result.get("data", {})
+        if isinstance(data, dict):
+            url = data.get("url") or data.get("data", {}).get("url")
+        else:
+            url = None
+        if not url:
+            return {
+                "ok": False,
+                "error": "missing_download_url",
+                "status": result.get("status"),
+                "correlation_id": result.get("correlation_id"),
+            }
+        return {
+            "ok": True,
+            "url": url,
+            "status": result.get("status"),
+            "correlation_id": result.get("correlation_id"),
+        }
+
 
 _client_instance: Optional[KIEClient] = None
 

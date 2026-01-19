@@ -222,6 +222,6 @@ def get_kie_client_or_stub():
         )
         return KIEStub()
 
-    from app.integrations.kie_client import KIEClient
+    from app.kie.kie_client import get_kie_client
 
-    return KIEClient()
+    return get_kie_client()

@@ -1,7 +1,6 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from telegram import InputFile
 from telegram.error import BadRequest
 
 from app.generations.telegram_sender import deliver_result
@@ -75,11 +74,9 @@ def test_deliver_result_url_ok(monkeypatch):
     assert bot.send_document.call_count == 0
 
 
-def test_deliver_result_fallback_download_on_bad_request(monkeypatch):
+def test_send_photo_badrequest_falls_back_to_document(monkeypatch):
     bot = MagicMock()
-    bot.send_photo = AsyncMock(
-        side_effect=[BadRequest("Wrong type of the web page content"), None]
-    )
+    bot.send_photo = AsyncMock(side_effect=BadRequest("Wrong type of the web page content"))
     bot.send_document = AsyncMock()
 
     head_response = DummyResponse(headers={"Content-Type": "image/png"}, content_length=1024)
@@ -97,9 +94,8 @@ def test_deliver_result_fallback_download_on_bad_request(monkeypatch):
         )
     )
 
-    assert bot.send_photo.call_count == 2
-    _, kwargs = bot.send_photo.call_args
-    assert isinstance(kwargs["photo"], InputFile)
+    bot.send_photo.assert_called_once()
+    bot.send_document.assert_called_once()
 
 
 def test_deliver_result_multi_urls_group_and_sequential(monkeypatch):
