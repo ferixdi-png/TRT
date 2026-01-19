@@ -6,3 +6,9 @@ def test_callbacks_gen_type_are_routed_not_fallback():
     assert is_known_callback_data("gen_type:image-to-image")
     assert is_known_callback_data("gen_type:text-to-video")
     assert is_known_callback_data("gen_type:image-edit")
+
+
+def test_callbacks_payment_amounts_are_routed():
+    assert is_known_callback_data("topup_amount:50")
+    assert is_known_callback_data("pay_sbp:50.0")
+    assert is_known_callback_data("pay_card:150")
