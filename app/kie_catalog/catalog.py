@@ -42,6 +42,8 @@ class ModelMode:
     credits: float
     official_usd: float
     notes: Optional[str] = None
+    title_ru: Optional[str] = None
+    short_hint_ru: Optional[str] = None
 
 
 @dataclass
@@ -60,6 +62,9 @@ class ModelSpec:
     free: bool = False
     kie_model: str = ""  # if differs from id
     modes: List[ModelMode] = field(default_factory=list)
+    description_ru: str = ""
+    required_inputs_ru: List[str] = field(default_factory=list)
+    output_type_ru: str = ""
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -88,6 +93,56 @@ MODEL_TYPE_TO_MEDIA = {
     "speech_to_text": "text",
     "text": "text",
 }
+
+OUTPUT_MEDIA_TYPE_RU = {
+    "image": "Изображение",
+    "video": "Видео",
+    "audio": "Аудио",
+    "text": "Текст",
+    "document": "Файл",
+}
+
+MODEL_TYPE_DESCRIPTION_RU = {
+    "text_to_image": "Генерация изображения по текстовому описанию.",
+    "image_to_image": "Преобразование изображения по вашему запросу.",
+    "image_edit": "Редактирование изображения по описанию.",
+    "outpaint": "Расширение изображения по описанию.",
+    "upscale": "Повышение качества и разрешения изображения.",
+    "text_to_video": "Генерация видео по текстовому описанию.",
+    "image_to_video": "Анимация изображения в видео.",
+    "video_upscale": "Повышение качества видео.",
+    "speech_to_video": "Создание видео по голосу.",
+    "text_to_speech": "Озвучка текста.",
+    "text_to_audio": "Генерация аудио по тексту.",
+    "audio_to_audio": "Обработка и улучшение аудио.",
+    "speech_to_text": "Распознавание речи в текст.",
+    "text": "Генерация текстового результата.",
+}
+
+
+def _humanize_param_ru(param_name: str) -> str:
+    ru_map = {
+        "prompt": "Текст запроса",
+        "text": "Текст запроса",
+        "image_input": "Изображение",
+        "image_urls": "Изображение",
+        "image_url": "Изображение",
+        "audio_input": "Аудио",
+        "audio_url": "Аудио",
+        "video_input": "Видео",
+        "video_url": "Видео",
+        "mask": "Маска",
+    }
+    return ru_map.get(param_name, param_name.replace("_", " ").capitalize())
+
+
+def _default_required_inputs_ru(schema: Dict[str, Any]) -> List[str]:
+    required = [name for name, info in schema.items() if info.get("required", False)]
+    return [_humanize_param_ru(name) for name in required]
+
+
+def _default_description_ru(model_type: str) -> str:
+    return MODEL_TYPE_DESCRIPTION_RU.get(model_type, "Генерация результата по вашему запросу.")
 
 
 def _load_registry_models() -> Dict[str, Any]:
@@ -207,7 +262,9 @@ def _parse_model_spec(
             unit=mode_data.get('unit', 'image'),
             credits=float(mode_data.get('credits', 0.0)),
             official_usd=float(mode_data.get('official_usd', 0.0)),
-            notes=mode_data.get('notes')
+            notes=mode_data.get('notes'),
+            title_ru=mode_data.get('title_ru'),
+            short_hint_ru=mode_data.get('short_hint_ru') or mode_data.get('notes'),
         )
         modes.append(mode)
 
@@ -217,6 +274,9 @@ def _parse_model_spec(
     model_mode = registry_data.get("model_mode") or model_type
     schema = _extract_schema(registry_data)
     output_media_type = _compute_output_media_type(model_type)
+    description_ru = model_data.get("description_ru") or _default_description_ru(model_type)
+    required_inputs_ru = model_data.get("required_inputs_ru") or _default_required_inputs_ru(schema)
+    output_type_ru = model_data.get("output_type_ru") or OUTPUT_MEDIA_TYPE_RU.get(output_media_type or "", "")
     return ModelSpec(
         id=model_id,
         title_ru=model_data.get('title_ru', ''),
@@ -230,7 +290,10 @@ def _parse_model_spec(
         output_media_type=output_media_type or "",
         free=_is_free_model_data(model_data),
         kie_model=registry_data.get("kie_model", model_id),
-        modes=modes
+        modes=modes,
+        description_ru=description_ru,
+        required_inputs_ru=required_inputs_ru,
+        output_type_ru=output_type_ru,
     )
 
 

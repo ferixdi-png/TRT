@@ -443,6 +443,8 @@ from app.models.registry import get_models_sync
 from app.services.free_tools_service import (
     add_referral_free_bonus,
     check_and_consume_free_generation,
+    check_free_generation_available,
+    consume_free_generation,
     format_free_counter_block,
     get_free_generation_status,
     get_free_counter_snapshot,
@@ -683,20 +685,39 @@ def _is_missing_media_error(error: str) -> bool:
     return False
 
 
+def _extract_missing_param(error_message: Optional[str], properties: Dict[str, Any]) -> Optional[str]:
+    if not error_message or not properties:
+        return None
+    lowered = error_message.lower()
+    for param_name in properties:
+        if param_name.lower() in lowered:
+            return param_name
+        spaced = param_name.replace("_", " ").lower()
+        if spaced and spaced in lowered:
+            return param_name
+    return None
+
+
 def _select_next_param(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     properties = session.get("properties", {})
     params = session.get("params", {})
     param_order = session.get("param_order") or _build_param_order(properties)
     session["param_order"] = param_order
-    for param_name in param_order:
+    required_params = session.get("required", [])
+    required_order = [name for name in param_order if name in required_params]
+    if not required_order:
+        required_order = [name for name in required_params if name in properties]
+    for param_name in required_order:
         if param_name in params:
             continue
         param_info = properties.get(param_name, {})
         param_type = param_info.get("type", "string")
         enum_values = _normalize_enum_values(param_info)
         is_optional = not param_info.get("required", False)
+        if param_name in required_params:
+            is_optional = False
         media_kind = _get_media_kind(param_name)
-        reason = "missing_required" if param_name in session.get("required", []) else "optional_next"
+        reason = "missing_required"
         if enum_values:
             reason = "enum_buttons"
         return {
@@ -1277,7 +1298,7 @@ def _build_mode_selection_text(model_name: str, user_lang: str) -> str:
 def _build_mode_selection_keyboard(model_id: str, modes: List[Any], user_lang: str) -> InlineKeyboardMarkup:
     buttons: List[List[InlineKeyboardButton]] = []
     for index, mode in enumerate(modes):
-        label = mode.notes or (f"Режим {index + 1}" if user_lang == "ru" else f"Mode {index + 1}")
+        label = _resolve_mode_label(mode, index, user_lang)
         buttons.append([InlineKeyboardButton(label, callback_data=f"select_mode:{model_id}:{index}")])
     buttons.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
     return InlineKeyboardMarkup(buttons)
@@ -5027,6 +5048,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['params'] = {}
             session['properties'] = input_params
             session['required'] = [p for p, info in input_params.items() if info.get('required', False)]
+            session['skipped_params'] = set()
             session['current_param'] = None
             # NOTE: model_id and model_info are already stored above at lines 8449-8450
             
@@ -6451,6 +6473,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             properties = session.get('properties', {})
             params = session.get('params', {})
             param_order = session.get('param_order', list(properties.keys()))
+            skipped_params = session.get('skipped_params', set())
             user_lang = get_user_language(user_id)
             keyboard = []
 
@@ -6461,6 +6484,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 default_value = param_info.get('default')
                 if param_name in params:
                     value_text = str(params[param_name])
+                elif param_name in skipped_params:
+                    value_text = "по умолчанию" if user_lang == "ru" else "default"
                 elif default_value is not None:
                     value_text = f"{default_value}"
                 else:
@@ -6506,6 +6531,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session = user_sessions[user_id]
             param_name = data.split(":", 1)[1]
             session.setdefault('param_history', [])
+            skipped_params = session.get("skipped_params", set())
+            if param_name in skipped_params:
+                skipped_params.discard(param_name)
             if 'params' in session:
                 session['params'].pop(param_name, None)
             session['waiting_for'] = param_name
@@ -6563,13 +6591,32 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     await query.answer(error_text, show_alert=True)
                     return INPUTTING_PARAMS
+                user_lang = get_user_language(user_id) if user_id else 'ru'
                 if 'params' in session and param_name in session['params']:
                     session['params'].pop(param_name, None)
+                skipped_params = session.setdefault("skipped_params", set())
+                skipped_params.add(param_name)
                 session['current_param'] = None
                 session['waiting_for'] = None
                 _record_param_history(session, param_name)
                 skip_param = True
-                await query.edit_message_text(f"⏭️ {param_name} пропущен.")
+                param_label = _humanize_param_name(param_name, user_lang)
+                skip_text = (
+                    f"✅ {param_label}: по умолчанию"
+                    if user_lang == "ru"
+                    else f"✅ {param_label}: default applied"
+                )
+                await query.edit_message_text(skip_text)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    action="PARAM_SKIPPED",
+                    action_path="button_callback.set_param",
+                    param={"param_name": param_name, "source": "callback"},
+                    outcome="skipped",
+                )
                 try:
                     next_param_result = await start_next_parameter(update, context, user_id)
                     if next_param_result:
@@ -6602,6 +6649,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if 'params' not in session:
                 session['params'] = {}
             if not skip_param:
+                skipped_params = session.setdefault("skipped_params", set())
+                skipped_params.discard(param_name)
                 session['params'][param_name] = param_value
                 _record_param_history(session, param_name)
             session['current_param'] = None
@@ -6615,6 +6664,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 param={"param_name": param_name, "source": "callback"},
                 outcome="saved" if not skip_param else "skipped",
             )
+            if not skip_param:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    action="PARAM_SET",
+                    action_path="button_callback.set_param",
+                    param={"param_name": param_name, "source": "callback"},
+                    outcome="stored",
+                )
             logger.info(
                 "🧩 PARAM_SET: action_path=button_set_param model_id=%s waiting_for=%s current_param=%s outcome=%s",
                 session.get('model_id'),
@@ -9442,8 +9502,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"💡 <b>Generation type:</b> {catalog_model.type}\n\n"
                     )
                 
-                if mode and mode.notes:
-                    example_text += f"⚙️ <b>Режим:</b> {mode.notes}\n\n" if user_lang == 'ru' else f"⚙️ <b>Mode:</b> {mode.notes}\n\n"
+                if mode:
+                    mode_label = _resolve_mode_label(mode, 0, user_lang)
+                    example_text += (
+                        f"⚙️ <b>Режим:</b> {mode_label}\n\n"
+                        if user_lang == 'ru'
+                        else f"⚙️ <b>Mode:</b> {mode_label}\n\n"
+                    )
                 
                 if user_lang == 'ru':
                     example_text += (
@@ -9847,6 +9912,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user_id not in user_sessions:
                 user_sessions[user_id] = {}
             user_sessions[user_id]["mode_index"] = mode_index
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                update_id=update_id,
+                action="MODE_SELECTED",
+                action_path=build_action_path(data),
+                model_id=model_id,
+                param={"mode_index": mode_index},
+                outcome="selected",
+            )
             data = f"select_model:{model_id}"
             mode_selected = True
 
@@ -10206,6 +10282,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 stage="MODEL_SELECT",
                 outcome="selected",
             )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                update_id=update.update_id,
+                action="MODEL_SELECTED",
+                action_path=build_action_path(data),
+                model_id=model_id,
+                gen_type=model_spec.model_mode or model_spec.model_type,
+                stage="MODEL_SELECT",
+                outcome="selected",
+            )
 
             input_params = model_spec.schema_properties or {}
             logger.info(
@@ -10227,6 +10315,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['ssot_conflicts'] = _detect_ssot_conflicts(model_spec)
             session['optional_media_params'] = []
             session['image_ref_prompt'] = False
+            session['skipped_params'] = set()
             model_info.setdefault("input_params", input_params)
             if model_spec.model_type in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}:
                 if "image_input" in input_params or "image_urls" in input_params:
@@ -10437,6 +10526,55 @@ def _get_param_format_hint(param_type: str, enum_values: list | None, user_lang:
     return "Format: text" if user_lang == 'en' else "Формат: текст"
 
 
+def _humanize_param_name(param_name: str, user_lang: str) -> str:
+    fallback = param_name.replace("_", " ").strip()
+    if user_lang != "ru":
+        return fallback.title() if fallback else param_name
+    ru_map = {
+        "prompt": "Текст запроса",
+        "text": "Текст запроса",
+        "image_size": "Размер изображения",
+        "aspect_ratio": "Соотношение сторон",
+        "guidance_scale": "Сила соответствия",
+        "enable_safety_checker": "Фильтр безопасности",
+        "image_urls": "Изображение",
+        "image_input": "Изображение",
+        "audio_url": "Аудио",
+        "audio_input": "Аудио",
+        "video_url": "Видео",
+        "video_input": "Видео",
+    }
+    return ru_map.get(param_name, fallback.capitalize() if fallback else param_name)
+
+
+def _short_correlation_suffix(correlation_id: Optional[str]) -> str:
+    if not correlation_id:
+        return "corr-na"
+    return correlation_id[-6:]
+
+
+def _build_default_mode_label(index: int, user_lang: str) -> str:
+    if user_lang == "ru":
+        fallbacks = ["Стандартный", "Высокое качество", "Быстрый", "Дополнительный"]
+    else:
+        fallbacks = ["Standard", "High quality", "Fast", "Extra"]
+    if index < len(fallbacks):
+        return fallbacks[index]
+    return fallbacks[-1]
+
+
+def _resolve_mode_label(mode: Any, index: int, user_lang: str) -> str:
+    title = getattr(mode, "title_ru", None)
+    hint = getattr(mode, "short_hint_ru", None)
+    if user_lang != "ru":
+        title = getattr(mode, "notes", None) or getattr(mode, "title_ru", None)
+        hint = getattr(mode, "notes", None)
+    title = title or _build_default_mode_label(index, user_lang)
+    if hint:
+        return f"{title} · {hint}"
+    return title
+
+
 def _record_param_history(session: dict, param_name: str) -> None:
     history = session.setdefault('param_history', [])
     if not history or history[-1] != param_name:
@@ -10537,6 +10675,16 @@ async def prompt_for_specific_param(
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="PARAM_PROMPTED",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            outcome="shown",
+            param={"param_name": param_name, "media_kind": "image"},
+        )
         return INPUTTING_PARAMS
 
     if param_name in ['audio_url', 'audio_input']:
@@ -10581,6 +10729,16 @@ async def prompt_for_specific_param(
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="PARAM_PROMPTED",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            outcome="shown",
+            param={"param_name": param_name, "media_kind": "audio"},
+        )
         return INPUTTING_PARAMS
 
     if param_type == 'boolean':
@@ -10621,6 +10779,16 @@ async def prompt_for_specific_param(
             text=message_text,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="PARAM_PROMPTED",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            outcome="shown",
+            param={"param_name": param_name, "type": param_type},
         )
         session['waiting_for'] = param_name
         session['current_param'] = param_name
@@ -10666,6 +10834,16 @@ async def prompt_for_specific_param(
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="PARAM_PROMPTED",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            outcome="shown",
+            param={"param_name": param_name, "type": param_type},
+        )
         session['waiting_for'] = param_name
         session['current_param'] = param_name
         return INPUTTING_PARAMS
@@ -10702,6 +10880,16 @@ async def prompt_for_specific_param(
         text=message_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML'
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        action="PARAM_PROMPTED",
+        action_path="prompt_for_specific_param",
+        model_id=session.get("model_id"),
+        outcome="shown",
+        param={"param_name": param_name, "type": param_type},
     )
     session['waiting_for'] = param_name
     session['current_param'] = param_name
@@ -10871,8 +11059,11 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
 
     param_order = session.get("param_order") or _build_param_order(properties)
     session["param_order"] = param_order
+    required_order = [param_name for param_name in param_order if param_name in required]
+    if not required_order:
+        required_order = [param_name for param_name in required if param_name in properties]
 
-    for param_name in param_order:
+    for param_name in required_order:
         if param_name in params:
             continue
 
@@ -10880,9 +11071,11 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         param_type = param_info.get('type', 'string')
         enum_values = _normalize_enum_values(param_info)
         is_optional = not param_info.get('required', False)
+        if param_name in required:
+            is_optional = False
         session['current_param'] = param_name
         media_kind = _get_media_kind(param_name)
-        reason = "missing_required" if param_name in required else "optional_next"
+        reason = "missing_required"
         if enum_values:
             reason = "enum_buttons"
         trace_event(
@@ -10980,6 +11173,16 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="PARAM_PROMPTED",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                outcome="shown",
+                param={"param_name": param_name, "media_kind": media_kind},
+            )
             return INPUTTING_PARAMS
 
         if param_type == 'boolean':
@@ -11032,6 +11235,16 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 text=message_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="PARAM_PROMPTED",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                outcome="shown",
+                param={"param_name": param_name, "type": param_type},
             )
             session['waiting_for'] = param_name
             return INPUTTING_PARAMS
@@ -11091,6 +11304,16 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 text=message_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="PARAM_PROMPTED",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                outcome="shown",
+                param={"param_name": param_name, "type": param_type},
             )
             session['waiting_for'] = param_name
             return INPUTTING_PARAMS
@@ -11161,6 +11384,16 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             text=message_text,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="PARAM_PROMPTED",
+            action_path="start_next_parameter",
+            model_id=model_id,
+            outcome="shown",
+            param={"param_name": param_name, "type": param_type},
         )
         session['waiting_for'] = param_name
         return INPUTTING_PARAMS
@@ -11374,6 +11607,16 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_path="input_parameters",
             param=summary,
             outcome="saved",
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="PARAM_SET",
+            action_path="input_parameters",
+            param=summary,
+            outcome="stored",
         )
     
     # CRITICAL: If photo is sent but session doesn't have waiting_for set, log warning
@@ -14083,8 +14326,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         list(params.keys()),
     )
     
-    # Check if this is a free generation (consume quota upfront)
-    free_result = await check_and_consume_free_generation(
+    # Check if this is a free generation (do not consume upfront)
+    free_result = await check_free_generation_available(
         user_id,
         model_id,
         correlation_id=correlation_id,
@@ -14357,6 +14600,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await status_message.edit_text(message_text, parse_mode="HTML")
             return ConversationHandler.END
 
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GENERATION_STARTED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            gen_type=model_spec.model_mode,
+            stage="GEN_START",
+            outcome="start",
+        )
         job_result = await run_generation(
             user_id,
             model_id,
@@ -14405,6 +14659,28 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 gen_type=model_spec.model_mode,
                 correlation_id=correlation_id,
             )
+            if is_free:
+                consume_result = await consume_free_generation(
+                    user_id,
+                    model_id,
+                    correlation_id=correlation_id,
+                    source="delivery",
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="FREE_QUOTA_UPDATE",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    stage="FREE_QUOTA",
+                    outcome=consume_result.get("status", "unknown"),
+                    param={
+                        "base_remaining": consume_result.get("base_remaining"),
+                        "referral_remaining": consume_result.get("referral_remaining"),
+                        "source": consume_result.get("source"),
+                    },
+                )
 
         if job_result.urls:
             save_generation_to_history(
@@ -14450,6 +14726,48 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
     except KIERequestFailed as exc:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GENERATION_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_CREATE",
+            outcome="failed",
+            error_code=exc.error_code or "KIE_REQUEST_FAILED",
+            fix_hint=exc.user_message or ERROR_CATALOG.get("KIE_FAIL_STATE"),
+        )
+        if exc.status == 422 and user_id in user_sessions:
+            properties = session.get("properties", {})
+            missing_param = _extract_missing_param(exc.user_message or str(exc), properties)
+            if missing_param:
+                session["waiting_for"] = missing_param
+                session["current_param"] = missing_param
+                user_lang = get_user_language(user_id) if user_id else "ru"
+                param_label = _humanize_param_name(missing_param, user_lang)
+                correlation_suffix = _short_correlation_suffix(correlation_id)
+                fix_hint = (
+                    f"Укажите параметр «{param_label}» и попробуйте снова."
+                    if user_lang == "ru"
+                    else f"Please provide “{param_label}” and try again."
+                )
+                await send_or_edit_message(
+                    (
+                        "⚠️ <b>Не хватает обязательного параметра</b>\n\n"
+                        f"{fix_hint}\n"
+                        f"ID: <code>{correlation_suffix}</code>"
+                        if user_lang == "ru"
+                        else (
+                            "⚠️ <b>Missing required parameter</b>\n\n"
+                            f"{fix_hint}\n"
+                            f"ID: <code>{correlation_suffix}</code>"
+                        )
+                    ),
+                    parse_mode="HTML",
+                )
+                await prompt_for_specific_param(update, context, user_id, missing_param, source="kie_validation")
+                return INPUTTING_PARAMS
         await send_or_edit_message(
             _build_kie_request_failed_message(exc.status, user_lang, exc.user_message),
             reply_markup=build_back_to_menu_keyboard(user_lang),
@@ -14457,6 +14775,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except TimeoutError as exc:
         logger.error("❌ Generation timeout: %s", exc, exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GENERATION_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_POLL",
+            outcome="timeout",
+            error_code="ERR_KIE_TIMEOUT",
+            fix_hint=ERROR_CATALOG.get("KIE_TIMEOUT"),
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -14498,6 +14828,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             correlation_id=correlation_id,
             user_id=user_id,
             chat_id=chat_id,
+            action="GENERATION_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_POLL",
+            outcome="failed",
+            error_code=exc.fail_code or "KIE_FAIL_STATE",
+            fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
             action="GEN_ERROR",
             action_path="confirm_generate",
             model_id=model_id,
@@ -14521,6 +14863,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except (KIEResultError, ValueError) as exc:
         error_text = str(exc)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GENERATION_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_PARSE",
+            outcome="failed",
+            error_code=getattr(exc, "error_code", "KIE_RESULT_ERROR"),
+            fix_hint=getattr(exc, "fix_hint", ERROR_CATALOG.get("KIE_FAIL_STATE")),
+        )
         if _is_missing_media_error(error_text) and user_id in user_sessions:
             properties = session.get("properties", {})
             image_param_name = None
@@ -14559,6 +14913,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GENERATION_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="GEN_ERROR",
+            outcome="failed",
+            error_code="ERR_GEN_UNKNOWN",
+            fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,

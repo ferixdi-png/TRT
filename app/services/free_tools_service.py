@@ -202,6 +202,158 @@ async def check_and_consume_free_generation(
     }
 
 
+async def check_free_generation_available(
+    user_id: int,
+    model_id: str,
+    *,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, object]:
+    cfg = get_free_tools_config()
+    if model_id not in cfg.model_ids:
+        return {"status": "not_free"}
+    if get_is_admin(user_id):
+        return {"status": "not_free"}
+
+    storage = get_storage()
+    usage = await storage.get_hourly_free_usage(user_id)
+    window_start = _parse_iso(usage.get("window_start_iso"))
+    used_count = int(usage.get("used_count", 0))
+    now = _now()
+
+    if not window_start or now - window_start >= timedelta(hours=1):
+        window_start = now
+        used_count = 0
+
+    base_remaining = cfg.base_per_hour - used_count
+    referral_remaining = await storage.get_referral_free_bank(user_id)
+    if base_remaining > 0 or referral_remaining > 0:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="FREE_QUOTA_CHECK",
+            action_path="free_tools_service.check_free_generation_available",
+            stage="FREE_QUOTA",
+            outcome="available",
+            param={
+                "model_id": model_id,
+                "base_remaining": max(0, base_remaining),
+                "referral_remaining": max(0, referral_remaining),
+            },
+        )
+        return {
+            "status": "ok",
+            "base_remaining": max(0, base_remaining),
+            "referral_remaining": max(0, referral_remaining),
+        }
+
+    reset_in = max(1, int(((window_start + timedelta(hours=1)) - now).total_seconds() / 60))
+    return {
+        "status": "deny",
+        "reset_in_minutes": reset_in,
+        "base_remaining": 0,
+        "referral_remaining": 0,
+    }
+
+
+async def consume_free_generation(
+    user_id: int,
+    model_id: str,
+    *,
+    correlation_id: Optional[str] = None,
+    source: str = "delivery",
+) -> Dict[str, object]:
+    cfg = get_free_tools_config()
+    if model_id not in cfg.model_ids:
+        return {"status": "not_free"}
+    if get_is_admin(user_id):
+        return {"status": "not_free"}
+
+    storage = get_storage()
+    usage = await storage.get_hourly_free_usage(user_id)
+    window_start = _parse_iso(usage.get("window_start_iso"))
+    used_count = int(usage.get("used_count", 0))
+    now = _now()
+
+    if not window_start or now - window_start >= timedelta(hours=1):
+        window_start = now
+        used_count = 0
+
+    base_remaining = cfg.base_per_hour - used_count
+    if base_remaining > 0:
+        used_count += 1
+        await storage.set_hourly_free_usage(
+            user_id,
+            window_start.isoformat(),
+            used_count,
+        )
+        referral_remaining = await storage.get_referral_free_bank(user_id)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="FREE_QUOTA_UPDATE",
+            action_path="free_tools_service.consume_free_generation",
+            stage="FREE_QUOTA",
+            outcome="consumed",
+            param={
+                "model_id": model_id,
+                "source": source,
+                "bucket": "hourly",
+                "base_remaining": max(0, cfg.base_per_hour - used_count),
+                "referral_remaining": max(0, referral_remaining),
+            },
+        )
+        return {
+            "status": "ok",
+            "source": "hourly",
+            "base_remaining": max(0, cfg.base_per_hour - used_count),
+            "referral_remaining": max(0, referral_remaining),
+        }
+
+    referral_remaining = await storage.get_referral_free_bank(user_id)
+    if referral_remaining > 0:
+        await storage.set_referral_free_bank(user_id, referral_remaining - 1)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="FREE_QUOTA_UPDATE",
+            action_path="free_tools_service.consume_free_generation",
+            stage="FREE_QUOTA",
+            outcome="consumed",
+            param={
+                "model_id": model_id,
+                "source": source,
+                "bucket": "referral",
+                "base_remaining": 0,
+                "referral_remaining": max(0, referral_remaining - 1),
+            },
+        )
+        return {
+            "status": "ok",
+            "source": "referral",
+            "base_remaining": 0,
+            "referral_remaining": max(0, referral_remaining - 1),
+        }
+
+    reset_in = max(1, int(((window_start + timedelta(hours=1)) - now).total_seconds() / 60))
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        action="FREE_QUOTA_UPDATE",
+        action_path="free_tools_service.consume_free_generation",
+        stage="FREE_QUOTA",
+        outcome="deny",
+        error_code="FREE_QUOTA_EMPTY",
+        fix_hint="Пользователь исчерпал бесплатные генерации.",
+        param={"model_id": model_id, "reset_in_minutes": reset_in},
+    )
+    return {
+        "status": "deny",
+        "reset_in_minutes": reset_in,
+        "base_remaining": 0,
+        "referral_remaining": 0,
+    }
+
+
 async def add_referral_free_bonus(user_id: int, bonus_count: Optional[int] = None) -> int:
     cfg = get_free_tools_config()
     bonus = cfg.referral_bonus if bonus_count is None else int(bonus_count)

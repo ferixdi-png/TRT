@@ -380,6 +380,18 @@ async def run_generation(
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
+        action="KIE_TASK_CREATED",
+        action_path="universal_engine.run_generation",
+        model_id=model_id,
+        gen_type=spec.model_mode,
+        task_id=task_id,
+        stage="KIE_CREATE",
+        outcome="created",
+        duration_ms=create_duration_ms,
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
         action="KIE_SUBMIT",
         action_path="universal_engine.run_generation",
         model_id=model_id,
