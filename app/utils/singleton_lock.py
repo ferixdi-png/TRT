@@ -90,6 +90,20 @@ def get_lock_degradation_notice(lang: str = "ru") -> str:
     )
 
 
+def get_lock_admin_notice(lang: str = "ru") -> str:
+    """Return a neutral lock status line for admins only."""
+    if not _lock_degraded:
+        return ""
+    reason = _lock_degraded_reason or "lock_degraded"
+    if reason == "LOCK_DISABLED_NO_DB":
+        if lang == "en":
+            return "ℹ️ Lock disabled (LOCK_DISABLED_NO_DB)."
+        return "ℹ️ Блокировка отключена (LOCK_DISABLED_NO_DB)."
+    if lang == "en":
+        return f"ℹ️ Lock status: {reason}."
+    return f"ℹ️ Статус блокировки: {reason}."
+
+
 def _set_lock_state(mode: str, acquired: bool, reason: Optional[str] = None) -> None:
     global _lock_mode, _lock_degraded, _lock_degraded_reason
     _lock_mode = mode
