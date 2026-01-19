@@ -13,6 +13,7 @@ from datetime import datetime
 
 from app.utils.logging_config import get_logger
 from app.observability.trace import trace_event, url_summary
+from app.observability.structured_logs import log_structured_event
 
 logger = get_logger(__name__)
 
@@ -63,6 +64,13 @@ class KIEStub:
             task_id=task_id,
             outcome="stub_created",
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="KIE_CREATE",
+            action_path="kie_stub.create_task",
+            model_id=model_id,
+            outcome="stub_created",
+        )
         
         return {
             'ok': True,
@@ -71,35 +79,43 @@ class KIEStub:
     
     async def _simulate_processing(self, task_id: str):
         """Симулировать обработку задачи"""
-        # pending -> processing -> completed
+        # pending -> processing -> success
         await asyncio.sleep(1)  # pending
-        
+
         if task_id in self._tasks:
             self._tasks[task_id]['state'] = 'processing'
             logger.debug(f"[STUB] Task {task_id} -> processing")
         
         await asyncio.sleep(2)  # processing
-        
+
         if task_id in self._tasks:
             # Генерируем фиктивные URLs
             task = self._tasks[task_id]
             model_id = task['model_id']
-            
+
             # Генерируем результат в зависимости от типа модели
             result_urls = []
-            if 'image' in model_id.lower() or 'text-to-image' in model_id.lower():
+            result_text = None
+            model_id_lower = model_id.lower()
+            if 'image' in model_id_lower or 'text-to-image' in model_id_lower:
                 result_urls = [f"https://example.com/generated/image_{task_id}.png"]
-            elif 'video' in model_id.lower() or 'text-to-video' in model_id.lower():
+            elif 'video' in model_id_lower or 'text-to-video' in model_id_lower:
                 result_urls = [f"https://example.com/generated/video_{task_id}.mp4"]
-            elif 'audio' in model_id.lower() or 'text-to-audio' in model_id.lower():
+            elif 'audio' in model_id_lower or 'voice' in model_id_lower or 'text-to-audio' in model_id_lower:
                 result_urls = [f"https://example.com/generated/audio_{task_id}.mp3"]
             else:
-                result_urls = [f"https://example.com/generated/result_{task_id}.txt"]
-            
-            self._tasks[task_id]['state'] = 'completed'
+                result_text = f"Stub result for task {task_id}"
+
+            self._tasks[task_id]['state'] = 'success'
             self._tasks[task_id]['result_urls'] = result_urls
-            self._tasks[task_id]['resultJson'] = json.dumps({'urls': result_urls})
-            logger.debug(f"[STUB] Task {task_id} -> completed")
+            result_payload = {
+                "resultUrls": result_urls,
+                "resultText": result_text,
+                "resultObject": result_text,
+            }
+            self._tasks[task_id]['resultJson'] = json.dumps(result_payload)
+            self._tasks[task_id]['resultText'] = result_text
+            logger.debug(f"[STUB] Task {task_id} -> success")
     
     async def get_task_status(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -128,9 +144,11 @@ class KIEStub:
             'state': state
         }
         
-        if state == 'completed':
+        if state == 'success':
             result['resultUrls'] = task.get('result_urls', [])
             result['resultJson'] = task.get('resultJson', '{}')
+            if task.get("resultText"):
+                result["resultText"] = task.get("resultText")
         elif state == 'failed':
             result['failCode'] = 'STUB_ERROR'
             result['failMsg'] = 'Simulated error'
@@ -157,6 +175,7 @@ class KIEStub:
     ) -> Dict[str, Any]:
         """Ждать завершения задачи (симуляция)"""
         start_time = asyncio.get_event_loop().time()
+        attempt = 0
         
         while True:
             elapsed = asyncio.get_event_loop().time() - start_time
@@ -166,8 +185,15 @@ class KIEStub:
                     'state': 'timeout',
                     'error': f'Task timeout after {timeout}s'
                 }
-            
+            attempt += 1
             status = await self.get_task_status(task_id, correlation_id=correlation_id)
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="KIE_POLL",
+                action_path="kie_stub.wait_for_task",
+                param={"attempt": attempt, "elapsed": round(elapsed, 3)},
+                outcome=status.get("state"),
+            )
             
             if not status.get('ok'):
                 await asyncio.sleep(poll_interval)
@@ -175,7 +201,7 @@ class KIEStub:
             
             state = status.get('state', 'pending')
             
-            if state in ('completed', 'failed'):
+            if state in ('success', 'completed', 'failed'):
                 return status
             
             await asyncio.sleep(poll_interval)
@@ -184,10 +210,12 @@ class KIEStub:
 def get_kie_client_or_stub():
     """Получить KIE клиент или stub в зависимости от env"""
     allow_real = os.getenv("KIE_ALLOW_REAL", "0").lower() in ("1", "true", "yes")
-    force_stub = os.getenv("KIE_STUB", "1").lower() in ("1", "true", "yes")
+    allow_real = allow_real or os.getenv("ALLOW_REAL_GENERATION", "0").lower() in ("1", "true", "yes")
+    force_stub = os.getenv("KIE_STUB", "0").lower() in ("1", "true", "yes")
+    has_api_key = bool(os.getenv("KIE_API_KEY"))
 
-    if force_stub or not allow_real:
-        logger.info("[STUB] Using KIE stub (KIE_STUB=1 or KIE_ALLOW_REAL!=1)")
+    if force_stub or not allow_real or not has_api_key:
+        logger.info("[STUB] Using KIE stub (force_stub=%s allow_real=%s has_key=%s)", force_stub, allow_real, has_api_key)
         return KIEStub()
 
     from app.integrations.kie_client import KIEClient

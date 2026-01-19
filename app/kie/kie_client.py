@@ -16,6 +16,7 @@ import aiohttp
 
 from app.utils.logging_config import get_logger
 from app.observability.trace import trace_event, url_summary
+from app.observability.structured_logs import log_structured_event
 
 logger = get_logger(__name__)
 
@@ -271,6 +272,14 @@ class KIEClient:
             input_sizes=input_sizes,
             has_callback=bool(callback_url),
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="KIE_CREATE",
+            action_path="kie_client.create_task",
+            model_id=model_id,
+            param={"input_keys": input_keys},
+            outcome="request",
+        )
 
         result = await self._request_json(
             "POST",
@@ -315,6 +324,14 @@ class KIEClient:
             attempt=result.get("meta", {}).get("attempt"),
             latency_ms=result.get("meta", {}).get("latency_ms"),
             task_id=task_id,
+        )
+        log_structured_event(
+            correlation_id=result.get("correlation_id"),
+            action="KIE_CREATE",
+            action_path="kie_client.create_task",
+            model_id=model_id,
+            param={"task_id": task_id},
+            outcome="created",
         )
         return {"ok": True, "taskId": task_id, "correlation_id": result["correlation_id"]}
 
@@ -370,6 +387,18 @@ class KIEClient:
             fail_msg=response_payload.get("failMsg"),
             result_url_summary=url_summary((response_payload.get("resultUrls") or [None])[0]),
         )
+        log_structured_event(
+            correlation_id=result.get("correlation_id"),
+            action="KIE_POLL",
+            action_path="kie_client.get_task_status",
+            model_id=None,
+            param={
+                "task_id": task_id,
+                "attempt": result.get("meta", {}).get("attempt"),
+                "latency_ms": result.get("meta", {}).get("latency_ms"),
+            },
+            outcome=response_payload.get("state"),
+        )
         return response_payload
 
     async def wait_for_task(
@@ -380,6 +409,7 @@ class KIEClient:
         correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         start_time = asyncio.get_event_loop().time()
+        attempt = 0
         while True:
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed > timeout:
@@ -392,12 +422,20 @@ class KIEClient:
                     "correlation_id": error.correlation_id,
                     "error_code": error.code,
                 }
+            attempt += 1
             status = await self.get_task_status(task_id, correlation_id=correlation_id)
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="KIE_POLL",
+                action_path="kie_client.wait_for_task",
+                param={"attempt": attempt, "elapsed": round(elapsed, 3), "task_id": task_id},
+                outcome=status.get("state"),
+            )
             if not status.get("ok"):
                 await asyncio.sleep(poll_interval)
                 continue
             state = status.get("state")
-            if state in ("completed", "failed"):
+            if state in ("success", "completed", "failed"):
                 return status
             await asyncio.sleep(poll_interval)
 
