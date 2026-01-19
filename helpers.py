@@ -147,7 +147,8 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
         'is_limited_admin': is_limited_admin,
         'remaining_free': await get_user_free_generations_remaining_async(user_id),
         'kie_credits': None,
-        'kie_credits_rub': None
+        'kie_credits_rub': None,
+        'kie_credits_error': None
     }
     
     if is_limited_admin:
@@ -171,6 +172,12 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
                     result['kie_credits'] = credits
                     result['kie_credits_rub'] = credits_rub
                     result['kie_credits_rub_str'] = credits_rub_str
+                else:
+                    status = balance_result.get("status") if balance_result else None
+                    if status == 404:
+                        result["kie_credits_error"] = "Баланс KIE недоступен (endpoint 404)"
+                    else:
+                        result["kie_credits_error"] = "Баланс KIE недоступен"
         except Exception as e:
             logger.error(f"❌❌❌ KIE API ERROR in get_credits (get_balance_info): {e}", exc_info=True)
     
@@ -206,6 +213,8 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
                 f'🔧 <b>Баланс системы генерации:</b> {balance_info["kie_credits_rub_str"]} ₽\n'
                 f'<i>({balance_info["kie_credits"]} кредитов)</i>'
             )
+        elif balance_info.get("kie_credits_error"):
+            balance_text += balance_info["kie_credits_error"]
         else:
             balance_text += 'ℹ️ Внутренний баланс доступен, внешний недоступен'
         return balance_text
