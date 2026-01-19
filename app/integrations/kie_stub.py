@@ -208,15 +208,20 @@ class KIEStub:
 
 
 def get_kie_client_or_stub():
-    """Получить KIE клиент или stub в зависимости от env"""
-    allow_real = os.getenv("KIE_ALLOW_REAL", "0").lower() in ("1", "true", "yes")
-    allow_real = allow_real or os.getenv("ALLOW_REAL_GENERATION", "0").lower() in ("1", "true", "yes")
+    """Получить KIE клиент или stub в зависимости от env."""
+    test_mode = os.getenv("TEST_MODE", "0").lower() in ("1", "true", "yes")
     force_stub = os.getenv("KIE_STUB", "0").lower() in ("1", "true", "yes")
     has_api_key = bool(os.getenv("KIE_API_KEY"))
 
-    if force_stub or not allow_real or not has_api_key:
-        logger.info("[STUB] Using KIE stub (force_stub=%s allow_real=%s has_key=%s)", force_stub, allow_real, has_api_key)
+    if force_stub or test_mode or not has_api_key:
+        logger.info(
+            "[STUB] Using KIE stub (force_stub=%s test_mode=%s has_key=%s)",
+            force_stub,
+            test_mode,
+            has_api_key,
+        )
         return KIEStub()
 
     from app.integrations.kie_client import KIEClient
+
     return KIEClient()
