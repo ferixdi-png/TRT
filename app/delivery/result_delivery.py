@@ -17,6 +17,7 @@ from telegram import InputFile
 
 from app.observability.structured_logs import log_structured_event
 from app.observability.trace import trace_event, url_summary
+from app.utils.url_normalizer import is_valid_result_url
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +231,30 @@ async def deliver_generation_result(
 
     async with aiohttp.ClientSession(timeout=DOWNLOAD_TIMEOUT) as session:
         for index, url in enumerate(urls, start=1):
+            if not is_valid_result_url(url):
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=chat_id,
+                    chat_id=chat_id,
+                    model_id=model_id,
+                    gen_type=gen_type,
+                    action="DELIVERY_VALIDATE",
+                    action_path="result_delivery.deliver_generation_result",
+                    stage="DELIVERY",
+                    waiting_for="URL_VALIDATE",
+                    outcome="failed",
+                    error_code="INVALID_RESULT_URL",
+                    fix_hint="check_kie_response_url_fields",
+                    param={"url": url_summary(url)},
+                )
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        "⚠️ Результат получен, но ссылка битая. Попробуйте ещё раз или выберите другую модель.\n"
+                        f"ID: {correlation_id or 'corr-na-na'}"
+                    ),
+                )
+                continue
             try:
                 target = await _download_with_retries(session, url)
                 real_type = _resolve_real_mime(target.content_type, target.data, target.url)

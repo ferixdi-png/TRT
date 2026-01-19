@@ -7,9 +7,19 @@ import app.utils.singleton_lock as singleton_lock
 import app.locking.single_instance as single_instance
 
 
-def test_webhook_requires_database_url(monkeypatch):
+def test_webhook_allows_github_without_database_url(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("BOT_MODE", "webhook")
+    monkeypatch.setenv("STORAGE_MODE", "github")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    settings = Settings()
+    settings.validate()
+
+
+def test_webhook_requires_database_url_for_non_github_storage(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("BOT_MODE", "webhook")
+    monkeypatch.setenv("STORAGE_MODE", "postgres")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     settings = Settings()
     with pytest.raises(ValueError):

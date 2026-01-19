@@ -158,10 +158,19 @@ class Settings:
         if not self.telegram_bot_token:
             errors.append("TELEGRAM_BOT_TOKEN is required")
         if self.bot_mode == "webhook" and not self.database_url:
-            errors.append("DATABASE_URL is required for webhook mode")
-            logger.error(
-                "[CONFIG] error_code=CONFIG_DB_REQUIRED fix_hint=set_DATABASE_URL_or_use_BOT_MODE=polling"
-            )
+            db_disabled = os.getenv("DISABLE_DB_LOCKS", "0").lower() in ("1", "true", "yes")
+            if self.storage_mode == "github" or db_disabled:
+                logger.warning(
+                    "[CONFIG] webhook_without_db_allowed=true storage_mode=%s db_disabled=%s "
+                    "note=singleton_lock_fallback_required",
+                    self.storage_mode,
+                    str(db_disabled).lower(),
+                )
+            else:
+                errors.append("DATABASE_URL is required for webhook mode")
+                logger.error(
+                    "[CONFIG] error_code=CONFIG_DB_REQUIRED fix_hint=set_DATABASE_URL_or_use_BOT_MODE=polling"
+                )
         
         if errors:
             error_msg = "\n".join(f"  - {err}" for err in errors)

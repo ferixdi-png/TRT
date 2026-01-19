@@ -3533,6 +3533,12 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     else:
         header_text += "\n👇 Выберите раздел в меню ниже."
 
+    from app.utils.singleton_lock import get_lock_degradation_notice
+
+    degradation_notice = get_lock_degradation_notice(user_lang)
+    if degradation_notice:
+        header_text += f"\n\n{degradation_notice}"
+
     if balance_status_line:
         header_text += f"\n\n{balance_status_line}"
 
@@ -10195,6 +10201,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 callback_data=data,
                 action_path=build_action_path(data),
             )
+            user_lang = get_user_language(user_id) if user_id else "ru"
+            error_text = (
+                "⚠️ Сбой на этапе router, уже записал лог.\n"
+                f"ID: {correlation_id or 'corr-na-na'}"
+            ) if user_lang == "ru" else (
+                "⚠️ Failure at stage router, logs captured.\n"
+                f"ID: {correlation_id or 'corr-na-na'}"
+            )
+            if query and query.message:
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=error_text,
+                )
         except Exception as structured_log_error:
             logger.warning(
                 "STRUCTURED_LOG error on callback exception: %s",
@@ -10217,8 +10236,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ВАЖНО: Этот код выполняется ТОЛЬКО если ни один обработчик выше не сработал
     
     logger.warning(f"⚠️ Unhandled callback_data: '{data}' from user {user_id}")
+    user_lang = "ru"
     try:
         correlation_id = ensure_correlation_id(update, context)
+        user_lang = get_user_language(user_id) if user_id else "ru"
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -10236,7 +10257,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Всегда отвечаем на callback, даже если не знаем что делать
     try:
-        await query.answer("Не понял нажатие, обновил меню.", show_alert=False)
+        fallback_text = (
+            "Команда устарела, обновляю меню." if user_lang == "ru" else "Command outdated, refreshing menu."
+        )
+        await query.answer(fallback_text, show_alert=False)
     except Exception:
         pass
     await show_main_menu(update, context, source="unknown_callback")
