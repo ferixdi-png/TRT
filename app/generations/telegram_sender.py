@@ -255,7 +255,7 @@ async def send_job_result(
 
     price_text = ""
     if price_rub is not None:
-        price_display = f"{price_rub:.2f}"
+        price_display = f"{int(price_rub)}"
         price_text = f"\n💰 <b>Цена:</b> {price_display} ₽"
 
     elapsed_text = ""
@@ -307,7 +307,7 @@ async def send_job_result(
         action="GEN_COMPLETE",
         action_path="telegram_sender.send_job_result",
         model_id=spec.id,
-        stage="TG_SEND",
+        stage="GEN_COMPLETE",
         outcome="sent",
         param={"summary_sent": True},
     )

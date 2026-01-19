@@ -236,12 +236,12 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
                 type_emoji = _get_type_emoji(model.type)
                 
                 # Формируем текст кнопки с эмодзи и ценой
-                button_text = f"{type_emoji} {model.title_ru} • ₽{price_rub:.2f}"
+                button_text = f"{type_emoji} {model.title_ru} • ₽{int(price_rub)}"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
                     max_len = 60 - len(f" • ₽{price_rub}".encode('utf-8')) - 2  # -2 для эмодзи и пробела
-                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • ₽{price_rub}"
+                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • ₽{int(price_rub)}"
                 
                 callback_data = _create_callback_data(model.id)
                 
@@ -302,7 +302,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     if "video_url" in required_fields or "video_urls" in required_fields:
         examples.append("video_url=https://example.com/video.mp4")
     example_text = "; ".join(examples) if examples else ("—" if user_lang == "ru" else "—")
-    price_label = f"₽{price_rub}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
+    price_label = f"₽{int(price_rub)}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
     
     if user_lang == 'ru':
         type_name = _get_type_name_ru(model.type)
