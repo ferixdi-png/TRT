@@ -3555,6 +3555,12 @@ async def run(settings, application):
 
     lock_attempted = False
     if not os.getenv("DATABASE_URL"):
+        if settings.bot_mode == "webhook":
+            logger.error(
+                "[LOCK] error_code=CONFIG_DB_REQUIRED fix_hint=set_DATABASE_URL_or_use_BOT_MODE=polling "
+                "message=DATABASE_URL_required_for_webhook_mode"
+            )
+            raise RuntimeError("CONFIG_DB_REQUIRED: DATABASE_URL is required for webhook mode")
         logger.info("[LOCK] DATABASE_URL not set - skipping singleton lock")
     else:
         try:

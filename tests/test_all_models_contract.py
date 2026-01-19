@@ -79,9 +79,7 @@ async def test_telegram_sender_selects_correct_method(monkeypatch):
         "image": "send_photo",
         "video": "send_video",
         "audio": "send_audio",
-        "voice": "send_voice",
         "text": "send_message",
-        "file": "send_document",
         "document": "send_document",
     }
 
@@ -124,7 +122,7 @@ async def test_telegram_sender_selects_correct_method(monkeypatch):
     monkeypatch.setattr(result_delivery, "_download_with_retries", fake_download)
 
     for model_id, spec in catalog.items():
-        media_kind = spec.output_media_type or "file"
+        media_kind = spec.output_media_type or "document"
         record = {"taskId": "task-123", "state": "success"}
         if media_kind == "text":
             record["resultJson"] = json.dumps({"resultText": "ok"})
@@ -133,7 +131,6 @@ async def test_telegram_sender_selects_correct_method(monkeypatch):
                 "image": "png",
                 "video": "mp4",
                 "audio": "mp3",
-                "voice": "ogg",
             }.get(media_kind, "bin")
             record["resultUrls"] = [f"https://example.com/file.{ext}"]
 

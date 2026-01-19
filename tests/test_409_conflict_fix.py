@@ -171,6 +171,8 @@ def test_render_webhook_fallback_starts_health_server():
             "WEBHOOK_BASE_URL": "",
             "PORT": str(port),
             "TELEGRAM_BOT_TOKEN": "test-token",
+            "DATABASE_URL": "postgresql://test-user:test-pass@localhost:5432/test-db",
+            "DISABLE_DB_LOCKS": "1",
             "DATA_DIR": temp_dir,
             "RENDER": "true",
             "TEST_MODE": "1",
@@ -196,4 +198,3 @@ def test_render_webhook_fallback_starts_health_server():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

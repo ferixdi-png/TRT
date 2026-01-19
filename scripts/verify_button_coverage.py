@@ -12,6 +12,7 @@ SCAN_FILES = [
     ROOT / "bot_kie.py",
     ROOT / "app" / "helpers" / "models_menu.py",
     ROOT / "app" / "observability" / "no_silence_guard.py",
+    ROOT / "app" / "generations" / "failure_ui.py",
 ]
 
 IGNORED_CALLBACKS = {

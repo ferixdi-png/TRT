@@ -12,8 +12,8 @@ from app.config import get_settings
 
 def _get_media_type(model_meta: ModelSpec | Dict[str, Any]) -> str:
     if isinstance(model_meta, ModelSpec):
-        return model_meta.output_media_type or "file"
-    return model_meta.get("output_media_type") or model_meta.get("media_type") or "file"
+        return model_meta.output_media_type or "document"
+    return model_meta.get("output_media_type") or model_meta.get("media_type") or "document"
 
 
 async def create_task(

@@ -83,7 +83,7 @@ async def test_kie_e2e_video_generation(monkeypatch, test_env):
 
 @pytest.mark.asyncio
 async def test_kie_e2e_audio_generation(monkeypatch, test_env):
-    spec = _pick_model(lambda model: model.output_media_type in {"audio", "voice"}, "audio")
+    spec = _pick_model(lambda model: model.output_media_type == "audio", "audio")
     url = "https://example.com/audio.mp3"
     result = await _run_generation_with_mock(
         monkeypatch,
