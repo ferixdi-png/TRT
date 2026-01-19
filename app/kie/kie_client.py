@@ -474,6 +474,59 @@ class KIEClient:
             return data
         return []
 
+    async def get_credits(self) -> Dict[str, Any]:
+        """Best-effort credits check. Returns ok=False with credits=None on unsupported endpoints."""
+        result = await self._request_json("GET", "/api/v1/account/balance")
+        if not result.get("ok"):
+            status = result.get("status")
+            if status in (404, 0):
+                logger.warning(
+                    "KIE credits endpoint unavailable (status=%s). Hint: verify KIE API plan or endpoint.",
+                    status,
+                )
+                return {
+                    "ok": False,
+                    "credits": None,
+                    "status": status,
+                    "error": result.get("error"),
+                    "correlation_id": result.get("correlation_id"),
+                }
+            logger.warning(
+                "KIE credits request failed (status=%s, error=%s). Hint: check KIE API credentials.",
+                status,
+                result.get("error"),
+            )
+            return {
+                "ok": False,
+                "credits": None,
+                "status": status,
+                "error": result.get("error"),
+                "correlation_id": result.get("correlation_id"),
+            }
+
+        data = result.get("data", {})
+        if isinstance(data, dict):
+            credits = data.get("credits") or data.get("data", {}).get("credits")
+        else:
+            credits = None
+        if credits is None:
+            logger.warning(
+                "KIE credits response missing credits field. Hint: confirm API response schema.",
+            )
+            return {
+                "ok": False,
+                "credits": None,
+                "status": result.get("status"),
+                "error": "missing_credits",
+                "correlation_id": result.get("correlation_id"),
+            }
+        return {
+            "ok": True,
+            "credits": credits,
+            "status": result.get("status"),
+            "correlation_id": result.get("correlation_id"),
+        }
+
 
 _client_instance: Optional[KIEClient] = None
 

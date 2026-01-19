@@ -159,14 +159,18 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
     if is_main_admin:
         try:
             kie = _get_client()
-            balance_result = await kie.get_credits()
-            if balance_result.get('ok'):
-                credits = balance_result.get('credits', 0)
-                credits_rub = credits * CREDIT_TO_USD * _get_usd_to_rub_rate()
-                credits_rub_str = f"{credits_rub:.2f}".rstrip('0').rstrip('.')
-                result['kie_credits'] = credits
-                result['kie_credits_rub'] = credits_rub
-                result['kie_credits_rub_str'] = credits_rub_str
+            get_credits = getattr(kie, "get_credits", None)
+            if not callable(get_credits):
+                logger.warning("KIE client has no get_credits method. Hint: update KIE client integration.")
+            else:
+                balance_result = await get_credits()
+                if balance_result and balance_result.get('ok'):
+                    credits = balance_result.get('credits', 0)
+                    credits_rub = credits * CREDIT_TO_USD * _get_usd_to_rub_rate()
+                    credits_rub_str = f"{credits_rub:.2f}".rstrip('0').rstrip('.')
+                    result['kie_credits'] = credits
+                    result['kie_credits_rub'] = credits_rub
+                    result['kie_credits_rub_str'] = credits_rub_str
         except Exception as e:
             logger.error(f"❌❌❌ KIE API ERROR in get_credits (get_balance_info): {e}", exc_info=True)
     
@@ -203,7 +207,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
                 f'<i>({balance_info["kie_credits"]} кредитов)</i>'
             )
         else:
-            balance_text += '⚠️ Баланс системы генерации недоступен'
+            balance_text += 'ℹ️ Внутренний баланс доступен, внешний недоступен'
         return balance_text
     else:
         # Regular user
