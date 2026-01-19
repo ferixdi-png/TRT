@@ -8,7 +8,6 @@
 | Из фото в фото | `gen_type:image-to-image` | `data.startswith("gen_type:")` |
 | Из текста в видео | `gen_type:text-to-video` | `data.startswith("gen_type:")` |
 | Из фото в видео | `gen_type:image-to-video` | `data.startswith("gen_type:")` |
-| Фото редактор | `gen_type:image-edit` | `data.startswith("gen_type:")` |
 | Баланс | `check_balance` | `data == "check_balance"` |
 | Партнерка | `referral_info` | `data == "referral_info"` |
 

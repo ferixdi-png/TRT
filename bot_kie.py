@@ -110,6 +110,46 @@ def is_known_callback_data(callback_data: Optional[str]) -> bool:
         return True
     return any(callback_data.startswith(prefix) for prefix in KNOWN_CALLBACK_PREFIXES)
 
+
+def _truncate_log_value(value: Optional[str], limit: int = 160) -> Optional[str]:
+    if not value:
+        return value
+    value = str(value)
+    if len(value) <= limit:
+        return value
+    return f"{value[:limit]}...<truncated>"
+
+
+async def inbound_update_logger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log every inbound Telegram update and set contextvars for propagation."""
+    from app.observability.context import set_update_context
+
+    correlation_id = ensure_correlation_id(update, context)
+    ctx = set_update_context(update, context, correlation_id=correlation_id)
+
+    command = None
+    callback_data = None
+    action_path = None
+    if update.message and update.message.text and update.message.text.startswith("/"):
+        command = update.message.text.split()[0]
+        action_path = f"command:{command}"
+    if update.callback_query:
+        callback_data = update.callback_query.data
+        action_path = build_action_path(callback_data)
+
+    log_structured_event(
+        correlation_id=correlation_id,
+        update_id=ctx.update_id,
+        user_id=ctx.user_id,
+        chat_id=ctx.chat_id,
+        update_type=ctx.update_type,
+        action="TG_UPDATE_IN",
+        action_path=action_path,
+        command=_truncate_log_value(command),
+        callback_data=_truncate_log_value(callback_data),
+        outcome="received",
+    )
+
 # ==================== SELF-CHECK: ENV SUMMARY AND VALIDATION ====================
 def log_env_summary():
     """Логирует summary ENV переменных без секретов"""
@@ -207,7 +247,7 @@ elif os.getenv("SKIP_CONFIG_INIT", "0") != "1" and os.getenv("TEST_MODE", "0") !
 # ==================== IMPORTS AFTER SELF-CHECK ====================
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
-    ConversationHandler, CallbackQueryHandler
+    ConversationHandler, CallbackQueryHandler, TypeHandler
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -358,6 +398,8 @@ def _determine_primary_input(
     if model_type in {"text_to_video", "text_to_image", "text_to_speech", "text_to_audio", "text"}:
         if "prompt" in input_params:
             return {"type": "prompt", "param": "prompt"}
+        if "text" in input_params:
+            return {"type": "prompt", "param": "text"}
 
     # Fallback for unknown types: prefer required media, then prompt
     if image_param and input_params.get(image_param, {}).get("required", False):
@@ -366,6 +408,8 @@ def _determine_primary_input(
         return {"type": "audio", "param": audio_param}
     if "prompt" in input_params:
         return {"type": "prompt", "param": "prompt"}
+    if "text" in input_params:
+        return {"type": "prompt", "param": "text"}
 
     return None
 
@@ -612,7 +656,7 @@ except (ValueError, TypeError):
 # Based on: 18 credits = $0.09 = 6.95 ₽
 # NOTE: Теперь рекомендуется использовать config.settings для этих значений
 CREDIT_TO_USD = 0.005  # 1 credit = $0.005 ($0.09 / 18)
-USD_TO_RUB_DEFAULT = 6.95 / 0.09  # 1 USD = 77.2222... RUB (calculated from 6.95 ₽ / $0.09) - default value
+USD_TO_RUB_DEFAULT = 77.83  # 1 USD = 77.83 RUB (fixed from pricing config)
 
 def get_usd_to_rub_rate() -> float:
     """
@@ -639,18 +683,8 @@ def get_usd_to_rub_rate() -> float:
 
 def set_usd_to_rub_rate(rate: float) -> bool:
     """Set USD to RUB exchange rate and save to file."""
-    try:
-        if not isinstance(rate, (int, float)) or rate <= 0:
-            logger.error(f"Invalid currency rate: {rate}")
-            return False
-        
-        rate_data = {'usd_to_rub': float(rate)}
-        save_json_file(CURRENCY_RATE_FILE, rate_data)
-        logger.info(f"Currency rate updated: 1 USD = {rate} RUB")
-        return True
-    except Exception as e:
-        logger.error(f"Error saving currency rate: {e}")
-        return False
+    logger.warning("USD to RUB rate is locked from pricing config; update ignored: %s", rate)
+    return False
 
 # Импортируем новые сервисы для использования (опционально)
 try:
@@ -843,7 +877,7 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
         mode_index = 0  # По умолчанию первый режим
         
         # Получаем цену из каталога
-        price_rub = price_for_model_rub(model_id, mode_index, settings)
+        price_rub = price_for_model_rub(model_id, mode_index, settings, is_admin=is_admin)
         
         if price_rub is None:
             logger.warning(f"Price not found for model {model_id}, using fallback")
@@ -881,13 +915,20 @@ WAITING_CURRENCY_RATE = 7
 # NOTE: active_generations already declared above (line 358), this is a duplicate - removed
 
 
+def format_rub_amount(value: float) -> str:
+    """Format RUB amount as integer with rounding up."""
+    import math
+
+    rub_int = int(math.ceil(value))
+    return f"{rub_int} ₽"
+
+
 def format_price_rub(price: float, is_admin: bool = False) -> str:
-    """Format price in rubles with appropriate text (always 2 decimals)."""
-    price_str = f"{price:.2f}"
+    """Format price in rubles with appropriate text (integer RUB)."""
+    price_str = format_rub_amount(price)
     if is_admin:
-        return f"💰 <b>Безлимит</b> (цена: {price_str} ₽)"
-    else:
-        return f"💰 <b>{price_str} ₽</b>"
+        return f"💰 <b>Безлимит</b> (цена: {price_str})"
+    return f"💰 <b>{price_str}</b>"
 
 
 def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> str:
@@ -999,6 +1040,17 @@ def is_audio_model(model_id: str) -> bool:
     """Check if model is an audio processing model"""
     audio_keywords = ['speech-to-text', 'audio', 'transcribe']
     return any(keyword in model_id.lower() for keyword in audio_keywords)
+
+
+def get_generation_timeout_seconds(model_spec: Any) -> int:
+    """Determine generation timeout per model category."""
+    model_mode = (getattr(model_spec, "model_mode", "") or "").lower()
+    output_media = (getattr(model_spec, "output_media_type", "") or "").lower()
+    if "video" in model_mode or output_media == "video":
+        return int(os.getenv("KIE_TIMEOUT_VIDEO", "420"))
+    if any(token in model_mode for token in ("audio", "speech")) or output_media in {"audio", "voice"}:
+        return int(os.getenv("KIE_TIMEOUT_AUDIO", "180"))
+    return int(os.getenv("KIE_TIMEOUT_IMAGE", "180"))
 FREE_GENERATIONS_PER_DAY = FREE_TOOLS_CONFIG.base_per_hour  # Backward-compatible name (per hour)
 REFERRAL_BONUS_GENERATIONS = FREE_TOOLS_CONFIG.referral_bonus  # Bonus generations for inviting a user
 
@@ -2322,38 +2374,39 @@ def build_manual_payment_instructions(
     """Build manual payment instructions for SBP/card transfers."""
     examples_count = int(amount / 0.62)  # free tools price
     video_count = int(amount / 3.86)  # Basic video price
+    amount_display = format_rub_amount(amount)
     if user_lang == 'ru':
         return (
-            f'💳 <b>ОПЛАТА {amount:.0f} ₽ ({method_label})</b> 💳\n\n'
+            f'💳 <b>ОПЛАТА {amount_display} ({method_label})</b> 💳\n\n'
             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             f'{payment_details}\n\n'
             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-            f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
+            f'💵 <b>Сумма к оплате:</b> {amount_display}\n\n'
             f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
             f'• ~{examples_count} изображений (free tools)\n'
             f'• ~{video_count} видео (базовая модель)\n'
             f'• Или комбинацию разных моделей!\n\n'
             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
             f'📸 <b>КАК ОПЛАТИТЬ:</b>\n'
-            f'1️⃣ Переведи {amount:.2f} ₽ по реквизитам выше\n'
+            f'1️⃣ Переведи {amount_display} по реквизитам выше\n'
             f'2️⃣ Сделай скриншот перевода\n'
             f'3️⃣ Отправь скриншот сюда\n'
             f'4️⃣ Баланс начислится автоматически! ⚡\n\n'
             f'✅ <b>Все просто и быстро!</b>'
         )
     return (
-        f'💳 <b>PAYMENT {amount:.0f} ₽ ({method_label})</b> 💳\n\n'
+        f'💳 <b>PAYMENT {amount_display} ({method_label})</b> 💳\n\n'
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
         f'{payment_details}\n\n'
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-        f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
+        f'💵 <b>Amount to pay:</b> {amount_display}\n\n'
         f'🎯 <b>WHAT YOU WILL GET:</b>\n'
         f'• ~{examples_count} images (free tools)\n'
         f'• ~{video_count} videos (basic model)\n'
         f'• Or a combination of different models!\n\n'
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
         f'📸 <b>HOW TO PAY:</b>\n'
-        f'1️⃣ Transfer {amount:.2f} ₽ using details above\n'
+        f'1️⃣ Transfer {amount_display} using details above\n'
         f'2️⃣ Take a screenshot of the transfer\n'
         f'3️⃣ Send screenshot here\n'
         f'4️⃣ Balance will be added automatically! ⚡\n\n'
@@ -2574,9 +2627,9 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
         
         message_parts = []
         if amount_found:
-            message_parts.append(f"✅ Сумма найдена: {found_amount:.2f} ₽")
+            message_parts.append(f"✅ Сумма найдена: {format_rub_amount(found_amount)}")
         else:
-            message_parts.append(f"⚠️ Сумма {expected_amount:.2f} ₽ не найдена в скриншоте")
+            message_parts.append(f"⚠️ Сумма {format_rub_amount(expected_amount)} не найдена в скриншоте")
         
         if expected_phone:
             if phone_found:
@@ -3245,7 +3298,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ):
         return
     logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
-    await show_main_menu(update, context, source="/start")
+    try:
+        await show_main_menu(update, context, source="/start")
+    except Exception as exc:
+        logger.error("❌ /start handler failed: %s", exc, exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="COMMAND_START",
+            action_path="command:/start",
+            stage="UI_ROUTER",
+            outcome="failed",
+            error_code="ERR_TG_START_HANDLER",
+            fix_hint="Проверьте обработчик /start и доступность меню.",
+        )
+        message = (
+            "❌ <b>Не удалось открыть меню</b>\n\n"
+            "Что случилось: ошибка обработки команды /start.\n"
+            "Что сделать: попробуйте снова через /start.\n"
+            "Код: <code>ERR_TG_START_HANDLER</code>"
+        )
+        if update.message:
+            await update.message.reply_text(message, parse_mode="HTML")
+        elif update.callback_query and update.callback_query.message:
+            await update.callback_query.message.reply_text(message, parse_mode="HTML")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3367,7 +3445,7 @@ async def show_admin_generation(query, context, gen: dict, current_index: int, t
                 f"👤 <a href=\"{user_link}\">Пользователь {user_id}</a>\n"
                 f"📅 <b>Дата:</b> {date_str}\n"
                 f"🤖 <b>Модель:</b> {model_name}\n"
-                f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else f'{price:.2f} ₽'}\n"
+                f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else format_rub_amount(price)}\n"
                 f"📦 <b>Результатов:</b> {len(result_urls)}\n\n"
             )
             
@@ -3384,7 +3462,7 @@ async def show_admin_generation(query, context, gen: dict, current_index: int, t
                 f"👤 <a href=\"{user_link}\">User {user_id}</a>\n"
                 f"📅 <b>Date:</b> {date_str}\n"
                 f"🤖 <b>Model:</b> {model_name}\n"
-                f"💰 <b>Cost:</b> {'🎁 Free' if is_free else f'{price:.2f} ₽'}\n"
+                f"💰 <b>Cost:</b> {'🎁 Free' if is_free else format_rub_amount(price)}\n"
                 f"📦 <b>Results:</b> {len(result_urls)}\n\n"
             )
             
@@ -3443,7 +3521,7 @@ async def show_payment_screenshot(query, payment: dict, current_index: int, tota
             return
         
         # Format payment info
-        amount_str = f"{amount:.2f}"
+        amount_str = format_rub_amount(amount)
         if timestamp:
             dt = datetime.datetime.fromtimestamp(timestamp)
             date_str = dt.strftime("%d.%m.%Y %H:%M")
@@ -3454,7 +3532,7 @@ async def show_payment_screenshot(query, payment: dict, current_index: int, tota
         caption = (
             f"📸 <b>Скриншот платежа #{payment_id}</b>\n\n"
             f"👤 <a href=\"{user_link}\">Пользователь {user_id}</a>\n"
-            f"💵 Сумма: {amount_str} ₽\n"
+            f"💵 Сумма: {amount_str}\n"
             f"📅 Дата: {date_str}\n\n"
             f"📄 {current_index + 1} из {total_count}"
         )
@@ -3860,7 +3938,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🎰 <b>КОЛЕСО ОСТАНОВИЛОСЬ!</b> 🎰\n\n'
                     f'🎁 <b>Ваш выигрыш:</b>\n\n'
-                    f'💰 <b>{amount:.2f} ₽</b>\n\n'
+                    f'💰 <b>{format_rub_amount(amount)}</b>\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'✅ <b>Сумма автоматически зачислена на ваш баланс!</b>\n\n'
                     f'💡 <b>Что дальше:</b>\n'
@@ -3875,7 +3953,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🎰 <b>WHEEL STOPPED!</b> 🎰\n\n'
                     f'🎁 <b>Your prize:</b>\n\n'
-                    f'💰 <b>{amount:.2f} ₽</b>\n\n'
+                    f'💰 <b>{format_rub_amount(amount)}</b>\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'✅ <b>Amount automatically added to your balance!</b>\n\n'
                     f'💡 <b>What\'s next:</b>\n'
@@ -4203,7 +4281,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info_text += f"ℹ️ <b>Описание:</b>\n{model_desc}\n\n"
             
             model_info_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            model_info_text += f"💰 <b>Стоимость генерации:</b> {price_text} ₽\n"
+            model_info_text += f"💰 <b>Стоимость генерации:</b> {price_text}\n"
             
             if is_admin:
                 model_info_text += t('msg_unlimited_available', lang=user_lang) + "\n\n"
@@ -4239,16 +4317,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 
                 needed = min_price - user_balance
-                needed_str = f"{needed:.2f}"
+                needed_str = format_rub_amount(needed)
                 remaining_free = await get_user_free_generations_remaining(user_id)
                 
                 if user_lang == 'ru':
                     insufficient_msg = (
                         f"❌ <b>Недостаточно средств для генерации</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                        f"💵 <b>Требуется минимум:</b> {price_text} ₽\n"
-                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
+                        f"💵 <b>Требуется минимум:</b> {price_text}\n"
+                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>Что делать:</b>\n"
                         f"• Пополните баланс через кнопку ниже\n"
@@ -4265,9 +4343,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     insufficient_msg = (
                         f"❌ <b>Insufficient Funds for Generation</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                        f"💵 <b>Minimum required:</b> {price_text} ₽\n"
-                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)}\n"
+                        f"💵 <b>Minimum required:</b> {price_text}\n"
+                        f"❌ <b>Need:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>What to do:</b>\n"
                         f"• Top up balance via button below\n"
@@ -4711,7 +4789,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     price_display = "бесплатно"
                 else:
                     # Fallback: show calculated price
-                    price_display = f"{min_price:.2f} ₽"
+                    price_display = format_rub_amount(min_price)
                 
                 # Compact button text (Telegram limit: 64 characters for button text)
                 # Make it shorter to fit price and avoid overlap
@@ -4852,7 +4930,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     price_display = "бесплатно"
                 else:
                     # Fallback: show calculated price
-                    price_display = f"{min_price:.2f} ₽"
+                    price_display = format_rub_amount(min_price)
                 
                 # Compact button text with price (Telegram limit: 64 characters)
                 model_name = model.get('name', model.get('id', 'Unknown'))
@@ -4871,7 +4949,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
                     price_display = "бесплатно"
                 else:
-                    price_display = f"{min_price:.2f} ₽"
+                    price_display = format_rub_amount(min_price)
                 
                 # Compact button text (Telegram limit: 64 characters for button text)
                 max_name_length = 20  # Shorter to fit price
@@ -5340,14 +5418,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
                         price = 0.0
-                    price_str = f"{price:.2f}"
+                    price_str = format_rub_amount(price)
                     
                     # Prepare price info
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
                         price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                     else:
-                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                        price_info = f"💰 <b>Стоимость:</b> {price_str}"
                     
                     # Format improved confirmation message with price
                     if user_lang == 'ru':
@@ -5366,7 +5444,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -5469,14 +5547,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
                         price = 0.0
-                    price_str = f"{price:.2f}"
+                    price_str = format_rub_amount(price)
                     
                     # Prepare price info
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
                         price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                     else:
-                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                        price_info = f"💰 <b>Стоимость:</b> {price_str}"
                     
                     # Format improved confirmation message with price
                     if user_lang == 'ru':
@@ -5495,7 +5573,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"🚀 <b>Готовы начать?</b>"
                         )
                     else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
                         confirm_msg = (
                             f"📋 <b>Generation Confirmation</b>\n\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -5795,14 +5873,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             price = calculate_price_rub(model_id, params, is_admin_user)
             if is_free:
                 price = 0.0
-            price_str = f"{price:.2f}"
+            price_str = format_rub_amount(price)
 
             # Prepare price info
             if is_free:
                 remaining = await get_user_free_generations_remaining(user_id)
                 price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
             else:
-                price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                price_info = f"💰 <b>Стоимость:</b> {price_str}"
 
             # Format improved confirmation message with price
             if user_lang == 'ru':
@@ -5821,7 +5899,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🚀 <b>Готовы начать?</b>"
                 )
             else:
-                price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
                 confirm_msg = (
                     f"📋 <b>Generation Confirmation</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -5981,19 +6059,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             
             current_balance = await get_user_balance_async(user_id)
-            balance_str = f"{current_balance:.2f}"
+            balance_str = format_rub_amount(current_balance)
             
             await query.edit_message_text(
                 f'💳 <b>ПОПОЛНЕНИЕ БАЛАНСА</b> 💳\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'💰 <b>Твой текущий баланс:</b> {balance_str} ₽\n\n'
+                f'💰 <b>Твой текущий баланс:</b> {balance_str}\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'{payment_details}\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'💡 <b>Доступные модели:</b>\n'
-                f'• От 3.86 ₽ за видео\n'
-                f'• От 0.62 ₽ за изображение\n'
-                f'• Редактирование от 0.5 ₽\n\n'
+                f'• От 4 ₽ за видео\n'
+                f'• От 1 ₽ за изображение\n'
+                f'• Редактирование от 1 ₽\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'🚀 <b>ВЫБЕРИ СУММУ:</b>\n'
                 f'• Быстрый выбор: 50, 100, 150 ₽\n'
@@ -6023,11 +6101,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             video_count = int(amount / 3.86)  # Basic video price
             
             # Show payment method selection
+            amount_display = format_rub_amount(amount)
             if user_lang == 'ru':
                 payment_text = (
-                    f'💳 <b>ОПЛАТА {amount:.0f} ₽</b> 💳\n\n'
+                    f'💳 <b>ОПЛАТА {amount_display}</b> 💳\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
+                    f'💵 <b>Сумма к оплате:</b> {amount_display}\n\n'
                     f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
                     f'• ~{examples_count} изображений (free tools)\n'
                     f'• ~{video_count} видео (базовая модель)\n'
@@ -6037,9 +6116,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 payment_text = (
-                    f'💳 <b>PAYMENT {amount:.0f} ₽</b> 💳\n\n'
+                    f'💳 <b>PAYMENT {amount_display}</b> 💳\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
+                    f'💵 <b>Amount to pay:</b> {amount_display}\n\n'
                     f'🎯 <b>WHAT YOU WILL GET:</b>\n'
                     f'• ~{examples_count} images (free tools)\n'
                     f'• ~{video_count} videos (basic model)\n'
@@ -6114,8 +6193,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # 1 XTR = 1 Star
                 from telegram import LabeledPrice
                 
-                invoice_text_ru = f"Пополнение баланса на {amount:.2f} ₽"
-                invoice_text_en = f"Balance top-up for {amount:.2f} ₽"
+                amount_display = format_rub_amount(amount)
+                invoice_text_ru = f"Пополнение баланса на {amount_display}"
+                invoice_text_en = f"Balance top-up for {amount_display}"
                 invoice_text = invoice_text_ru if user_lang == 'ru' else invoice_text_en
                 
                 # Store payment info in session
@@ -6146,14 +6226,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text(
                         f'⭐ <b>ОПЛАТА ЧЕРЕЗ TELEGRAM STARS</b> ⭐\n\n'
                         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                        f'💰 <b>Сумма:</b> {amount:.2f} ₽ ({stars_amount} ⭐)\n\n'
+                        f'💰 <b>Сумма:</b> {amount_display} ({stars_amount} ⭐)\n\n'
                         f'💡 <b>Счет отправлен выше. Оплатите через Telegram Stars.</b>'
                     )
                 else:
                     await query.edit_message_text(
                         f'⭐ <b>PAYMENT VIA TELEGRAM STARS</b> ⭐\n\n'
                         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                        f'💰 <b>Amount:</b> {amount:.2f} ₽ ({stars_amount} ⭐)\n\n'
+                        f'💰 <b>Amount:</b> {amount_display} ({stars_amount} ⭐)\n\n'
                         f'💡 <b>Invoice sent above. Pay via Telegram Stars.</b>'
                     )
                     
@@ -6202,7 +6282,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 try:
                     from telegram import LabeledPrice
-                    invoice_text = f"Balance top-up for {amount:.2f} ₽"
+                    amount_display = format_rub_amount(amount)
+                    invoice_text = f"Balance top-up for {amount_display}"
                     
                     user_sessions[user_id] = {
                         'topup_amount': amount,
@@ -6224,7 +6305,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text(
                         f'⭐ <b>PAYMENT VIA TELEGRAM STARS</b> ⭐\n\n'
                         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                        f'💰 <b>Amount:</b> {amount:.2f} ₽ ({stars_amount} ⭐)\n\n'
+                        f'💰 <b>Amount:</b> {amount_display} ({stars_amount} ⭐)\n\n'
                         f'💡 <b>Invoice sent above. Pay via Telegram Stars.</b>'
                     )
                 except Exception as e:
@@ -6390,12 +6471,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'   • Всего генераций: <b>{stats["total_generations"]}</b>\n'
                     f'{top_models_text}'
                     f'💰 <b>Финансы:</b>\n'
-                    f'   • Общий доход: <b>{stats["total_revenue"]:.2f} ₽</b>\n'
-                    f'   • Доход сегодня: <b>{stats["revenue_today"]:.2f} ₽</b>\n'
-                    f'   • Доход за неделю: <b>{stats["revenue_week"]:.2f} ₽</b>\n'
-                    f'   • Доход за месяц: <b>{stats["revenue_month"]:.2f} ₽</b>\n'
+                    f'   • Общий доход: <b>{format_rub_amount(stats["total_revenue"])}</b>\n'
+                    f'   • Доход сегодня: <b>{format_rub_amount(stats["revenue_today"])}</b>\n'
+                    f'   • Доход за неделю: <b>{format_rub_amount(stats["revenue_week"])}</b>\n'
+                    f'   • Доход за месяц: <b>{format_rub_amount(stats["revenue_month"])}</b>\n'
                     f'   • Всего платежей: <b>{stats["total_payments"]}</b>\n'
-                    f'   • Средний чек: <b>{stats["avg_check"]:.2f} ₽</b>\n'
+                    f'   • Средний чек: <b>{format_rub_amount(stats["avg_check"])}</b>\n'
                     f'   • Конверсия в оплату: <b>{stats["conversion_rate"]:.1f}%</b>\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'📊 <b>СИСТЕМА:</b>\n\n'
@@ -7854,7 +7935,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🎨 <b>Генерация #{gen.get('id', 1)}</b>\n"
                     f"📅 <b>Дата:</b> {date_str}\n"
                     f"🤖 <b>Модель:</b> {model_name}\n"
-                    f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else f'{price:.2f} ₽'}\n"
+                    f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else format_rub_amount(price)}\n"
                     f"📦 <b>Результатов:</b> {len(result_urls)}\n\n"
                 )
                 
@@ -8243,7 +8324,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🎨 <b>Генерация #{gen.get('id', 1)}</b>\n\n"
                     f"📅 <b>Дата создания:</b> {date_str}\n"
                     f"🤖 <b>Модель:</b> {model_name}\n"
-                    f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else f'{price:.2f} ₽'}\n"
+                    f"💰 <b>Стоимость:</b> {'🎁 Бесплатно' if is_free else format_rub_amount(price)}\n"
                     f"📦 <b>Результатов:</b> {len(result_urls)}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>Что можно сделать:</b>\n"
@@ -8262,7 +8343,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🎨 <b>Generation #{gen.get('id', 1)}</b>\n\n"
                     f"📅 <b>Created:</b> {date_str}\n"
                     f"🤖 <b>Model:</b> {model_name}\n"
-                    f"💰 <b>Cost:</b> {'🎁 Free' if is_free else f'{price:.2f} ₽'}\n"
+                    f"💰 <b>Cost:</b> {'🎁 Free' if is_free else format_rub_amount(price)}\n"
                     f"📦 <b>Results:</b> {len(result_urls)}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>What you can do:</b>\n"
@@ -8839,7 +8920,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 from app.config import get_settings
 
                 settings = get_settings()
-                price_info = get_model_price_info(model_id, 0, settings)
+                price_info = get_model_price_info(model_id, 0, settings, is_admin=is_admin_check)
                 trace_event(
                     "info",
                     correlation_id,
@@ -9134,18 +9215,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if user_balance >= min_price:
                         paid_count = int(user_balance / min_price)
                         model_info_text += f"💳 <b>Платных:</b> {paid_count} генераций\n"
-                    model_info_text += f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n\n"
+                    model_info_text += f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)}\n\n"
                 elif available_count > 0:
                     model_info_text += (
                         f"✅ <b>Доступно:</b> {available_count} генераций\n"
-                        f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n\n"
+                        f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)}\n\n"
                     )
                 else:
                     # Not enough balance - show warning
                     model_info_text += (
                         f"\n❌ <b>Недостаточно средств</b>\n\n"
-                        f"💵 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                        f"💰 <b>Требуется:</b> {format_price_rub(min_price, is_admin)} ₽\n\n"
+                        f"💵 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
+                        f"💰 <b>Требуется:</b> {format_price_rub(min_price, is_admin)}\n\n"
                         f"💡 Пополните баланс для генерации"
                     )
                     
@@ -9170,16 +9251,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 
                 needed = min_price - user_balance
-                needed_str = f"{needed:.2f}"
+                needed_str = format_rub_amount(needed)
                 remaining_free = await get_user_free_generations_remaining(user_id)
                 
                 if user_lang == 'ru':
                     insufficient_msg = (
                         f"❌ <b>Недостаточно средств для генерации</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                        f"💵 <b>Требуется минимум:</b> {price_text} ₽\n"
-                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
+                        f"💵 <b>Требуется минимум:</b> {price_text}\n"
+                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>Что делать:</b>\n"
                         f"• Пополните баланс через кнопку ниже\n"
@@ -9196,9 +9277,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     insufficient_msg = (
                         f"❌ <b>Insufficient Funds for Generation</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)} ₽\n"
-                        f"💵 <b>Minimum required:</b> {price_text} ₽\n"
-                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)}\n"
+                        f"💵 <b>Minimum required:</b> {price_text}\n"
+                        f"❌ <b>Need:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>What to do:</b>\n"
                         f"• Top up balance via button below\n"
@@ -9236,6 +9317,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
+
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                update_id=update.update_id,
+                action="MODEL_SELECT",
+                action_path=build_action_path(data),
+                model_id=model_id,
+                gen_type=model_spec.model_mode or model_spec.model_type,
+                stage="MODEL_SELECT",
+                outcome="selected",
+            )
 
             input_params = model_spec.schema_properties or {}
             logger.info(
@@ -9680,7 +9774,7 @@ async def send_confirmation_message(
     price = calculate_price_rub(model_id, params, is_admin_user)
     if is_free:
         price = 0.0
-    price_str = f"{price:.2f}"
+    price_str = format_rub_amount(price)
     if is_free:
         remaining = await get_user_free_generations_remaining(user_id)
         price_info = (
@@ -9690,9 +9784,9 @@ async def send_confirmation_message(
         )
     else:
         price_info = (
-            f"💰 <b>Стоимость:</b> {price_str} ₽"
+            f"💰 <b>Стоимость:</b> {price_str}"
             if user_lang == 'ru'
-            else f"💰 <b>Cost:</b> {price_str} ₽"
+            else f"💰 <b>Cost:</b> {price_str}"
         )
 
     settings_label = _get_settings_label(user_lang)
@@ -10157,9 +10251,11 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id=user_id,
         chat_id=chat_id,
         update_id=update_id,
-        action="UX_INPUT",
+        action="INPUT_COLLECT",
         action_path="input_parameters",
         model_id=session.get("model_id") if isinstance(session, dict) else None,
+        gen_type=(session.get("model_spec").model_mode if isinstance(session, dict) and session.get("model_spec") else None),
+        stage="INPUT_COLLECT",
         param={
             "waiting_for": session.get("waiting_for") if isinstance(session, dict) else None,
             "current_param": session.get("current_param") if isinstance(session, dict) else None,
@@ -10437,7 +10533,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if found_amounts:
                     result_text += f"💰 <b>Найденные суммы:</b>\n"
                     for amt in sorted(set(found_amounts), reverse=True)[:5]:
-                        result_text += f"  • {amt:.2f} ₽\n"
+                        result_text += f"  • {format_rub_amount(amt)}\n"
                     result_text += "\n"
                 else:
                     result_text += "⚠️ <b>Суммы не найдены</b>\n\n"
@@ -10609,30 +10705,29 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return WAITING_CURRENCY_RATE
             
-            # Save currency rate
+            # Save currency rate (locked from pricing config)
             if set_usd_to_rub_rate(new_rate):
-                old_rate = get_usd_to_rub_rate()
+                current_rate = get_usd_to_rub_rate()
                 await update.message.reply_text(
                     f"✅ <b>Курс валюты обновлен!</b>\n\n"
                     f"📊 <b>Новый курс:</b>\n"
-                    f"1 USD = {new_rate:.2f} RUB\n\n"
+                    f"1 USD = {current_rate:.2f} RUB\n\n"
                     f"💡 Все цены будут пересчитаны автоматически при следующем просмотре.",
                     parse_mode='HTML'
                 )
-                
-                # Clear waiting state
                 if user_id in user_sessions:
                     del user_sessions[user_id]['waiting_for']
-                
                 return ConversationHandler.END
-            else:
-                await update.message.reply_text(
-                    "❌ <b>Ошибка сохранения курса</b>\n\n"
-                    "Не удалось сохранить курс валюты.\n\n"
-                    "Попробуйте еще раз или нажмите /cancel для отмены.",
-                    parse_mode='HTML'
-                )
-                return WAITING_CURRENCY_RATE
+
+            current_rate = get_usd_to_rub_rate()
+            await update.message.reply_text(
+                "❌ <b>Курс валюты зафиксирован</b>\n\n"
+                f"1 USD = {current_rate:.2f} RUB\n\n"
+                "Изменение курса временно отключено.\n"
+                "Попробуйте позже или нажмите /cancel для отмены.",
+                parse_mode='HTML'
+            )
+            return WAITING_CURRENCY_RATE
                 
         except ValueError:
             await update.message.reply_text(
@@ -10739,7 +10834,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Add payment and auto-credit balance
                 payment = await add_payment_async(user_id, amount, screenshot_file_id)
                 new_balance = await get_user_balance_async(user_id)
-                balance_str = f"{new_balance:.2f}"
+                balance_str = format_rub_amount(new_balance)
                 
                 # Delete analysis message (if exists)
                 if analysis_msg:
@@ -10766,8 +10861,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     payment_success_msg = (
                         f"✅ <b>ОПЛАТА ПОЛУЧЕНА!</b> ✅\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💵 <b>Сумма:</b> {amount:.2f} ₽\n"
-                        f"💰 <b>Новый баланс:</b> {balance_str} ₽\n\n"
+                        f"💵 <b>Сумма:</b> {format_rub_amount(amount)}\n"
+                        f"💰 <b>Новый баланс:</b> {balance_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"🎉 <b>Отлично! Баланс пополнен!</b>\n\n"
                         f"💡 <b>Что дальше:</b>\n"
@@ -10780,8 +10875,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     payment_success_msg = (
                         f"✅ <b>PAYMENT RECEIVED!</b> ✅\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💵 <b>Amount:</b> {amount:.2f} ₽\n"
-                        f"💰 <b>New balance:</b> {balance_str} ₽\n\n"
+                        f"💵 <b>Amount:</b> {format_rub_amount(amount)}\n"
+                        f"💰 <b>New balance:</b> {balance_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"🎉 <b>Great! Balance topped up!</b>\n\n"
                         f"💡 <b>What's next:</b>\n"
@@ -10843,11 +10938,12 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             video_count = int(amount / 3.86)  # Basic video price
             
             # Show payment method selection
+            amount_display = format_rub_amount(amount)
             if user_lang == 'ru':
                 payment_text = (
-                    f'💳 <b>ОПЛАТА {amount:.0f} ₽</b> 💳\n\n'
+                    f'💳 <b>ОПЛАТА {amount_display}</b> 💳\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
+                    f'💵 <b>Сумма к оплате:</b> {amount_display}\n\n'
                     f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
                     f'• ~{examples_count} изображений (free tools)\n'
                     f'• ~{video_count} видео (базовая модель)\n'
@@ -10857,9 +10953,9 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 payment_text = (
-                    f'💳 <b>PAYMENT {amount:.0f} ₽</b> 💳\n\n'
+                    f'💳 <b>PAYMENT {amount_display}</b> 💳\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
+                    f'💵 <b>Amount to pay:</b> {amount_display}\n\n'
                     f'🎯 <b>WHAT YOU WILL GET:</b>\n'
                     f'• ~{examples_count} images (free tools)\n'
                     f'• ~{video_count} videos (basic model)\n'
@@ -11566,17 +11662,17 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         price = calculate_price_rub(model_id, params, is_admin_user)
                         if is_free:
                             price = 0.0
-                        price_str = f"{price:.2f}"
+                        price_str = format_rub_amount(price)
                         
                         # Prepare price info
                         if is_free:
                             remaining = await get_user_free_generations_remaining(user_id)
                             price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                         else:
-                            price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+                            price_info = f"💰 <b>Стоимость:</b> {price_str}"
                         
                         if user_lang == 'en':
-                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
                             confirm_text = (
                                 f"📋 <b>Generation Confirmation</b>\n\n"
                                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -12038,11 +12134,11 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     else:
                         # КРИТИЧНО: Всегда показываем цену
                         price = calculate_price_rub(model_id, params, is_admin_user)
-                        price_str = f"{price:.2f}"
+                        price_str = format_rub_amount(price)
                         if is_admin_user:
-                            free_info = f"\n\n💰 <b>Стоимость:</b> Безлимит (цена: {price_str} ₽)"
+                            free_info = f"\n\n💰 <b>Стоимость:</b> Безлимит (цена: {price_str})"
                         else:
-                            free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
+                            free_info = f"\n\n💰 <b>Стоимость:</b> {price_str}"
                     
                     user_lang = get_user_language(user_id)
                     keyboard = [
@@ -12154,8 +12250,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                         else:
                             price = calculate_price_rub(model_id, params, is_admin_user)
-                            price_str = f"{price:.2f}"
-                            free_info = f"\n\n💰 <b>Стоимость:</b> {price_str} ₽"
+                            price_str = format_rub_amount(price)
+                            free_info = f"\n\n💰 <b>Стоимость:</b> {price_str}"
                         
                         user_lang = get_user_language(user_id)
                         keyboard = [
@@ -12407,19 +12503,34 @@ async def start_generation_directly(
         if not is_free:
             user_balance = await get_user_balance_async(user_id)
             if user_balance < price:
-                price_str = f"{price:.2f}"
-                balance_str = f"{user_balance:.2f}"
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="BALANCE_CHECK",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+                    stage="BALANCE_CHECK",
+                    outcome="failed",
+                    error_code="ERR_BALANCE_LOW",
+                    fix_hint="Пополните баланс или используйте бесплатные генерации.",
+                    param={"price_rub": price, "balance_rub": user_balance},
+                )
+                price_str = format_rub_amount(price)
+                balance_str = format_rub_amount(user_balance)
                 user_lang_check = get_user_language(user_id)
                 needed = price - user_balance
-                needed_str = f"{needed:.2f}"
+                needed_str = format_rub_amount(needed)
                 
                 if user_lang_check == 'ru':
                     insufficient_msg = (
                         f"❌ <b>Недостаточно средств</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                        f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
-                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"💰 <b>Требуется:</b> {price_str}\n"
+                        f"💳 <b>Ваш баланс:</b> {balance_str}\n"
+                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>Что делать:</b>\n"
                         f"• Пополните баланс через главное меню\n"
@@ -12430,9 +12541,9 @@ async def start_generation_directly(
                     insufficient_msg = (
                         f"❌ <b>Insufficient Funds</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💰 <b>Required:</b> {price_str} ₽\n"
-                        f"💳 <b>Your balance:</b> {balance_str} ₽\n"
-                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"💰 <b>Required:</b> {price_str}\n"
+                        f"💳 <b>Your balance:</b> {balance_str}\n"
+                        f"❌ <b>Need:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>What to do:</b>\n"
                         f"• Top up balance via main menu\n"
@@ -12466,7 +12577,7 @@ async def start_generation_directly(
         "✅ <b>Ваш запрос принят и обрабатывается</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🤖 <b>Модель:</b> <code>{model_name}</code>\n"
-        f"💰 <b>Стоимость:</b> <b>{price:.2f} ₽</b>\n"
+        f"💰 <b>Стоимость:</b> <b>{format_rub_amount(price)}</b>\n"
         f"⏱️ <b>Ожидаемое время:</b> 10-60 секунд\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "💡 <b>Что происходит:</b>\n"
@@ -12482,7 +12593,7 @@ async def start_generation_directly(
         "✅ <b>Your request is accepted and processing</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🤖 <b>Model:</b> <code>{model_name}</code>\n"
-        f"💰 <b>Cost:</b> <b>{price:.2f} ₽</b>\n"
+        f"💰 <b>Cost:</b> <b>{format_rub_amount(price)}</b>\n"
         f"⏱️ <b>Expected time:</b> 10-60 seconds\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "💡 <b>What's happening:</b>\n"
@@ -12676,19 +12787,19 @@ async def start_generation_directly(
         # Проверяем баланс (но НЕ списываем - списание только при success)
         user_balance_check = await get_user_balance_async(user_id)
         if user_balance_check < price_rub_catalog:
-            price_str = f"{price_rub_catalog:.2f}"
-            balance_str = f"{user_balance_check:.2f}"
+            price_str = format_rub_amount(price_rub_catalog)
+            balance_str = format_rub_amount(user_balance_check)
             user_lang_check = get_user_language(user_id)
             needed = price_rub_catalog - user_balance_check
-            needed_str = f"{needed:.2f}"
+            needed_str = format_rub_amount(needed)
             
             if user_lang_check == 'ru':
                 insufficient_msg = (
                     f"❌ <b>Недостаточно средств</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
-                    f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                    f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                    f"💳 <b>Ваш баланс:</b> {balance_str}\n"
+                    f"💰 <b>Требуется:</b> {price_str}\n"
+                    f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 Пополните баланс для генерации"
                 )
@@ -12696,9 +12807,9 @@ async def start_generation_directly(
                 insufficient_msg = (
                     f"❌ <b>Insufficient funds</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💳 <b>Your balance:</b> {balance_str} ₽\n"
-                    f"💰 <b>Required:</b> {price_str} ₽\n"
-                    f"❌ <b>Missing:</b> {needed_str} ₽\n\n"
+                    f"💳 <b>Your balance:</b> {balance_str}\n"
+                    f"💰 <b>Required:</b> {price_str}\n"
+                    f"❌ <b>Missing:</b> {needed_str}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 Top up balance to generate"
                 )
@@ -13119,7 +13230,26 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from app.config import get_settings
 
         settings = get_settings()
-        price_info = get_model_price_info(model_id, 0, settings)
+        price_info = get_model_price_info(model_id, 0, settings, is_admin=is_admin_user)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="PRICE_CALC",
+            action_path="confirm_generate",
+            model_id=model_id,
+            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            stage="PRICE_CALC",
+            outcome="success",
+            param={
+                "official_usd": price_info.get("official_usd") if price_info else None,
+                "usd_to_rub": price_info.get("usd_to_rub") if price_info else None,
+                "multiplier": price_info.get("price_multiplier") if price_info else None,
+                "price_rub": price,
+                "is_admin": is_admin_user,
+            },
+        )
         trace_event(
             "info",
             correlation_id,
@@ -13160,21 +13290,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not is_free:
             user_balance = await get_user_balance_async(user_id)
             if user_balance < price:
-                price_str = f"{price:.2f}"
-                balance_str = f"{user_balance:.2f}"
+                price_str = format_rub_amount(price)
+                balance_str = format_rub_amount(user_balance)
                 remaining_free = await get_user_free_generations_remaining(user_id)
                 
                 user_lang = get_user_language(user_id)
                 needed = price - user_balance
-                needed_str = f"{needed:.2f}"
+                needed_str = format_rub_amount(needed)
                 
                 if user_lang == 'ru':
                     error_text = (
                         f"❌ <b>Недостаточно средств</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                        f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
-                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"💰 <b>Требуется:</b> {price_str}\n"
+                        f"💳 <b>Ваш баланс:</b> {balance_str}\n"
+                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     )
                     
@@ -13195,9 +13325,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     error_text = (
                         f"❌ <b>Insufficient Funds</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💰 <b>Required:</b> {price_str} ₽\n"
-                        f"💳 <b>Your balance:</b> {balance_str} ₽\n"
-                        f"❌ <b>Need:</b> {needed_str} ₽\n\n"
+                        f"💰 <b>Required:</b> {price_str}\n"
+                        f"💳 <b>Your balance:</b> {balance_str}\n"
+                        f"❌ <b>Need:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     )
                     
@@ -13217,20 +13347,33 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 
                 await send_or_edit_message(error_text)
                 return ConversationHandler.END
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="BALANCE_CHECK",
+                action_path="confirm_generate",
+                model_id=model_id,
+                gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+                stage="BALANCE_CHECK",
+                outcome="ok",
+                param={"price_rub": price, "balance_rub": user_balance},
+            )
     elif user_id != ADMIN_ID:
         # Limited admin - check limit
         remaining = get_admin_remaining(user_id)
         if remaining < price:
-            price_str = f"{price:.2f}"
-            remaining_str = f"{remaining:.2f}"
+            price_str = format_rub_amount(price)
+            remaining_str = format_rub_amount(remaining)
             limit = get_admin_limit(user_id)
             spent = get_admin_spent(user_id)
             await send_or_edit_message(
                 f"❌ <b>Превышен лимит</b>\n\n"
-                f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                f"💳 <b>Лимит:</b> {limit:.2f} ₽\n"
-                f"💸 <b>Потрачено:</b> {spent:.2f} ₽\n"
-                f"✅ <b>Осталось:</b> {remaining_str} ₽\n\n"
+                f"💰 <b>Требуется:</b> {price_str}\n"
+                f"💳 <b>Лимит:</b> {format_rub_amount(limit)}\n"
+                f"💸 <b>Потрачено:</b> {format_rub_amount(spent)}\n"
+                f"✅ <b>Осталось:</b> {remaining_str}\n\n"
                 f"Обратитесь к главному администратору для увеличения лимита."
             )
             return ConversationHandler.END
@@ -13264,9 +13407,28 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
     )
 
+    last_progress_ts = 0.0
+
     async def progress_callback(event: Dict[str, Any]) -> None:
-        if event.get("stage") == "KIE_CREATE":
+        nonlocal last_progress_ts
+        stage = event.get("stage")
+        if stage == "KIE_CREATE":
             await send_or_edit_message(accepted_msg)
+            return
+        if stage == "KIE_POLL":
+            now = time.monotonic()
+            if now - last_progress_ts < 25:
+                return
+            last_progress_ts = now
+            elapsed = int(event.get("elapsed") or 0)
+            if user_lang == "ru":
+                progress_text = f"⏳ Генерирую… прошло {elapsed} сек."
+            else:
+                progress_text = f"⏳ Generating… {elapsed}s elapsed."
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=progress_text)
+            except Exception as send_exc:
+                logger.warning("Progress update failed: %s", send_exc)
 
     try:
         from app.generations.universal_engine import run_generation, KIEJobFailed
@@ -13278,12 +13440,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await send_or_edit_message("❌ <b>Модель не найдена в каталоге</b>")
             return ConversationHandler.END
 
+        timeout_seconds = get_generation_timeout_seconds(model_spec)
+        poll_interval = int(os.getenv("KIE_POLL_INTERVAL", "3"))
+
         job_result = await run_generation(
             user_id,
             model_id,
             params,
             correlation_id=correlation_id,
             progress_callback=progress_callback,
+            timeout=timeout_seconds,
+            poll_interval=poll_interval,
         )
         elapsed = job_result.raw.get("elapsed")
         from app.utils.deps import get_kie_client_from_context
@@ -13306,9 +13473,41 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action="GEN_COMPLETE",
             action_path="confirm_generate",
             model_id=model_id,
+            stage="GEN_COMPLETE",
             outcome="sent",
             duration_ms=int((time.time() - start_time) * 1000),
         )
+        return ConversationHandler.END
+    except TimeoutError as exc:
+        logger.error("❌ Generation timeout: %s", exc, exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="KIE_POLL",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_POLL",
+            outcome="timeout",
+            error_code="ERR_KIE_TIMEOUT",
+            fix_hint=ERROR_CATALOG.get("KIE_TIMEOUT"),
+        )
+        trace_error(
+            correlation_id or "corr-na-na",
+            "ERR_KIE_TIMEOUT",
+            ERROR_CATALOG.get("KIE_TIMEOUT", "Проверьте timeout/backoff и статус KIE."),
+            exc,
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="KIE_POLL",
+        )
+        timeout_text = (
+            "⏳ <b>Генерация заняла слишком много времени</b>\n\n"
+            "Что случилось: превышен таймаут ожидания.\n"
+            "Что сделать: попробуйте снова чуть позже.\n"
+            "Код: <code>ERR_KIE_TIMEOUT</code>"
+        )
+        await send_or_edit_message(timeout_text, parse_mode="HTML")
         return ConversationHandler.END
     except KIEJobFailed as exc:
         from app.observability.redaction import redact_payload
@@ -13350,14 +13549,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action_path="confirm_generate",
             model_id=model_id,
             outcome="failed",
-            error_code="KIE_FAIL_STATE",
+            error_code="ERR_GEN_UNKNOWN",
             fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
         )
         await send_or_edit_message(
             (
                 "❌ <b>Ошибка генерации</b>\n\n"
                 "Пожалуйста, попробуйте позже.\n"
-                f"ID: {correlation_id}"
+                f"ID: {correlation_id}\n"
+                "Код: <code>ERR_GEN_UNKNOWN</code>"
             ),
             parse_mode='HTML'
         )
@@ -24729,19 +24929,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             # Проверяем баланс
             user_balance_check = await get_user_balance_async(user_id)
             if user_balance_check < price_rub_catalog:
-                price_str = f"{price_rub_catalog:.2f}"
-                balance_str = f"{user_balance_check:.2f}"
+                price_str = format_rub_amount(price_rub_catalog)
+                balance_str = format_rub_amount(user_balance_check)
                 user_lang_check = get_user_language(user_id)
                 needed = price_rub_catalog - user_balance_check
-                needed_str = f"{needed:.2f}"
+                needed_str = format_rub_amount(needed)
                 
                 if user_lang_check == 'ru':
                     insufficient_msg = (
                         f"❌ <b>Недостаточно средств</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Ваш баланс:</b> {balance_str} ₽\n"
-                        f"💰 <b>Требуется:</b> {price_str} ₽\n"
-                        f"❌ <b>Не хватает:</b> {needed_str} ₽\n\n"
+                        f"💳 <b>Ваш баланс:</b> {balance_str}\n"
+                        f"💰 <b>Требуется:</b> {price_str}\n"
+                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 Пополните баланс для генерации"
                     )
@@ -24749,9 +24949,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     insufficient_msg = (
                         f"❌ <b>Insufficient funds</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Your balance:</b> {balance_str} ₽\n"
-                        f"💰 <b>Required:</b> {price_str} ₽\n"
-                        f"❌ <b>Missing:</b> {needed_str} ₽\n\n"
+                        f"💳 <b>Your balance:</b> {balance_str}\n"
+                        f"💰 <b>Required:</b> {price_str}\n"
+                        f"❌ <b>Missing:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 Top up balance to generate"
                     )
@@ -26070,6 +26270,8 @@ async def _register_all_handlers_internal(application: Application):
     Внутренняя функция для регистрации всех handlers.
     Используется и в create_bot_application, и в main().
     """
+    # Inbound update logger/context middleware (must be first)
+    application.add_handler(TypeHandler(Update, inbound_update_logger), group=-100)
     # Create conversation handler for generation
     generation_handler = ConversationHandler(
         entry_points=[
@@ -26889,6 +27091,9 @@ async def main():
         # # D) per_message=True removed to avoid PTBUserWarning
         # requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
     )
+
+    # Inbound update logger/context middleware (must be first)
+    application.add_handler(TypeHandler(Update, inbound_update_logger), group=-100)
     
     # ==================== PHASE 1: GLOBAL INPUT ROUTERS (BEFORE ConversationHandler) ====================
     # These routers catch TEXT/PHOTO/AUDIO OUTSIDE conversation and route to input_parameters if waiting_for exists
@@ -27056,10 +27261,10 @@ async def main():
         # Show last 10 payments
         total_amount = stats['total_amount']
         total_count = stats['total_count']
-        total_str = f"{total_amount:.2f}"
+        total_str = format_rub_amount(total_amount)
         
         text = f"📊 <b>Статистика платежей:</b>\n\n"
-        text += f"💰 <b>Всего:</b> {total_str} ₽\n"
+        text += f"💰 <b>Всего:</b> {total_str}\n"
         text += f"📝 <b>Количество:</b> {total_count}\n\n"
         text += f"<b>Последние платежи:</b>\n\n"
         
@@ -27069,7 +27274,7 @@ async def main():
             user_id_payment = payment.get('user_id', 0)
             amount = payment.get('amount', 0)
             timestamp = payment.get('timestamp', 0)
-            amount_str = f"{amount:.2f}"
+            amount_str = format_rub_amount(amount)
             
             if timestamp:
                 dt = datetime.datetime.fromtimestamp(timestamp)
@@ -27079,7 +27284,7 @@ async def main():
             
             # Create user link: tg://user?id=USER_ID
             user_link = f"tg://user?id={user_id_payment}"
-            text += f"👤 <a href=\"{user_link}\">Пользователь {user_id_payment}</a> | 💵 {amount_str} ₽ | 📅 {date_str}\n"
+            text += f"👤 <a href=\"{user_link}\">Пользователь {user_id_payment}</a> | 💵 {amount_str} | 📅 {date_str}\n"
             
             if payment.get('screenshot_file_id'):
                 payments_with_screenshots += 1
@@ -27150,14 +27355,14 @@ async def main():
         try:
             user_id = int(context.args[0])
             balance = await get_user_balance_async(user_id)
-            balance_str = f"{balance:.2f}"
+            balance_str = format_rub_amount(balance)
             is_blocked = is_user_blocked(user_id)
             blocked_text = "🔒 Заблокирован" if is_blocked else "✅ Активен"
             
             # Get user payments
             user_payments = get_user_payments(user_id)
             total_paid = sum(p.get('amount', 0) for p in user_payments)
-            total_paid_str = f"{total_paid:.2f}"
+            total_paid_str = format_rub_amount(total_paid)
             
             # Check if user is limited admin
             admin_info = ""
@@ -27167,15 +27372,15 @@ async def main():
                 remaining = get_admin_remaining(user_id)
                 admin_info = (
                     f"\n👑 <b>Админ с лимитом:</b>\n"
-                    f"💳 Лимит: {limit:.2f} ₽\n"
-                    f"💸 Потрачено: {spent:.2f} ₽\n"
-                    f"✅ Осталось: {remaining:.2f} ₽"
+                    f"💳 Лимит: {format_rub_amount(limit)}\n"
+                    f"💸 Потрачено: {format_rub_amount(spent)}\n"
+                    f"✅ Осталось: {format_rub_amount(remaining)}"
                 )
             
             text = (
                 f"👤 <b>Пользователь:</b> {user_id}\n"
-                f"💰 <b>Баланс:</b> {balance_str} ₽\n"
-                f"💵 <b>Всего пополнено:</b> {total_paid_str} ₽\n"
+                f"💰 <b>Баланс:</b> {balance_str}\n"
+                f"💵 <b>Всего пополнено:</b> {total_paid_str}\n"
                 f"📝 <b>Платежей:</b> {len(user_payments)}\n"
                 f"🔐 <b>Статус:</b> {blocked_text}"
                 f"{admin_info}"

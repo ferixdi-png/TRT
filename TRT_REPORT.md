@@ -1,5 +1,30 @@
 # TRT_REPORT.md
 
+## 2026-02-01: Observability + pricing rounding + free menu + generation progress
+**Было → стало (ключевые изменения):**
+- **Было:** входящие апдейты Telegram иногда не логировались, update_id/user_id/chat_id пропадали в structured logs. **Стало:** контекстные contextvars + middleware для TG_UPDATE_IN и автоподстановка полей в structured logs/trace. 【F:app/observability/context.py†L1-L67】【F:app/observability/structured_logs.py†L20-L58】【F:app/observability/trace.py†L78-L190】【F:bot_kie.py†L113-L178】【F:bot_kie.py†L26084-L27020】
+- **Было:** /start мог «молчать» при ошибке. **Стало:** try/except с логом ERR_TG_START_HANDLER и гарантированным ответом пользователю. 【F:bot_kie.py†L3241-L3279】
+- **Было:** free tools брались статически и включали аудио. **Стало:** 5 самых дешёвых non‑audio из каталога (детерминированно), с логированием исключений. 【F:app/kie_catalog/catalog.py†L260-L343】【F:app/services/free_tools_service.py†L16-L44】【F:pricing/config.yaml†L23-L31】
+- **Было:** цены/балансы показывались с копейками, курс плавал, admin multiplier не фиксирован. **Стало:** курс 77.83 из config, ceil до целого ₽, admin multiplier=1.0. 【F:pricing/config.yaml†L17-L31】【F:pricing/engine.py†L20-L102】【F:app/services/pricing_service.py†L11-L116】【F:bot_kie.py†L820-L960】
+- **Было:** долгий KIE_POLL без прогресса/таймаута. **Стало:** прогресс‑апдейты каждые ~25с + таймауты по категориям (image/video/audio) с ERR_KIE_TIMEOUT. 【F:app/generations/universal_engine.py†L220-L392】【F:bot_kie.py†L13210-L13456】
+
+**Файлы изменены (основные):**
+- `app/observability/context.py`, `app/observability/structured_logs.py`, `app/observability/trace.py`, `app/observability/error_catalog.py`
+- `bot_kie.py`, `helpers.py`, `app/helpers/models_menu.py`, `app/generations/telegram_sender.py`
+- `app/kie_catalog/catalog.py`, `app/services/free_tools_service.py`, `app/services/pricing_service.py`, `pricing/config.yaml`, `pricing/config.json`, `pricing/engine.py`
+- `tests/test_pricing_rounding.py`, `tests/test_pricing_sources.py`, `tests/test_free_tools_menu.py`, `tests/test_all_models_contract.py`, `tests/test_main_menu.py`
+
+**Тесты/проверки:**
+- `python scripts/verify_project.py`
+- `pytest -q`
+
+**TOP‑5 “WHAT’S MISSING TO PROD” (P2 only):**
+1. **P2:** Telegram fallback send_document всё ещё best‑effort без ретраев, возможны единичные не‑доставки при плохой сети. Evidence: `telegram_sender.deliver_result` fallback catch‑all. 【F:app/generations/telegram_sender.py†L73-L214】 (Fix: not implemented yet.)
+2. **P2:** Таймауты пока по категориям, без индивидуальных overrides на модели с >420с. Evidence: `get_generation_timeout_seconds`. 【F:bot_kie.py†L988-L1005】 (Fix: not implemented yet.)
+3. **P2:** OCR‑распознавание платежей остаётся эвристикой (может ошибаться на нестандартных скриншотах). Evidence: `analyze_payment_screenshot`. 【F:bot_kie.py†L2472-L2665】 (Fix: not implemented yet.)
+4. **P2:** Нет централизованных ретраев для TG_SEND в случае временных ошибок API. Evidence: `telegram_sender.deliver_result`. 【F:app/generations/telegram_sender.py†L73-L214】 (Fix: not implemented yet.)
+5. **P2:** Нет пер‑модельного SLA/alert на превышение KIE_POLL по статистике. Evidence: only structured logs emitted. 【F:app/generations/universal_engine.py†L220-L392】 (Fix: not implemented yet.)
+
 ## 2026-01-19: P0/P1 production hardening — media delivery, free tools, pricing, modality contract
 **Было → стало (ключевые изменения):**
 - **Было:** Telegram получал прямые URL и падал на HTML/403/redirect. **Стало:** медиа всегда скачивается сервером, проверяется content-type/size и отправляется как InputFile; для oversized — безопасная ссылка без preview. 【F:app/generations/media_pipeline.py†L1-L278】【F:app/generations/telegram_sender.py†L1-L180】
