@@ -20,6 +20,7 @@ IGNORED_CALLBACKS = {
 
 DYNAMIC_CALLBACK_PREFIXES = {
     "modelk:",
+    "reset_wizard",
 }
 
 CALLBACK_PATTERNS = [
