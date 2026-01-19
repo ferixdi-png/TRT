@@ -10,6 +10,7 @@ import asyncio
 import sys
 import os
 import re
+import math
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -26,6 +27,7 @@ from app.observability.trace import (
     trace_event,
 )
 from app.observability.error_catalog import ERROR_CATALOG
+from app.middleware.rate_limit import PerUserRateLimiter, TTLCache
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -94,12 +96,25 @@ KNOWN_CALLBACK_EXACT = {
     "tutorial_start",
     "tutorial_complete",
     "confirm_generate",
+    "reset_wizard",
     "cancel",
     "back_to_previous_step",
     "view_payment_screenshots",
 }
 
 SKIP_PARAM_VALUE = "__skip__"
+
+MESSAGE_RATE_LIMIT_PER_SEC = float(os.getenv("TG_RATE_LIMIT_PER_SEC", "1.5"))
+MESSAGE_RATE_LIMIT_BURST = float(os.getenv("TG_RATE_LIMIT_BURST", "5"))
+CALLBACK_RATE_LIMIT_PER_SEC = float(os.getenv("TG_CALLBACK_RATE_LIMIT_PER_SEC", "2.0"))
+CALLBACK_RATE_LIMIT_BURST = float(os.getenv("TG_CALLBACK_RATE_LIMIT_BURST", "6"))
+UPDATE_DEDUP_TTL_SECONDS = float(os.getenv("TG_UPDATE_DEDUP_TTL_SECONDS", "60"))
+CALLBACK_DEDUP_TTL_SECONDS = float(os.getenv("TG_CALLBACK_DEDUP_TTL_SECONDS", "30"))
+
+_message_rate_limiter = PerUserRateLimiter(MESSAGE_RATE_LIMIT_PER_SEC, MESSAGE_RATE_LIMIT_BURST)
+_callback_rate_limiter = PerUserRateLimiter(CALLBACK_RATE_LIMIT_PER_SEC, CALLBACK_RATE_LIMIT_BURST)
+_update_deduper = TTLCache(UPDATE_DEDUP_TTL_SECONDS)
+_callback_deduper = TTLCache(CALLBACK_DEDUP_TTL_SECONDS)
 
 
 def is_known_callback_data(callback_data: Optional[str]) -> bool:
@@ -149,6 +164,110 @@ async def inbound_update_logger(update: Update, context: ContextTypes.DEFAULT_TY
         callback_data=_truncate_log_value(callback_data),
         outcome="received",
     )
+
+
+async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Deduplicate updates and apply per-user rate limits before handlers."""
+    from telegram.ext import ApplicationHandlerStop
+    from app.observability.no_silence_guard import track_outgoing_action
+    from app.ux.navigation import build_back_to_menu_keyboard
+
+    user_id = update.effective_user.id if update.effective_user else None
+    if not user_id:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    correlation_id = ensure_correlation_id(update, context)
+    update_id = getattr(update, "update_id", None)
+
+    if update_id is not None and _update_deduper.seen(update_id):
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="TG_UPDATE_IN",
+            action_path="dedup:update_id",
+            outcome="deduped",
+            fix_hint="duplicate_update_id",
+        )
+        if update.callback_query:
+            try:
+                await update.callback_query.answer()
+                track_outgoing_action(update_id, action_type="answerCallbackQuery")
+            except Exception:
+                pass
+        raise ApplicationHandlerStop
+
+    if update.callback_query and update.callback_query.id:
+        callback_id = update.callback_query.id
+        if _callback_deduper.seen(callback_id):
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="TG_UPDATE_IN",
+                action_path="dedup:callback",
+                outcome="deduped",
+                fix_hint="duplicate_callback_id",
+                param={"callback_id": callback_id},
+            )
+            try:
+                await update.callback_query.answer()
+                if update_id is not None:
+                    track_outgoing_action(update_id, action_type="answerCallbackQuery")
+            except Exception:
+                pass
+            raise ApplicationHandlerStop
+
+    limiter = _callback_rate_limiter if update.callback_query else _message_rate_limiter
+    allowed, retry_after = limiter.check(user_id)
+    if allowed:
+        return
+
+    wait_seconds = max(1, int(math.ceil(retry_after)))
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    text = (
+        f"⏳ <b>Слишком быстро</b>\n\n"
+        f"Попробуйте снова через {wait_seconds} сек."
+        if user_lang == "ru"
+        else f"⏳ <b>Too fast</b>\n\nTry again in {wait_seconds}s."
+    )
+    reply_markup = build_back_to_menu_keyboard(user_lang)
+
+    if update.callback_query:
+        try:
+            await update.callback_query.answer()
+            if update_id is not None:
+                track_outgoing_action(update_id, action_type="answerCallbackQuery")
+        except Exception:
+            pass
+
+    if chat_id:
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+            if update_id is not None:
+                track_outgoing_action(update_id, action_type="send_message")
+        except Exception:
+            logger.warning("Failed to send throttle response to user %s", user_id, exc_info=True)
+
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="TG_RATE_LIMIT",
+        action_path="rate_limit_guard",
+        outcome="throttled",
+        param={"retry_after": wait_seconds, "update_type": "callback" if update.callback_query else "message"},
+    )
+    raise ApplicationHandlerStop
 
 # ==================== SELF-CHECK: ENV SUMMARY AND VALIDATION ====================
 def log_env_summary():
@@ -791,6 +910,10 @@ _processed_update_ttl_seconds = 120
 active_generations = {}
 active_generations_lock = asyncio.Lock()
 
+# Generation submit locks to prevent double confirm clicks
+generation_submit_locks: dict[int, float] = {}
+GENERATION_SUBMIT_LOCK_TTL_SECONDS = 20
+
 # Store saved generation data for "generate again" feature
 saved_generations = {}
 
@@ -1380,6 +1503,33 @@ def reset_session_on_navigation(user_id: int, *, reason: str) -> None:
             reason,
             ",".join(cleared_keys),
         )
+    if session.get("model_id") is None and any(
+        key in session for key in ("params", "properties", "required", "waiting_for", "current_param")
+    ):
+        clear_user_session(user_id, reason=f"{reason}:stale_model_id")
+
+
+def clear_user_session(user_id: int, *, reason: str) -> None:
+    """Hard reset session state to avoid stale keys."""
+    session = user_sessions.get(user_id)
+    if session is None:
+        return
+    session.clear()
+    session["last_activity"] = time.time()
+    logger.info("🧹 SESSION_RESET_FULL: action_path=%s user_id=%s", reason, user_id)
+
+
+def _acquire_generation_submit_lock(user_id: int) -> bool:
+    now = time.time()
+    last = generation_submit_locks.get(user_id)
+    if last and now - last < GENERATION_SUBMIT_LOCK_TTL_SECONDS:
+        return False
+    generation_submit_locks[user_id] = now
+    return True
+
+
+def _release_generation_submit_lock(user_id: int) -> None:
+    generation_submit_locks.pop(user_id, None)
 
 def _cleanup_processed_updates(now_ts: float) -> None:
     expired = [
@@ -2792,6 +2942,9 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
     if not image_data or len(image_data) == 0:
         logger.error("Empty image data provided")
         return None
+
+    request_timeout = aiohttp.ClientTimeout(total=20, sock_connect=6, sock_read=12)
+    user_agent_header = {"User-Agent": "TRTBot/1.0 (+https://github.com/ferixdi-png/TRT)"}
     
     # 🔴 ВРЕМЕННОЕ РЕШЕНИЕ: Используются внешние хостинги
     # NOTE: заменить на KIE AI File Upload API (https://kieai.redpandaai.co/api/file-stream-upload)
@@ -2857,7 +3010,12 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
                     content_type='image/jpeg'
                 )
                 
-                async with session.post(service['url'], data=data, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                async with session.post(
+                    service['url'],
+                    data=data,
+                    timeout=request_timeout,
+                    headers=user_agent_header,
+                ) as resp:
                     status = resp.status
                     text = await resp.text()
                     logger.info(f"Response from {service['url']}: status={status}, text={text[:100]}")
@@ -2867,15 +3025,27 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
                         # For catbox.moe, response is direct URL
                         if 'catbox.moe' in service['url']:
                             if text.startswith('http'):
+                                logger.info("Upload succeeded via catbox.moe")
                                 return text
                         # For 0x0.st, response is direct URL
                         elif text.startswith('http'):
+                            logger.info("Upload succeeded via 0x0.st")
                             return text
                     else:
                         logger.warning(f"Upload to {service['url']} failed with status {status}: {text[:200]}")
             else:  # raw
-                    headers = {'Content-Type': 'image/jpeg', 'Max-Downloads': '1', 'Max-Days': '7'}
-                    async with session.put(service['url'], data=image_data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    headers = {
+                        'Content-Type': 'image/jpeg',
+                        'Max-Downloads': '1',
+                        'Max-Days': '7',
+                        **user_agent_header,
+                    }
+                    async with session.put(
+                        service['url'],
+                        data=image_data,
+                        headers=headers,
+                        timeout=request_timeout,
+                    ) as resp:
                         status = resp.status
                         text = await resp.text()
                         logger.info(f"Response from {service['url']}: status={status}, text={text[:100]}")
@@ -2883,6 +3053,7 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
                         if status in [200, 201]:
                             text = text.strip()
                             if text.startswith('http'):
+                                logger.info("Upload succeeded via transfer.sh")
                                 return text
                         else:
                             logger.warning(f"Upload to {service['url']} failed with status {status}: {text[:200]}")
@@ -2934,7 +3105,7 @@ async def upload_image_to_kie_file_api(image_data: bytes, filename: str = "image
 
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
-        async with session.post(url, data=data, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+        async with session.post(url, data=data, headers=headers, timeout=aiohttp.ClientTimeout(total=45)) as resp:
             payload_text = await resp.text()
             if resp.status not in {200, 201}:
                 logger.error(
@@ -2955,6 +3126,7 @@ async def upload_image_to_kie_file_api(image_data: bytes, filename: str = "image
             if not file_url:
                 logger.error("KIE file upload missing fileUrl: %s", payload)
                 return None
+            logger.info("Upload succeeded via KIE file API")
             return file_url
     except asyncio.TimeoutError:
         logger.warning("Timeout uploading image to KIE file API.")
@@ -3445,6 +3617,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.message.reply_text(message, parse_mode="HTML")
 
 
+async def reset_wizard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Safely reset wizard state and return to main menu."""
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    correlation_id = ensure_correlation_id(update, context)
+    if user_id:
+        clear_user_session(user_id, reason="command:/reset")
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="COMMAND_RESET",
+        action_path="command:/reset",
+        outcome="processed",
+    )
+    await show_main_menu(update, context, source="/reset")
+
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
@@ -3843,6 +4034,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_lang = get_user_language(user_id) if user_id else 'ru'
         except:
             user_lang = 'ru'
+
+        if data == "reset_wizard":
+            clear_user_session(user_id, reason="reset_wizard")
+            await show_main_menu(update, context, source="reset_wizard")
+            track_outgoing_action(update_id, action_type="edit_message_text")
+            return ConversationHandler.END
 
         # 🔥🔥🔥 SUPER-DETAILED CONTEXT LOGGING
         try:
@@ -13191,11 +13388,13 @@ async def start_generation_directly(
         try:
             user_lang = get_user_language(user_id) if user_id else 'ru'
             error_msg = "Ошибка сервера, попробуйте позже" if user_lang == 'ru' else "Server error, please try later"
+            from app.ux.navigation import build_back_to_menu_keyboard
             await status_message.edit_text(
                 f"❌ <b>{error_msg}</b>\n\n"
                 f"Не удалось создать задачу генерации.\n"
                 f"Попробуйте еще раз через несколько секунд.",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=build_back_to_menu_keyboard(user_lang),
             )
         except:
             pass
@@ -13370,8 +13569,19 @@ async def start_generation_directly(
                 f"Произошла ошибка: {error}\n\n"
                 "Пожалуйста, попробуйте позже."
             )
-        
-        await status_message.edit_text(user_message, parse_mode='HTML')
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        next_steps = (
+            "\n\n💡 Попробуйте ещё раз через несколько секунд или вернитесь в меню."
+            if user_lang == "ru"
+            else "\n\n💡 Try again in a few seconds or return to the main menu."
+        )
+        from app.ux.navigation import build_back_to_menu_keyboard
+
+        await status_message.edit_text(
+            user_message + next_steps,
+            parse_mode='HTML',
+            reply_markup=build_back_to_menu_keyboard(user_lang),
+        )
         return ConversationHandler.END
 
 
@@ -13513,6 +13723,22 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except:
                 pass
         return result_message
+
+    if not _acquire_generation_submit_lock(user_id):
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        throttle_text = (
+            "⏳ <b>Генерация уже запускается</b>\n\n"
+            "Пожалуйста, подождите несколько секунд и попробуйте снова."
+            if user_lang == "ru"
+            else "⏳ <b>Generation already starting</b>\n\nPlease wait a few seconds and try again."
+        )
+        from app.ux.navigation import build_back_to_menu_keyboard
+
+        await send_or_edit_message(
+            throttle_text,
+            reply_markup=build_back_to_menu_keyboard(user_lang),
+        )
+        return ConversationHandler.END
     
     # Check if user is blocked
     if not is_admin_user and is_user_blocked(user_id):
@@ -13598,7 +13824,12 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"{chr(10).join('• ' + err for err in validation_errors[:5])}\n\n"
             f"Please check parameters and try again."
         )
-        await send_or_edit_message(error_text)
+        from app.ux.navigation import build_back_to_menu_keyboard
+
+        await send_or_edit_message(
+            error_text,
+            reply_markup=build_back_to_menu_keyboard(user_lang),
+        )
         return ConversationHandler.END
     
     # Параметры нормализованы, используем api_params вместо params
@@ -26881,6 +27112,8 @@ async def _register_all_handlers_internal(application: Application):
     """
     # Inbound update logger/context middleware (must be first)
     application.add_handler(TypeHandler(Update, inbound_update_logger), group=-100)
+    application.add_handler(TypeHandler(Update, inbound_rate_limit_guard), group=-99)
+    application.add_handler(TypeHandler(Update, inbound_rate_limit_guard), group=-99)
     # Create conversation handler for generation
     generation_handler = ConversationHandler(
         entry_points=[
@@ -27077,6 +27310,9 @@ async def _register_all_handlers_internal(application: Application):
     
     # Базовые command handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("reset", reset_wizard_command))
+    application.add_handler(CommandHandler("reset", reset_wizard_command))
+    application.add_handler(CommandHandler("reset", reset_wizard_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("balance", check_balance))
     application.add_handler(CommandHandler("cancel", cancel))

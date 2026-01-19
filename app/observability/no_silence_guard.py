@@ -78,7 +78,11 @@ class NoSilenceGuard:
                     outcome=trace_ctx.get("outcome", "responded"),
                     response_count=self.outgoing_actions[update_id],
                     response_type=action_type,
-                    **{k: v for k, v in trace_ctx.items() if k not in {"correlation_id", "stage"}},
+                    **{
+                        k: v
+                        for k, v in trace_ctx.items()
+                        if k not in {"correlation_id", "stage", "outcome"}
+                    },
                 )
     
     def mark_update_processed(self, update_id: int):
