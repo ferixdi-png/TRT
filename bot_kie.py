@@ -6382,6 +6382,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         balance_rub = balance * CREDIT_TO_USD * get_usd_to_rub_rate()
                         balance_rub_str = f"{balance_rub:.2f}".rstrip('0').rstrip('.')
                         kie_balance_info = f"💰 <b>Баланс KIE API:</b> {balance_rub_str} ₽ ({balance} кредитов)\n\n"
+                    else:
+                        status = balance_result.get("status")
+                        if status == 404:
+                            kie_balance_info = "💰 <b>Баланс KIE API:</b> Баланс KIE недоступен (endpoint 404)\n\n"
+                        else:
+                            kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
                 except Exception as e:
                     logger.error(f"Error getting KIE balance: {e}")
                     kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
@@ -13199,7 +13205,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await send_or_edit_message(accepted_msg)
 
     try:
-        from app.generations.universal_engine import run_generation
+        from app.generations.universal_engine import run_generation, KIEJobFailed
         from app.generations.telegram_sender import send_job_result
         from app.kie_catalog import get_model
 
@@ -13237,6 +13243,37 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             duration_ms=int((time.time() - start_time) * 1000),
         )
         return ConversationHandler.END
+    except KIEJobFailed as exc:
+        logger.error(f"❌ Generation failed: {exc}", exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GEN_ERROR",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code=exc.fail_code or "KIE_FAIL_STATE",
+            fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
+            param={"fail_code": exc.fail_code, "fail_msg": exc.fail_msg},
+        )
+        details_lines = []
+        if exc.fail_msg:
+            details_lines.append(f"Причина: {exc.fail_msg}")
+        if exc.fail_code:
+            details_lines.append(f"Код: {exc.fail_code}")
+        fail_details = "\n".join(details_lines)
+        if fail_details:
+            fail_details = f"{fail_details}\n"
+        await send_or_edit_message(
+            (
+                "❌ <b>Ошибка генерации</b>\n\n"
+                f"{fail_details}"
+                f"ID: {correlation_id}"
+            ),
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
         log_structured_event(
@@ -13251,7 +13288,11 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
         )
         await send_or_edit_message(
-            "❌ <b>Ошибка генерации</b>\n\nПожалуйста, попробуйте позже.",
+            (
+                "❌ <b>Ошибка генерации</b>\n\n"
+                "Пожалуйста, попробуйте позже.\n"
+                f"ID: {correlation_id}"
+            ),
             parse_mode='HTML'
         )
         return ConversationHandler.END

@@ -1,5 +1,39 @@
 # TRT_REPORT.md
 
+## 2026-01-19: P0/P1 hardening — webhook, KIE gating, media delivery, credits UX
+**Было (P0/P1):**
+- Webhook падал с 500 из‑за попыток обращаться к `correlation_id` на `telegram.Update` (slots), без гарантированного fallback‑ответа пользователю.
+- KIE stub включался в проде по умолчанию, если не задан `ALLOW_REAL_GENERATION`/`KIE_ALLOW_REAL`.
+- Telegram отдавал `Wrong type of the web page content` при отправке медиа по URL (часть моделей ломала доставку).
+- KIE credits ходил на `/api/v1/account/balance` и получал 404 без явного UX‑сообщения.
+- Ошибки `state=fail` не показывали `failCode/failMsg` в логах и сообщениях, стадийные логи не фиксировали duration для create/poll/parse/send.
+
+**Стало:**
+- Webhook логирует correlation_id через contextvars, не мутирует Update и всегда ACK=200; при ошибке обработчика отправляется fallback‑сообщение пользователю.
+- Реальный KIE включается по умолчанию, если есть `KIE_API_KEY` и нет `TEST_MODE`/`KIE_STUB=1`; stub только по явному флагу.
+- Telegram sender выбирает метод доставки по `ModelSpec.output_media_type`, делает URL→download fallback с content‑type guard, media‑group и size‑guard.
+- KIE credits переехал на `/api/v1/chat/credit`, при 404 показывает “Баланс KIE недоступен (endpoint 404)” и пишет structured warning.
+- Ошибки `state=fail` включают `failCode/failMsg` в structured logs и тексте пользователю; стадии create/poll/parse/send фиксируют duration.
+
+**Root cause:**
+- Ошибка корреляции в webhook и fallback‑обработка, неверные defaults по stub, слабый медиа‑детектор и устаревший endpoint balance.
+
+**Файлы изменены:**
+- `main_render.py`, `app/generations/telegram_sender.py`, `app/generations/universal_engine.py`, `app/integrations/kie_stub.py`
+- `app/kie/kie_client.py`, `bot_kie.py`, `helpers.py`, `.dockerignore`
+- `tests/test_webhook_handler_smoke.py`, `tests/test_kie_stub_env_logic.py`, `tests/test_telegram_sender_media.py`
+- `TRT_REPORT.md`
+
+**Как проверил:**
+- `python scripts/verify_project.py`
+- `pytest -q`
+
+**Как проверить вручную (Telegram):**
+1. `/start` → выбрать модель → отправить промпт → убедиться, что медиа доставляется корректным типом (фото/видео/аудио).
+2. Админ → “Панель администратора” → убедиться, что баланс KIE отображается или “Баланс KIE недоступен (endpoint 404)”.
+3. Спровоцировать ошибку генерации (например, некорректные параметры) → увидеть `failCode/failMsg` и correlation_id в сообщении.
+4. Проверить webhook‑режим: отправить update и убедиться, что ответ всегда 200 и пользователь получает fallback при ошибке.
+
 ## 2026-01-19: P0/P1 fixes — balance, payment flow, session reset
 **Было:**
 - Кнопка “Баланс” падала при отсутствии `get_credits()` у KIE клиента.

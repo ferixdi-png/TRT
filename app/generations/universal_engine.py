@@ -38,6 +38,23 @@ class KIEResultError(RuntimeError):
         self.raw_keys = raw_keys or []
 
 
+class KIEJobFailed(RuntimeError):
+    """Raised when KIE task completes with fail state."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        fail_code: Optional[str],
+        fail_msg: Optional[str],
+        correlation_id: Optional[str],
+    ) -> None:
+        super().__init__(message)
+        self.fail_code = fail_code
+        self.fail_msg = fail_msg
+        self.correlation_id = correlation_id
+
+
 def _parse_result_json(raw_value: Any) -> Dict[str, Any]:
     if raw_value is None:
         return {}
@@ -94,6 +111,7 @@ def parse_record_info(
     media_type: str,
     model_id: str,
     correlation_id: Optional[str] = None,
+    duration_ms: Optional[int] = None,
 ) -> JobResult:
     result_json = _parse_result_json(record.get("resultJson"))
     urls = _extract_urls(record, result_json)
@@ -127,9 +145,11 @@ def parse_record_info(
             action="KIE_PARSE",
             action_path="universal_engine.parse_record_info",
             model_id=model_id,
+            stage="KIE_PARSE",
             outcome="failed",
             error_code="KIE_RESULT_EMPTY",
             fix_hint=fix_hint,
+            duration_ms=duration_ms,
         )
         raise KIEResultError(
             "KIE_RESULT_EMPTY",
@@ -145,9 +165,11 @@ def parse_record_info(
             action="KIE_PARSE",
             action_path="universal_engine.parse_record_info",
             model_id=model_id,
+            stage="KIE_PARSE",
             outcome="failed",
             error_code="KIE_RESULT_EMPTY_TEXT",
             fix_hint=fix_hint,
+            duration_ms=duration_ms,
         )
         raise KIEResultError(
             "KIE_RESULT_EMPTY_TEXT",
@@ -181,7 +203,9 @@ def parse_record_info(
             action="KIE_PARSE",
             action_path="universal_engine.parse_record_info",
             model_id=model_id,
+            stage="KIE_PARSE",
             outcome="success",
+            duration_ms=duration_ms,
         )
     return job_result
 
@@ -213,12 +237,25 @@ async def run_generation(
         client: Any = get_kie_client_or_stub()
     except Exception:
         client = KIEClient()
+    create_start = time.monotonic()
     create_fn = getattr(client, "create_task", None)
     if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
         created = await client.create_task(spec.kie_model, payload["input"], correlation_id=correlation_id)
     else:
         created = await client.create_task(spec.kie_model, payload["input"])
+    create_duration_ms = int((time.monotonic() - create_start) * 1000)
     if not created.get("ok"):
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_CREATE",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            stage="KIE_CREATE",
+            outcome="failed",
+            error_code="KIE_CREATE_FAILED",
+            duration_ms=create_duration_ms,
+        )
         raise RuntimeError(created.get("error", "create_task_failed"))
     task_id = created.get("taskId")
     log_structured_event(
@@ -227,11 +264,14 @@ async def run_generation(
         action="KIE_CREATE",
         action_path="universal_engine.run_generation",
         model_id=model_id,
+        stage="KIE_CREATE",
         outcome="created",
+        duration_ms=create_duration_ms,
     )
     if progress_callback:
         await progress_callback({"stage": "KIE_CREATE", "task_id": task_id})
 
+    poll_start = time.monotonic()
     start_time = time.time()
     wait_fn = getattr(client, "wait_for_task", None)
     if wait_fn and "correlation_id" in inspect.signature(wait_fn).parameters:
@@ -246,6 +286,7 @@ async def run_generation(
     record["taskId"] = task_id
     record["elapsed"] = time.time() - start_time
     state = record.get("state")
+    poll_duration_ms = int((time.monotonic() - poll_start) * 1000)
     if correlation_id:
         trace_event(
             "info",
@@ -260,15 +301,19 @@ async def run_generation(
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
-        action="KIE_DONE",
+        action="KIE_POLL",
         action_path="universal_engine.run_generation",
         model_id=model_id,
+        stage="KIE_POLL",
         outcome=state,
-        duration_ms=int(record.get("elapsed", 0) * 1000),
+        duration_ms=poll_duration_ms,
+        param={"task_id": task_id},
     )
     if progress_callback:
         await progress_callback({"stage": "KIE_DONE", "task_id": task_id, "state": state})
     if state not in {"success", "completed"}:
+        fail_code = record.get("failCode")
+        fail_msg = record.get("failMsg") or record.get("errorMessage")
         if correlation_id:
             trace_event(
                 "info",
@@ -278,10 +323,61 @@ async def run_generation(
                 action="KIE_POLL",
                 task_id=task_id,
                 state=state,
-                fail_code=record.get("failCode"),
-                fail_msg=record.get("failMsg"),
+                fail_code=fail_code,
+                fail_msg=fail_msg,
                 parse_result="failed",
             )
-        raise RuntimeError(record.get("failMsg") or record.get("errorMessage") or "Task failed")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_POLL",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            stage="KIE_POLL",
+            outcome="failed",
+            duration_ms=poll_duration_ms,
+            error_code=fail_code or "KIE_FAIL_STATE",
+            fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
+            param={"fail_code": fail_code, "fail_msg": fail_msg},
+        )
+        error_text = fail_msg or "Task failed"
+        if fail_code:
+            error_text = f"{error_text} (code: {fail_code})"
+        raise KIEJobFailed(
+            error_text,
+            fail_code=fail_code,
+            fail_msg=fail_msg,
+            correlation_id=correlation_id,
+        )
 
-    return parse_record_info(record, spec.output_media_type, model_id, correlation_id=correlation_id)
+    parse_start = time.monotonic()
+    try:
+        result = parse_record_info(
+            record,
+            spec.output_media_type,
+            model_id,
+            correlation_id=correlation_id,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_PARSE",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            stage="KIE_PARSE",
+            outcome="success",
+            duration_ms=int((time.monotonic() - parse_start) * 1000),
+        )
+        return result
+    except Exception:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_PARSE",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            stage="KIE_PARSE",
+            outcome="failed",
+            duration_ms=int((time.monotonic() - parse_start) * 1000),
+        )
+        raise

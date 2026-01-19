@@ -65,7 +65,12 @@ def parse_result(
 ) -> JobResult:
     media_type = _get_media_type(model_meta)
     model_id = model_meta.id if isinstance(model_meta, ModelSpec) else model_meta.get("id", "unknown")
-    return parse_record_info(record, media_type, model_id, correlation_id=correlation_id)
+    return parse_record_info(
+        record,
+        media_type,
+        model_id,
+        correlation_id=correlation_id,
+    )
 
 
 async def send_result_to_user(
