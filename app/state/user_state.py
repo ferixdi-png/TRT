@@ -70,6 +70,31 @@ def get_is_admin(user_id: int) -> bool:
     return get_is_admin_service(user_id)
 
 
+async def get_user_free_generations_remaining_async(user_id: int) -> int:
+    """Получить оставшиеся бесплатные генерации (async)"""
+    return await get_user_free_generations_remaining_service(user_id)
+
+
+async def has_claimed_gift_async(user_id: int) -> bool:
+    """Проверить получение подарка (async)"""
+    return await has_claimed_gift_service(user_id)
+
+
+async def get_admin_limit_async(user_id: int) -> float:
+    """Получить лимит админа (async)"""
+    return await get_admin_limit_service(user_id)
+
+
+async def get_admin_spent_async(user_id: int) -> float:
+    """Получить потраченную сумму админа (async)"""
+    return await get_admin_spent_service(user_id)
+
+
+async def get_admin_remaining_async(user_id: int) -> float:
+    """Получить оставшийся лимит админа (async)"""
+    return await get_admin_remaining_service(user_id)
+
+
 # ==================== Синхронные версии (для обратной совместимости) ====================
 
 def get_user_balance(user_id: int) -> float:

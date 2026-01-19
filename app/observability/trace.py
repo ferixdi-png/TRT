@@ -128,58 +128,66 @@ def _sanitize_fields(fields: Dict[str, Any]) -> Dict[str, Any]:
     return sanitized
 
 
-def trace_event(level: str, correlation_id: str, **fields: Any) -> None:
+def trace_event(level: str, correlation_id: str, stage: Optional[str] = None, **fields: Any) -> None:
     """Emit a structured trace event."""
-    trace_verbose = _get_env_flag("TRACE_VERBOSE", "false")
-    trace_payloads = _get_env_flag("TRACE_PAYLOADS", "false")
-    trace_pricing = _get_env_flag("TRACE_PRICING", "false")
-    log_level = _get_log_level(os.getenv("LOG_LEVEL", "INFO"))
-    desired_level = _get_log_level(level)
-    if desired_level < log_level:
-        return
+    try:
+        trace_verbose = _get_env_flag("TRACE_VERBOSE", "false")
+        trace_payloads = _get_env_flag("TRACE_PAYLOADS", "false")
+        trace_pricing = _get_env_flag("TRACE_PRICING", "false")
+        log_level = _get_log_level(os.getenv("LOG_LEVEL", "INFO"))
+        desired_level = _get_log_level(level)
+        if desired_level < log_level:
+            return
 
-    always_fields = set(fields.pop("always_fields", []))
-    base_fields: Dict[str, Any] = {
-        "correlation_id": correlation_id,
-        "event": fields.get("event"),
-        "stage": fields.get("stage"),
-        "duration_ms": fields.get("duration_ms"),
-        "update_type": fields.get("update_type"),
-        "action": fields.get("action"),
-        "action_path": fields.get("action_path"),
-        "outcome": fields.get("outcome"),
-    }
+        if stage is None:
+            stage = fields.pop("stage", None)
+        else:
+            fields.pop("stage", None)
 
-    extra_fields = {k: v for k, v in fields.items() if k not in base_fields}
-    if not trace_payloads:
-        payload_keys = {
-            "payload",
-            "input",
-            "params",
-            "result",
-            "result_json",
-            "raw_response",
-            "response_payload",
+        always_fields = set(fields.pop("always_fields", []))
+        base_fields: Dict[str, Any] = {
+            "correlation_id": correlation_id,
+            "event": fields.get("event"),
+            "stage": stage,
+            "duration_ms": fields.get("duration_ms"),
+            "update_type": fields.get("update_type"),
+            "action": fields.get("action"),
+            "action_path": fields.get("action_path"),
+            "outcome": fields.get("outcome"),
         }
-        extra_fields = {
-            k: v
-            for k, v in extra_fields.items()
-            if k not in payload_keys and "payload" not in k.lower()
-        }
-    if not trace_pricing:
-        extra_fields = {
-            k: v
-            for k, v in extra_fields.items()
-            if all(token not in k.lower() for token in ("price", "pricing", "credits", "official_usd"))
-        }
-    payload = base_fields
-    if trace_verbose:
-        payload.update(extra_fields)
-    elif always_fields:
-        payload.update({k: v for k, v in extra_fields.items() if k in always_fields})
-    payload = _sanitize_fields(payload)
 
-    logger.log(desired_level, "TRACE %s", json.dumps(payload, ensure_ascii=False, default=str))
+        extra_fields = {k: v for k, v in fields.items() if k not in base_fields}
+        if not trace_payloads:
+            payload_keys = {
+                "payload",
+                "input",
+                "params",
+                "result",
+                "result_json",
+                "raw_response",
+                "response_payload",
+            }
+            extra_fields = {
+                k: v
+                for k, v in extra_fields.items()
+                if k not in payload_keys and "payload" not in k.lower()
+            }
+        if not trace_pricing:
+            extra_fields = {
+                k: v
+                for k, v in extra_fields.items()
+                if all(token not in k.lower() for token in ("price", "pricing", "credits", "official_usd"))
+            }
+        payload = base_fields
+        if trace_verbose:
+            payload.update(extra_fields)
+        elif always_fields:
+            payload.update({k: v for k, v in extra_fields.items() if k in always_fields})
+        payload = _sanitize_fields(payload)
+
+        logger.log(desired_level, "TRACE %s", json.dumps(payload, ensure_ascii=False, default=str))
+    except Exception as exc:
+        logger.warning("TRACE_EVENT_FAILED error=%s", exc, exc_info=True)
 
 
 def trace_error(
