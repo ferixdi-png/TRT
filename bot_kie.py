@@ -96,6 +96,7 @@ KNOWN_CALLBACK_EXACT = {
     "tutorial_start",
     "tutorial_complete",
     "confirm_generate",
+    "show_parameters",
     "reset_wizard",
     "cancel",
     "back_to_previous_step",
