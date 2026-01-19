@@ -24,12 +24,13 @@ async def test_optional_enum_shows_skip_button():
                 "enum": ["a", "b"],
             }
         },
-        "required": ["style"],
+        "required": [],
+        "skipped_params": set(),
         "params": {},
     }
 
     try:
-        await bot_kie.start_next_parameter(update, context, user_id)
+        await bot_kie.prompt_for_specific_param(update, context, user_id, "style", source="test")
         message = harness.outbox.get_last_message()
         keyboard = message["reply_markup"].inline_keyboard
         buttons = [button.text for row in keyboard for button in row]
@@ -56,12 +57,13 @@ async def test_optional_text_shows_skip_button():
                 "required": False,
             }
         },
-        "required": ["note"],
+        "required": [],
+        "skipped_params": set(),
         "params": {},
     }
 
     try:
-        await bot_kie.start_next_parameter(update, context, user_id)
+        await bot_kie.prompt_for_specific_param(update, context, user_id, "note", source="test")
         message = harness.outbox.get_last_message()
         keyboard = message["reply_markup"].inline_keyboard
         buttons = [button.text for row in keyboard for button in row]
@@ -88,12 +90,13 @@ async def test_optional_boolean_shows_skip_button():
                 "required": False,
             }
         },
-        "required": ["flag"],
+        "required": [],
+        "skipped_params": set(),
         "params": {},
     }
 
     try:
-        await bot_kie.start_next_parameter(update, context, user_id)
+        await bot_kie.prompt_for_specific_param(update, context, user_id, "flag", source="test")
         message = harness.outbox.get_last_message()
         keyboard = message["reply_markup"].inline_keyboard
         buttons = [button.text for row in keyboard for button in row]

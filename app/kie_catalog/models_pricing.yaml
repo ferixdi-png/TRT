@@ -85,16 +85,26 @@ models:
 - id: bytedance/seedream
   title_ru: Seedream 3.0 Text to Image
   type: t2i
+  description_ru: Генерация изображений по текстовому описанию (Seedream 3.0).
+  required_inputs_ru:
+  - Текст запроса
+  output_type_ru: Изображение
   modes:
   - unit: image
     credits: 3.5
     official_usd: 0.0175
+    title_ru: Стандартный
+    short_hint_ru: Базовое качество
   - unit: image
     credits: 5.0
     official_usd: 0.025
+    title_ru: Высокое качество
+    short_hint_ru: Детализация выше
   - unit: image
     credits: 5.0
     official_usd: 0.025
+    title_ru: Быстрый
+    short_hint_ru: Ускоренная генерация
 - id: bytedance/seedream-v4-text-to-image
   title_ru: Seedream V4 Text to Image
   type: t2i

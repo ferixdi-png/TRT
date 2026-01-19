@@ -119,6 +119,18 @@ async def deliver_result(
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
                 param={"tg_method": "send_message", "media_type": "text"},
             )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="RESULT_DELIVERED",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="success",
+                param={"media_type": media_type, "tg_method": "send_message"},
+            )
         except Exception as exc:
             log_structured_event(
                 correlation_id=correlation_id,
@@ -159,6 +171,18 @@ async def deliver_result(
                 outcome="success",
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
                 param={"tg_method": tg_method, "media_type": media_type},
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="RESULT_DELIVERED",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="success",
+                param={"media_type": media_type, "tg_method": tg_method},
             )
         except Exception as exc:
             log_structured_event(
