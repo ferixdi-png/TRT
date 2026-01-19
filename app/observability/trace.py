@@ -11,6 +11,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from app.observability.context import get_context_fields
+
 logger = logging.getLogger(__name__)
 _correlation_id_var: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 
@@ -145,12 +147,16 @@ def trace_event(level: str, correlation_id: str, stage: Optional[str] = None, **
             fields.pop("stage", None)
 
         always_fields = set(fields.pop("always_fields", []))
+        context_fields = get_context_fields()
         base_fields: Dict[str, Any] = {
             "correlation_id": correlation_id,
             "event": fields.get("event"),
             "stage": stage,
             "duration_ms": fields.get("duration_ms"),
-            "update_type": fields.get("update_type"),
+            "update_id": fields.get("update_id") or context_fields.get("update_id"),
+            "user_id": fields.get("user_id") or context_fields.get("user_id"),
+            "chat_id": fields.get("chat_id") or context_fields.get("chat_id"),
+            "update_type": fields.get("update_type") or context_fields.get("update_type"),
             "action": fields.get("action"),
             "action_path": fields.get("action_path"),
             "outcome": fields.get("outcome"),
@@ -199,6 +205,7 @@ def trace_error(
 ) -> None:
     """Emit a structured error trace entry."""
     debug_enabled = _get_env_flag("TRACE_VERBOSE", "false") or _get_log_level(os.getenv("LOG_LEVEL", "INFO")) <= logging.DEBUG
+    context_fields = get_context_fields()
     payload = {
         "correlation_id": correlation_id,
         "event": "ERROR",
@@ -206,6 +213,9 @@ def trace_error(
         "fix_hint": fix_hint,
         "error_type": type(exc).__name__,
         "error_message": str(exc),
+        "update_id": fields.get("update_id") or context_fields.get("update_id"),
+        "user_id": fields.get("user_id") or context_fields.get("user_id"),
+        "chat_id": fields.get("chat_id") or context_fields.get("chat_id"),
     }
     payload.update(fields)
     if debug_enabled:

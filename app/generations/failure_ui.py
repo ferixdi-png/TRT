@@ -8,6 +8,7 @@ def build_kie_fail_ui(correlation_id: str, model_id: str) -> tuple[str, InlineKe
     text = (
         "❌ <b>Генерация не завершилась (KIE)</b>\n\n"
         f"correlation_id={correlation_id}\n"
+        "Код: ERR_KIE_FAIL\n"
         "Нажмите Повторить или вернитесь в меню."
     )
     keyboard = InlineKeyboardMarkup(

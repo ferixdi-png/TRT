@@ -34,11 +34,7 @@ settings:
   usd_to_rub: 77.83  # 1 USD = 77.83 RUB
   markup_multiplier: 2.0  # Multiplier for regular users (admins use 1.0)
 free_tools:
-  model_ids:
-    - elevenlabs/audio-isolation
-    - elevenlabs/sound-effect
-    - suno/v5
-    - recraft/crisp-upscale
-    - z-image
+  # model_ids are computed dynamically from the pricing catalog (5 cheapest non-audio models)
+  model_ids: []
   base_per_hour: 5
   referral_bonus: 10

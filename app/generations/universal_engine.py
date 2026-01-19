@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import inspect
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -242,6 +243,15 @@ async def run_generation(
 
         client = get_kie_client()
     create_start = time.monotonic()
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        action="KIE_SUBMIT",
+        action_path="universal_engine.run_generation",
+        model_id=model_id,
+        stage="KIE_SUBMIT",
+        outcome="start",
+    )
     create_fn = getattr(client, "create_task", None)
     if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
         created = await client.create_task(spec.kie_model, payload["input"], correlation_id=correlation_id)
@@ -252,10 +262,10 @@ async def run_generation(
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
-            action="KIE_CREATE",
+            action="KIE_SUBMIT",
             action_path="universal_engine.run_generation",
             model_id=model_id,
-            stage="KIE_CREATE",
+            stage="KIE_SUBMIT",
             outcome="failed",
             error_code="KIE_CREATE_FAILED",
             duration_ms=create_duration_ms,
@@ -265,10 +275,10 @@ async def run_generation(
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
-        action="KIE_CREATE",
+        action="KIE_SUBMIT",
         action_path="universal_engine.run_generation",
         model_id=model_id,
-        stage="KIE_CREATE",
+        stage="KIE_SUBMIT",
         outcome="created",
         duration_ms=create_duration_ms,
     )
@@ -276,20 +286,80 @@ async def run_generation(
         await progress_callback({"stage": "KIE_CREATE", "task_id": task_id})
 
     poll_start = time.monotonic()
-    start_time = time.time()
-    wait_fn = getattr(client, "wait_for_task", None)
-    if wait_fn and "correlation_id" in inspect.signature(wait_fn).parameters:
-        record = await client.wait_for_task(
-            task_id,
-            timeout=timeout,
-            poll_interval=poll_interval,
+    attempt = 0
+    poll_delay = poll_interval
+    max_poll_delay = max(poll_interval, 12)
+    progress_interval = 25
+    next_progress_at = poll_start + progress_interval
+    get_status_fn = getattr(client, "get_task_status", None)
+    record: Dict[str, Any] = {}
+    state = None
+    while True:
+        elapsed = time.monotonic() - poll_start
+        if elapsed > timeout:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_POLL",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                stage="KIE_POLL",
+                outcome="timeout",
+                duration_ms=int(elapsed * 1000),
+                error_code="ERR_KIE_TIMEOUT",
+                fix_hint=ERROR_CATALOG.get("KIE_TIMEOUT"),
+                param={"task_id": task_id, "attempt": attempt, "elapsed": round(elapsed, 3)},
+            )
+            raise TimeoutError("ERR_KIE_TIMEOUT")
+
+        attempt += 1
+        if get_status_fn:
+            if "correlation_id" in inspect.signature(get_status_fn).parameters:
+                record = await client.get_task_status(task_id, correlation_id=correlation_id)
+            else:
+                record = await client.get_task_status(task_id)
+        else:
+            wait_fn = getattr(client, "wait_for_task", None)
+            if wait_fn and "correlation_id" in inspect.signature(wait_fn).parameters:
+                record = await client.wait_for_task(
+                    task_id,
+                    timeout=timeout,
+                    poll_interval=poll_interval,
+                    correlation_id=correlation_id,
+                )
+            else:
+                record = await client.wait_for_task(task_id, timeout=timeout, poll_interval=poll_interval)
+
+        record["taskId"] = task_id
+        record["elapsed"] = elapsed
+        state = record.get("state")
+        log_structured_event(
             correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_POLL",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            stage="KIE_POLL",
+            outcome=state,
+            duration_ms=int(elapsed * 1000),
+            param={"task_id": task_id, "attempt": attempt, "elapsed": round(elapsed, 3), "poll_delay": poll_delay},
         )
-    else:
-        record = await client.wait_for_task(task_id, timeout=timeout, poll_interval=poll_interval)
-    record["taskId"] = task_id
-    record["elapsed"] = time.time() - start_time
-    state = record.get("state")
+        if progress_callback and elapsed >= next_progress_at:
+            await progress_callback(
+                {"stage": "KIE_POLL", "task_id": task_id, "state": state, "attempt": attempt, "elapsed": elapsed}
+            )
+            next_progress_at = time.monotonic() + progress_interval
+
+        if record.get("ok") is False:
+            await asyncio.sleep(poll_delay)
+            poll_delay = min(max_poll_delay, poll_delay * 1.5)
+            continue
+        if state in {"success", "completed", "failed"}:
+            break
+
+        await asyncio.sleep(poll_delay)
+        poll_delay = min(max_poll_delay, poll_delay * 1.5)
+
     poll_duration_ms = int((time.monotonic() - poll_start) * 1000)
     if correlation_id:
         trace_event(
@@ -302,17 +372,6 @@ async def run_generation(
             state=state,
             elapsed=record.get("elapsed"),
         )
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        action="KIE_POLL",
-        action_path="universal_engine.run_generation",
-        model_id=model_id,
-        stage="KIE_POLL",
-        outcome=state,
-        duration_ms=poll_duration_ms,
-        param={"task_id": task_id},
-    )
     if progress_callback:
         await progress_callback({"stage": "KIE_DONE", "task_id": task_id, "state": state})
     if state not in {"success", "completed"}:

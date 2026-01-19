@@ -85,7 +85,7 @@ def _init_imports():
             _get_usd_to_rub_rate = _get_usd_to_rub_rate_func
         except ImportError:
             def _default_rate():
-                return 77.22
+                return 77.83
             _get_usd_to_rub_rate = _default_rate
             logger.warning("⚠️ app.services.payments_service not found, using default rate")
 
@@ -105,7 +105,6 @@ async def build_main_menu_keyboard(
         [InlineKeyboardButton("Из фото в фото", callback_data="gen_type:image-to-image")],
         [InlineKeyboardButton("Из текста в видео", callback_data="gen_type:text-to-video")],
         [InlineKeyboardButton("Из фото в видео", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("Фото редактор", callback_data="gen_type:image-edit")],
         [InlineKeyboardButton("Баланс", callback_data="check_balance")],
         [InlineKeyboardButton("Партнерка", callback_data="referral_info")],
     ]
