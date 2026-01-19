@@ -1,3 +1,24 @@
+## 2026-02-09: No-silence SSOT + Render handler registration
+**Причина (root cause):**
+- В webhook-пути Render при fallback на `app.bootstrap.create_application` не регистрировались `ConversationHandler`/message handlers, поэтому после выбора модели текстовые сообщения не попадали в обработчики. 
+- Состояние сессии (`waiting_for/current_param`) велось в глобальном словаре без единого слоя доступа/логов, что мешало диагностике и маршрутизации. 
+
+**Было → стало (ключевые изменения):**
+- **Session SSOT:** глобальный `user_sessions` → `SessionStore` с логами `SESSION_GET/SET/MISS`, единый источник данных через `DependencyContainer`. 
+- **Handler registration:** в `main_render.py` bootstrap-путь теперь регистрирует handlers через `_register_all_handlers_internal`, чтобы `ConversationHandler` и message handlers всегда активны. 
+- **No-silence fallback:** добавлен финальный обработчик `unhandled_update_fallback` для TEXT/PHOTO/AUDIO/DOCUMENT с `UNHANDLED_UPDATE` логами и кнопкой “Reset step”. 
+- **UX:** при запросе параметров теперь всегда отображается free counter + “Reset step” в клавиатурах. 
+
+**Затронутые файлы:**
+- `app/session_store.py`, `app/bootstrap.py`
+- `bot_kie.py`, `main_render.py`
+- `tests/test_no_silence_prompt_flow.py`
+
+**Проверка (команды):**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python scripts/verify_button_coverage.py`
+
 ## 2026-02-08: Production-ready no-lock webhook + анти-мусор URL + no-silence
 **Было → стало (ключевые изменения):**
 - **Webhook без БД:** при `BOT_MODE=webhook` без `DATABASE_URL` требовался DB lock. **Стало:** разрешён старт при `STORAGE_MODE=github` или `DISABLE_DB_LOCKS=1` с “no-lock mode” и `LOCK_DISABLED_NO_DB`. 

@@ -2362,6 +2362,7 @@ async def build_application(settings):
 
 
         create_bot_application = None
+        needs_handler_registration = False
 
 
 
@@ -2490,6 +2491,7 @@ async def build_application(settings):
 
 
                 logger.info("[BUILD] Using app.bootstrap.create_application")
+                needs_handler_registration = True
 
 
 
@@ -2938,6 +2940,14 @@ async def build_application(settings):
 
 
         _application = await create_bot_application(settings)
+
+        if needs_handler_registration:
+            try:
+                from bot_kie import _register_all_handlers_internal
+            except ImportError as handler_import_error:
+                logger.error("[BUILD] Failed to import handler registration: %s", handler_import_error)
+                raise
+            await _register_all_handlers_internal(_application)
 
 
 
