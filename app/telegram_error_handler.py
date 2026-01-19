@@ -9,13 +9,15 @@ import logging
 from pathlib import Path
 from typing import Callable, Awaitable, Optional
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import Conflict as TelegramConflict
 from telegram.ext import Application, ContextTypes
 
 from app.bot_mode import handle_conflict_gracefully
 from app.observability.error_guard import ErrorGuard
+from app.observability.error_catalog import ERROR_CATALOG
 from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+from app.observability.trace import ensure_correlation_id, trace_error, trace_event
 from app.services.user_service import get_user_language as get_user_language_async
 from app.utils.singleton_lock import release_singleton_lock
 
@@ -23,6 +25,21 @@ logger = logging.getLogger(__name__)
 
 
 def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Awaitable[None]]:
+    def _map_error_code(error: BaseException, error_msg: str) -> str:
+        if isinstance(error, TelegramConflict) or "Conflict" in error_msg or "409" in error_msg:
+            return "INTERNAL_EXCEPTION"
+        if "KIE" in error_msg or "kie" in error_msg:
+            if "401" in error_msg or "unauthorized" in error_msg:
+                return "KIE_AUTH"
+            if "429" in error_msg or "rate" in error_msg:
+                return "KIE_RATE_LIMIT"
+            if "timeout" in error_msg:
+                return "KIE_TIMEOUT"
+            return "KIE_FAIL_STATE"
+        if "price" in error_msg or "pricing" in error_msg:
+            return "PRICING_NOT_FOUND"
+        return "INTERNAL_EXCEPTION"
+
     async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Global error handler for all exceptions in the bot.
@@ -32,6 +49,9 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
             error = context.error
             error_type = type(error).__name__
             error_msg = str(error)
+            correlation_id = ensure_correlation_id(update, context)
+            error_code = _map_error_code(error, error_msg)
+            fix_hint = ERROR_CATALOG.get(error_code, ERROR_CATALOG["INTERNAL_EXCEPTION"])
 
             logger.error("[ERROR_HANDLER] Called with error: %s: %s", error_type, error_msg[:200])
 
@@ -80,6 +100,13 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                 os._exit(0)
 
             logger.exception("❌❌❌ GLOBAL ERROR HANDLER: %s: %s", error_type, error_msg)
+            trace_error(
+                correlation_id,
+                error_code,
+                fix_hint,
+                error,
+                error_type=error_type,
+            )
 
             try:
                 project_root = Path(__file__).resolve().parents[1]
@@ -126,6 +153,16 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                     "chat_id": chat_id,
                 },
             )
+            trace_event(
+                "info",
+                correlation_id,
+                event="TRACE_IN",
+                stage="STATE_VALIDATE",
+                action="ERROR_HANDLER",
+                user_id=user_id,
+                chat_id=chat_id,
+                error_code=error_code,
+            )
 
             guard = get_no_silence_guard()
             update_id = update.update_id if isinstance(update, Update) else None
@@ -154,6 +191,9 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                         chat_id=chat_id,
                         text=error_text,
                         parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup(
+                            [[InlineKeyboardButton("🏠 Главное меню" if user_lang == "ru" else "🏠 Main menu", callback_data="back_to_menu")]]
+                        ),
                     )
                     if update_id:
                         track_outgoing_action(update_id)
