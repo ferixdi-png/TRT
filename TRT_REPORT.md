@@ -1368,3 +1368,36 @@ tests/test_409_conflict_fix.py ........
 2. **Video (t2v/i2v):** выбрать модель → пройти обязательные поля → получить `sendVideo`.  
 3. **Audio (tts/sfx):** выбрать модель → обязательные поля → получить `sendAudio`.  
 4. **Document/text:** выбрать модель с текстовым выводом → получить `sendMessage`/`sendDocument` и убедиться в корректном типе.  
+## 2026-02-10: KIE readiness gate + media required enforcement + integration smoke
+**Причина (root cause):**
+- В `confirm_generation` не было preflight-проверки готовности KIE (наличие KIE клиента и KIE_API_KEY), поэтому submit падал уже после старта UX-цепочки без отдельного `KIE_NOT_READY` лога и без понятной подсказки в чате.
+- Обязательные media-входы определялись строго по SSOT `required`, без принудительного требование для `image_edit/image_to_video/audio_*`, из-за чего wizard мог показывать confirm_screen без изображения/аудио и дальше получать 422 от KIE.
+- `reset_step` отсутствовал в `is_known_callback_data`, из‑за чего unknown fallback мог срабатывать после успешных действий.
+
+**Было → стало (ключевые изменения):**
+- **KIE readiness gate:** добавлена проверка готовности KIE до submit с `KIE_NOT_READY` логом, user-facing подсказкой и блокировкой “ложного старта”.
+- **Media required overrides:** image/video/audio/document inputs принудительно помечаются required для соответствующих типов моделей; confirm_generate возвращает на шаг ввода при отсутствии медиа и логирует `STATE_INVALID_MISSING_MEDIA`.
+- **Callback routing:** `reset_step` и медиа‑кнопки добавлены в `is_known_callback_data`, основной router помечает update как обработанный, unknown fallback не дублируется.
+- **Integration smoke:** добавлен отдельный stub-сценарий submit→poll→download→deliver (скрипт + pytest), чтобы ловить регрессии без реального KIE.
+- **Model card RU:** при выборе модели показывается единая карточка с RU‑описанием, списком required-входов, типом результата и строкой “как пользоваться”.
+
+**Затронутые файлы:**
+- `bot_kie.py`
+- `tests/test_required_media_flow.py`
+- `tests/test_delivery_routing.py`
+- `tests/test_integration_smoke_stub_pipeline.py`
+- `scripts/integration_smoke.py`
+
+**Проверка (команды):**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python scripts/verify_button_coverage.py`
+
+**Чеклист ручной проверки (Seedream + Recraft):**
+1. **Seedream 3.0:** выбрать модель → запрос текста → confirm screen → submit только при KIE readiness.
+2. **Recraft crisp-upscale:** выбрать модель → бот требует изображение → confirm невозможен без image_input.
+3. **Video модель:** выбрать модель → prompt обязателен, confirm после ввода.
+
+**Оставшиеся риски:**
+- Если KIE вернёт нестандартный output URL, доставка зависит от URL normalizer (см. прошлые фиксы).
+- Для моделей с неконсистентной SSOT схематикой потребуется ручная проверка required полей.
