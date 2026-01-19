@@ -71,6 +71,28 @@ async def get_free_generation_status(user_id: int) -> Dict[str, int]:
     }
 
 
+async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None) -> Dict[str, int]:
+    cfg = get_free_tools_config()
+    storage = get_storage()
+    usage = await storage.get_hourly_free_usage(user_id)
+    window_start = _parse_iso(usage.get("window_start_iso"))
+    used_count = int(usage.get("used_count", 0))
+    current_time = now or _now()
+    if not window_start or current_time - window_start >= timedelta(hours=1):
+        window_start = current_time
+        used_count = 0
+    limit_per_hour = int(cfg.base_per_hour)
+    remaining = max(0, limit_per_hour - used_count)
+    next_refill_in = max(0, int((window_start + timedelta(hours=1) - current_time).total_seconds()))
+    return {
+        "limit_per_hour": limit_per_hour,
+        "used_in_current_window": used_count,
+        "remaining": remaining,
+        "next_refill_in": next_refill_in,
+        "window_start_iso": window_start.isoformat(),
+    }
+
+
 async def check_and_consume_free_generation(user_id: int, model_id: str) -> Dict[str, object]:
     cfg = get_free_tools_config()
     if model_id not in cfg.model_ids:
