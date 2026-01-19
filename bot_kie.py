@@ -39,6 +39,8 @@ KNOWN_CALLBACK_PREFIXES = (
     "category:",
     "gen_type:",
     "select_model:",
+    "edit_param:",
+    "set_param:",
     "model:",
     "modelk:",
     "start:",
@@ -80,6 +82,7 @@ KNOWN_CALLBACK_EXACT = {
     "admin_settings",
     "admin_set_currency_rate",
     "back_to_menu",
+    "back_to_confirmation",
     "topup_balance",
     "topup_custom",
     "referral_info",
@@ -436,6 +439,9 @@ import time
 from asyncio import Lock
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# Shared HTTP client session (initialized lazily via get_http_client)
+_http_client: aiohttp.ClientSession | None = None
 
 # Ensure Python can find modules in the same directory (for Render compatibility)
 sys.path.insert(0, str(Path(__file__).parent))
@@ -2606,7 +2612,24 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
     for service in hosting_services:
         try:
             logger.info(f"Trying to upload to {service['url']}")
-            session = await get_http_client()
+            try:
+                session = await get_http_client()
+            except Exception as e:
+                log_structured_event(
+                    correlation_id=get_correlation_id(None, None),
+                    action="IMAGE_UPLOAD",
+                    action_path="image_upload>hosting",
+                    stage="image_upload",
+                    outcome="http_client_uninitialized",
+                    error_code="IMAGE_HOSTING_HTTP_CLIENT_NOT_INITIALIZED",
+                    fix_hint="declare_global_http_client_and_init_aiohttp_session",
+                )
+                logger.error(
+                    "HTTP client not initialized for image hosting upload: %s",
+                    e,
+                    exc_info=True,
+                )
+                return None
             if service['data_type'] == 'form':
                 data = aiohttp.FormData()
                 # Add extra params if needed
@@ -2661,6 +2684,81 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
     # If all services fail, return None
     logger.error("All image hosting services failed. Image size: {} bytes".format(len(image_data)))
     return None
+
+
+async def upload_image_to_kie_file_api(image_data: bytes, filename: str = "image.jpg") -> str:
+    """Upload image directly to KIE AI File Upload API and return fileUrl."""
+    api_key = os.getenv("KIE_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("KIE_API_KEY not set; skipping KIE file upload fallback.")
+        return None
+
+    base_url = os.getenv("KIE_FILE_UPLOAD_BASE_URL", "https://kieai.redpandaai.co").rstrip("/")
+    url = f"{base_url}/api/file-stream-upload"
+
+    try:
+        session = await get_http_client()
+    except Exception as e:
+        log_structured_event(
+            correlation_id=get_correlation_id(None, None),
+            action="IMAGE_UPLOAD",
+            action_path="image_upload>kie_file_api",
+            stage="image_upload",
+            outcome="http_client_uninitialized",
+            error_code="IMAGE_HOSTING_HTTP_CLIENT_NOT_INITIALIZED",
+            fix_hint="declare_global_http_client_and_init_aiohttp_session",
+        )
+        logger.error("HTTP client not initialized for KIE file upload: %s", e, exc_info=True)
+        return None
+
+    data = aiohttp.FormData()
+    data.add_field(
+        "file",
+        BytesIO(image_data),
+        filename=filename,
+        content_type="image/jpeg",
+    )
+    data.add_field("uploadPath", "images")
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        async with session.post(url, data=data, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+            payload_text = await resp.text()
+            if resp.status not in {200, 201}:
+                logger.error(
+                    "KIE file upload failed: status=%s payload=%s",
+                    resp.status,
+                    payload_text[:200],
+                )
+                return None
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                logger.error("KIE file upload response is not JSON: %s", payload_text[:200])
+                return None
+            if not payload.get("success"):
+                logger.error("KIE file upload unsuccessful: %s", payload)
+                return None
+            file_url = payload.get("data", {}).get("fileUrl")
+            if not file_url:
+                logger.error("KIE file upload missing fileUrl: %s", payload)
+                return None
+            return file_url
+    except asyncio.TimeoutError:
+        logger.warning("Timeout uploading image to KIE file API.")
+        return None
+    except Exception as e:
+        logger.error("Exception uploading image to KIE file API: %s", e, exc_info=True)
+        return None
+
+
+async def upload_image_with_fallback(image_data: bytes, filename: str = "image.jpg") -> str:
+    """Try public hosting first, fall back to KIE file upload API."""
+    public_url = await upload_image_to_hosting(image_data, filename=filename)
+    if public_url:
+        return public_url
+    logger.warning("Public hosting unavailable; trying KIE file upload API fallback.")
+    return await upload_image_to_kie_file_api(image_data, filename=filename)
 
 
 MAIN_MENU_TEXT_FALLBACK = "Главное меню"
@@ -5468,191 +5566,196 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("set_param:"):
             # Handle parameter setting via button
             parts = data.split(":", 2)
-            if len(parts) == 3:
-                param_name = parts[1]
-                param_value = parts[2]
-                skip_param = False
-                
-                if user_id not in user_sessions:
-                    await query.edit_message_text("❌ Сессия не найдена.")
-                    return ConversationHandler.END
-                
-                session = user_sessions[user_id]
-                properties = session.get('properties', {})
-                param_info = properties.get(param_name, {})
-                param_type = param_info.get('type', 'string')
-                
-                # 🔴 ВАЛИДАЦИЯ ENUM ЗНАЧЕНИЙ: Проверяем, что значение находится в списке допустимых
-                enum_values = param_info.get('enum')
-                if enum_values and param_value not in enum_values and param_value not in {SKIP_PARAM_VALUE, "custom"}:
-                    # Недопустимое enum значение
+            if len(parts) != 3:
+                await query.answer("Ошибка: неверный формат параметра", show_alert=True)
+                return ConversationHandler.END
+
+            param_name = parts[1]
+            param_value = parts[2]
+            skip_param = False
+
+            if user_id not in user_sessions:
+                await query.edit_message_text("❌ Сессия не найдена.")
+                return ConversationHandler.END
+
+            session = user_sessions[user_id]
+            properties = session.get('properties', {})
+            param_info = properties.get(param_name, {})
+            param_type = param_info.get('type', 'string')
+
+            # 🔴 ВАЛИДАЦИЯ ENUM ЗНАЧЕНИЙ: Проверяем, что значение находится в списке допустимых
+            enum_values = param_info.get('enum')
+            if enum_values and param_value not in enum_values and param_value not in {SKIP_PARAM_VALUE, "custom"}:
+                # Недопустимое enum значение
+                user_lang = get_user_language(user_id) if user_id else 'ru'
+                error_text = (
+                    f"❌ <b>Недопустимое значение</b>\n\n"
+                    f"Допустимые значения: {', '.join(enum_values)}\n"
+                    f"Введено: {param_value}"
+                ) if user_lang == 'ru' else (
+                    f"❌ <b>Invalid value</b>\n\n"
+                    f"Allowed values: {', '.join(enum_values)}\n"
+                    f"Entered: {param_value}"
+                )
+                await query.answer(error_text, show_alert=True)
+                return ConversationHandler.END
+
+            if param_value == SKIP_PARAM_VALUE:
+                if param_info.get('required', False):
                     user_lang = get_user_language(user_id) if user_id else 'ru'
                     error_text = (
-                        f"❌ <b>Недопустимое значение</b>\n\n"
-                        f"Допустимые значения: {', '.join(enum_values)}\n"
-                        f"Введено: {param_value}"
-                    ) if user_lang == 'ru' else (
-                        f"❌ <b>Invalid value</b>\n\n"
-                        f"Allowed values: {', '.join(enum_values)}\n"
-                        f"Entered: {param_value}"
+                        "❌ Этот параметр обязателен и не может быть пропущен."
+                        if user_lang == 'ru'
+                        else "❌ This parameter is required and cannot be skipped."
                     )
                     await query.answer(error_text, show_alert=True)
-                    return ConversationHandler.END
-                
-                if param_value == SKIP_PARAM_VALUE:
-                    if param_info.get('required', False):
-                        user_lang = get_user_language(user_id) if user_id else 'ru'
-                        error_text = (
-                            "❌ Этот параметр обязателен и не может быть пропущен."
-                            if user_lang == 'ru'
-                            else "❌ This parameter is required and cannot be skipped."
-                        )
-                        await query.answer(error_text, show_alert=True)
-                        return INPUTTING_PARAMS
-                    if 'params' in session and param_name in session['params']:
-                        session['params'].pop(param_name, None)
-                    session['current_param'] = None
-                    session['waiting_for'] = None
-                    _record_param_history(session, param_name)
-                    skip_param = True
-                    await query.edit_message_text(f"⏭️ {param_name} пропущен.")
-                    try:
-                        next_param_result = await start_next_parameter(update, context, user_id)
-                        if next_param_result:
-                            return next_param_result
-                    except Exception as e:
-                        logger.error(f"Error starting next parameter after skip: {e}")
-                        await query.edit_message_text("❌ Ошибка при переходе к следующему параметру.")
-                        return INPUTTING_PARAMS
-
-                if param_value == "custom" and param_name == "language_code":
-                    session['current_param'] = param_name
-                    session['waiting_for'] = param_name
-                    session['language_code_custom'] = True
-                    await query.edit_message_text(
-                        "✏️ Введите код языка (например: en, ru, de, fr).",
-                    )
+                    return INPUTTING_PARAMS
+                if 'params' in session and param_name in session['params']:
+                    session['params'].pop(param_name, None)
+                session['current_param'] = None
+                session['waiting_for'] = None
+                _record_param_history(session, param_name)
+                skip_param = True
+                await query.edit_message_text(f"⏭️ {param_name} пропущен.")
+                try:
+                    next_param_result = await start_next_parameter(update, context, user_id)
+                    if next_param_result:
+                        return next_param_result
+                    return INPUTTING_PARAMS
+                except Exception as e:
+                    logger.error(f"Error starting next parameter after skip: {e}")
+                    await query.edit_message_text("❌ Ошибка при переходе к следующему параметру.")
                     return INPUTTING_PARAMS
 
-                # Convert boolean string to actual boolean
-                if param_type == 'boolean':
-                    if param_value.lower() == 'true':
-                        param_value = True
-                    elif param_value.lower() == 'false':
-                        param_value = False
-                    else:
-                        # Use default if invalid
-                        param_value = param_info.get('default', True)
-                
-                if 'params' not in session:
-                    session['params'] = {}
-                if not skip_param:
-                    session['params'][param_name] = param_value
-                    _record_param_history(session, param_name)
-                session['current_param'] = None
-                logger.info(
-                    "🧩 PARAM_SET: action_path=button_set_param model_id=%s waiting_for=%s current_param=%s outcome=%s",
-                    session.get('model_id'),
-                    session.get('waiting_for'),
-                    param_name,
-                    "skipped" if skip_param else "stored",
+            if param_value == "custom" and param_name == "language_code":
+                session['current_param'] = param_name
+                session['waiting_for'] = param_name
+                session['language_code_custom'] = True
+                await query.edit_message_text(
+                    "✏️ Введите код языка (например: en, ru, de, fr).",
                 )
-                
-                # Check if there are more parameters
-                required = session.get('required', [])
-                params = session.get('params', {})
-                missing = [p for p in required if p not in params]
-                
-                if missing:
-                    await query.edit_message_text(f"✅ {param_name} установлен: {param_value}")
-                    # Move to next parameter
-                    try:
-                        next_param_result = await start_next_parameter(update, context, user_id)
-                        if next_param_result:
-                            return next_param_result
-                    except Exception as e:
-                        logger.error(f"Error starting next parameter: {e}")
-                        await query.edit_message_text("❌ Ошибка при переходе к следующему параметру.")
-                        return INPUTTING_PARAMS
+                return INPUTTING_PARAMS
+
+            # Convert boolean string to actual boolean
+            if param_type == 'boolean':
+                if param_value.lower() == 'true':
+                    param_value = True
+                elif param_value.lower() == 'false':
+                    param_value = False
                 else:
-                    # All parameters collected
-                    session['waiting_for'] = None
-                    # Get model_id from session (CRITICAL: must be defined before use)
-                    model_id = session.get('model_id', '')
-                    if not model_id:
-                        logger.error(f"❌ model_id not found in session for user_id={user_id}")
-                        await query.edit_message_text("❌ Ошибка: модель не найдена в сессии.")
-                        return ConversationHandler.END
-                    
-                    model_name = session.get('model_info', {}).get('name', 'Unknown')
-                    params_text = "\n".join([f"  • {k}: {v}" for k, v in params.items()])
-                    
-                    user_lang = get_user_language(user_id)
-                    keyboard = [
-                        [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
-                        [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
-                        [
-                            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                        ],
-                        [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                    ]
-                    
-                    # Calculate price for confirmation message
-                    is_admin_user = get_is_admin(user_id)
-                    is_free = is_free_generation_available(user_id, model_id)
-                    price = calculate_price_rub(model_id, params, is_admin_user)
-                    if is_free:
-                        price = 0.0
-                    price_str = f"{price:.2f}".rstrip('0').rstrip('.')
-                    
-                    # Prepare price info
-                    if is_free:
-                        remaining = get_user_free_generations_remaining(user_id)
-                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
-                    else:
-                        price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
-                    
-                    # Format improved confirmation message with price
-                    if user_lang == 'ru':
-                        confirm_msg = (
-                            f"📋 <b>Подтверждение генерации</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Модель:</b> {model_name}\n\n"
-                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>Что будет дальше:</b>\n"
-                            f"• Генерация начнется после подтверждения\n"
-                            f"• Результат придет автоматически\n"
-                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-                            f"🚀 <b>Готовы начать?</b>"
-                        )
-                    else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
-                        confirm_msg = (
-                            f"📋 <b>Generation Confirmation</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Model:</b> {model_name}\n\n"
-                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info_en}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>What's next:</b>\n"
-                            f"• Generation will start after confirmation\n"
-                            f"• Result will come automatically\n"
-                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                            f"🚀 <b>Ready to start?</b>"
-                        )
-                    
-                    logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
-                    await query.edit_message_text(
-                        confirm_msg,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                    return CONFIRMING_GENERATION
+                    # Use default if invalid
+                    param_value = param_info.get('default', True)
+
+            if 'params' not in session:
+                session['params'] = {}
+            if not skip_param:
+                session['params'][param_name] = param_value
+                _record_param_history(session, param_name)
+            session['current_param'] = None
+            logger.info(
+                "🧩 PARAM_SET: action_path=button_set_param model_id=%s waiting_for=%s current_param=%s outcome=%s",
+                session.get('model_id'),
+                session.get('waiting_for'),
+                param_name,
+                "skipped" if skip_param else "stored",
+            )
+
+            # Check if there are more parameters
+            required = session.get('required', [])
+            params = session.get('params', {})
+            missing = [p for p in required if p not in params]
+
+            if missing:
+                await query.edit_message_text(f"✅ {param_name} установлен: {param_value}")
+                # Move to next parameter
+                try:
+                    next_param_result = await start_next_parameter(update, context, user_id)
+                    if next_param_result:
+                        return next_param_result
+                    return INPUTTING_PARAMS
+                except Exception as e:
+                    logger.error(f"Error starting next parameter: {e}")
+                    await query.edit_message_text("❌ Ошибка при переходе к следующему параметру.")
+                    return INPUTTING_PARAMS
+
+            # All parameters collected
+            session['waiting_for'] = None
+            # Get model_id from session (CRITICAL: must be defined before use)
+            model_id = session.get('model_id', '')
+            if not model_id:
+                logger.error(f"❌ model_id not found in session for user_id={user_id}")
+                await query.edit_message_text("❌ Ошибка: модель не найдена в сессии.")
+                return ConversationHandler.END
+
+            model_name = session.get('model_info', {}).get('name', 'Unknown')
+            params_text = "\n".join([f"  • {k}: {v}" for k, v in params.items()])
+
+            user_lang = get_user_language(user_id)
+            keyboard = [
+                [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
+                [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                ],
+                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            ]
+
+            # Calculate price for confirmation message
+            is_admin_user = get_is_admin(user_id)
+            is_free = is_free_generation_available(user_id, model_id)
+            price = calculate_price_rub(model_id, params, is_admin_user)
+            if is_free:
+                price = 0.0
+            price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+
+            # Prepare price info
+            if is_free:
+                remaining = get_user_free_generations_remaining(user_id)
+                price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+            else:
+                price_info = f"💰 <b>Стоимость:</b> {price_str} ₽"
+
+            # Format improved confirmation message with price
+            if user_lang == 'ru':
+                confirm_msg = (
+                    f"📋 <b>Подтверждение генерации</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n\n"
+                    f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"{price_info}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 <b>Что будет дальше:</b>\n"
+                    f"• Генерация начнется после подтверждения\n"
+                    f"• Результат придет автоматически\n"
+                    f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
+                    f"🚀 <b>Готовы начать?</b>"
+                )
+            else:
+                price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str} ₽"
+                confirm_msg = (
+                    f"📋 <b>Generation Confirmation</b>\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🤖 <b>Model:</b> {model_name}\n\n"
+                    f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"{price_info_en}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💡 <b>What's next:</b>\n"
+                    f"• Generation will start after confirmation\n"
+                    f"• Result will come automatically\n"
+                    f"• Usually takes from 10 seconds to 2 minutes\n\n"
+                    f"🚀 <b>Ready to start?</b>"
+                )
+
+            logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
+            await query.edit_message_text(
+                confirm_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return CONFIRMING_GENERATION
         
         # Handle back to previous step
         if data == "back_to_previous_step":
@@ -11030,7 +11133,10 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.debug(f"🔥🔥🔥 UPLOADING TO HOSTING: user_id={user_id}, filename=image_{user_id}_{photo.file_id[:8]}.jpg")
             # 🔴 API CALL: File Upload API - upload_image_to_hosting
             try:
-                public_url = await upload_image_to_hosting(image_data, filename=f"image_{user_id}_{photo.file_id[:8]}.jpg")
+                public_url = await upload_image_with_fallback(
+                    image_data,
+                    filename=f"image_{user_id}_{photo.file_id[:8]}.jpg",
+                )
             except Exception as e:
                 logger.error(f"❌❌❌ FILE UPLOAD API ERROR in upload_image_to_hosting (image): {e}", exc_info=True)
                 user_lang = get_user_language(user_id) if user_id else 'ru'
@@ -11052,10 +11158,25 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if not public_url:
                 logger.error(f"❌❌❌ IMAGE UPLOAD FAILED: user_id={user_id}, model_id={session.get('model_id', 'Unknown')}, file_size={len(image_data)} bytes, upload_image_to_hosting returned None")
+                try:
+                    log_structured_event(
+                        correlation_id=ensure_correlation_id(update, context),
+                        user_id=user_id,
+                        chat_id=update.effective_chat.id if update.effective_chat else None,
+                        update_id=update.update_id,
+                        action="IMAGE_UPLOAD",
+                        action_path="image_upload>fallback",
+                        stage="image_upload",
+                        outcome="upload_unavailable",
+                        error_code="IMAGE_HOSTING_HTTP_CLIENT_NOT_INITIALIZED",
+                        fix_hint="declare_global_http_client_and_init_aiohttp_session",
+                    )
+                except Exception as log_error:
+                    logger.warning("STRUCTURED_LOG image upload unavailable failed: %s", log_error, exc_info=True)
                 await update.message.reply_text(
-                    "❌ <b>Ошибка загрузки</b>\n\n"
-                    "Не удалось обработать изображение.\n"
-                    "Попробуйте еще раз или пропустите этот шаг.",
+                    "⚠️ <b>Аплоад временно недоступен</b>\n\n"
+                    "Не удалось загрузить изображение.\n"
+                    "Попробуйте еще раз позже или пропустите этот шаг.",
                     parse_mode='HTML'
                 )
                 return INPUTTING_PARAMS
