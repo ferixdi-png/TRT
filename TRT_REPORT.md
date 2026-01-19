@@ -1,3 +1,30 @@
+## 2026-02-03: P0/P1 hardening — trace outcome fix, image_edit adapter, throttling, upload resilience
+**Было → стало (ключевые изменения):**
+- **P0 (outgoing crash):** `track_outgoing_action` мог падать на двойном `outcome` в `trace_event`. **Стало:** `outcome` исключён из распаковки контекста + тест на безопасный вызов. 【F:app/observability/no_silence_guard.py†L63-L92】【F:tests/test_no_silence_guard_trace_context.py†L1-L32】
+- **P0 (image_edit 422):** `image_input` не конвертировался в KIE‑ожидаемое поле при SSOT→payload в `universal_engine`. **Стало:** добавлен строгий адаптер `image_input → image/image_url`, покрыт тестом для `recraft/remove-background`. 【F:app/kie_contract/image_adapter.py†L1-L38】【F:app/kie_contract/payload_builder.py†L1-L45】【F:kie_input_adapter.py†L186-L209】【F:tests/test_kie_payload_image_edit.py†L1-L12】
+- **P1 (anti‑spam):** не было централизованного throttle/dedup для обновлений/коллбеков. **Стало:** token‑bucket лимит на сообщения/коллбеки + TTL‑dedup по `update_id` и `callback_query.id` с UX “Too fast…” и кнопкой главного меню. 【F:app/middleware/rate_limit.py†L1-L68】【F:tests/test_rate_limit_and_dedup.py†L1-L27】【F:bot_kie.py†L96-L214】
+- **P1 (submit lock):** повторный `confirm_generate` мог запускать дубль до регистрации task_id. **Стало:** введён submit‑lock с TTL и UX‑ответом. 【F:bot_kie.py†L914-L1006】【F:bot_kie.py†L13560-L13637】
+- **P1 (upload reliability):** 0x0.st часто давал 403 из‑за отсутствия UA; таймауты и fallback логировались неявно. **Стало:** добавлен User‑Agent, настроены таймауты, усилено логирование провайдера/фолбэка. 【F:bot_kie.py†L2772-L3062】
+- **P1 (UX resilience):** не было безопасного сброса “мастера” с гарантированным выходом в меню. **Стало:** добавлена команда `/reset` и “reset_wizard” callback, полный сброс сессии при stale‑state. 【F:bot_kie.py†L3396-L3469】【F:bot_kie.py†L1427-L1476】【F:bot_kie.py†L3812-L3872】【F:bot_kie.py†L27306-L28386】
+
+**Root cause:**
+- Дублирующееся `outcome` попадало в `trace_event` через `trace_ctx`, ломая outgoing‑логирование.
+- SSOT‑payload builder не маппировал `image_input` в фактическое поле KIE для image‑edit моделей.
+- Отсутствовала единая защита от спама/повторов на входе и rate‑limit для callback‑сессий.
+- В upload fallback отсутствовал корректный UA и строгие таймауты.
+
+**Файлы изменены (основные):**
+- `app/observability/no_silence_guard.py`, `app/kie_contract/image_adapter.py`, `app/kie_contract/payload_builder.py`, `kie_input_adapter.py`
+- `app/middleware/rate_limit.py`, `bot_kie.py`
+- `tests/test_no_silence_guard_trace_context.py`, `tests/test_kie_payload_image_edit.py`, `tests/test_rate_limit_and_dedup.py`
+
+**Команды проверки:**
+- `pytest`
+
+**Оставшиеся риски:**
+- Rate‑limit/дедуп хранятся в памяти процесса и сбрасываются при рестарте; для полной устойчивости нужна shared‑store версия.
+- Внешние хостинги всё ещё используются как временный обход, до полного перехода на KIE File Upload API.
+
 ## 2026-02-02: P0 hardening — TG delivery, wizard conflicts, observability, free counter, SSOT guardrails
 **Было → стало (ключевые изменения):**
 - **A (Telegram delivery):** URL‑direct отправка могла приводить к `Wrong type of the web page content` и тихим сбоям. **Стало:** всегда скачиваем медиа через GET, определяем content‑type/подпись по байтам, отбрасываем HTML‑страницы с `KIE_MEDIA_URL_NOT_MEDIA`, выбираем корректный TG метод (включая GIF→animation) и шлём понятный текст при неудаче. 【F:app/generations/media_pipeline.py†L1-L328】【F:app/generations/telegram_sender.py†L1-L311】
