@@ -78,12 +78,12 @@ class DependencyContainer:
         if self.kie_client is None:
             # Ленивая инициализация при первом использовании
             try:
-                from app.kie.kie_client import KIEClient
+                from app.kie.kie_client import get_kie_client
                 if self.settings and self.settings.kie_api_key:
-                    self.kie_client = KIEClient(
-                        api_key=self.settings.kie_api_key,
-                        base_url=self.settings.kie_api_url or "https://api.kie.ai",
-                    )
+                    client = get_kie_client()
+                    client.api_key = self.settings.kie_api_key
+                    client.base_url = (self.settings.kie_api_url or "https://api.kie.ai").rstrip("/")
+                    self.kie_client = client
                     logger.info("[OK] KIE client initialized")
                 else:
                     logger.warning("[WARN] KIE_API_KEY not set, KIE client not available")
@@ -132,7 +132,28 @@ async def create_application(settings: Optional[Settings] = None) -> Application
         logger.debug("[BOOTSTRAP] Post-init hook called")
     
     # Создаем Application с post_init
-    application = Application.builder().token(settings.telegram_bot_token).post_init(post_init).build()
+    async def post_shutdown(app: Application) -> None:
+        deps = get_deps(app)
+        kie_client = deps.get_kie_client()
+        close_fn = getattr(kie_client, "close", None)
+        if kie_client and callable(close_fn):
+            await close_fn()
+            logger.info("[OK] KIE client session closed")
+        storage = deps.get_storage()
+        close_storage = getattr(storage, "close", None)
+        if storage and callable(close_storage):
+            result = close_storage()
+            if asyncio.iscoroutine(result):
+                await result
+            logger.info("[OK] Storage closed")
+
+    application = (
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
     ensure_error_handler_registered(application)
     
     # Инициализируем dependency container

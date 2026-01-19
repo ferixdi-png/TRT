@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 from app.generations.telegram_sender import deliver_result
 from app.generations.universal_engine import JobResult, parse_record_info
-from app.kie.kie_client import KIEClient
+from app.kie.kie_client import KIEClient, get_kie_client
 from app.kie_catalog import ModelSpec
 
 
@@ -23,7 +23,7 @@ async def create_task(
     callback_url: Optional[str] = None,
     client: Optional[KIEClient] = None,
 ) -> str:
-    kie_client = client or KIEClient()
+    kie_client = client or get_kie_client()
     result = await kie_client.create_task(
         model_id,
         input_payload,
@@ -43,7 +43,7 @@ async def poll_task(
     correlation_id: Optional[str] = None,
     client: Optional[KIEClient] = None,
 ) -> Dict[str, Any]:
-    kie_client = client or KIEClient()
+    kie_client = client or get_kie_client()
     record = await kie_client.wait_for_task(
         task_id,
         timeout=timeout,
@@ -90,4 +90,5 @@ async def send_result_to_user(
         parsed_result.urls,
         parsed_result.text,
         correlation_id=correlation_id,
+        kie_client=get_kie_client(),
     )

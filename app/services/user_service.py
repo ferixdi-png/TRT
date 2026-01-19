@@ -4,7 +4,8 @@ User service - чистые функции для работы с пользов
 """
 
 import logging
-from typing import Optional
+import asyncio
+from typing import Optional, Dict
 from app.storage import get_storage
 from app.config import get_settings
 
@@ -12,6 +13,15 @@ logger = logging.getLogger(__name__)
 
 # Глобальный кэш для admin проверок (чтобы не обращаться к storage каждый раз)
 _admin_cache: dict[int, bool] = {}
+_user_locks: Dict[int, asyncio.Lock] = {}
+
+
+def _get_user_lock(user_id: int) -> asyncio.Lock:
+    lock = _user_locks.get(user_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _user_locks[user_id] = lock
+    return lock
 
 
 def _get_storage():
@@ -28,19 +38,22 @@ async def get_user_balance(user_id: int) -> float:
 async def set_user_balance(user_id: int, amount: float) -> None:
     """Установить баланс пользователя"""
     storage = _get_storage()
-    await storage.set_user_balance(user_id, amount)
+    async with _get_user_lock(user_id):
+        await storage.set_user_balance(user_id, amount)
 
 
 async def add_user_balance(user_id: int, amount: float) -> float:
     """Добавить к балансу пользователя"""
     storage = _get_storage()
-    return await storage.add_user_balance(user_id, amount)
+    async with _get_user_lock(user_id):
+        return await storage.add_user_balance(user_id, amount)
 
 
 async def subtract_user_balance(user_id: int, amount: float) -> bool:
     """Вычесть из баланса пользователя"""
     storage = _get_storage()
-    return await storage.subtract_user_balance(user_id, amount)
+    async with _get_user_lock(user_id):
+        return await storage.subtract_user_balance(user_id, amount)
 
 
 async def get_user_language(user_id: int) -> str:
@@ -137,4 +150,3 @@ def get_user_language_sync(user_id: int) -> str:
         raise RuntimeError("get_user_language_sync called inside running event loop")
 
     return asyncio.run(get_user_language(user_id))
-
