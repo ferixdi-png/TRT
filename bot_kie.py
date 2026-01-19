@@ -60,6 +60,9 @@ KNOWN_CALLBACK_PREFIXES = (
     "admin_user_mode",
     "admin_back_to_admin",
     "topup_amount:",
+    "pay_sbp:",
+    "pay_card:",
+    "pay_stars:",
     "gen_view:",
     "gen_repeat:",
     "gen_history:",
@@ -1232,6 +1235,40 @@ def update_session_activity(user_id: int):
         user_sessions[user_id]['last_activity'] = time.time()
 
 
+def reset_session_on_navigation(user_id: int, *, reason: str) -> None:
+    """Clear flow-specific session data when user navigates to a new context."""
+    if user_id not in user_sessions:
+        return
+    session = user_sessions[user_id]
+    cleared_keys = []
+    for key in (
+        "waiting_for",
+        "current_param",
+        "model_id",
+        "model_info",
+        "model_spec",
+        "param_history",
+        "param_order",
+        "params",
+        "properties",
+        "required",
+        "gen_type",
+        "payment_method",
+        "topup_amount",
+        "stars_amount",
+        "invoice_payload",
+        "balance_charged",
+    ):
+        if key in session:
+            session.pop(key, None)
+            cleared_keys.append(key)
+    if cleared_keys:
+        logger.info(
+            "🧹 SESSION_RESET: action_path=%s cleared=%s",
+            reason,
+            ",".join(cleared_keys),
+        )
+
 def _cleanup_processed_updates(now_ts: float) -> None:
     expired = [
         update_id
@@ -2313,6 +2350,55 @@ def get_payment_details() -> str:
     details += "✅ <b>Баланс начислится автоматически</b> после отправки скриншота."
     
     return details
+
+
+def build_manual_payment_instructions(
+    *,
+    amount: float,
+    user_lang: str,
+    payment_details: str,
+    method_label: str,
+) -> str:
+    """Build manual payment instructions for SBP/card transfers."""
+    examples_count = int(amount / 0.62)  # Z-Image price
+    video_count = int(amount / 3.86)  # Basic video price
+    if user_lang == 'ru':
+        return (
+            f'💳 <b>ОПЛАТА {amount:.0f} ₽ ({method_label})</b> 💳\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'{payment_details}\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
+            f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
+            f'• ~{examples_count} изображений Z-Image\n'
+            f'• ~{video_count} видео (базовая модель)\n'
+            f'• Или комбинацию разных моделей!\n\n'
+            f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            f'📸 <b>КАК ОПЛАТИТЬ:</b>\n'
+            f'1️⃣ Переведи {amount:.2f} ₽ по реквизитам выше\n'
+            f'2️⃣ Сделай скриншот перевода\n'
+            f'3️⃣ Отправь скриншот сюда\n'
+            f'4️⃣ Баланс начислится автоматически! ⚡\n\n'
+            f'✅ <b>Все просто и быстро!</b>'
+        )
+    return (
+        f'💳 <b>PAYMENT {amount:.0f} ₽ ({method_label})</b> 💳\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'{payment_details}\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
+        f'🎯 <b>WHAT YOU WILL GET:</b>\n'
+        f'• ~{examples_count} Z-Image images\n'
+        f'• ~{video_count} videos (basic model)\n'
+        f'• Or a combination of different models!\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'📸 <b>HOW TO PAY:</b>\n'
+        f'1️⃣ Transfer {amount:.2f} ₽ using details above\n'
+        f'2️⃣ Take a screenshot of the transfer\n'
+        f'3️⃣ Send screenshot here\n'
+        f'4️⃣ Balance will be added automatically! ⚡\n\n'
+        f'✅ <b>Simple and fast!</b>'
+    )
 
 
 def get_support_contact() -> str:
@@ -4053,17 +4139,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
-            if user_id in user_sessions:
-                session = user_sessions[user_id]
-                session['waiting_for'] = None
-                session['current_param'] = None
-                session['param_history'] = []
-                logger.info(
-                    "🏠 MENU_RESET: action_path=back_to_menu model_id=%s waiting_for=%s current_param=%s outcome=cleared",
-                    session.get('model_id'),
-                    session.get('waiting_for'),
-                    session.get('current_param'),
-                )
+            reset_session_on_navigation(user_id, reason="back_to_menu")
             await show_main_menu(update, context, source="back_to_menu")
             return ConversationHandler.END
         
@@ -4531,6 +4607,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
+            reset_session_on_navigation(user_id, reason="gen_type")
             
             # User selected a generation type
             parts = data.split(":", 1)
@@ -4884,7 +4961,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Error answering callback for free_tools: {e}")
                 pass
-            
+            reset_session_on_navigation(user_id, reason="free_tools")
             logger.info(f"User {user_id} clicked 'free_tools' button")
             
             # Get free tools from SSOT (pricing catalog)
@@ -5863,6 +5940,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
+            reset_session_on_navigation(user_id, reason="check_balance")
             
             # Check user's personal balance (используем helpers для устранения дублирования)
             try:
@@ -6019,6 +6097,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         InlineKeyboardButton("⭐ Telegram Stars", callback_data=f"pay_stars:{amount}"),
                         InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")
                     ],
+                    [InlineKeyboardButton("💳 Карта", callback_data=f"pay_card:{amount}")],
                     [
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -6126,6 +6205,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("Ошибка: неверная сумма", show_alert=True)
                 return ConversationHandler.END
             user_lang = get_user_language(user_id)
+            session = user_sessions.get(user_id, {})
+            if session.get("waiting_for") != "payment_method" or session.get("topup_amount") is None:
+                await query.answer("Сначала выберите сумму пополнения.", show_alert=True)
+                return ConversationHandler.END
+
+            if user_lang == "en":
+                await query.answer("For English users, only Telegram Stars payment is available.", show_alert=True)
+                return SELECTING_AMOUNT
+            amount = session.get("topup_amount", amount)
             
             # English users can only pay via Telegram Stars
             if user_lang == 'en':
@@ -6178,11 +6266,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             
             payment_details = get_payment_details()
-            
-            # Calculate what user can generate
-            examples_count = int(amount / 0.62)  # Z-Image price
-            video_count = int(amount / 3.86)  # Basic video price
-            
             keyboard = [
                 [
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
@@ -6190,48 +6273,63 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ],
                 [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
             ]
-            
-            if user_lang == 'ru':
-                sbp_text = (
-                    f'💳 <b>ОПЛАТА {amount:.0f} ₽ (СБП)</b> 💳\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'{payment_details}\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💵 <b>Сумма к оплате:</b> {amount:.2f} ₽\n\n'
-                    f'🎯 <b>ЧТО ТЫ ПОЛУЧИШЬ:</b>\n'
-                    f'• ~{examples_count} изображений Z-Image\n'
-                    f'• ~{video_count} видео (базовая модель)\n'
-                    f'• Или комбинацию разных моделей!\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'📸 <b>КАК ОПЛАТИТЬ:</b>\n'
-                    f'1️⃣ Переведи {amount:.2f} ₽ по реквизитам выше\n'
-                    f'2️⃣ Сделай скриншот перевода\n'
-                    f'3️⃣ Отправь скриншот сюда\n'
-                    f'4️⃣ Баланс начислится автоматически! ⚡\n\n'
-                    f'✅ <b>Все просто и быстро!</b>'
-                )
-            else:
-                sbp_text = (
-                    f'💳 <b>PAYMENT {amount:.0f} ₽ (SBP)</b> 💳\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'{payment_details}\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💵 <b>Amount to pay:</b> {amount:.2f} ₽\n\n'
-                    f'🎯 <b>WHAT YOU WILL GET:</b>\n'
-                    f'• ~{examples_count} Z-Image images\n'
-                    f'• ~{video_count} videos (basic model)\n'
-                    f'• Or a combination of different models!\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'📸 <b>HOW TO PAY:</b>\n'
-                    f'1️⃣ Transfer {amount:.2f} ₽ using details above\n'
-                    f'2️⃣ Take a screenshot of the transfer\n'
-                    f'3️⃣ Send screenshot here\n'
-                    f'4️⃣ Balance will be added automatically! ⚡\n\n'
-                    f'✅ <b>Simple and fast!</b>'
-                )
+
+            sbp_text = build_manual_payment_instructions(
+                amount=amount,
+                user_lang=user_lang,
+                payment_details=payment_details,
+                method_label="СБП" if user_lang == "ru" else "SBP",
+            )
             
             await query.edit_message_text(
                 sbp_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return WAITING_PAYMENT_SCREENSHOT
+
+        if data.startswith("pay_card:"):
+            # User chose card payment
+            parts = data.split(":", 1)
+            if len(parts) < 2:
+                await query.answer("Ошибка: неверный формат суммы", show_alert=True)
+                return ConversationHandler.END
+            try:
+                amount = float(parts[1])
+            except (ValueError, TypeError):
+                await query.answer("Ошибка: неверная сумма", show_alert=True)
+                return ConversationHandler.END
+
+            user_lang = get_user_language(user_id)
+            session = user_sessions.get(user_id, {})
+            if session.get("waiting_for") != "payment_method" or session.get("topup_amount") is None:
+                await query.answer("Сначала выберите сумму пополнения.", show_alert=True)
+                return ConversationHandler.END
+
+            amount = session.get("topup_amount", amount)
+            user_sessions[user_id] = {
+                'topup_amount': amount,
+                'waiting_for': 'payment_screenshot',
+                'payment_method': 'card'
+            }
+
+            payment_details = get_payment_details()
+            keyboard = [
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                ],
+                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            ]
+
+            card_text = build_manual_payment_instructions(
+                amount=amount,
+                user_lang=user_lang,
+                payment_details=payment_details,
+                method_label="Карта" if user_lang == "ru" else "Card",
+            )
+            await query.edit_message_text(
+                card_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
@@ -7624,6 +7722,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
+            reset_session_on_navigation(user_id, reason="referral_info")
             
             # Show referral information
             referral_link = get_user_referral_link(user_id)
@@ -8862,6 +8961,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # 🔥 MAXIMUM LOGGING: select_model entry
             logger.debug(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
+            reset_session_on_navigation(user_id, reason="select_model")
             
             # Answer callback immediately to show button was pressed
             try:
@@ -25891,6 +25991,8 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
             CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
             CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
+            CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
+            CallbackQueryHandler(button_callback, pattern='^pay_card:'),
             CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
             CallbackQueryHandler(button_callback, pattern='^referral_info$'),
             CallbackQueryHandler(button_callback, pattern='^generate_again$'),
@@ -26378,6 +26480,8 @@ async def main():
             CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
             CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
             CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
+            CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
+            CallbackQueryHandler(button_callback, pattern='^pay_card:'),
             CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
             CallbackQueryHandler(button_callback, pattern='^referral_info$'),
             CallbackQueryHandler(button_callback, pattern='^generate_again$'),
@@ -26531,6 +26635,7 @@ async def main():
                 CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
                 CallbackQueryHandler(button_callback, pattern='^pay_stars:'),
                 CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
+                CallbackQueryHandler(button_callback, pattern='^pay_card:'),
                 CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
                 CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),

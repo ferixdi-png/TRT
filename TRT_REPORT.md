@@ -1,5 +1,35 @@
 # TRT_REPORT.md
 
+## 2026-01-19: P0/P1 fixes — balance, payment flow, session reset
+**Было:**
+- Кнопка “Баланс” падала при отсутствии `get_credits()` у KIE клиента.
+- `pay_sbp:*` уходил в UNKNOWN_CALLBACK и сбрасывал пользователя в меню.
+- PTBUserWarning фиксировал возврат state=3, неизвестный текущему ConversationHandler.
+- “Грязные сессии”: ожидание `payment_screenshot` конфликтовало с меню/моделью.
+
+**Стало:**
+- Баланс показывает внутренние RUB всегда; KIE credits — best‑effort без падений и с нейтральным текстом.
+- `pay_sbp:*` и `pay_card:*` маршрутизируются корректно и поддерживаются из MENU при валидной сессии.
+- Возвраты из button_callback ограничены валидными state keys (без PTBUserWarning).
+- Введён единый reset при навигации: очищает хвосты сценариев при переходе в меню/модели/баланс/реферальную информацию.
+
+**Root cause:**
+- В клиенте KIE отсутствовал `get_credits()`, а payment callback не был зарегистрирован в роутере/known patterns.
+
+**Файлы изменены:**
+- `app/kie/kie_client.py`, `helpers.py`, `bot_kie.py`
+- `tests/test_balance_kie_safe.py`, `tests/test_payment_flow_sbp.py`, `tests/test_navigation_resets_session.py`, `tests/test_callbacks_routing.py`
+- `TRT_REPORT.md`
+
+**Статус:**
+- payment flow OK
+- balance OK
+- no unknown_callback
+- no PTBUserWarning
+
+**Как проверил:**
+- `pytest tests/test_balance_kie_safe.py tests/test_payment_flow_sbp.py tests/test_navigation_resets_session.py tests/test_callbacks_routing.py`
+
 ## 2025-02-16: Production-ready generation pipeline (stub/real, media, logs, tests)
 **Было:**
 - KIE stub возвращал `state=completed` и `resultJson.urls`, что ломало `universal_engine` (ожидает `state=success` и `resultUrls`).
