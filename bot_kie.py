@@ -99,7 +99,13 @@ KNOWN_CALLBACK_EXACT = {
     "tutorial_complete",
     "confirm_generate",
     "show_parameters",
+    "add_image",
+    "skip_image",
+    "image_done",
+    "add_audio",
+    "skip_audio",
     "reset_wizard",
+    "reset_step",
     "cancel",
     "back_to_previous_step",
     "view_payment_screenshots",
@@ -610,7 +616,77 @@ def _get_media_kind(param_name: str) -> Optional[str]:
         return "video"
     if any(key in name for key in ["audio", "voice"]):
         return "audio"
+    if any(key in name for key in ["document", "file"]):
+        return "document"
     return None
+
+
+def _is_primary_media_input_param(param_name: str) -> bool:
+    normalized = param_name.lower()
+    primary_media_inputs = {
+        "image_input",
+        "image_urls",
+        "image_url",
+        "video_input",
+        "video_url",
+        "audio_input",
+        "audio_url",
+        "document_input",
+        "document_url",
+        "file_input",
+        "file_url",
+    }
+    if normalized in primary_media_inputs:
+        return True
+    if normalized.endswith("_input") or normalized.endswith("_url") or normalized.endswith("_urls"):
+        return _get_media_kind(normalized) in {"image", "video", "audio", "document"}
+    return False
+
+
+def _should_force_media_required(model_type: str, media_kind: str) -> bool:
+    normalized = (model_type or "").lower()
+    if media_kind == "image":
+        return normalized in {
+            "image_edit",
+            "image_to_image",
+            "image_to_video",
+            "outpaint",
+            "upscale",
+            "video_upscale",
+        }
+    if media_kind == "video":
+        return normalized in {"image_to_video", "video_upscale"}
+    if media_kind == "audio":
+        return normalized.startswith("audio_") or normalized in {"speech_to_text", "speech_to_video", "music"}
+    if media_kind == "document":
+        return normalized in {"document", "document_to_text"}
+    return False
+
+
+def _apply_media_required_overrides(
+    model_spec: "ModelSpec",
+    input_params: Dict[str, Any],
+) -> tuple[Dict[str, Any], List[str], List[str]]:
+    """Force media inputs to required when model type implies mandatory media."""
+    import copy
+
+    properties = copy.deepcopy(input_params or {})
+    required = set(model_spec.schema_required or [])
+    forced_required: List[str] = []
+    model_type = (model_spec.model_type or model_spec.model_mode or "").lower()
+
+    for param_name, param_info in properties.items():
+        media_kind = _get_media_kind(param_name)
+        if not media_kind or not _is_primary_media_input_param(param_name):
+            continue
+        if not _should_force_media_required(model_type, media_kind):
+            continue
+        if not param_info.get("required", False):
+            param_info["required"] = True
+            forced_required.append(param_name)
+        required.add(param_name)
+
+    return properties, sorted(required), forced_required
 
 
 def _build_param_order(input_params: Dict[str, Any]) -> List[str]:
@@ -660,10 +736,10 @@ def _first_required_media_param(properties: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _detect_ssot_conflicts(model_spec: ModelSpec) -> list[str]:
+def _detect_ssot_conflicts(model_spec: "ModelSpec", properties_override: Optional[Dict[str, Any]] = None) -> list[str]:
     conflicts: list[str] = []
     model_type = (model_spec.model_type or "").lower()
-    properties = model_spec.schema_properties or {}
+    properties = properties_override or model_spec.schema_properties or {}
     required_media = [
         name for name, info in properties.items()
         if info.get("required", False) and _get_media_kind(name)
@@ -696,6 +772,47 @@ def _extract_missing_param(error_message: Optional[str], properties: Dict[str, A
         if spaced and spaced in lowered:
             return param_name
     return None
+
+
+def _collect_missing_required_media(session: Dict[str, Any]) -> List[str]:
+    properties = session.get("properties", {})
+    params = session.get("params", {})
+    required = set(session.get("required", []))
+    missing: List[str] = []
+    for param_name, param_info in properties.items():
+        if not _get_media_kind(param_name):
+            continue
+        is_required = param_info.get("required", False) or param_name in required
+        if not is_required:
+            continue
+        value = params.get(param_name)
+        if value:
+            continue
+        session_value = session.get(param_name)
+        if not session_value:
+            missing.append(param_name)
+    return missing
+
+
+def _kie_readiness_state() -> tuple[bool, str]:
+    if is_dry_run() or not allow_real_generation():
+        return True, "dry_run"
+    if is_test_mode() or os.getenv("KIE_STUB", "0").lower() in ("1", "true", "yes"):
+        return True, "stub"
+    api_key = os.getenv("KIE_API_KEY", "").strip()
+    if not api_key:
+        return False, "missing_api_key"
+    try:
+        from app.kie.kie_client import get_kie_client
+
+        client = get_kie_client()
+    except Exception:
+        client = None
+    if client is None:
+        return False, "client_none"
+    if not getattr(client, "api_key", None):
+        return False, "missing_api_key"
+    return True, "ready"
 
 
 def _select_next_param(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1314,16 +1431,16 @@ def _build_kie_request_failed_message(
     if status == 401:
         return (
             "❌ <b>Неверный ключ</b>\n\n"
-            "Проверьте KIE API ключ. Сервис временно недоступен."
+            "Проверьте KIE_API_KEY в ENV (Render/Timeweb) и перезапустите сервис."
             if user_lang == "ru"
-            else "❌ <b>Authorization issue</b>\n\nService is temporarily unavailable. We're on it."
+            else "❌ <b>Authorization issue</b>\n\nCheck KIE_API_KEY in ENV and restart the service."
         )
     if status == 402:
         return (
             "⚠️ <b>Недостаточно средств на KIE аккаунте</b>\n\n"
-            "Это проблема баланса KIE. Попробуйте позже или выберите другую модель."
+            "Пополните баланс KIE аккаунта и попробуйте снова."
             if user_lang == "ru"
-            else "⚠️ <b>Provider temporarily unavailable</b>\n\nTry later or choose another model."
+            else "⚠️ <b>KIE account has insufficient credits</b>\n\nPlease top up and try again."
         )
     if status == 422:
         return (
@@ -4376,6 +4493,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             user_lang = 'ru'
 
+        if context and getattr(context, "user_data", None) is not None:
+            context.user_data["last_callback_handled_update_id"] = update_id
+
         if data == "reset_step":
             session_store.clear(user_id)
             await show_main_menu(update, context, source="reset_step")
@@ -5032,6 +5152,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Get input parameters from model info
             input_params = model_info.get('input_params', {})
+            from app.kie_catalog import get_model
+            model_spec = get_model(model_id) if model_id else None
+            forced_media_required: List[str] = []
+            if model_spec:
+                input_params, required_params, forced_media_required = _apply_media_required_overrides(
+                    model_spec,
+                    input_params,
+                )
+            else:
+                required_params = [p for p, info in input_params.items() if info.get('required', False)]
             
             if not input_params:
                 # If no params defined, ask for simple text input
@@ -5047,7 +5177,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Store session data
             session['params'] = {}
             session['properties'] = input_params
-            session['required'] = [p for p, info in input_params.items() if info.get('required', False)]
+            session['required'] = required_params
+            session['required_forced_media'] = forced_media_required
             session['skipped_params'] = set()
             session['current_param'] = None
             # NOTE: model_id and model_info are already stored above at lines 8449-8450
@@ -10048,6 +10179,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                 )
                 return ConversationHandler.END
+
+            input_params, required_params, forced_media_required = _apply_media_required_overrides(
+                model_spec,
+                model_spec.schema_properties or {},
+            )
             
             # Check user balance and calculate available generations
             user_balance = await get_user_balance_async(user_id)
@@ -10095,16 +10231,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Check if new user for hints
             is_new = await is_new_user_async(user_id)
             
-            # Premium formatted model info (optimized for mobile - shorter lines)
             model_info_text = (
-                f"✨ <b>ПРЕМИУМ МОДЕЛЬ</b> ✨\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{model_emoji} <b>{model_name}</b>\n"
-                f"📁 {model_category}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📝 <b>Описание:</b>\n"
-                f"<i>{model_desc}</i>\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                _build_model_card(model_spec, model_info, required_params, user_lang)
+                + "\n\n"
+                + "━━━━━━━━━━━━━━━━━━━━\n\n"
             )
             free_counter_line = ""
             try:
@@ -10295,7 +10425,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 outcome="selected",
             )
 
-            input_params = model_spec.schema_properties or {}
             logger.info(
                 "✅ SELECT_MODEL: Using SSOT schema: count=%s, keys=%s, user_id=%s",
                 len(input_params),
@@ -10306,13 +10435,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Store session data
             session['params'] = {}
             session['properties'] = input_params
-            session['required'] = model_spec.schema_required or []
+            session['required'] = required_params
             session['required_original'] = (model_spec.schema_required or []).copy()
+            session['required_forced_media'] = forced_media_required
             session['current_param'] = None
             session['param_history'] = []
             session['model_spec'] = model_spec
             session['param_order'] = _build_param_order(input_params)
-            session['ssot_conflicts'] = _detect_ssot_conflicts(model_spec)
+            session['ssot_conflicts'] = _detect_ssot_conflicts(model_spec, input_params)
             session['optional_media_params'] = []
             session['image_ref_prompt'] = False
             session['skipped_params'] = set()
@@ -10340,6 +10470,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     error_code="SSOT_CONFLICT_DETECTED",
                     fix_hint="Проверьте модельный SSOT на противоречия.",
                     param={"conflicts": session['ssot_conflicts']},
+                )
+            if forced_media_required:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update.update_id,
+                    action="MEDIA_REQUIRED_OVERRIDE",
+                    action_path="select_model",
+                    model_id=model_id,
+                    gen_type=model_spec.model_mode or model_spec.model_type,
+                    stage="MODEL_SELECT",
+                    outcome="forced",
+                    param={"forced_media": forced_media_required},
                 )
             logger.info(
                 "✅ SELECT_MODEL: Parameter order determined: %s, user_id=%s",
@@ -10573,6 +10717,105 @@ def _resolve_mode_label(mode: Any, index: int, user_lang: str) -> str:
     if hint:
         return f"{title} · {hint}"
     return title
+
+
+def _summarize_required_inputs(
+    required_params: List[str],
+    properties: Dict[str, Any],
+    user_lang: str,
+) -> str:
+    kinds: List[str] = []
+    for param in required_params:
+        if param in {"prompt", "text"}:
+            kinds.append("text")
+            continue
+        media_kind = _get_media_kind(param)
+        if media_kind:
+            kinds.append(media_kind)
+    if not kinds:
+        if "prompt" in properties or "text" in properties:
+            kinds.append("text")
+    labels_ru = {
+        "text": "Текст",
+        "image": "Картинка",
+        "video": "Видео",
+        "audio": "Аудио",
+        "document": "Файл",
+    }
+    labels_en = {
+        "text": "Text",
+        "image": "Image",
+        "video": "Video",
+        "audio": "Audio",
+        "document": "File",
+    }
+    labels = labels_ru if user_lang == "ru" else labels_en
+    ordered = []
+    for kind in ["text", "image", "video", "audio", "document"]:
+        if kind in kinds and kind not in ordered:
+            ordered.append(kind)
+    if not ordered:
+        return ""
+    if user_lang == "ru":
+        return "Входы: " + ", ".join(labels[k] for k in ordered)
+    return "Inputs: " + ", ".join(labels[k] for k in ordered)
+
+
+def _resolve_output_type_label(model_spec: "ModelSpec", user_lang: str) -> str:
+    output_ru = model_spec.output_type_ru or ""
+    output_media = (model_spec.output_media_type or "").lower()
+    fallback_ru = {
+        "image": "Изображение",
+        "video": "Видео",
+        "audio": "Аудио",
+        "text": "Текст",
+        "document": "Файл",
+    }.get(output_media, "Файл")
+    fallback_en = {
+        "image": "Image",
+        "video": "Video",
+        "audio": "Audio",
+        "text": "Text",
+        "document": "File",
+    }.get(output_media, "File")
+    if user_lang == "ru":
+        return output_ru or fallback_ru
+    return fallback_en
+
+
+def _build_model_card(
+    model_spec: "ModelSpec",
+    model_info: Dict[str, Any],
+    required_params: List[str],
+    user_lang: str,
+) -> str:
+    name = model_info.get("name") or model_spec.title_ru or model_spec.id
+    description_ru = model_spec.description_ru or "Генерация результата по вашему запросу."
+    inputs_line = _summarize_required_inputs(required_params, model_spec.schema_properties or {}, user_lang)
+    output_label = _resolve_output_type_label(model_spec, user_lang)
+    if user_lang == "ru":
+        usage_line = "Как пользоваться: заполните обязательные входы и нажмите «Сгенерировать»."
+        card_parts = [
+            f"🪪 <b>Карточка модели</b>",
+            f"🤖 <b>{name}</b>",
+            f"📝 {description_ru}",
+        ]
+        if inputs_line:
+            card_parts.append(f"📥 {inputs_line}")
+        card_parts.append(f"📤 Результат: {output_label}")
+        card_parts.append(f"💡 {usage_line}")
+        return "\n".join(card_parts)
+    usage_line = "How to use: provide required inputs and tap “Generate”."
+    card_parts = [
+        f"🪪 <b>Model card</b>",
+        f"🤖 <b>{name}</b>",
+        f"📝 {description_ru}",
+    ]
+    if inputs_line:
+        card_parts.append(f"📥 {inputs_line}")
+    card_parts.append(f"📤 Output: {output_label}")
+    card_parts.append(f"💡 {usage_line}")
+    return "\n".join(card_parts)
 
 
 def _record_param_history(session: dict, param_name: str) -> None:
@@ -14267,7 +14510,78 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     model_id = session.get('model_id')
     params = session.get('params', {})
     model_info = session.get('model_info', {})
-    
+
+    missing_media = _collect_missing_required_media(session)
+    if missing_media:
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        missing_param = missing_media[0]
+        param_label = _humanize_param_name(missing_param, user_lang)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="STATE_INVALID_MISSING_MEDIA",
+            action_path="confirm_generate",
+            model_id=model_id,
+            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            stage="UI_VALIDATE",
+            outcome="missing_media",
+            error_code="STATE_INVALID_MISSING_MEDIA",
+            fix_hint="Запросите загрузку обязательного медиа-входа.",
+            param={"missing_media": missing_media},
+        )
+        await send_or_edit_message(
+            (
+                f"📎 <b>Нужен обязательный медиа-ввод</b>\n\n"
+                f"Пожалуйста, загрузите: <b>{param_label}</b>.\n"
+                "После загрузки сможете подтвердить генерацию."
+                if user_lang == "ru"
+                else (
+                    f"📎 <b>Missing required media input</b>\n\n"
+                    f"Please upload: <b>{param_label}</b>.\n"
+                    "After upload you can confirm generation."
+                )
+            ),
+            parse_mode="HTML",
+        )
+        await prompt_for_specific_param(update, context, user_id, missing_param, source="missing_media")
+        return INPUTTING_PARAMS
+
+    kie_ready, kie_state = _kie_readiness_state()
+    if not kie_ready:
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        fix_hint = "Проверьте переменные окружения (KIE_API_KEY) и перезапустите сервис."
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="KIE_NOT_READY",
+            action_path="confirm_generate",
+            model_id=model_id,
+            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            stage="KIE_SUBMIT",
+            outcome="blocked",
+            error_code="KIE_NOT_READY",
+            fix_hint=fix_hint,
+            param={"state": kie_state},
+        )
+        if user_lang == "ru":
+            user_message = (
+                "⚠️ <b>KIE API не настроен</b>\n\n"
+                "Не задан KIE_API_KEY, генерации временно недоступны.\n"
+                "Что сделать: проверьте ENV на Render или сообщите администратору."
+            )
+        else:
+            user_message = (
+                "⚠️ <b>KIE API not configured</b>\n\n"
+                "KIE_API_KEY is missing. Generations are temporarily unavailable.\n"
+                "Please check ENV or contact the admin."
+            )
+        await send_or_edit_message(user_message, parse_mode="HTML")
+        return ConversationHandler.END
+
     # CRITICAL: Check if task already exists in active_generations to prevent duplicate
     async with active_generations_lock:
         user_active_generations = [(uid, tid) for (uid, tid) in active_generations.keys() if uid == user_id]
@@ -14726,6 +15040,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
     except KIERequestFailed as exc:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="KIE_SUBMIT_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            stage="KIE_SUBMIT",
+            outcome="failed",
+            error_code=exc.error_code or "KIE_SUBMIT_FAILED",
+            fix_hint=exc.user_message or ERROR_CATALOG.get("KIE_FAIL_STATE"),
+            param={"status": exc.status},
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -15997,187 +16325,187 @@ async def _register_all_handlers_internal(application: Application):
     # Create conversation handler for generation
     generation_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(button_callback, pattern='^show_models$'),
-            CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
-            CallbackQueryHandler(button_callback, pattern='^category:'),
-            CallbackQueryHandler(button_callback, pattern='^all_models$'),
-            CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-            CallbackQueryHandler(button_callback, pattern='^free_tools$'),
-            CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-            CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-            CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
-            CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-            CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-            CallbackQueryHandler(button_callback, pattern='^select_model:'),
-            CallbackQueryHandler(button_callback, pattern='^model:'),
-            CallbackQueryHandler(button_callback, pattern='^modelk:'),
-            CallbackQueryHandler(button_callback, pattern='^start:'),
-            CallbackQueryHandler(button_callback, pattern='^example:'),
-            CallbackQueryHandler(button_callback, pattern='^info:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_set_currency_rate$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-            CallbackQueryHandler(button_callback, pattern='^view_payment_screenshots$'),
-            CallbackQueryHandler(button_callback, pattern='^payment_screenshot_nav:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_payments_back$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-            CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-            CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-            CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-            CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-            CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
-            CallbackQueryHandler(button_callback, pattern='^pay_card:'),
-            CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-            CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-            CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-            CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-            CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-            CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-            CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-            CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-            CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-            CallbackQueryHandler(button_callback, pattern='^tutorial_complete$')
+            CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^example:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^info:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_set_currency_rate$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^view_payment_screenshots$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^payment_screenshot_nav:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments_back$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^pay_sbp:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^pay_card:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$')
         ],
         states={
             SELECTING_MODEL: [
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^show_models$'),
-                CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
-                CallbackQueryHandler(button_callback, pattern='^category:'),
-                CallbackQueryHandler(button_callback, pattern='^all_models$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^free_tools$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             CONFIRMING_GENERATION: [
                 CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
-                CallbackQueryHandler(button_callback, pattern='^retry_generate:'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^retry_generate:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             INPUTTING_PARAMS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
                 MessageHandler(filters.PHOTO, input_parameters),
                 MessageHandler(filters.Document.ALL, input_parameters),
                 MessageHandler(filters.AUDIO | filters.VOICE, input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                CallbackQueryHandler(button_callback, pattern='^model:'),
-                CallbackQueryHandler(button_callback, pattern='^modelk:'),
-                CallbackQueryHandler(button_callback, pattern='^start:'),
-                CallbackQueryHandler(button_callback, pattern='^example:'),
-                CallbackQueryHandler(button_callback, pattern='^info:'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^example:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^info:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$')
             ]
         },
-        fallbacks=[CallbackQueryHandler(button_callback, pattern='^cancel$'),
+        fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
                    CommandHandler('cancel', cancel)]
     )
     
@@ -16223,12 +16551,15 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CommandHandler('models', list_models))
     
     # Базовые callback handlers
-    application.add_handler(CallbackQueryHandler(button_callback))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True))
     
     # Fallback handler for unknown callbacks (must be last, lowest priority)
     async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fallback handler for unknown callbacks - ensures no silence"""
         query = update.callback_query
+        if context and getattr(context, "user_data", None) is not None:
+            if context.user_data.get("last_callback_handled_update_id") == update.update_id:
+                return
         if query and is_known_callback_data(query.data):
             logger.debug(f"Skipping unknown_callback_handler for known callback: {query.data}")
             return
@@ -16509,328 +16840,328 @@ async def main():
     generation_handler = ConversationHandler(
         entry_points=[
             # Only CallbackQueryHandler for # D) per_message=True removed to avoid PTBUserWarning
-        CallbackQueryHandler(button_callback, pattern='^show_models$'),
-            CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
-            CallbackQueryHandler(button_callback, pattern='^category:'),
-            CallbackQueryHandler(button_callback, pattern='^all_models$'),
-            CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-            CallbackQueryHandler(button_callback, pattern='^free_tools$'),
-            CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-            CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-            CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
-            CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-            CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-            CallbackQueryHandler(button_callback, pattern='^select_model:'),
-            CallbackQueryHandler(button_callback, pattern='^model:'),
-            CallbackQueryHandler(button_callback, pattern='^modelk:'),
-            CallbackQueryHandler(button_callback, pattern='^start:'),
-            CallbackQueryHandler(button_callback, pattern='^example:'),
-            CallbackQueryHandler(button_callback, pattern='^info:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_set_currency_rate$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-            CallbackQueryHandler(button_callback, pattern='^view_payment_screenshots$'),
-            CallbackQueryHandler(button_callback, pattern='^payment_screenshot_nav:'),
-            CallbackQueryHandler(button_callback, pattern='^admin_payments_back$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-            CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-            CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-            CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-            CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-            CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-            CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
-            CallbackQueryHandler(button_callback, pattern='^pay_card:'),
-            CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-            CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-            CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-            CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-            CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-            CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-            CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-            CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-            CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-            CallbackQueryHandler(button_callback, pattern='^tutorial_complete$')
+        CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^example:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^info:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_set_currency_rate$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^view_payment_screenshots$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^payment_screenshot_nav:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments_back$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^pay_sbp:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^pay_card:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$')
         ],
         states={
             SELECTING_MODEL: [
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^show_models$'),
-                CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'),
-                CallbackQueryHandler(button_callback, pattern='^category:'),
-                CallbackQueryHandler(button_callback, pattern='^all_models$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^free_tools$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             CONFIRMING_GENERATION: [
                 CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
-                CallbackQueryHandler(button_callback, pattern='^retry_generate:'),
-                CallbackQueryHandler(button_callback, pattern='^model:'),
-                CallbackQueryHandler(button_callback, pattern='^modelk:'),
-                CallbackQueryHandler(button_callback, pattern='^start:'),
-                CallbackQueryHandler(button_callback, pattern='^example:'),
-                CallbackQueryHandler(button_callback, pattern='^info:'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_previous_step$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^retry_generate:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^example:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^info:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             INPUTTING_PARAMS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
                 MessageHandler(filters.PHOTO, input_parameters),
                 MessageHandler(filters.AUDIO | filters.VOICE | (filters.Document.MimeType("audio/*")), input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^set_param:'),
-                CallbackQueryHandler(button_callback, pattern='^add_image$'),
-                CallbackQueryHandler(button_callback, pattern='^skip_image$'),
-                CallbackQueryHandler(button_callback, pattern='^image_done$'),
-                CallbackQueryHandler(button_callback, pattern='^add_audio$'),
-                CallbackQueryHandler(button_callback, pattern='^skip_audio$'),
-                CallbackQueryHandler(button_callback, pattern='^model:'),
-                CallbackQueryHandler(button_callback, pattern='^modelk:'),
-                CallbackQueryHandler(button_callback, pattern='^start:'),
-                CallbackQueryHandler(button_callback, pattern='^example:'),
-                CallbackQueryHandler(button_callback, pattern='^info:'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^set_param:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^add_image$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^skip_image$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^image_done$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^add_audio$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^skip_audio$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^example:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^info:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
             ],
             SELECTING_AMOUNT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^pay_stars:'),
-                CallbackQueryHandler(button_callback, pattern='^pay_sbp:'),
-                CallbackQueryHandler(button_callback, pattern='^pay_card:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^claim_gift$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^pay_stars:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^pay_sbp:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^pay_card:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
             ],
             WAITING_PAYMENT_SCREENSHOT: [
                 MessageHandler(filters.PHOTO, input_parameters),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
             ],
             ADMIN_TEST_OCR: [
                 MessageHandler(filters.PHOTO, input_parameters),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_amount:'),
-                CallbackQueryHandler(button_callback, pattern='^topup_custom$'),
-                CallbackQueryHandler(button_callback, pattern='^referral_info$'),
-                CallbackQueryHandler(button_callback, pattern='^help_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^support_contact$'),
-                CallbackQueryHandler(button_callback, pattern='^copy_bot$'),
-                CallbackQueryHandler(button_callback, pattern='^generate_again$'),
-                CallbackQueryHandler(button_callback, pattern='^my_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_repeat:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_history:'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_start$'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_step'),
-                CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_view_generations$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_nav:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_gen_view:'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_search$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_add$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_promocodes$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_create_broadcast$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_broadcast_stats$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_test_ocr$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_user_mode$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, pattern='^select_model:'),
-                CallbackQueryHandler(button_callback, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_view_generations$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
             ],
             WAITING_BROADCAST_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
                 MessageHandler(filters.PHOTO, input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^check_balance$'),
-                CallbackQueryHandler(button_callback, pattern='^topup_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
             ],
             WAITING_CURRENCY_RATE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
-                CallbackQueryHandler(button_callback, pattern='^back_to_menu$'),
-                CallbackQueryHandler(button_callback, pattern='^reset_step$'),
-                CallbackQueryHandler(button_callback, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
             ]
         },
         fallbacks=[
@@ -17183,36 +17514,36 @@ async def main():
     # Add separate handlers for main menu buttons (works outside ConversationHandler)
     # This ensures the buttons work from main menu
     # NOTE: These handlers must be registered BEFORE generation_handler to catch callbacks first
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^show_models$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^show_all_models_list$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^back_to_menu$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^gen_type:'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^category:'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^all_models$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^check_balance$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^topup_balance$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^topup_amount:'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^topup_custom$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^referral_info$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^my_generations$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^gen_view:'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^gen_repeat:'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^gen_history:'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^help_menu$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^support_contact$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^free_tools$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^claim_gift$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^generate_again$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^copy_bot$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^tutorial_start$'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^tutorial_step'))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern='^tutorial_complete$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^category:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^topup_custom$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^gen_view:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^gen_repeat:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'))
     
     # CRITICAL: Add universal fallback handler for ALL other callbacks
     # This ensures NO button is left unhandled - catches everything not matched above
     # Must be registered AFTER specific handlers but BEFORE generation_handler
     # This handler will catch any callback_data that doesn't match patterns above
-    application.add_handler(CallbackQueryHandler(button_callback))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True))
     
     # 🔴 ГЛОБАЛЬНЫЙ ERROR HANDLER
     # Дубликат error_handler удален - используется обработчик выше (строка 24313)

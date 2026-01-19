@@ -13,6 +13,15 @@ class DummyBot:
     async def send_photo(self, chat_id=None, **kwargs):
         self.calls.append(("send_photo", chat_id, kwargs))
 
+    async def send_video(self, chat_id=None, **kwargs):
+        self.calls.append(("send_video", chat_id, kwargs))
+
+    async def send_audio(self, chat_id=None, **kwargs):
+        self.calls.append(("send_audio", chat_id, kwargs))
+
+    async def send_document(self, chat_id=None, **kwargs):
+        self.calls.append(("send_document", chat_id, kwargs))
+
 
 class DummySession:
     async def __aenter__(self):
@@ -61,3 +70,66 @@ async def test_delivery_routing_image(monkeypatch):
         correlation_id="corr-test",
     )
     assert bot.calls and bot.calls[0][0] == "send_photo"
+
+
+@pytest.mark.asyncio
+async def test_delivery_routing_video(monkeypatch):
+    bot = DummyBot()
+
+    async def fake_resolve(*_args, **_kwargs):
+        return "send_video", {"video": "file"}
+
+    monkeypatch.setattr(telegram_sender, "resolve_and_prepare_telegram_payload", fake_resolve)
+    monkeypatch.setattr(telegram_sender.aiohttp, "ClientSession", lambda: DummySession())
+
+    await telegram_sender.deliver_result(
+        bot,
+        chat_id=1,
+        media_type="video",
+        urls=["https://example.com/file.mp4"],
+        text=None,
+        correlation_id="corr-test",
+    )
+    assert bot.calls and bot.calls[0][0] == "send_video"
+
+
+@pytest.mark.asyncio
+async def test_delivery_routing_audio(monkeypatch):
+    bot = DummyBot()
+
+    async def fake_resolve(*_args, **_kwargs):
+        return "send_audio", {"audio": "file"}
+
+    monkeypatch.setattr(telegram_sender, "resolve_and_prepare_telegram_payload", fake_resolve)
+    monkeypatch.setattr(telegram_sender.aiohttp, "ClientSession", lambda: DummySession())
+
+    await telegram_sender.deliver_result(
+        bot,
+        chat_id=1,
+        media_type="audio",
+        urls=["https://example.com/file.mp3"],
+        text=None,
+        correlation_id="corr-test",
+    )
+    assert bot.calls and bot.calls[0][0] == "send_audio"
+
+
+@pytest.mark.asyncio
+async def test_delivery_routing_document(monkeypatch):
+    bot = DummyBot()
+
+    async def fake_resolve(*_args, **_kwargs):
+        return "send_document", {"document": "file"}
+
+    monkeypatch.setattr(telegram_sender, "resolve_and_prepare_telegram_payload", fake_resolve)
+    monkeypatch.setattr(telegram_sender.aiohttp, "ClientSession", lambda: DummySession())
+
+    await telegram_sender.deliver_result(
+        bot,
+        chat_id=1,
+        media_type="document",
+        urls=["https://example.com/file.bin"],
+        text=None,
+        correlation_id="corr-test",
+    )
+    assert bot.calls and bot.calls[0][0] == "send_document"
