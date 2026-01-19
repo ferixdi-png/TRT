@@ -4,6 +4,8 @@ from app.observability.no_silence_guard import NoSilenceGuard
 def test_set_trace_context_keyword_only():
     guard = NoSilenceGuard()
     guard.set_trace_context(
+        None,
+        None,
         user_id=11,
         chat_id=22,
         update_id=33,
