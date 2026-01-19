@@ -1,5 +1,30 @@
 # TRT_REPORT.md
 
+## 2025-02-16: P0/P1 hardening (trace, callbacks, async balance, dedup, KIE e2e)
+**Было:**
+- `trace_event()` падал на дублирующемся `stage` → ломал `answerCallbackQuery` и UX.
+- Callback data с двоеточием в значении (`set_param:aspect_ratio:9:16`) разбивался неправильно в парсере.
+- `check_balance` и другие async пути дергали sync‑обертки, что приводило к `RuntimeError` в event loop.
+- UNKNOWN_CALLBACK молча уводил в меню без структурного лога и fix_hint.
+- Повторные update_id могли дублировать `/start` и callback цепочки.
+- Шумный `CATALOG_CACHE hit` в INFO.
+
+**Стало:**
+- `trace_event()` теперь best‑effort, не пробрасывает исключения, корректно принимает `stage` без дублей.
+- Все разборы callback data используют `split(..., maxsplit=...)`; колоны в значении не ломают парсер.
+- Баланс/лимиты теперь получают данные через async путь без sync‑wrapper.
+- UNKNOWN_CALLBACK отвечает пользователю и пишет structured log с `fix_hint`.
+- Введён TTL‑dedup по `update_id` (outcome=deduped) для защиты от повторов.
+- `CATALOG_CACHE hit` переведён в DEBUG.
+
+**Покрытие тестами:**
+- `tests/ux/test_z_image_aspect_ratio_flow.py` — callback с `9:16` (не уходит в UNKNOWN_CALLBACK).
+- `tests/test_check_balance_button.py` — кнопка баланса без `SYNC_WRAPPER_CALLED_IN_ASYNC`.
+- `tests/test_kie_job_runner_e2e.py` — 5 e2e кейсов KIE (image/video/audio/stt/photo enhancement).
+
+**Как проверил:**
+- `pytest -q`
+
 ## 2025-02-16: P0 webhook ACK + correlation via contextvars
 **Проблема:**
 - `/webhook` падал с 500 из‑за `object.__setattr__(update, "correlation_id", ...)` на `telegram.Update` (slots).

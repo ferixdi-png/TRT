@@ -7,6 +7,11 @@ from app.state.user_state import (
     # Async версии (рекомендуется)
     get_user_balance_async,
     get_user_language_async,
+    get_user_free_generations_remaining_async,
+    has_claimed_gift_async,
+    get_admin_limit_async,
+    get_admin_spent_async,
+    get_admin_remaining_async,
     get_is_admin,
     
     # Синхронные версии (для обратной совместимости)
@@ -24,6 +29,11 @@ __all__ = [
     'get_user_balance_async',
     'get_user_language',
     'get_user_language_async',
+    'get_user_free_generations_remaining_async',
+    'has_claimed_gift_async',
+    'get_admin_limit_async',
+    'get_admin_spent_async',
+    'get_admin_remaining_async',
     'get_is_admin',
     'get_user_free_generations_remaining',
     'has_claimed_gift',
@@ -31,4 +41,3 @@ __all__ = [
     'get_admin_spent',
     'get_admin_remaining',
 ]
-

@@ -671,6 +671,10 @@ kie = None
 # Store user sessions
 user_sessions = {}
 
+# Deduplicate update_id to prevent double-processing bursts
+_processed_update_ids: dict[int, float] = {}
+_processed_update_ttl_seconds = 120
+
 # Store active generations - allows multiple concurrent generations per user
 # Structure: active_generations[(user_id, task_id)] = {session_data}
 active_generations = {}
@@ -1212,6 +1216,49 @@ def update_session_activity(user_id: int):
     """Update last activity time for user session."""
     if user_id in user_sessions:
         user_sessions[user_id]['last_activity'] = time.time()
+
+
+def _cleanup_processed_updates(now_ts: float) -> None:
+    expired = [
+        update_id
+        for update_id, ts in _processed_update_ids.items()
+        if now_ts - ts > _processed_update_ttl_seconds
+    ]
+    for update_id in expired:
+        _processed_update_ids.pop(update_id, None)
+
+
+def _should_dedupe_update(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    action: str,
+    action_path: str,
+    user_id: Optional[int],
+    chat_id: Optional[int],
+) -> bool:
+    update_id = getattr(update, "update_id", None)
+    if update_id is None:
+        return False
+    now_ts = time.time()
+    _cleanup_processed_updates(now_ts)
+    if update_id in _processed_update_ids:
+        correlation_id = ensure_correlation_id(update, context)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action=action,
+            action_path=action_path,
+            stage="dedup",
+            outcome="deduped",
+            error_code=None,
+            fix_hint="duplicate_update_id",
+        )
+        return True
+    _processed_update_ids[update_id] = now_ts
+    return False
 
 
 def _guard_sync_wrapper_in_event_loop(wrapper_name: str) -> None:
@@ -3024,7 +3071,18 @@ async def show_main_menu(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
-    logger.info(f"🔥 /start command received from user_id={update.effective_user.id if update.effective_user else 'None'}")
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if _should_dedupe_update(
+        update,
+        context,
+        action="COMMAND_START",
+        action_path="command:/start",
+        user_id=user_id,
+        chat_id=chat_id,
+    ):
+        return
+    logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
     await show_main_menu(update, context, source="/start")
 
 
@@ -3370,6 +3428,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Could not answer callback query: {answer_error}")
             # Continue anyway - better to process than to fail completely
         
+        if _should_dedupe_update(
+            update,
+            context,
+            action="CALLBACK",
+            action_path=build_action_path(data),
+            user_id=user_id,
+            chat_id=query.message.chat_id if query and query.message else None,
+        ):
+            return ConversationHandler.END
+
         logger.info(f"Button callback received: user_id={user_id}, data='{data}'")
         
         if not data:
@@ -6175,7 +6243,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if data.startswith("payment_screenshot_nav:"):
                 await query.answer()
                 
-                parts = data.split(":")
+                parts = data.split(":", 1)
                 if len(parts) < 2:
                     await query.answer("Ошибка навигации", show_alert=True)
                     return ConversationHandler.END
@@ -6307,7 +6375,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             await query.answer()
-            parts = data.split(":")
+            parts = data.split(":", 1)
             if len(parts) < 2:
                 return ConversationHandler.END
             
@@ -6340,7 +6408,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             await query.answer()
-            parts = data.split(":")
+            parts = data.split(":", 1)
             if len(parts) < 2:
                 return ConversationHandler.END
             
@@ -7877,7 +7945,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             # Navigate through generation history
-            parts = data.split(":")
+            parts = data.split(":", 2)
             if len(parts) < 3:
                 try:
                     await query.answer("❌ Ошибка навигации", show_alert=True)
@@ -9061,6 +9129,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ВАЖНО: Этот код выполняется ТОЛЬКО если ни один обработчик выше не сработал
     
     logger.warning(f"⚠️ Unhandled callback_data: '{data}' from user {user_id}")
+    try:
+        correlation_id = ensure_correlation_id(update, context)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=query.message.chat_id if query and query.message else None,
+            update_id=update.update_id,
+            action="UNKNOWN_CALLBACK",
+            action_path=build_action_path(data),
+            stage="UI_ROUTER",
+            outcome="unknown_callback",
+            error_code="UI_UNKNOWN_CALLBACK",
+            fix_hint="register_callback_handler_or_validate_callback_data",
+        )
+    except Exception as structured_log_error:
+        logger.warning("STRUCTURED_LOG unknown callback failed: %s", structured_log_error, exc_info=True)
     
     # Всегда отвечаем на callback, даже если не знаем что делать
     try:
@@ -9750,6 +9834,15 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS ENTRY: user_id={user_id}, has_photo={has_photo}, has_text={has_text}, has_audio={has_audio}, has_document={has_document}, update_type={type(update).__name__}")
 
     correlation_id = ensure_correlation_id(update, context)
+    if _should_dedupe_update(
+        update,
+        context,
+        action="INPUT",
+        action_path="input_parameters",
+        user_id=user_id,
+        chat_id=update.message.chat_id if update.message else None,
+    ):
+        return ConversationHandler.END
     input_type = "unknown"
     if has_text:
         input_type = "text"
@@ -25755,6 +25848,21 @@ async def _register_all_handlers_internal(application: Application):
             stage="UI_ROUTER",
             outcome="unknown_callback",
         )
+        try:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="UNKNOWN_CALLBACK",
+                action_path=build_action_path(query.data if query else None),
+                stage="UI_ROUTER",
+                outcome="unknown_callback",
+                error_code="UI_UNKNOWN_CALLBACK",
+                fix_hint="register_callback_handler_or_validate_callback_data",
+            )
+        except Exception as structured_log_error:
+            logger.warning("STRUCTURED_LOG unknown callback handler failed: %s", structured_log_error, exc_info=True)
         trace_event(
             "info",
             correlation_id,
@@ -26336,6 +26444,15 @@ async def main():
         guard = get_no_silence_guard()
         update_id = update.update_id
         user_id = update.effective_user.id if update.effective_user else None
+        if _should_dedupe_update(
+            update,
+            context,
+            action="TEXT_ROUTER",
+            action_path="global_text_router",
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+        ):
+            return
         
         # Check if user has active session with waiting_for
         if user_id and user_id in user_sessions:
@@ -26366,6 +26483,15 @@ async def main():
         guard = get_no_silence_guard()
         update_id = update.update_id
         user_id = update.effective_user.id if update.effective_user else None
+        if _should_dedupe_update(
+            update,
+            context,
+            action="PHOTO_ROUTER",
+            action_path="global_photo_router",
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+        ):
+            return
         
         # Check if user has active session expecting image
         if user_id and user_id in user_sessions:
@@ -26397,6 +26523,15 @@ async def main():
         guard = get_no_silence_guard()
         update_id = update.update_id
         user_id = update.effective_user.id if update.effective_user else None
+        if _should_dedupe_update(
+            update,
+            context,
+            action="AUDIO_ROUTER",
+            action_path="global_audio_router",
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+        ):
+            return
         
         # Check if user has active session expecting audio
         if user_id and user_id in user_sessions:

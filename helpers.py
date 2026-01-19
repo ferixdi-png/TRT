@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 # Импорты для user state (БЕЗ bot_kie!)
 from app.state.user_state import (
-    get_user_balance,
-    get_user_language,
+    get_user_balance_async,
+    get_user_language_async,
     get_is_admin,
-    get_user_free_generations_remaining,
+    get_user_free_generations_remaining_async,
     has_claimed_gift,
-    get_admin_limit,
-    get_admin_spent,
-    get_admin_remaining,
+    get_admin_limit_async,
+    get_admin_spent_async,
+    get_admin_remaining_async,
 )
 
 # Ленивые импорты для остальных модулей (не user state)
@@ -131,9 +131,9 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
     """
     _init_imports()
     if user_lang is None:
-        user_lang = get_user_language(user_id)
+        user_lang = await get_user_language_async(user_id)
     
-    user_balance = get_user_balance(user_id)
+    user_balance = await get_user_balance_async(user_id)
     balance_str = f"{user_balance:.2f}".rstrip('0').rstrip('.')
     is_admin_user = get_is_admin(user_id)
     is_main_admin = (user_id == ADMIN_ID)
@@ -145,15 +145,15 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
         'is_admin': is_admin_user,
         'is_main_admin': is_main_admin,
         'is_limited_admin': is_limited_admin,
-        'remaining_free': get_user_free_generations_remaining(user_id),
+        'remaining_free': await get_user_free_generations_remaining_async(user_id),
         'kie_credits': None,
         'kie_credits_rub': None
     }
     
     if is_limited_admin:
-        result['limit'] = get_admin_limit(user_id)
-        result['spent'] = get_admin_spent(user_id)
-        result['remaining'] = get_admin_remaining(user_id)
+        result['limit'] = await get_admin_limit_async(user_id)
+        result['spent'] = await get_admin_spent_async(user_id)
+        result['remaining'] = await get_admin_remaining_async(user_id)
     
     # Get KIE credits for main admin
     if is_main_admin:
