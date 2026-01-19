@@ -1325,3 +1325,46 @@ tests/test_409_conflict_fix.py ........
 - `pytest -q`
 - `python scripts/verify_button_coverage.py`
 - Ручной сценарий через PTB harness (TEST_MODE/DRY_RUN, STORAGE_MODE=json): `/start` → `Из текста в фото` → `bytedance/seedream` → режим → текст `котик` (в harness update_id фиксирован и срабатывает dedupe; корректное принятие prompt покрыто тестом `test_active_session_router_routes_prompt_text`).
+## 2026-02-10: Wizard required-only + Seedream pipeline + media delivery contracts
+**Причина (root cause):**
+- Wizard подбирал следующий параметр из полного списка, поэтому опциональные поля (например, `image_size`) становились обязательными и цикл “skip → снова спросить” блокировал генерацию.
+- Режимы без меток отображались как “Режим 1/2/3”, а карточки моделей не показывали понятное RU-описание/выход.
+- Free-лимит списывался до фактической доставки результата.
+
+**Было → стало (ключевые изменения):**
+- **Wizard:** `start_next_parameter()` выбирает только отсутствующие **обязательные** параметры; опциональные доступны через “⚙️ Параметры”. Пропуск опционального сохраняется в `skipped_params`, чтобы его не спрашивали снова.  
+- **Seedream 3.0:** добавлен детерминированный тест полного пайплайна (mock KIE + отправка фото); добавлен тест required-only flow (prompt → подтверждение без `image_size`).  
+- **Mode labels:** режимы теперь отображаются с RU-лейблами/подсказками из SSOT или безопасным fallback (“Стандартный/Высокое качество/Быстрый”).  
+- **Карточки моделей:** карточка теперь показывает RU-описание, список нужных вводов и тип результата, с дефолтами на базе SSOT.  
+- **Free quota:** проверка доступности без списания; списание происходит **только после успешной доставки** результата.  
+- **Контракты медиа:** добавлен тест отправки `document` типа и лог `RESULT_DELIVERED`.  
+
+**Затронутые файлы:**
+- `bot_kie.py`
+- `app/kie_catalog/catalog.py`
+- `app/helpers/models_menu.py`
+- `app/services/free_tools_service.py`
+- `app/generations/universal_engine.py`
+- `app/generations/telegram_sender.py`
+- `app/kie_catalog/models_pricing.yaml`
+- `tests/test_seedream_required_flow.py`
+- `tests/test_seedream_delivery_pipeline.py`
+- `tests/test_media_delivery_document.py`
+- `tests/test_parameter_buttons.py`
+- `tests/test_balance_gate.py`
+
+**Проверка (команды):**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python scripts/verify_button_coverage.py`
+
+**Почему это гарантирует генерацию Seedream + других моделей:**
+- Wizard больше не блокируется на `image_size` и завершает required-only flow (prompt → confirm) для Seedream 3.0.
+- При ошибке валидации KIE конкретный параметр открывается повторно, а не вся цепочка.
+- Результаты доставляются с правильным типом медиа и фиксируются тестами для image/audio/video/document.
+
+**Чек-лист ручной проверки (Seedream + 3 разных типа):**
+1. **Seedream 3.0 (t2i):** выбрать модель → ввести prompt → убедиться, что сразу появляется подтверждение без запроса `image_size`.  
+2. **Video (t2v/i2v):** выбрать модель → пройти обязательные поля → получить `sendVideo`.  
+3. **Audio (tts/sfx):** выбрать модель → обязательные поля → получить `sendAudio`.  
+4. **Document/text:** выбрать модель с текстовым выводом → получить `sendMessage`/`sendDocument` и убедиться в корректном типе.  

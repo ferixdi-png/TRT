@@ -17,7 +17,7 @@ async def test_balance_gate_blocks_kie_call(harness, monkeypatch):
     def fake_normalize(model_id, params):
         return params, []
 
-    async def fake_check_and_consume(*_args, **_kwargs):
+    async def fake_check_available(*_args, **_kwargs):
         return {"status": "not_free"}
 
     async def fake_balance(_user_id):
@@ -30,7 +30,7 @@ async def test_balance_gate_blocks_kie_call(harness, monkeypatch):
         raise AssertionError("run_generation should not be called when balance is insufficient")
 
     monkeypatch.setattr("kie_input_adapter.normalize_for_generation", fake_normalize)
-    monkeypatch.setattr(bot_kie, "check_and_consume_free_generation", fake_check_and_consume)
+    monkeypatch.setattr(bot_kie, "check_free_generation_available", fake_check_available)
     monkeypatch.setattr(bot_kie, "get_user_balance_async", fake_balance)
     monkeypatch.setattr(bot_kie, "calculate_price_rub", fake_price)
     monkeypatch.setattr("app.generations.universal_engine.run_generation", fake_run_generation)
