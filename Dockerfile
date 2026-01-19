@@ -22,12 +22,6 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy all application files (using .dockerignore to exclude unnecessary files)
 COPY . /app
 
-# Create directories with empty __init__.py files if they don't exist
-# Code has try/except for imports, so it will work without these modules
-RUN mkdir -p ./bot_kie_services ./bot_kie_utils && \
-    (test -f ./bot_kie_services/__init__.py || echo '"""Empty - modules not available in build context"""' > ./bot_kie_services/__init__.py) && \
-    (test -f ./bot_kie_utils/__init__.py || echo '"""Empty - modules not available in build context"""' > ./bot_kie_utils/__init__.py)
-
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=10000
@@ -49,6 +43,16 @@ RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml 
     python3 -c "import yaml" || (echo "ERROR: PyYAML not installed!" && exit 1) && \
     test -f /app/app/config.py || (echo "ERROR: app/config.py not found!" && exit 1) && \
     python3 -c "from app.config import get_settings, Settings; print('✅ app.config import OK')" || (echo "ERROR: app.config import failed!" && exit 1) && \
+    if [ -f /app/bot_kie_services/__init__.py ]; then \
+        if grep -q "Empty - modules not available in build context" /app/bot_kie_services/__init__.py; then \
+            echo "ERROR: bot_kie_services stub detected in image build"; exit 1; \
+        fi; \
+    fi && \
+    if [ -f /app/bot_kie_utils/__init__.py ]; then \
+        if grep -q "Empty - modules not available in build context" /app/bot_kie_utils/__init__.py; then \
+            echo "ERROR: bot_kie_utils stub detected in image build"; exit 1; \
+        fi; \
+    fi && \
     echo "✅ Critical files verified"
 
 # Start the bot using Render-first entrypoint

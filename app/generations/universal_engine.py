@@ -126,7 +126,7 @@ def _extract_text(record: Dict[str, Any], result_json: Dict[str, Any]) -> Option
 
 
 def _infer_media_from_urls(urls: List[str], fallback: str) -> str:
-    if fallback in {"image", "video", "audio", "voice", "text"}:
+    if fallback in {"image", "video", "audio", "text", "document"}:
         return fallback
     for url in urls:
         lower = url.lower()
@@ -179,7 +179,7 @@ def parse_record_info(
             ) from exc
     text = _extract_text(record, result_json)
 
-    supported_media = {"image", "video", "audio", "voice", "file", "text"}
+    supported_media = {"image", "video", "audio", "text", "document"}
     hint_media = media_type if media_type in supported_media else ""
 
     if text and not urls:
@@ -187,8 +187,6 @@ def parse_record_info(
     elif urls:
         fallback_hint = hint_media if hint_media and hint_media != "text" else "document"
         resolved_media = _infer_media_from_urls(urls, fallback_hint)
-        if hint_media == "voice" and resolved_media == "audio":
-            resolved_media = "voice"
     else:
         raw_keys = list(record.keys())
         result_keys = list(result_json.keys())
