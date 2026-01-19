@@ -53,6 +53,10 @@ def parse_record_info(
     urls: List[str] = []
     text: Optional[str] = None
 
+    supported_media = {"image", "video", "audio", "voice", "file", "text"}
+    if media_type not in supported_media:
+        media_type = "file"
+
     if media_type in {"image", "video", "audio", "voice", "file"}:
         urls = result_json.get("resultUrls") or []
         if not urls and result_json.get("resultUrl"):
@@ -79,8 +83,6 @@ def parse_record_info(
                 list(result_json.keys()),
             )
             raise KIEResultError("KIE_RESULT_EMPTY_TEXT")
-    else:
-        raise KIEResultError(f"Unsupported media_type: {media_type}")
 
     job_result = JobResult(
         task_id=record.get("taskId", ""),

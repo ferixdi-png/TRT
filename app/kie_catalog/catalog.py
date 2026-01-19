@@ -199,7 +199,7 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
     cache_key = _compute_catalog_cache_key()
     
     if _catalog_cache is not None and not force_reload and _catalog_cache_key == cache_key:
-        logger.info("CATALOG_CACHE hit cache_key=%s models=%s", cache_key, len(_catalog_cache))
+        logger.debug("CATALOG_CACHE hit cache_key=%s models=%s", cache_key, len(_catalog_cache))
         return _catalog_cache
     
     logger.info("CATALOG_CACHE miss cache_key=%s force_reload=%s", cache_key, force_reload)
