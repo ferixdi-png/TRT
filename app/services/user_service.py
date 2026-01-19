@@ -82,8 +82,10 @@ async def set_gift_claimed(user_id: int) -> None:
 
 async def get_user_free_generations_remaining(user_id: int) -> int:
     """Получить оставшиеся бесплатные генерации"""
-    storage = _get_storage()
-    return await storage.get_user_free_generations_remaining(user_id)
+    from app.services.free_tools_service import get_free_generation_status
+
+    status = await get_free_generation_status(user_id)
+    return int(status.get("total_remaining", 0))
 
 
 def get_is_admin(user_id: int) -> bool:

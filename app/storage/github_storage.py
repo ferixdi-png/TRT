@@ -62,6 +62,8 @@ class GitHubStorage(BaseStorage):
         self.languages_file = "user_languages.json"
         self.gift_claimed_file = "gift_claimed.json"
         self.free_generations_file = "daily_free_generations.json"
+        self.hourly_free_usage_file = "hourly_free_usage.json"
+        self.referral_free_bank_file = "referral_free_bank.json"
         self.admin_limits_file = "admin_limits.json"
         self.generations_history_file = "generations_history.json"
         self.payments_file = "payments.json"
@@ -628,6 +630,31 @@ class GitHubStorage(BaseStorage):
             return data
 
         await self._update_json(self.free_generations_file, updater)
+
+    async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
+        data, _ = await self._read_json(self.hourly_free_usage_file)
+        return data.get(str(user_id), {})
+
+    async def set_hourly_free_usage(self, user_id: int, window_start_iso: str, used_count: int) -> None:
+        def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+            data[str(user_id)] = {
+                "window_start_iso": window_start_iso,
+                "used_count": int(used_count),
+            }
+            return data
+
+        await self._update_json(self.hourly_free_usage_file, updater)
+
+    async def get_referral_free_bank(self, user_id: int) -> int:
+        data, _ = await self._read_json(self.referral_free_bank_file)
+        return int(data.get(str(user_id), 0))
+
+    async def set_referral_free_bank(self, user_id: int, remaining_count: int) -> None:
+        def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+            data[str(user_id)] = int(max(0, remaining_count))
+            return data
+
+        await self._update_json(self.referral_free_bank_file, updater)
 
     async def get_admin_limit(self, user_id: int) -> float:
         from app.config import get_settings

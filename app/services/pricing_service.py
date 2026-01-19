@@ -3,6 +3,7 @@
 """
 
 import logging
+from decimal import Decimal, ROUND_CEILING
 from typing import Optional, Dict
 from app.config import Settings
 from app.kie_catalog.catalog import get_model, ModelSpec
@@ -23,7 +24,12 @@ def get_usd_to_rub(settings: Settings) -> float:
     return getattr(settings, 'usd_to_rub', 100.0)
 
 
-def user_price_rub(official_usd: float, usd_to_rub: float, price_multiplier: float = 2.0) -> int:
+def _ceil_decimal(value: Decimal, places: int) -> Decimal:
+    quant = Decimal("1").scaleb(-places)
+    return value.quantize(quant, rounding=ROUND_CEILING)
+
+
+def user_price_rub(official_usd: float, usd_to_rub: float, price_multiplier: float = 2.0) -> float:
     """
     Рассчитывает цену для пользователя в рублях.
     
@@ -35,14 +41,18 @@ def user_price_rub(official_usd: float, usd_to_rub: float, price_multiplier: flo
         price_multiplier: Множитель цены (по умолчанию 2.0)
     
     Returns:
-        Цена в рублях (округляется до целого, минимум 1₽)
+        Цена в рублях (округление вверх до 2 знаков)
     """
-    price = official_usd * usd_to_rub * price_multiplier
-    price_int = max(1, int(round(price)))
-    return price_int
+    price = (
+        Decimal(str(official_usd))
+        * Decimal(str(usd_to_rub))
+        * Decimal(str(price_multiplier))
+    )
+    price_ceiled = _ceil_decimal(price, 2)
+    return float(price_ceiled)
 
 
-def price_for_model_rub(model_id: str, mode_index: int, settings: Settings) -> Optional[int]:
+def price_for_model_rub(model_id: str, mode_index: int, settings: Settings) -> Optional[float]:
     """
     Рассчитывает цену для конкретной модели и режима в рублях.
     
@@ -106,4 +116,3 @@ def get_model_price_info(model_id: str, mode_index: int, settings: Settings) -> 
         "price_multiplier": price_multiplier,
         "price_rub": price_rub
     }
-

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from app.kie_contract.schema_loader import REGISTRY_PATH
+from pricing.engine import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class ModelSpec:
     type: str  # t2i, i2i, t2v, i2v, v2v, tts, stt, sfx, audio_isolation, upscale, bg_remove, watermark_remove, music, lip_sync
     category: str  # Alias for type (contract requirement)
     model_type: str  # text_to_image, image_to_video, etc (registry)
+    model_mode: str  # text_to_image, image_to_image, image_edit, etc (registry)
     schema_required: List[str] = field(default_factory=list)
     schema_properties: Dict[str, Any] = field(default_factory=dict)
     output_media_type: str = "image"  # image|video|audio|voice|text|file
@@ -104,8 +106,17 @@ def _extract_schema(model_data: Dict[str, Any]) -> Dict[str, Any]:
     return schema if isinstance(schema, dict) else {}
 
 
-def _schema_required(schema: Dict[str, Any]) -> List[str]:
-    required = [name for name, spec in schema.items() if spec.get("required", False)]
+def _schema_required(schema: Dict[str, Any], model_mode: str) -> List[str]:
+    required = []
+    for name, spec in schema.items():
+        is_required = spec.get("required", False)
+        if name in {"image_input", "image_urls"}:
+            if model_mode in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}:
+                is_required = False
+            elif model_mode in {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale", "video_upscale"}:
+                is_required = True
+        if is_required:
+            required.append(name)
     return required
 
 
@@ -165,6 +176,7 @@ def _parse_model_spec(
     model_id = model_data.get('id', '')
     registry_data = registry_data or {}
     model_type = registry_data.get("model_type", "")
+    model_mode = registry_data.get("model_mode") or model_type
     schema = _extract_schema(registry_data)
     output_media_type = _compute_output_media_type(model_type)
     return ModelSpec(
@@ -174,7 +186,8 @@ def _parse_model_spec(
         type=model_data.get('type', 't2i'),
         category=model_data.get('type', 't2i'),
         model_type=model_type,
-        schema_required=_schema_required(schema),
+        model_mode=model_mode,
+        schema_required=_schema_required(schema, model_mode),
         schema_properties=schema,
         output_media_type=output_media_type or "",
         free=_is_free_model_data(model_data),
@@ -237,7 +250,18 @@ def get_free_model_ids() -> List[str]:
     Возвращает список ID бесплатных моделей из каталога.
     Бесплатность определяется только по данным каталога (free=true или 0 credits).
     """
+    free_tools = load_config().get("free_tools", {})
+    model_ids = free_tools.get("model_ids")
+    if isinstance(model_ids, list) and model_ids:
+        return list(model_ids)
     return [model.id for model in load_catalog() if model.free]
+
+
+def get_free_tools_model_ids() -> List[str]:
+    """Return fixed list of free tool model IDs from pricing config."""
+    free_tools = load_config().get("free_tools", {})
+    model_ids = free_tools.get("model_ids", [])
+    return list(model_ids) if isinstance(model_ids, list) else []
 
 
 def _verify_catalog_internal(models: List[ModelSpec]) -> None:
