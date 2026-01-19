@@ -56,7 +56,7 @@ class ModelSpec:
     model_mode: str  # text_to_image, image_to_image, image_edit, etc (registry)
     schema_required: List[str] = field(default_factory=list)
     schema_properties: Dict[str, Any] = field(default_factory=dict)
-    output_media_type: str = "image"  # image|video|audio|voice|text|file
+    output_media_type: str = "document"  # image|video|audio|text|document
     free: bool = False
     kie_model: str = ""  # if differs from id
     modes: List[ModelMode] = field(default_factory=list)
@@ -70,6 +70,8 @@ class ModelSpec:
             self.kie_model = self.id
 
 
+ALLOWED_OUTPUT_MEDIA_TYPES = {"image", "video", "audio", "text", "document"}
+
 MODEL_TYPE_TO_MEDIA = {
     "text_to_image": "image",
     "image_to_image": "image",
@@ -81,8 +83,10 @@ MODEL_TYPE_TO_MEDIA = {
     "video_upscale": "video",
     "speech_to_video": "video",
     "text_to_speech": "audio",
+    "text_to_audio": "audio",
     "audio_to_audio": "audio",
     "speech_to_text": "text",
+    "text": "text",
 }
 
 
@@ -103,15 +107,24 @@ def _load_registry_models() -> Dict[str, Any]:
     for model_id, model_data in models.items():
         if not isinstance(model_data, dict):
             continue
-        if not model_data.get("output_media_type"):
+        output_media_type = _normalize_output_media_type(model_data.get("output_media_type"))
+        if not output_media_type:
             model_type = model_data.get("model_type")
             if model_type and model_type in MODEL_TYPE_TO_MEDIA:
-                model_data["output_media_type"] = MODEL_TYPE_TO_MEDIA[model_type]
-                logger.debug(
-                    "SSOT enriched output_media_type model=%s media=%s",
+                output_media_type = MODEL_TYPE_TO_MEDIA[model_type]
+        if output_media_type:
+            if output_media_type not in ALLOWED_OUTPUT_MEDIA_TYPES:
+                logger.warning(
+                    "SSOT invalid output_media_type model=%s media=%s",
                     model_id,
-                    model_data["output_media_type"],
+                    output_media_type,
                 )
+            model_data["output_media_type"] = output_media_type
+            logger.debug(
+                "SSOT enriched output_media_type model=%s media=%s",
+                model_id,
+                output_media_type,
+            )
     return models
 
 
@@ -136,6 +149,17 @@ def _schema_required(schema: Dict[str, Any], model_mode: str) -> List[str]:
 
 def _compute_output_media_type(model_type: str) -> Optional[str]:
     return MODEL_TYPE_TO_MEDIA.get(model_type)
+
+
+def _normalize_output_media_type(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    normalized = str(value).lower()
+    if normalized == "file":
+        return "document"
+    if normalized == "voice":
+        return "audio"
+    return normalized
 
 
 def _load_yaml_catalog() -> List[Dict[str, Any]]:

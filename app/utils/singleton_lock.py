@@ -13,9 +13,8 @@ _lock_strict_mode = os.getenv("SINGLETON_LOCK_STRICT", "0").lower() in ("1", "tr
 
 
 def _locks_disabled() -> bool:
-    storage_mode = os.getenv("STORAGE_MODE", "github").lower()
-    disabled = os.getenv("DISABLE_DB_LOCKS", "1").lower() in ("1", "true", "yes")
-    return disabled or storage_mode == "github"
+    disabled = os.getenv("DISABLE_DB_LOCKS", "0").lower() in ("1", "true", "yes")
+    return disabled
 
 # Module-global SingletonLock instance
 _singleton_lock_instance = None
@@ -71,7 +70,7 @@ async def acquire_singleton_lock(dsn=None) -> bool:
     
     if _locks_disabled():
         set_lock_acquired(True)
-        logger.info("[LOCK] singleton_disabled=true reason=storage_mode_github")
+        logger.info("[LOCK] singleton_disabled=true reason=disabled_by_env")
         return True
 
     try:
