@@ -2,12 +2,39 @@
 Pytest configuration и фикстуры для тестов.
 """
 
+import importlib.util
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import pytest
 import asyncio
 import inspect
+from pathlib import Path
+
+
+def _module_available(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
+
+
+def _ensure_test_dependencies() -> None:
+    bootstrap_enabled = os.getenv("VERIFY_BOOTSTRAP", "1").lower() not in ("0", "false", "no")
+    if not bootstrap_enabled:
+        return
+    missing = []
+    for module_name in ("telegram", "yaml"):
+        if not _module_available(module_name):
+            missing.append(module_name)
+    if not missing:
+        return
+    requirements_file = Path(__file__).resolve().parents[1] / "requirements.txt"
+    print(f"ℹ️ Missing test modules: {', '.join(missing)}. Installing requirements...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(requirements_file)])
+
+
+_ensure_test_dependencies()
+
 from tests.ptb_harness import PTBHarness
 
 

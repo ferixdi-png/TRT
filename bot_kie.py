@@ -3596,11 +3596,12 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     else:
         header_text += "\n👇 Выберите раздел в меню ниже."
 
-    from app.utils.singleton_lock import get_lock_degradation_notice
+    from app.utils.singleton_lock import get_lock_admin_notice
 
-    degradation_notice = get_lock_degradation_notice(user_lang)
-    if degradation_notice:
-        header_text += f"\n\n{degradation_notice}"
+    is_admin_user = get_is_admin(user_id) if user_id else False
+    admin_lock_notice = get_lock_admin_notice(user_lang) if is_admin_user else ""
+    if admin_lock_notice:
+        header_text += f"\n\n{admin_lock_notice}"
 
     if balance_status_line:
         header_text += f"\n\n{balance_status_line}"
@@ -13558,7 +13559,8 @@ async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     session_store = get_session_store(context)
     session = session_store.get(user_id) if user_id else None
     waiting_for = session.get("waiting_for") if isinstance(session, dict) else None
-    if waiting_for:
+    current_param = session.get("current_param") if isinstance(session, dict) else None
+    if waiting_for or current_param:
         return
 
     _log_route_decision_once(
@@ -13706,6 +13708,65 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
     current_param = session.get("current_param") if isinstance(session, dict) else None
     update_type = _resolve_update_type(update)
 
+    if waiting_for or current_param:
+        if update.message:
+            _log_route_decision_once(
+                update,
+                context,
+                waiting_for=waiting_for or current_param,
+                chosen_handler="unhandled_update_fallback->input_parameters",
+                reason="waiting_for_in_fallback",
+            )
+            guard = get_no_silence_guard()
+            try:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="UNHANDLED_UPDATE_FALLBACK_SAFE",
+                    action_path="fallback",
+                    stage="UI_ROUTER",
+                    outcome="routed_to_input_parameters",
+                    param={
+                        "update_type": update_type,
+                        "waiting_for": waiting_for,
+                        "current_param": current_param,
+                    },
+                )
+                await input_parameters(update, context)
+                return
+            except Exception as exc:
+                logger.error("Fallback routing failed: %s", exc, exc_info=True)
+                await guard.check_and_ensure_response(update, context)
+                return
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        param_label = waiting_for or current_param or "параметр"
+        message_text = (
+            f"Я жду ввод параметра <b>{param_label}</b>."
+            if user_lang == "ru"
+            else f"I'm waiting for parameter <b>{param_label}</b>."
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="UNHANDLED_UPDATE_FALLBACK_SAFE",
+            action_path="fallback",
+            stage="UI_ROUTER",
+            outcome="waiting_for_param",
+            param={
+                "update_type": update_type,
+                "waiting_for": waiting_for,
+                "current_param": current_param,
+            },
+        )
+        if chat_id:
+            await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode="HTML")
+            track_outgoing_action(update.update_id, action_type="fallback")
+        return
+
     logger.warning(
         "UNHANDLED_UPDATE correlation_id=%s user_id=%s update_type=%s session=%s",
         correlation_id,
@@ -13731,35 +13792,6 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
         },
     )
 
-    if waiting_for or current_param:
-        if update.message:
-            _log_route_decision_once(
-                update,
-                context,
-                waiting_for=waiting_for or current_param,
-                chosen_handler="unhandled_update_fallback->input_parameters",
-                reason="waiting_for_in_fallback",
-            )
-            guard = get_no_silence_guard()
-            try:
-                await input_parameters(update, context)
-                return
-            except Exception as exc:
-                logger.error("Fallback routing failed: %s", exc, exc_info=True)
-                await guard.check_and_ensure_response(update, context)
-                return
-        user_lang = get_user_language(user_id) if user_id else "ru"
-        param_label = waiting_for or current_param or "параметр"
-        message_text = (
-            f"Я жду ввод параметра <b>{param_label}</b>."
-            if user_lang == "ru"
-            else f"I'm waiting for parameter <b>{param_label}</b>."
-        )
-        if chat_id:
-            await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode="HTML")
-            track_outgoing_action(update.update_id, action_type="fallback")
-        return
-
     _log_route_decision_once(
         update,
         context,
@@ -13772,6 +13804,21 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
     )
     guard = get_no_silence_guard()
     try:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="UNHANDLED_UPDATE_FALLBACK_SAFE",
+            action_path="fallback",
+            stage="UI_ROUTER",
+            outcome="menu_shown",
+            param={
+                "update_type": update_type,
+                "waiting_for": waiting_for,
+                "current_param": current_param,
+            },
+        )
         await show_main_menu(update, context, source="unhandled_update_fallback")
         track_outgoing_action(update.update_id, action_type="fallback")
     except Exception as exc:
