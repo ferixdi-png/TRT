@@ -80,7 +80,7 @@ MODEL_TYPE_TO_MEDIA = {
     "image_to_video": "video",
     "video_upscale": "video",
     "speech_to_video": "video",
-    "text_to_speech": "voice",
+    "text_to_speech": "audio",
     "audio_to_audio": "audio",
     "speech_to_text": "text",
 }
@@ -98,7 +98,21 @@ def _load_registry_models() -> Dict[str, Any]:
         logger.error(f"Failed to load registry: {exc}", exc_info=True)
         return {}
     models = data.get("models", {})
-    return models if isinstance(models, dict) else {}
+    if not isinstance(models, dict):
+        return {}
+    for model_id, model_data in models.items():
+        if not isinstance(model_data, dict):
+            continue
+        if not model_data.get("output_media_type"):
+            model_type = model_data.get("model_type")
+            if model_type and model_type in MODEL_TYPE_TO_MEDIA:
+                model_data["output_media_type"] = MODEL_TYPE_TO_MEDIA[model_type]
+                logger.debug(
+                    "SSOT enriched output_media_type model=%s media=%s",
+                    model_id,
+                    model_data["output_media_type"],
+                )
+    return models
 
 
 def _extract_schema(model_data: Dict[str, Any]) -> Dict[str, Any]:

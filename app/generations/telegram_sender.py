@@ -11,6 +11,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from app.kie_catalog import ModelSpec
 from app.generations.universal_engine import JobResult
 from app.delivery.result_delivery import deliver_generation_result
+from app.generations.media_pipeline import resolve_and_prepare_telegram_payload
+from app.utils.url_normalizer import normalize_result_urls, ResultUrlNormalizationError
+import aiohttp
 from app.services.free_tools_service import format_free_counter_block, get_free_counter_snapshot
 from app.observability.trace import trace_event, url_summary
 from app.observability.structured_logs import log_structured_event
@@ -33,16 +36,113 @@ async def deliver_result(
     """Deliver generation result to Telegram with unified delivery."""
     media_type = (media_type or "").lower()
     caption_text = text or f"✅ Готово. ID: {correlation_id or 'corr-na-na'}"
-    await deliver_generation_result(
-        SimpleNamespace(bot=bot),
-        chat_id,
-        correlation_id,
-        model_id,
-        gen_type or media_type,
-        urls,
-        caption_text,
-        prefer_upload=True,
+    start_ts = time.monotonic()
+    normalized_urls: List[str] = []
+    try:
+        normalized_urls = normalize_result_urls(
+            urls,
+            correlation_id=correlation_id,
+            model_id=model_id,
+            stage="TG_DELIVER",
+        )
+    except ResultUrlNormalizationError as exc:
+        logger.error("URL normalization failed: %s", exc)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ Ошибка результата: {exc}",
+        )
+        return
+
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=chat_id,
+        chat_id=chat_id,
+        model_id=model_id,
+        gen_type=gen_type or media_type,
+        action="TG_DELIVER",
+        action_path="telegram_sender.deliver_result",
+        stage="TG_DELIVER",
+        outcome="start",
+        param={"media_type": media_type, "urls_count": len(normalized_urls)},
     )
+
+    if media_type == "text":
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=caption_text,
+                parse_mode="HTML",
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="TG_DELIVER",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="success",
+                duration_ms=int((time.monotonic() - start_ts) * 1000),
+                param={"tg_method": "send_message", "media_type": "text"},
+            )
+        except Exception as exc:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="TG_DELIVER",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="failed",
+                duration_ms=int((time.monotonic() - start_ts) * 1000),
+                error_code="TG_DELIVER_FAILED",
+                fix_hint=str(exc),
+            )
+            raise
+        return
+
+    async with aiohttp.ClientSession() as session:
+        tg_method, payload = await resolve_and_prepare_telegram_payload(
+            {"urls": normalized_urls, "text": text},
+            correlation_id,
+            media_type or "document",
+            kie_client,
+            session,
+        )
+        try:
+            await getattr(bot, tg_method)(chat_id=chat_id, **payload)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="TG_DELIVER",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="success",
+                duration_ms=int((time.monotonic() - start_ts) * 1000),
+                param={"tg_method": tg_method, "media_type": media_type},
+            )
+        except Exception as exc:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="TG_DELIVER",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="failed",
+                duration_ms=int((time.monotonic() - start_ts) * 1000),
+                error_code="TG_DELIVER_FAILED",
+                fix_hint=str(exc),
+            )
+            raise
 
 
 async def send_job_result(
