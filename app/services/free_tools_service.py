@@ -22,7 +22,7 @@ class FreeToolsConfig:
 def get_free_tools_config() -> FreeToolsConfig:
     config = load_config()
     free_tools = config.get("free_tools", {}) if isinstance(config, dict) else {}
-    model_ids = get_dynamic_free_tools_model_ids()
+    model_ids = get_dynamic_free_tools_model_ids(log_selection=False)
     base_per_hour = int(free_tools.get("base_per_hour", 5))
     referral_bonus = int(free_tools.get("referral_bonus", 10))
     return FreeToolsConfig(
