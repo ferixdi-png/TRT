@@ -66,6 +66,7 @@ def find_zero_byte_files() -> list[Path]:
 
 def main() -> int:
     ok = True
+    print("ℹ️ Runtime SSOT: root /models + /app. Folder 5656-main is deprecated/ignored.")
     ok &= run_command("python -m compileall .")
     ok &= run_command("pytest -q")
     ok &= run_command("python scripts/verify_ssot.py")

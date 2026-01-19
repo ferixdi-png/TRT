@@ -382,3 +382,24 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request; make 
 - ✅ Генерации через KIE AI
 - ✅ Корректную работу с базой данных
 - ✅ Асинхронность и обработку ошибок
+
+---
+
+## F) UX: Free generations counter + next refill timer (P0)
+
+**Требования:**
+- На каждом релевантном экране показывать счетчик бесплатных генераций:
+  - Главное меню
+  - Список моделей / бесплатных инструментов
+  - Экран подтверждения генерации
+  - После результата / ошибки
+- Источник фактического потребления: `storage/partner-01/hourly_free_usage.json` (или текущий storage-адаптер).
+- Формулы:
+  - `remaining = max(0, limit_per_hour - used_in_current_window)`
+  - `next_refill_in = max(0, (window_start + 3600) - now)`
+- Формат строки для пользователя:
+  - Если `remaining > 0`: **"Бесплатные: 2/5 • обновится через 17 мин"**
+  - Если `remaining == 0`: **"Следующая бесплатная через …"**
+- Обновлять счетчик после каждого: `MODEL_SELECT`, `CONFIRM_GENERATE`, `GEN_DONE`/`GEN_ERROR`.
+- Логировать `FREE_COUNTER_VIEW` в structured logs.
+- Добавить тесты на корректный расчет окна/таймера при смещении времени и при переходе между меню/моделями без реальных запросов к Telegram/KIE.

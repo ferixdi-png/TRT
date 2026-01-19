@@ -26,6 +26,7 @@ def main() -> int:
         return 1
 
     errors: List[str] = []
+    warnings: List[str] = []
 
     for model_id, model_data in models.items():
         if not isinstance(model_data, dict):
@@ -37,6 +38,22 @@ def main() -> int:
         if not isinstance(schema, dict) or not schema:
             errors.append(f"{model_id}: missing input schema")
             continue
+        model_type = str(model_data.get("model_type") or "").lower()
+        required_media = [
+            name for name, info in schema.items()
+            if isinstance(info, dict) and info.get("required", False) and any(
+                key in name.lower() for key in ["image", "mask", "video", "audio", "voice"]
+            )
+        ]
+        if model_type in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"} and required_media:
+            warnings.append(
+                f"{model_id}: SSOT_CONFLICT_TEXT_MODEL_REQUIRES_IMAGE ({', '.join(required_media)})"
+            )
+        if model_type in {"image_edit", "image_to_image", "image_to_video", "outpaint", "upscale", "video_upscale"}:
+            if not required_media:
+                warnings.append(
+                    f"{model_id}: SSOT_CONFLICT_IMAGE_MODEL_MISSING_IMAGE_INPUT"
+                )
         for field_name, field_spec in schema.items():
             if not isinstance(field_spec, dict):
                 errors.append(f"{model_id}.{field_name}: field spec must be dict")
@@ -48,6 +65,13 @@ def main() -> int:
                 errors.append(f"{model_id}.{field_name}: enum missing values")
             if field_type == "array" and not field_spec.get("item_type"):
                 errors.append(f"{model_id}.{field_name}: array missing item_type")
+
+    if warnings:
+        print("⚠️ SSOT consistency warnings:")
+        for warning in warnings[:20]:
+            print(f"- {warning}")
+        if len(warnings) > 20:
+            print(f"... and {len(warnings) - 20} more")
 
     if errors:
         print("❌ Model specs verification failed:")
