@@ -14,6 +14,7 @@ from app.config import Settings, get_settings
 from app.storage import get_storage
 from app.telegram_error_handler import ensure_error_handler_registered
 from app.utils.logging_config import get_logger
+from app.session_store import get_session_store
 
 logger = get_logger(__name__)
 
@@ -159,6 +160,7 @@ async def create_application(settings: Optional[Settings] = None) -> Application
     # Инициализируем dependency container
     deps = DependencyContainer()
     await deps.initialize(settings)
+    deps.user_sessions = get_session_store().data
     application.bot_data["deps"] = deps
     
     logger.info("[OK] Application created with dependency container")
