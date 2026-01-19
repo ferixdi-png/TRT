@@ -7,10 +7,12 @@ import logging
 import os
 import traceback
 import uuid
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+_correlation_id_var: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,21 @@ class TraceContext:
     user_id: Optional[int]
     chat_id: Optional[int]
     update_type: Optional[str]
+
+
+def set_correlation_id(correlation_id: Optional[str]) -> Token[Optional[str]]:
+    """Store correlation id in a context-local variable."""
+    return _correlation_id_var.set(correlation_id)
+
+
+def reset_correlation_id(token: Token[Optional[str]]) -> None:
+    """Reset correlation id context to previous token."""
+    _correlation_id_var.reset(token)
+
+
+def get_correlation_id() -> Optional[str]:
+    """Fetch correlation id from the current context."""
+    return _correlation_id_var.get()
 
 
 def _get_env_flag(name: str, default: str = "false") -> bool:
@@ -51,7 +68,7 @@ def ensure_correlation_id(update: Any, context: Any) -> str:
     elif getattr(update, "callback_query", None) and update.callback_query.from_user:
         user_id = update.callback_query.from_user.id
 
-    correlation_id = getattr(update, "correlation_id", None)
+    correlation_id = get_correlation_id()
     if context and getattr(context, "user_data", None) is not None:
         if context.user_data.get("correlation_update_id") == update_id:
             correlation_id = context.user_data.get("correlation_id")
