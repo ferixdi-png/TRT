@@ -1,6 +1,21 @@
 {
   "6913446846": [
     {
+      "id": 3,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "дом"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768917008488_jtq0xr.png"
+      ],
+      "task_id": "b9815117be5dc2875da7c102c9010115",
+      "timestamp": 1768917021
+    },
+    {
       "id": 2,
       "is_free": true,
       "model_id": "google/imagen4-fast",
@@ -32,19 +47,19 @@
       "timestamp": 1768908864
     },
     {
-      "id": 3,
+      "id": 4,
       "is_free": true,
-      "model_id": "google/nano-banana",
-      "model_name": "Google Nano Banana Text to Image",
+      "model_id": "google/imagen4-fast",
+      "model_name": "Google Imagen 4 Fast",
       "params": {
-        "prompt": "дом"
+        "prompt": "кот"
       },
       "price": 0.0,
       "result_urls": [
-        "https://tempfile.aiquickdraw.com/workers/nano/image_1768917008488_jtq0xr.png"
+        "https://tempfile.aiquickdraw.com/f/a0e1cf46-6643-4c30-9ad0-1fb2954a346a_0.png"
       ],
-      "task_id": "b9815117be5dc2875da7c102c9010115",
-      "timestamp": 1768917021
+      "task_id": "5060ea4201323738690c7dc814d16f1e",
+      "timestamp": 1768917079
     }
   ],
   "8365353562": [
