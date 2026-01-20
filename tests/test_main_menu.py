@@ -17,11 +17,16 @@ from bot_kie import (
 )
 
 
+def _reset_dedupe():
+    bot_kie._processed_update_ids.clear()
+
+
 @pytest.mark.asyncio
 async def test_start_command(harness):
     """Тест команды /start."""
     # Добавляем handler
     harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
     
     # Обрабатываем команду
     result = await harness.process_command('/start', user_id=12345)
@@ -36,7 +41,7 @@ async def test_start_command(harness):
     assert messages, "Bot should send a message"
     header_message = messages[0]
     assert 'text' in header_message, "Message should have text"
-    assert "Привет" in header_message['text'] or "Welcome" in header_message['text']
+    assert "FERIXDI AI" in header_message['text']
     assert 'reply_markup' in header_message
     assert header_message['reply_markup'] is not None, "Should have reply_markup"
     keyboard = header_message['reply_markup'].inline_keyboard
@@ -54,9 +59,27 @@ async def test_start_command(harness):
 
 
 @pytest.mark.asyncio
+async def test_menu_updated_visible(harness):
+    """MENU_UPDATED_VISIBLE: обновлённый welcome-текст должен быть показан."""
+    harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
+
+    result = await harness.process_command('/start', user_id=12345)
+
+    assert result['success'], f"Command failed: {result.get('error')}"
+    payloads = result['outbox']['messages'] + result['outbox']['edited_messages']
+    assert payloads
+    text = payloads[0]["text"]
+    assert "бесплат" in text.lower()
+    assert "Фото / видео / аудио / текст" in text
+    assert "параметр" in text.lower()
+
+
+@pytest.mark.asyncio
 async def test_start_command_no_crash(harness):
     """Тест, что /start не падает с исключением."""
     harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
     
     # Обрабатываем команду несколько раз подряд
     for i in range(3):
@@ -70,26 +93,30 @@ async def test_start_long_welcome_splits_chunks(harness, monkeypatch):
     header_text = "<b>ДОБРО ПОЖАЛОВАТЬ</b>"
     long_text = "<b>Детали</b>\n\n" + ("A" * (TELEGRAM_TEXT_LIMIT + 500))
 
-    async def fake_build_main_menu_sections(update):
+    async def fake_build_main_menu_sections(update, correlation_id=None):
         return header_text, long_text
 
     monkeypatch.setattr(bot_kie, "_build_main_menu_sections", fake_build_main_menu_sections)
 
     harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
 
     result = await harness.process_command('/start', user_id=12345)
 
     assert result['success'], f"Command failed: {result.get('error')}"
     messages = result['outbox']['messages']
-    assert len(messages) == 1, "Main menu should not send extra detail cards"
-    assert len(messages[0]['text']) <= TELEGRAM_TEXT_LIMIT
-    assert messages[0]['reply_markup'] is not None
+    edited = result['outbox']['edited_messages']
+    assert len(messages) + len(edited) == 1, "Main menu should not send extra detail cards"
+    payload = (messages + edited)[0]
+    assert len(payload['text']) <= TELEGRAM_TEXT_LIMIT
+    assert payload['reply_markup'] is not None
 
 
 @pytest.mark.asyncio
 async def test_unknown_callback_shows_main_menu(harness):
     """Unknown callback должен возвращать главное меню."""
     harness.add_handler(CallbackQueryHandler(button_callback))
+    _reset_dedupe()
 
     result = await harness.process_callback('unknown_callback:123', user_id=12345)
 
@@ -99,13 +126,15 @@ async def test_unknown_callback_shows_main_menu(harness):
     callback_answers = result['outbox']['callback_answers']
     assert callback_answers
     assert any(
-        "Команда устарела" in answer.get("text", "") or "Command outdated" in answer.get("text", "")
+        "Команда устарела" in (answer.get("text") or "")
+        or "Command outdated" in (answer.get("text") or "")
+        or "Не понял" in (answer.get("text") or "")
         for answer in callback_answers
     )
     assert edited or messages
 
     payloads = edited + messages
-    assert any("Привет" in payload["text"] or "Welcome" in payload["text"] for payload in payloads)
+    assert any("FERIXDI AI" in payload["text"] for payload in payloads)
     header_payload = next(payload for payload in payloads if payload.get("reply_markup"))
     keyboard = header_payload['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [

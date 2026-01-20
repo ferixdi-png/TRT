@@ -42,7 +42,7 @@ async def test_confirm_generation_recomputes_free_counter_line(monkeypatch):
             )
 
         async def fake_deliver_result(*_args, **_kwargs):
-            return None
+            return True
 
         monkeypatch.setattr(bot_kie, "get_free_counter_line", fake_free_counter_line)
         monkeypatch.setattr(bot_kie, "consume_free_generation", fake_consume)
