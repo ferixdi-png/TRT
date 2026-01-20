@@ -124,6 +124,23 @@
       "timestamp": 1768908864
     }
   ],
+  "7881587044": [
+    {
+      "id": 1,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "Фотореалистичный киберпанк-город ночью"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768918096832_1yieb5.png"
+      ],
+      "task_id": "92758275ba56d2b1e1a11d6903829f36",
+      "timestamp": 1768918108
+    }
+  ],
   "8365353562": [
     {
       "id": 1,
