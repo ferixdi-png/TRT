@@ -1587,6 +1587,12 @@ def _update_price_quote(
     from app.pricing.price_resolver import resolve_price_quote
     from app.config import get_settings
 
+    def _resolve_free_tool_sku_id() -> Optional[str]:
+        for free_sku in FREE_TOOL_SKU_IDS:
+            if free_sku.split("::", 1)[0] == model_id:
+                return free_sku
+        return None
+
     quote = resolve_price_quote(
         model_id=model_id,
         mode_index=mode_index,
@@ -1596,6 +1602,41 @@ def _update_price_quote(
         is_admin=is_admin,
     )
     if quote is None:
+        free_sku_id = _resolve_free_tool_sku_id()
+        if free_sku_id:
+            session["price_quote"] = {
+                "price_rub": "0.00",
+                "currency": "RUB",
+                "breakdown": {
+                    "model_id": model_id,
+                    "mode_index": mode_index,
+                    "gen_type": gen_type,
+                    "params": dict(params or {}),
+                    "sku_id": free_sku_id,
+                    "unit": "free",
+                    "free_fallback": True,
+                },
+            }
+            session["sku_id"] = free_sku_id
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="PRICE_RESOLVED",
+                action_path=action_path,
+                model_id=model_id,
+                gen_type=gen_type,
+                stage="PRICE_RESOLVE",
+                outcome="resolved",
+                param={
+                    "price_rub": "0.00",
+                    "mode_index": mode_index,
+                    "params": params or {},
+                    "free_fallback": True,
+                },
+            )
+            return session["price_quote"]
         session["price_quote"] = None
         log_structured_event(
             correlation_id=correlation_id,
@@ -1609,6 +1650,7 @@ def _update_price_quote(
             stage="PRICE_RESOLVE",
             outcome="missing",
             error_code="PRICE_MISSING_RULE",
+            fix_hint="pricing ssot missing SKU mapping; check params and catalog.",
             param={
                 "mode_index": mode_index,
                 "params": params or {},
@@ -4919,9 +4961,14 @@ async def respond_price_undefined(
 
     message_text = (
         "❌ <b>Цена не определена</b>\n\n"
+        "Причина: цена для модели не найдена.\n"
         "Пожалуйста, выберите другую модель или попробуйте позже."
         if user_lang == "ru"
-        else "❌ <b>Price is unavailable</b>\n\nPlease select another model or try again later."
+        else (
+            "❌ <b>Price is unavailable</b>\n\n"
+            "Reason: pricing for this model is missing.\n"
+            "Please select another model or try again later."
+        )
     )
 
     sent = False

@@ -101,8 +101,8 @@ def get_lock_admin_notice(lang: str = "ru") -> str:
         return "ℹ️ Блокировка отключена (LOCK_DISABLED_NO_DB)."
     if reason == "file_lock_fallback":
         if lang == "en":
-            return "⚠️ Lock fallback active (local only)."
-        return "⚠️ Включён fallback режим блокировки (локальный уровень)."
+            return "ℹ️ Local-only lock mode active."
+        return "ℹ️ Локальный режим блокировки активен."
     if lang == "en":
         return f"ℹ️ Lock status: {reason}."
     return f"ℹ️ Статус блокировки: {reason}."
