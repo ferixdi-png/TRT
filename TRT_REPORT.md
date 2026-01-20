@@ -1,3 +1,29 @@
+## 2026-02-11: SSOT media inputs + confirm_generate gate
+**What was broken (log evidence):**
+- Readiness audit flagged media-required models as missing mandatory inputs, which could bypass upload prompts and lead to silent failures at generation. The main offender was `infinitalk/from-audio`, whose SSOT entry lacked required media inputs and had a mismatched type/mode relative to the documented lip-sync requirements. 
+
+### Root cause: media-required models misclassified or missing required flags
+| Severity | Model | gen_type | Conflicts | SSOT required media inputs | Readiness required inputs |
+| --- | --- | --- | --- | --- | --- |
+| — | — | — | — | — | — |
+_Current audit found no models meeting the conflict/missing-media criteria above; the table is empty after the SSOT fix._
+
+**What changed (key diffs):**
+- Updated SSOT for `infinitalk/from-audio` in `models/kie_models.yaml` to `lip_sync` and marked `image_input` + `audio_input` as required with `prompt` max 5000 to match documentation. 
+- Added a hard confirm_generate gate in `bot_kie.py` that blocks when required media inputs are missing and logs `GEN_BLOCKED_MISSING_REQUIRED_INPUTS`, even if SSOT required flags are incomplete. 
+- Updated regression test (`tests/test_required_media_flow.py`) to assert the explicit “Нужно загрузить изображение” blocking message for missing image input. 
+
+**How verified (commands):**
+- `pytest -q`
+- `python scripts/verify_project.py`
+- `python scripts/verify_button_coverage.py`
+- `python scripts/audit_model_readiness.py`
+
+**Readiness summary (latest audit):**
+- READY: 1
+- PARTIAL: 71
+- BLOCKED: 0
+
 ## 2026-02-10: P0 pricing clarity + gen_type SSOT + session cache + webhook lock fallback
 **Краткое состояние (по логам / наблюдениям):**
 - SSOT loaded 72 models, webhook OK.
