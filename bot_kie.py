@@ -11559,6 +11559,69 @@ def _format_param_price_rows(values: list[str], price_map: dict[str, float]) -> 
     return rows
 
 
+def build_enum_keyboard_with_prices(
+    param_name: str,
+    enum_values: list,
+    is_optional: bool,
+    default_value: str | None,
+    user_lang: str,
+    model_id: str,
+    current_params: dict,
+) -> tuple[list[list[InlineKeyboardButton]] | None, str, list]:
+    price_depends, param_price_map = _get_param_price_variants(
+        model_id,
+        param_name,
+        current_params or {},
+    )
+    display_values = list(enum_values)
+    if price_depends:
+        display_values = [value for value in enum_values if str(value) in param_price_map]
+        if not display_values:
+            return None, "", []
+
+    price_variants_text = ""
+    if price_depends:
+        price_rows = _format_param_price_rows([str(value) for value in display_values], param_price_map)
+        price_variants_text = "\n".join(price_rows)
+
+    keyboard = []
+    if price_depends:
+        from app.pricing.price_resolver import format_price_rub
+    for i in range(0, len(display_values), 2):
+        first_value = display_values[i]
+        first_label = str(first_value)
+        if price_depends:
+            price_value = param_price_map.get(str(first_value))
+            if price_value is not None:
+                first_label = f"{first_label} — {format_price_rub(price_value)}₽"
+        row = [
+            InlineKeyboardButton(first_label, callback_data=f"set_param:{param_name}:{first_value}")
+        ]
+        if i + 1 < len(display_values):
+            second_value = display_values[i + 1]
+            second_label = str(second_value)
+            if price_depends:
+                price_value = param_price_map.get(str(second_value))
+                if price_value is not None:
+                    second_label = f"{second_label} — {format_price_rub(price_value)}₽"
+            row.append(InlineKeyboardButton(second_label, callback_data=f"set_param:{param_name}:{second_value}"))
+        keyboard.append(row)
+
+    if is_optional:
+        if default_value is not None and default_value in display_values:
+            default_text = (
+                f"⏭️ Использовать по умолчанию ({default_value})"
+                if user_lang == "ru"
+                else f"⏭️ Use default ({default_value})"
+            )
+            keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
+        elif default_value is None:
+            skip_text = "⏭️ Пропустить (auto)" if user_lang == "ru" else "⏭️ Skip (auto)"
+            keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+
+    return keyboard, price_variants_text, display_values
+
+
 async def prompt_for_specific_param(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -11831,10 +11894,16 @@ async def prompt_for_specific_param(
         return INPUTTING_PARAMS
 
     if enum_values:
-        display_values = list(enum_values)
-        if price_depends and param_price_map:
-            display_values = [value for value in enum_values if str(value) in param_price_map]
-        if price_depends and not display_values:
+        keyboard, price_variants_text, display_values = build_enum_keyboard_with_prices(
+            param_name=param_name,
+            enum_values=enum_values,
+            is_optional=is_optional,
+            default_value=default_value,
+            user_lang=user_lang,
+            model_id=model_id,
+            current_params=session.get("params", {}),
+        )
+        if not display_values:
             blocked_text = (
                 "⛔️ <b>Нет цены для доступных вариантов</b>"
                 if user_lang == "ru"
@@ -11853,34 +11922,6 @@ async def prompt_for_specific_param(
                 parse_mode="HTML",
             )
             return INPUTTING_PARAMS
-        keyboard = []
-        for i in range(0, len(display_values), 2):
-            first_value = display_values[i]
-            first_label = str(first_value)
-            if price_depends and param_price_map:
-                from app.pricing.price_resolver import format_price_rub
-                price_value = param_price_map.get(str(first_value))
-                if price_value is not None:
-                    first_label = f"{first_label} — {format_price_rub(price_value)}₽"
-            row = [
-                InlineKeyboardButton(first_label, callback_data=f"set_param:{param_name}:{first_value}")
-            ]
-            if i + 1 < len(display_values):
-                second_value = display_values[i + 1]
-                second_label = str(second_value)
-                if price_depends and param_price_map:
-                    from app.pricing.price_resolver import format_price_rub
-                    price_value = param_price_map.get(str(second_value))
-                    if price_value is not None:
-                        second_label = f"{second_label} — {format_price_rub(price_value)}₽"
-                row.append(InlineKeyboardButton(second_label, callback_data=f"set_param:{param_name}:{second_value}"))
-            keyboard.append(row)
-        if is_optional and default_value and default_value in display_values:
-            default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
-            keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
-        elif is_optional and not default_value:
-            skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
-            keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
         keyboard.append([
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -11892,8 +11933,6 @@ async def prompt_for_specific_param(
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
-        price_rows = _format_param_price_rows([str(value) for value in display_values], param_price_map) if price_depends else []
-        price_variants_text = "\n".join(price_rows)
         detail_block = (
             f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
             f"{description}\n\n"
@@ -12418,26 +12457,35 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             return INPUTTING_PARAMS
 
         if enum_values:
-            keyboard = []
-            for i in range(0, len(enum_values), 2):
-                row = [InlineKeyboardButton(
-                    enum_values[i],
-                    callback_data=f"set_param:{param_name}:{enum_values[i]}"
-                )]
-                if i + 1 < len(enum_values):
-                    row.append(InlineKeyboardButton(
-                        enum_values[i + 1],
-                        callback_data=f"set_param:{param_name}:{enum_values[i + 1]}"
-                    ))
-                keyboard.append(row)
-
             default_value = param_info.get('default')
-            if is_optional and default_value and default_value in enum_values:
-                default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
-                keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
-            elif is_optional and not default_value:
-                skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
-                keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
+            keyboard, price_variants_text, display_values = build_enum_keyboard_with_prices(
+                param_name=param_name,
+                enum_values=enum_values,
+                is_optional=is_optional,
+                default_value=default_value,
+                user_lang=user_lang,
+                model_id=model_id,
+                current_params=params,
+            )
+            if not display_values:
+                blocked_text = (
+                    "⛔️ <b>Нет цены для доступных вариантов</b>"
+                    if user_lang == "ru"
+                    else "⛔️ <b>No price for available variants</b>"
+                )
+                blocked_keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu"),
+                    ]
+                ])
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=blocked_text,
+                    reply_markup=blocked_keyboard,
+                    parse_mode="HTML",
+                )
+                return INPUTTING_PARAMS
 
             keyboard.append([
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
@@ -12464,7 +12512,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     f"📝 <b>Выберите {param_name}:</b>\n\n"
                     f"{param_desc}{default_info}\n\n"
                     f"💡 Нажмите одну из кнопок ниже\n\n"
-                    f"{price_line}"
+                    f"{price_variants_text}\n\n{price_line}" if price_variants_text else f"{price_line}"
                 ),
                 free_counter_line,
             )
@@ -16105,6 +16153,33 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         "source": consume_result.get("source"),
                     },
                 )
+                if consume_result.get("status") == "ok":
+                    try:
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
+                            correlation_id=correlation_id,
+                            action_path="confirm_generate.post_consume",
+                        )
+                        snapshot = await get_free_counter_snapshot(user_id)
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            user_id=user_id,
+                            chat_id=chat_id,
+                            action="FREE_QUOTA_REFRESH",
+                            action_path="confirm_generate",
+                            model_id=model_id,
+                            stage="FREE_QUOTA",
+                            outcome="snapshot",
+                            param={
+                                "consume_result": consume_result,
+                                "remaining": snapshot.get("remaining"),
+                                "used_today": snapshot.get("used_today"),
+                                "limit_per_day": snapshot.get("limit_per_day"),
+                            },
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to refresh free counter after consume: %s", exc)
 
         if job_result.urls:
             save_generation_to_history(
