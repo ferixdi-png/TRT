@@ -13,7 +13,7 @@ import re
 import math
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 from app.observability.structured_logs import (
@@ -29,6 +29,7 @@ from app.observability.trace import (
 )
 from app.observability.error_catalog import ERROR_CATALOG
 from app.middleware.rate_limit import PerUserRateLimiter, TTLCache
+from app.ux.texts_ru import build_welcome_text_ru
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -3918,6 +3919,8 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     remaining_free = FREE_GENERATIONS_PER_DAY
     free_counter_line = ""
     balance_status_line = ""
+    balance_str = ""
+    free_snapshot: Optional[Dict[str, int]] = None
     if user_id:
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
@@ -3934,23 +3937,20 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
         except Exception as exc:
             logger.warning("Failed to resolve free counter line: %s", exc)
         try:
-            from app.services.user_service import get_user_balance as get_user_balance_async
             from app.services.free_tools_service import get_free_counter_snapshot
+
+            free_snapshot = await get_free_counter_snapshot(user_id)
+        except Exception as exc:
+            logger.warning("Failed to resolve free counter snapshot: %s", exc)
+        try:
+            from app.services.user_service import get_user_balance as get_user_balance_async
 
             balance_value = await get_user_balance_async(user_id)
             balance_str = format_rub_amount(balance_value)
-            snapshot = await get_free_counter_snapshot(user_id)
-            refill_eta = _format_refill_eta(snapshot.get("next_refill_in", 0), user_lang)
             if user_lang == "en":
-                balance_status_line = (
-                    f"Balance: {balance_str} | Free: {snapshot.get('remaining', 0)} "
-                    f"(refill in {refill_eta})"
-                )
+                balance_status_line = f"Balance: {balance_str}"
             else:
-                balance_status_line = (
-                    f"Баланс: {balance_str} | Бесплатных: {snapshot.get('remaining', 0)} "
-                    f"(пополнение через {refill_eta})"
-                )
+                balance_status_line = f"Баланс: {balance_str}"
         except Exception as exc:
             logger.warning("Failed to resolve balance status line: %s", exc)
 
@@ -3965,18 +3965,6 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
         name = user.mention_html() if user else "друг"
 
     if is_new:
-        header_text = t(
-            "welcome_new",
-            lang=user_lang,
-            name=name,
-            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-            free_limit=FREE_GENERATIONS_PER_DAY,
-            models=total_models,
-            types=len(generation_types),
-            online=online_count,
-            ref_bonus=REFERRAL_BONUS_GENERATIONS,
-            ref_link=referral_link,
-        )
         referral_bonus_text = ""
     else:
         referral_bonus_text = ""
@@ -3988,16 +3976,50 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
                 bonus=referrals_count * REFERRAL_BONUS_GENERATIONS,
             )
 
-        header_text = t(
-            "welcome_returning",
-            lang=user_lang,
+    if user_lang == "ru":
+        remaining = remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY
+        limit_per_hour = FREE_GENERATIONS_PER_DAY
+        next_refill_in = 0
+        if free_snapshot:
+            remaining = int(free_snapshot.get("remaining", remaining))
+            limit_per_hour = int(free_snapshot.get("limit_per_hour", limit_per_hour))
+            next_refill_in = int(free_snapshot.get("next_refill_in", 0))
+        next_refill_at_local = (datetime.now() + timedelta(seconds=next_refill_in)).strftime("%H:%M")
+        header_text = build_welcome_text_ru(
             name=name,
-            online=online_count,
-            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-            free_limit=FREE_GENERATIONS_PER_DAY,
-            models=total_models,
-            types=len(generation_types),
+            is_new=is_new,
+            remaining=remaining,
+            limit_per_hour=limit_per_hour,
+            next_refill_in=next_refill_in,
+            next_refill_at_local=next_refill_at_local,
+            balance=balance_str or None,
+            compact_free_counter_hint=bool(free_counter_line),
         )
+    else:
+        if is_new:
+            header_text = t(
+                "welcome_new",
+                lang=user_lang,
+                name=name,
+                free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+                free_limit=FREE_GENERATIONS_PER_DAY,
+                models=total_models,
+                types=len(generation_types),
+                online=online_count,
+                ref_bonus=REFERRAL_BONUS_GENERATIONS,
+                ref_link=referral_link,
+            )
+        else:
+            header_text = t(
+                "welcome_returning",
+                lang=user_lang,
+                name=name,
+                online=online_count,
+                free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+                free_limit=FREE_GENERATIONS_PER_DAY,
+                models=total_models,
+                types=len(generation_types),
+            )
 
     if user_lang == "en":
         header_text += "\n👇 Select a section from the menu below."
@@ -4011,7 +4033,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     if admin_lock_notice:
         header_text += f"\n\n{admin_lock_notice}"
 
-    if balance_status_line:
+    if balance_status_line and user_lang == "en":
         header_text += f"\n\n{balance_status_line}"
 
     if free_counter_line:

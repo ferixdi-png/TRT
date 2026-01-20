@@ -1,7 +1,7 @@
 """RU UX text helpers for model cards and confirmations."""
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 
 def build_model_card(
@@ -29,3 +29,39 @@ def build_confirm_summary(model_name: str, price_text: str, summary: str) -> str
         f"Цена: <b>{price_text}</b>\n\n"
         f"{summary}"
     )
+
+
+def build_welcome_text_ru(
+    *,
+    name: str,
+    is_new: bool,
+    remaining: int,
+    limit_per_hour: int,
+    next_refill_in: int,
+    next_refill_at_local: str,
+    balance: Optional[str] = None,
+    compact_free_counter_hint: bool = False,
+) -> str:
+    greeting = "Привет" if is_new else "С возвращением"
+    lines = [
+        f"👋 <b>{greeting}, {name}!</b>",
+        "FERIXDI AI — уже запущенный и стабильно работающий бот для генерации контента.",
+        "Бесплатные модели + очень много нейронок: фото, видео, апскейл, удаление фона и другие задачи.",
+        "Бот честно показывает, сколько бесплатных генераций осталось и когда они восстановятся "
+        "(через час после использования / таймер).",
+        "UX: выберите раздел → модель → введите параметры → подтвердите → получите файл.",
+        "Оплата в рублях доступна как опция, но основной фокус — бесплатные модели.",
+    ]
+
+    if compact_free_counter_hint:
+        lines.append("🆓 Остаток бесплатных и время восстановления — в счетчике ниже.")
+    else:
+        lines.append(
+            "🆓 Бесплатно сейчас: "
+            f"{remaining}/{limit_per_hour} · таймер {next_refill_in} сек (в {next_refill_at_local})."
+        )
+
+    if balance:
+        lines.append(f"💳 Баланс: {balance}")
+
+    return "\n".join(lines)
