@@ -1,177 +1,61 @@
 """
-Single instance locking using PostgreSQL advisory locks.
-Prevents multiple bot instances from running simultaneously.
+Single instance locking (GitHub-only mode).
+Uses file lock fallback from app.utils.singleton_lock.
 """
-import os
-import sys
-import logging
+from __future__ import annotations
+
 import asyncio
-from typing import Optional
-from urllib.parse import urlparse
+import concurrent.futures
+import logging
+from typing import Dict
+
+from app.utils import singleton_lock as lock_utils
 
 logger = logging.getLogger(__name__)
 
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
-def _safe_dsn_parts(dsn: Optional[str]) -> tuple[str, str]:
-    if not dsn:
-        return "unknown", "unknown"
+
+def _run_coro_sync(coro, *, label: str) -> bool:
     try:
-        parsed = urlparse(dsn)
-        host = parsed.hostname or "unknown"
-        port = str(parsed.port or "unknown")
-        return host, port
-    except Exception:
-        return "unknown", "unknown"
-
-try:
-    import asyncpg
-    HAS_ASYNCPG = True
-except ImportError:
-    HAS_ASYNCPG = False
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    future = _executor.submit(lambda: asyncio.run(coro))
     try:
-        import psycopg
-        HAS_PSYCOPG = True
-    except ImportError:
-        HAS_PSYCOPG = False
-
-from app.utils.singleton_lock import (
-    set_lock_acquired,
-    is_lock_acquired,
-    should_exit_on_lock_conflict,
-    get_safe_mode
-)
+        return future.result()
+    except Exception as exc:
+        logger.error("LOCK_SYNC_CALL_FAILED label=%s error=%s", label, exc, exc_info=True)
+        return False
 
 
 class SingletonLock:
-    """PostgreSQL advisory lock for single instance enforcement."""
-    
-    LOCK_ID = 123456789  # Fixed advisory lock ID
-    
-    def __init__(self, dsn: Optional[str] = None):
-        self.dsn = dsn or os.getenv("DATABASE_URL")
-        self._connection = None
-        self._lock_held = False
-        
+    """Compatibility wrapper around file-based singleton lock."""
+
     async def acquire(self, timeout: float = 5.0) -> bool:
-        """
-        Acquire PostgreSQL advisory lock.
-        
-        Args:
-            timeout: Timeout for connection in seconds
-            
-        Returns:
-            True if lock acquired, False if already held by another instance
-        """
-        if not self.dsn:
-            logger.warning("DATABASE_URL not set, skipping singleton lock")
-            logger.warning(
-                "[LOCK] mitigation=github_sha_retry+per_user_lock "
-                "reason=database_url_missing"
-            )
-            # In passive mode, allow startup without lock
-            set_lock_acquired(False)
-            return False
-            
-        try:
-            if HAS_ASYNCPG:
-                self._connection = await asyncio.wait_for(
-                    asyncpg.connect(self.dsn),
-                    timeout=timeout
-                )
-            elif HAS_PSYCOPG:
-                self._connection = await asyncio.wait_for(
-                    psycopg.AsyncConnection.connect(self.dsn),
-                    timeout=timeout
-                )
-            else:
-                logger.warning("No async PostgreSQL driver available, skipping singleton lock")
-                set_lock_acquired(False)
-                return False
-                
-            # Try to acquire advisory lock (non-blocking)
-            if HAS_ASYNCPG:
-                lock_acquired = await self._connection.fetchval(
-                    "SELECT pg_try_advisory_lock($1)",
-                    self.LOCK_ID
-                )
-            else:  # psycopg
-                async with self._connection.cursor() as cur:
-                    await cur.execute(
-                        "SELECT pg_try_advisory_lock(%s)",
-                        (self.LOCK_ID,)
-                    )
-                    result = await cur.fetchone()
-                    lock_acquired = result[0] if result else False
-                    
-            if lock_acquired:
-                self._lock_held = True
-                set_lock_acquired(True)
-                logger.info(f"PostgreSQL advisory lock acquired (ID: {self.LOCK_ID})")
-                return True
-            else:
-                self._lock_held = False
-                set_lock_acquired(False)
-                logger.warning(
-                    f"PostgreSQL advisory lock already held (ID: {self.LOCK_ID}). "
-                    f"Another instance is running."
-                )
-                
-                # Check if we should exit or go to passive mode
-                if should_exit_on_lock_conflict():
-                    logger.info("SINGLETON_LOCK_STRICT=1: entering passive mode (no hard exit)")
-                    await self.release()
-                    return False
-                logger.info(
-                    "[LOCK] Passive mode: telegram runner disabled, healthcheck only. "
-                    f"Safe mode: {get_safe_mode()}"
-                )
-                return False
-                    
-        except asyncio.TimeoutError:
-            logger.warning(f"Singleton lock acquisition timed out after {timeout}s")
-            set_lock_acquired(False)
-            return False
-        except Exception as e:
-            host, port = _safe_dsn_parts(self.dsn)
-            logger.error(f"Failed to acquire singleton lock: {e}")
-            logger.error(
-                f"[LOCK] passive_mode=true error_class={e.__class__.__name__} "
-                f"host={host} port={port} reason=lock_acquire_failed"
-            )
-            set_lock_acquired(False)
-            return False
-    
-    async def release(self):
-        """Release PostgreSQL advisory lock."""
-        if not self._connection or not self._lock_held:
-            return
-            
-        try:
-            if HAS_ASYNCPG:
-                await self._connection.execute(
-                    "SELECT pg_advisory_unlock($1)",
-                    self.LOCK_ID
-                )
-            else:  # psycopg
-                async with self._connection.cursor() as cur:
-                    await cur.execute(
-                        "SELECT pg_advisory_unlock(%s)",
-                        (self.LOCK_ID,)
-                    )
-                    
-            self._lock_held = False
-            set_lock_acquired(False)
-            logger.info("PostgreSQL advisory lock released")
-        except Exception as e:
-            logger.error(f"Failed to release singleton lock: {e}")
-        finally:
-            if self._connection:
-                await self._connection.close()
-                self._connection = None
-    
-    async def __aenter__(self):
-        await self.acquire()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.release()
+        del timeout
+        return await lock_utils.acquire_singleton_lock(require_lock=True)
+
+    async def release(self) -> None:
+        await lock_utils.release_singleton_lock()
+
+
+def acquire_single_instance_lock() -> bool:
+    logger.info("🔒 DB_DISABLED: github-only mode (file lock)")
+    return _run_coro_sync(lock_utils.acquire_singleton_lock(require_lock=True), label="acquire")
+
+
+def release_single_instance_lock() -> None:
+    _run_coro_sync(lock_utils.release_singleton_lock(), label="release")
+
+
+def is_lock_held() -> bool:
+    return lock_utils.is_lock_acquired()
+
+
+def get_lock_debug_info() -> Dict[str, str]:
+    return {
+        "mode": lock_utils.get_lock_mode(),
+        "safe_mode": lock_utils.get_safe_mode(),
+        "degraded": str(lock_utils.is_lock_degraded()).lower(),
+    }

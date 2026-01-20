@@ -610,7 +610,6 @@ def log_env_snapshot():
 
 
 
-        "DATABASE_URL": "[SET]" if os.getenv("DATABASE_URL") else "[NOT SET]",
 
 
 
@@ -3568,45 +3567,14 @@ async def run(settings, application):
 
 
     lock_attempted = False
-    storage_mode = os.getenv("STORAGE_MODE", "github").lower()
-    db_disabled = os.getenv("DISABLE_DB_LOCKS", "0").lower() in ("1", "true", "yes")
-    if not os.getenv("DATABASE_URL"):
-        if settings.bot_mode == "webhook":
-            if storage_mode == "github" or db_disabled:
-                logger.warning(
-                    "[LOCK] error_code=LOCK_DISABLED_NO_DB message=no_db_lock_mode "
-                    "storage_mode=%s db_disabled=%s",
-                    storage_mode,
-                    str(db_disabled).lower(),
-                )
-                try:
-                    lock_attempted = True
-                    lock_acquired = await acquire_singleton_lock(require_lock=True)
-                    logger.info("[LOCK] LOCK_MODE=%s", get_lock_mode())
-                    if not lock_acquired:
-                        logger.warning(
-                            "[LOCK] Singleton lock not acquired - continuing in passive mode "
-                            "(no_db_lock_mode)"
-                        )
-                except Exception as e:
-                    logger.warning(f"[LOCK] Failed to acquire singleton lock (no_db_lock_mode): {e} - continuing anyway")
-            else:
-                logger.error(
-                    "[LOCK] error_code=CONFIG_DB_REQUIRED fix_hint=set_DATABASE_URL_or_use_BOT_MODE=polling "
-                    "message=DATABASE_URL_required_for_webhook_mode"
-                )
-                raise RuntimeError("CONFIG_DB_REQUIRED: DATABASE_URL is required for webhook mode")
-        else:
-            logger.info("[LOCK] DATABASE_URL not set - skipping singleton lock")
-    else:
-        try:
-            lock_attempted = True
-            lock_acquired = await acquire_singleton_lock(require_lock=settings.bot_mode == "webhook")
-            logger.info("[LOCK] LOCK_MODE=%s", get_lock_mode())
-            if not lock_acquired:
-                logger.warning("[LOCK] Singleton lock not acquired - continuing in passive mode (database may be unavailable)")
-        except Exception as e:
-            logger.warning(f"[LOCK] Failed to acquire singleton lock (database may be unavailable): {e} - continuing anyway")
+    try:
+        lock_attempted = True
+        lock_acquired = await acquire_singleton_lock(require_lock=settings.bot_mode == "webhook")
+        logger.info("[LOCK] LOCK_MODE=%s", get_lock_mode())
+        if not lock_acquired:
+            logger.warning("[LOCK] Singleton lock not acquired - continuing in passive mode (file lock fallback)")
+    except Exception as e:
+        logger.warning(f"[LOCK] Failed to acquire singleton lock: {e} - continuing anyway")
 
 
 

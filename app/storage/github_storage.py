@@ -57,6 +57,8 @@ class GitHubStorage(BaseStorage):
         self._implicit_dirs_logged = False
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._stub_enabled = os.getenv("GITHUB_STORAGE_STUB", "0") in ("1", "true", "yes")
+        self._stub_store: Dict[str, Tuple[Dict[str, Any], Optional[str]]] = {}
 
         self.balances_file = "user_balances.json"
         self.languages_file = "user_languages.json"
@@ -265,6 +267,11 @@ class GitHubStorage(BaseStorage):
             path,
             len(payload_json.encode("utf-8")),
         )
+        if self._stub_enabled:
+            sha = f"stub-{int(time.time() * 1000)}"
+            self._stub_store[path] = (data, sha)
+            logger.info("[GITHUB] write_ok path=%s status=stub", path)
+            return sha
         content = base64.b64encode(payload_json.encode("utf-8")).decode("utf-8")
         payload = {
             "message": f"storage update {path}",
@@ -373,6 +380,12 @@ class GitHubStorage(BaseStorage):
 
     async def _fetch_json_payload(self, filename: str) -> Tuple[Dict[str, Any], Optional[str], int]:
         path = self._storage_path(filename)
+        if self._stub_enabled:
+            payload = self._stub_store.get(path)
+            if payload is None:
+                return {}, None, 404
+            data, sha = payload
+            return data, sha, 200
         url = self._contents_url(path)
         response = await self._request_with_retry(
             "GET",
@@ -439,6 +452,8 @@ class GitHubStorage(BaseStorage):
     def test_connection(self) -> bool:
         """Sync connection test for GitHub storage."""
         async def _check() -> bool:
+            if self._stub_enabled:
+                return True
             path = self._storage_path(self.balances_file)
             url = self._contents_url(path)
             timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
@@ -904,5 +919,34 @@ class GitHubStorage(BaseStorage):
         data, _ = await self._read_json(self.referrals_file)
         return float(data.get(str(referrer_id), 0.0))
 
-    async def close(self) -> None:
-        await self._close_all_sessions("close")
+    # ==================== GENERIC JSON FILES ====================
+
+    async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        data, _ = await self._read_json(filename)
+        if data:
+            return data
+        return default or {}
+
+    async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
+        last_error: Optional[Exception] = None
+        for attempt in range(1, self.config.max_retries + 1):
+            _, sha = await self._read_json(filename, force_refresh=True)
+            try:
+                new_sha = await self._write_json(filename, data, sha)
+                self._set_request_cache(filename, data, new_sha or sha)
+                if attempt > 1:
+                    logger.info(
+                        "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+                        attempt,
+                        self._storage_path(filename),
+                    )
+                return
+            except GitHubConflictError as exc:
+                last_error = exc
+                logger.warning(
+                    "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
+                    attempt,
+                    self._storage_path(filename),
+                )
+                await self._backoff(attempt)
+        raise RuntimeError("Exceeded GitHub write retries") from last_error
