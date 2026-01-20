@@ -241,7 +241,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
         if user_lang == 'en':
             free_info = ""
             if remaining_free > 0:
-                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per hour (free tools)"
+                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per day (free tools)"
             
             balance_message = (
                 f"╔═══════════════════════════════════╗\n"
@@ -275,7 +275,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             # Russian version
             free_info = ""
             if remaining_free > 0:
-                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в час (пул free tools)"
+                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день (пул free tools)"
             
             balance_message = (
                 f"╔═══════════════════════════════════════════╗\n"

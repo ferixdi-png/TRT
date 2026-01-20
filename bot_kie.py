@@ -1953,7 +1953,7 @@ def get_generation_timeout_seconds(model_spec: Any) -> int:
     if any(token in model_mode for token in ("audio", "speech")) or output_media in {"audio", "voice"}:
         return int(os.getenv("KIE_TIMEOUT_AUDIO", "180"))
     return int(os.getenv("KIE_TIMEOUT_IMAGE", "180"))
-FREE_GENERATIONS_PER_DAY = FREE_TOOLS_CONFIG.base_per_hour  # Backward-compatible name (per hour)
+FREE_GENERATIONS_PER_DAY = FREE_TOOLS_CONFIG.base_per_day
 REFERRAL_BONUS_GENERATIONS = FREE_TOOLS_CONFIG.referral_bonus  # Bonus generations for inviting a user
 
 # Инициализация констант в helpers
@@ -2602,7 +2602,7 @@ def get_user_free_generations_today(user_id: int) -> int:
 
 
 async def get_user_free_generations_remaining(user_id: int) -> int:
-    """Get remaining free generations for user in the current hour (including referral bank)."""
+    """Get remaining free generations for user today (including referral bank)."""
     status = await get_free_generation_status(user_id)
     return int(status.get("total_remaining", 0))
 
@@ -2621,10 +2621,10 @@ async def is_free_generation_available(user_id: int, sku_id: str) -> bool:
     return int(status.get("total_remaining", 0)) > 0
 
 
-def _format_free_counter_line(remaining: int, limit_per_hour: int, next_refill_in: int, user_lang: str) -> str:
+def _format_free_counter_line(remaining: int, limit_per_day: int, next_refill_in: int, user_lang: str) -> str:
     return format_free_counter_block(
         remaining,
-        limit_per_hour,
+        limit_per_day,
         next_refill_in,
         user_lang=user_lang,
     )
@@ -2666,7 +2666,7 @@ async def get_free_counter_line(
     snapshot = await get_free_counter_snapshot(user_id)
     line = _format_free_counter_line(
         snapshot["remaining"],
-        snapshot["limit_per_hour"],
+        snapshot["limit_per_day"],
         snapshot["next_refill_in"],
         user_lang,
     )
@@ -2680,8 +2680,8 @@ async def get_free_counter_line(
         fix_hint="Показан счетчик бесплатных генераций.",
         param={
             "remaining": snapshot["remaining"],
-            "limit_per_hour": snapshot["limit_per_hour"],
-            "used_in_current_window": snapshot["used_in_current_window"],
+            "limit_per_day": snapshot["limit_per_day"],
+            "used_today": snapshot["used_today"],
             "next_refill_in": snapshot["next_refill_in"],
         },
     )
@@ -4104,43 +4104,12 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     generation_types = get_generation_types()
     total_models = len(get_models_sync())
     remaining_free = FREE_GENERATIONS_PER_DAY
-    free_counter_line = ""
-    balance_status_line = ""
     if user_id:
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
             remaining_free = await get_free_remaining_async(user_id)
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
-        try:
-            free_counter_line = await get_free_counter_line(
-                user_id,
-                user_lang=user_lang,
-                correlation_id=correlation_id,
-                action_path="main_menu",
-            )
-        except Exception as exc:
-            logger.warning("Failed to resolve free counter line: %s", exc)
-        try:
-            from app.services.user_service import get_user_balance as get_user_balance_async
-            from app.services.free_tools_service import get_free_counter_snapshot
-
-            balance_value = await get_user_balance_async(user_id)
-            balance_str = format_rub_amount(balance_value)
-            snapshot = await get_free_counter_snapshot(user_id)
-            refill_eta = _format_refill_eta(snapshot.get("next_refill_in", 0), user_lang)
-            if user_lang == "en":
-                balance_status_line = (
-                    f"Balance: {balance_str} | Free: {snapshot.get('remaining', 0)} "
-                    f"(refill in {refill_eta})"
-                )
-            else:
-                balance_status_line = (
-                    f"Баланс: {balance_str} | Бесплатных: {snapshot.get('remaining', 0)} "
-                    f"(пополнение через {refill_eta})"
-                )
-        except Exception as exc:
-            logger.warning("Failed to resolve balance status line: %s", exc)
 
     is_new = await is_new_user_async(user_id) if user_id else True
     referral_link = get_user_referral_link(user_id) if user_id else ""
@@ -4198,12 +4167,6 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     admin_lock_notice = get_lock_admin_notice(user_lang) if is_admin_user else ""
     if admin_lock_notice:
         header_text += f"\n\n{admin_lock_notice}"
-
-    if balance_status_line:
-        header_text += f"\n\n{balance_status_line}"
-
-    if free_counter_line:
-        header_text += f"\n\n🆓 {free_counter_line}"
 
     details_parts = []
     if referral_bonus_text:
@@ -6460,6 +6423,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception as exc:
                 logger.warning("Failed to resolve free counter line: %s", exc)
+            if free_counter_line:
+                if user_lang == "en":
+                    free_counter_line = f"{free_counter_line}\n🔄 Limit refreshes once per day."
+                else:
+                    free_counter_line = f"{free_counter_line}\n🔄 Лимит обновляется раз в день."
             if user_lang == 'ru':
                 free_tools_text = (
                     f"🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ</b>\n\n"
@@ -6903,7 +6871,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Prepare price info
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
-                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str}"
 
@@ -6960,7 +6928,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             free_counter_line,
                         )
                     else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str}"
                         confirm_msg = _append_free_counter_text(
                             (
                             f"📋 <b>Generation Confirmation</b>\n\n"
@@ -7072,7 +7040,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Prepare price info
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
-                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
+                        price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str}"
                     
@@ -7096,7 +7064,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             free_counter_line,
                         )
                     else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
+                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str}"
                         confirm_msg = _append_free_counter_text(
                             (
                             f"📋 <b>Generation Confirmation</b>\n\n"
@@ -8956,7 +8924,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🎯 <b>У нас {total_models} моделей в {len(categories)} категориях:</b>\n\n'
                     f'🖼️ <b>Изображения</b>\n'
-                    f'• free tools - бесплатные модели (5 раз в час)\n'
+                    f'• free tools - бесплатные модели (5 раз в день)\n'
                     f'• Nano Banana Pro - качество 2K/4K\n'
                     f'• Imagen 4 Ultra - новейшая от Google\n\n'
                     f'🎬 <b>Видео</b>\n'
@@ -9076,7 +9044,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     '━━━━━━━━━━━━━━━━━━━━\n\n'
                     '💰 <b>Как это работает:</b>\n\n'
                     '🎁 <b>Бесплатно:</b>\n'
-                    f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} генераций free tools в час\n'
+                    f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} генераций free tools в день\n'
                     f'• Пригласите друга - получите +{REFERRAL_BONUS_GENERATIONS} генераций!\n\n'
                     '💳 <b>Пополнение баланса:</b>\n'
                     '• Минимальная сумма: 50 ₽\n'
@@ -10920,7 +10888,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 available_count = "Безлимит"
             elif is_free_available:
                 # For z-image with free generations, show free count
-                available_count = f"🎁 {remaining_free} бесплатно в час"
+                available_count = f"🎁 {remaining_free} бесплатно в день"
             elif min_price and user_balance >= min_price:
                 available_count = int(user_balance / min_price)
             else:
@@ -10987,7 +10955,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if is_new and sku_id in FREE_TOOL_SKU_IDS:
                 model_info_text += (
                     f"\n💡 <b>Отлично для начала!</b>\n"
-                    f"Эта модель бесплатна для первых {FREE_GENERATIONS_PER_DAY} генераций в час.\n"
+                    f"Эта модель бесплатна для первых {FREE_GENERATIONS_PER_DAY} генераций в день.\n"
                     f"Просто опишите, что хотите создать, и нажмите \"Генерировать\"!\n\n"
                 )
             
@@ -11001,7 +10969,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Для обычных пользователей всегда показываем цену и баланс
                 if is_free_available:
                     model_info_text += (
-                        f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в час\n"
+                        f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день\n"
                     )
                     if min_price and user_balance >= min_price:
                         paid_count = int(user_balance / min_price)
@@ -12071,9 +12039,9 @@ async def send_confirmation_message(
     if is_free:
         remaining = await get_user_free_generations_remaining(user_id)
         price_info = (
-            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час\n{price_line}"
+            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день\n{price_line}"
             if user_lang == 'ru'
-            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour\n{price_line}"
+            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day\n{price_line}"
         )
     elif not price_display:
         price_info = price_line
@@ -14223,12 +14191,12 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         # Prepare price info
                         if is_free:
                             remaining = await get_user_free_generations_remaining(user_id)
-                            price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
+                            price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
                         else:
                             price_info = f"💰 <b>Стоимость:</b> {price_str}"
                         
                         if user_lang == 'en':
-                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
+                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str}"
                             confirm_text = (
                                 f"📋 <b>Generation Confirmation</b>\n\n"
                                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -14768,7 +14736,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
                         free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
-                        free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
+                        free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
                     else:
                         # КРИТИЧНО: Всегда показываем цену
                         price = calculate_price_rub(model_id, params, is_admin_user)
@@ -14906,7 +14874,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if is_free:
                             remaining = await get_user_free_generations_remaining(user_id)
                             free_info = f"\n\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\n"
-                            free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
+                            free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
                         else:
                             price = calculate_price_rub(model_id, params, is_admin_user)
                             if price is None:
@@ -15796,14 +15764,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     if free_result.get("status") == "deny":
         user_lang = get_user_language(user_id)
-        reset_in = free_result.get("reset_in_minutes", 0)
         deny_text = (
             f"❌ <b>Лимит бесплатных генераций исчерпан</b>\n\n"
-            f"Доступно снова через {reset_in} мин."
+            "Бесплатный лимит пополнится завтра.\n"
+            "💳 Можете пополнить счет, чтобы продолжить пользоваться инструментами."
             if user_lang == "ru"
             else (
                 f"❌ <b>Free generation limit reached</b>\n\n"
-                f"Available again in {reset_in} min."
+                "Free limit resets tomorrow.\n"
+                "💳 Top up to keep using the tools."
             )
         )
         await send_or_edit_message(deny_text)
