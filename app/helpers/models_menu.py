@@ -11,7 +11,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.kie_catalog import load_catalog, get_model, ModelSpec
 from app.pricing.price_resolver import format_price_rub
-from app.pricing.ssot_catalog import get_min_price_rub
+from app.pricing.price_ssot import get_min_price, model_has_free_sku
+from app.ux.model_visibility import is_model_visible
 
 logger = logging.getLogger(__name__)
 
@@ -165,11 +166,12 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
         InlineKeyboardMarkup с кнопками моделей, сгруппированных по типам
     """
     catalog = load_catalog()
-    settings = get_settings()
     
     # Группируем по типам
     models_by_type: Dict[str, List[ModelSpec]] = defaultdict(list)
     for model in catalog:
+        if not is_model_visible(model.id):
+            continue
         models_by_type[model.type].append(model)
     
     keyboard = []
@@ -225,19 +227,22 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
             # Кнопки моделей (по 1 в ряд, так как могут быть длинными)
             for model in sorted(brand_models, key=lambda m: m.title_ru):
                 # Получаем цену для первого режима
-                price_rub = get_min_price_rub(model.id)
+                price_rub = get_min_price(model.id)
                 price_display = format_price_rub(price_rub) if price_rub is not None else "—"
+                free_option = model_has_free_sku(model.id)
                 
                 # Получаем эмодзи для типа модели
                 type_emoji = _get_type_emoji(model.type)
                 
                 # Формируем текст кнопки с эмодзи и ценой
-                button_text = f"{type_emoji} {model.title_ru} • от {price_display} ₽"
+                free_label = " • Free option" if free_option else ""
+                button_text = f"{type_emoji} {model.title_ru} • от {price_display} ₽{free_label}"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
-                    max_len = 60 - len(f" • от {price_display} ₽".encode('utf-8')) - 2  # -2 для эмодзи и пробела
-                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • от {price_display} ₽"
+                    suffix = f" • от {price_display} ₽{free_label}"
+                    max_len = 60 - len(suffix.encode('utf-8')) - 2  # -2 для эмодзи и пробела
+                    button_text = f"{type_emoji} {model.title_ru[:max_len]}...{suffix}"
                 
                 callback_data = _create_callback_data(model.id)
                 
@@ -296,8 +301,9 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     if mode_index < 0 or mode_index >= len(model.modes):
         mode_index = 0
     
-    price_rub = get_min_price_rub(model.id)
+    price_rub = get_min_price(model.id)
     price_display = format_price_rub(price_rub) if price_rub is not None else "—"
+    free_option = model_has_free_sku(model.id)
     
     # Формируем текст карточки
     type_emoji = _get_type_emoji(model.type)
@@ -318,6 +324,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
         examples.append("video_url=https://example.com/video.mp4")
     example_text = "; ".join(examples) if examples else ("—" if user_lang == "ru" else "—")
     price_label = f"от {price_display} ₽" if price_rub is not None else ("цена уточняется" if user_lang == "ru" else "pricing pending")
+    free_option_label = "Free option" if free_option else ""
     if user_lang == 'ru':
         type_name = _get_type_name_ru(model.type)
         
@@ -342,6 +349,8 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"📤 <b>Выход:</b> {model.output_type_ru or '—'}\n"
             f"📌 <b>Пример:</b> {example_text}\n"
         )
+        if free_option_label:
+            card_text += f"🏷️ <b>{free_option_label}</b>\n"
         
         if len(model.modes) > 1:
             card_text += (
@@ -368,6 +377,8 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"📤 <b>Output:</b> {model.output_type_ru or '—'}\n"
             f"📌 <b>Example:</b> {example_text}\n"
         )
+        if free_option_label:
+            card_text += f"🏷️ <b>{free_option_label}</b>\n"
         
         if len(model.modes) > 1:
             card_text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
