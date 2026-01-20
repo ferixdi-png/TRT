@@ -6,6 +6,7 @@ import os
 import sys
 import logging
 import asyncio
+import inspect
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,12 @@ async def start_telegram_bot():
         # Delete webhook and start polling
         await app.bot.delete_webhook(drop_pending_updates=True)
         logger.info("Starting Telegram bot polling...")
-        await app.run_polling(drop_pending_updates=True)
+        if inspect.iscoroutinefunction(app.run_polling):
+            await app.run_polling(drop_pending_updates=True)
+        else:
+            polling_result = app.run_polling(drop_pending_updates=True)
+            if inspect.isawaitable(polling_result):
+                await polling_result
     except Exception as e:
         logger.error(f"Failed to start Telegram bot: {e}")
         raise
