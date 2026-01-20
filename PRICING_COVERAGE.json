@@ -1,0 +1,363 @@
+{
+  "summary": {
+    "READY": 49,
+    "MISSING_PRICE": 3,
+    "MISSING_PARAM_SCHEMA": 20,
+    "AMBIGUOUS_SKU": 0
+  },
+  "total_models": 72,
+  "models": {
+    "z-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "nano-banana-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "seedream/4.5-text-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "seedream/4.5-edit": {
+      "status": "READY",
+      "issues": []
+    },
+    "sora-2-pro-image-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "sora-watermark-remover": {
+      "status": "READY",
+      "issues": []
+    },
+    "sora-2-text-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling-2.6/image-to-video": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "Missing enum values for pricing param 'sound'"
+      ]
+    },
+    "kling-2.6/text-to-video": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "Missing enum values for pricing param 'sound'"
+      ]
+    },
+    "flux-2/pro-image-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "flux-2/pro-text-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "flux-2/flex-image-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "flux-2/flex-text-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "topaz/image-upscale": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v2-5-turbo-text-to-video-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v2-5-turbo-image-to-video-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "wan/2-5-image-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "wan/2-5-text-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "wan/2-2-animate-move": {
+      "status": "READY",
+      "issues": []
+    },
+    "wan/2-2-animate-replace": {
+      "status": "READY",
+      "issues": []
+    },
+    "hailuo/02-text-to-video-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "hailuo/02-image-to-video-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "hailuo/02-image-to-video-standard": {
+      "status": "MISSING_PRICE",
+      "issues": [
+        "At least one param combination has no price."
+      ]
+    },
+    "hailuo/02-text-to-video-standard": {
+      "status": "READY",
+      "issues": []
+    },
+    "topaz/video-upscale": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v1-avatar-standard": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/ai-avatar-v1-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "bytedance/seedream-v4-text-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "bytedance/seedream-v4-edit": {
+      "status": "READY",
+      "issues": []
+    },
+    "recraft/remove-background": {
+      "status": "READY",
+      "issues": []
+    },
+    "recraft/crisp-upscale": {
+      "status": "READY",
+      "issues": []
+    },
+    "ideogram/v3-reframe": {
+      "status": "READY",
+      "issues": []
+    },
+    "wan/2-2-a14b-speech-to-video-turbo": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "bytedance/seedream": {
+      "status": "READY",
+      "issues": []
+    },
+    "qwen/text-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "qwen/image-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "qwen/image-edit": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "ideogram/character-edit": {
+      "status": "READY",
+      "issues": []
+    },
+    "ideogram/character-remix": {
+      "status": "READY",
+      "issues": []
+    },
+    "ideogram/character": {
+      "status": "READY",
+      "issues": []
+    },
+    "bytedance/v1-pro-fast-image-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v2-1-master-image-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v2-1-standard": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v2-1-pro": {
+      "status": "READY",
+      "issues": []
+    },
+    "kling/v2-1-master-text-to-video": {
+      "status": "READY",
+      "issues": []
+    },
+    "ideogram/v3-text-to-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "ideogram/v3-edit": {
+      "status": "READY",
+      "issues": []
+    },
+    "ideogram/v3-remix": {
+      "status": "READY",
+      "issues": []
+    },
+    "wan/2-2-a14b-text-to-video-turbo": {
+      "status": "MISSING_PRICE",
+      "issues": [
+        "No READY pricing SKUs in SSOT."
+      ]
+    },
+    "wan/2-2-a14b-image-to-video-turbo": {
+      "status": "MISSING_PRICE",
+      "issues": [
+        "No READY pricing SKUs in SSOT."
+      ]
+    },
+    "google/imagen4-ultra": {
+      "status": "READY",
+      "issues": []
+    },
+    "google/imagen4-fast": {
+      "status": "READY",
+      "issues": []
+    },
+    "google/imagen4": {
+      "status": "READY",
+      "issues": []
+    },
+    "google/nano-banana": {
+      "status": "READY",
+      "issues": []
+    },
+    "google/nano-banana-edit": {
+      "status": "READY",
+      "issues": []
+    },
+    "elevenlabs/speech-to-text": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "grok/imagine": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "openai/4o-image": {
+      "status": "READY",
+      "issues": []
+    },
+    "flux/kontext": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "google/veo-3": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "google/veo-3.1": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "sora-2-pro-storyboard": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "kling/v2-5-turbo": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "hailuo/2.3": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "infinitalk/from-audio": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "elevenlabs/audio-isolation": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "elevenlabs/sound-effect": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "elevenlabs/text-to-speech": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "google/nanobanana-gemini-2.5-flash": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "runway/gen-4": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "suno/v5": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    },
+    "midjourney/api": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "No READY pricing SKUs in SSOT.",
+        "SSOT has unmapped pricing entries (missing param schema)."
+      ]
+    }
+  }
+}

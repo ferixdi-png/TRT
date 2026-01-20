@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict
 from app.config import Settings
 from app.kie_catalog.catalog import get_model, ModelSpec
+from app.pricing.ssot_catalog import get_min_price_rub
 
 logger = logging.getLogger(__name__)
 
@@ -77,20 +78,11 @@ def price_for_model_rub(
     Returns:
         Цена в рублях или None, если модель/режим не найдены
     """
-    model = get_model(model_id)
-    if not model:
-        logger.warning(f"Model not found: {model_id}")
+    min_price = get_min_price_rub(model_id)
+    if min_price is None:
+        logger.warning("Missing pricing SSOT for model %s", model_id)
         return None
-    
-    if mode_index < 0 or mode_index >= len(model.modes):
-        logger.warning(f"Invalid mode index {mode_index} for model {model_id}")
-        return None
-    
-    mode = model.modes[mode_index]
-    usd_to_rub = get_usd_to_rub(settings)
-    price_multiplier = getattr(settings, 'price_multiplier', 2.0)
-    
-    return user_price_rub(mode.official_usd, usd_to_rub, price_multiplier, is_admin=is_admin)
+    return float(min_price)
 
 
 def get_model_price_info(
@@ -114,24 +106,18 @@ def get_model_price_info(
     model = get_model(model_id)
     if not model:
         return None
-    
-    if mode_index < 0 or mode_index >= len(model.modes):
+    min_price = get_min_price_rub(model_id)
+    if min_price is None:
         return None
-    
-    mode = model.modes[mode_index]
-    usd_to_rub = get_usd_to_rub(settings)
-    price_multiplier = getattr(settings, 'price_multiplier', 2.0)
-    price_rub = user_price_rub(mode.official_usd, usd_to_rub, price_multiplier, is_admin=is_admin)
-    
     return {
         "model_id": model_id,
         "model_title": model.title_ru,
         "mode_index": mode_index,
-        "mode_notes": mode.notes,
-        "unit": mode.unit,
-        "credits": mode.credits,
-        "official_usd": mode.official_usd,
-        "usd_to_rub": usd_to_rub,
-        "price_multiplier": 1.0 if is_admin else price_multiplier,
-        "price_rub": price_rub
+        "mode_notes": None,
+        "unit": None,
+        "credits": None,
+        "official_usd": None,
+        "usd_to_rub": None,
+        "price_multiplier": None,
+        "price_rub": float(min_price),
     }

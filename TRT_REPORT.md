@@ -1515,3 +1515,12 @@ tests/test_409_conflict_fix.py ........
 - `python scripts/verify_button_coverage.py` ✅
 - `pytest -q` ✅
 - `python scripts/smoke_test_all_models.py` ✅ (71 OK, 1 SKIP: infinitalk/from-audio blocked due to missing audio input in SSOT)
+
+## 2026-02-12: Pricing SSOT & UX pricing flow
+**Updates applied:**
+- Added pricing SSOT in RUB (`data/kie_pricing_rub.yaml`) and wired pricing resolver to exact SKU matching.
+- Implemented option-level confirmation with “this option” pricing and SKU-based free tools selection.
+- Generated pricing coverage reports (`PRICING_COVERAGE.md`, `PRICING_COVERAGE.json`) and updated UX cards to show input/output + from-price.
+
+**Verification (now):**
+- `python scripts/pricing_audit.py`

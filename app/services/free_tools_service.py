@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from pricing.engine import load_config
-from app.kie_catalog.catalog import get_free_tools_model_ids as get_dynamic_free_tools_model_ids
+from app.pricing.ssot_catalog import get_free_sku_ids
 from app.storage import get_storage
 from app.observability.structured_logs import log_structured_event
 from app.services.user_service import get_is_admin
@@ -14,7 +14,7 @@ from app.services.user_service import get_is_admin
 
 @dataclass(frozen=True)
 class FreeToolsConfig:
-    model_ids: List[str]
+    sku_ids: List[str]
     base_per_hour: int
     referral_bonus: int
 
@@ -22,18 +22,18 @@ class FreeToolsConfig:
 def get_free_tools_config() -> FreeToolsConfig:
     config = load_config()
     free_tools = config.get("free_tools", {}) if isinstance(config, dict) else {}
-    model_ids = get_dynamic_free_tools_model_ids(log_selection=False)
+    sku_ids = get_free_sku_ids()
     base_per_hour = int(free_tools.get("base_per_hour", 5))
     referral_bonus = int(free_tools.get("referral_bonus", 10))
     return FreeToolsConfig(
-        model_ids=list(model_ids),
+        sku_ids=list(sku_ids),
         base_per_hour=base_per_hour,
         referral_bonus=referral_bonus,
     )
 
 
 def get_free_tools_model_ids() -> List[str]:
-    return get_free_tools_config().model_ids
+    return get_free_tools_config().sku_ids
 
 
 def _parse_iso(dt_str: Optional[str]) -> Optional[datetime]:
@@ -124,7 +124,7 @@ async def check_and_consume_free_generation(
     correlation_id: Optional[str] = None,
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
-    if model_id not in cfg.model_ids:
+    if model_id not in cfg.sku_ids:
         return {"status": "not_free"}
     if get_is_admin(user_id):
         return {"status": "not_free"}
@@ -156,7 +156,7 @@ async def check_and_consume_free_generation(
             stage="FREE_QUOTA",
             outcome="consumed",
             param={
-                "model_id": model_id,
+            "sku_id": model_id,
                 "source": "hourly",
                 "base_remaining": max(0, cfg.base_per_hour - used_count),
                 "referral_remaining": max(0, referral_remaining),
@@ -180,7 +180,7 @@ async def check_and_consume_free_generation(
             stage="FREE_QUOTA",
             outcome="consumed",
             param={
-                "model_id": model_id,
+            "sku_id": model_id,
                 "source": "referral",
                 "base_remaining": 0,
                 "referral_remaining": max(0, referral_remaining - 1),
@@ -209,7 +209,7 @@ async def check_free_generation_available(
     correlation_id: Optional[str] = None,
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
-    if model_id not in cfg.model_ids:
+    if model_id not in cfg.sku_ids:
         return {"status": "not_free"}
     if get_is_admin(user_id):
         return {"status": "not_free"}
@@ -263,7 +263,7 @@ async def consume_free_generation(
     source: str = "delivery",
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
-    if model_id not in cfg.model_ids:
+    if model_id not in cfg.sku_ids:
         return {"status": "not_free"}
     if get_is_admin(user_id):
         return {"status": "not_free"}
@@ -295,7 +295,7 @@ async def consume_free_generation(
             stage="FREE_QUOTA",
             outcome="consumed",
             param={
-                "model_id": model_id,
+                "sku_id": model_id,
                 "source": source,
                 "bucket": "hourly",
                 "base_remaining": max(0, cfg.base_per_hour - used_count),
