@@ -4,7 +4,7 @@ Hybrid storage: GitHub storage for static data, local runtime storage for balanc
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 
 from app.storage.base import BaseStorage
 
@@ -219,6 +219,15 @@ class HybridStorage(BaseStorage):
             await self._runtime.write_json_file(filename, data)
         else:
             await self._primary.write_json_file(filename, data)
+
+    async def update_json_file(
+        self,
+        filename: str,
+        update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if self._is_runtime_file(filename):
+            return await self._runtime.update_json_file(filename, update_fn)
+        return await self._primary.update_json_file(filename, update_fn)
 
     def test_connection(self) -> bool:
         return self._primary.test_connection()

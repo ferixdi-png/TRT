@@ -4,7 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime
 
 
@@ -197,6 +197,15 @@ class BaseStorage(ABC):
     @abstractmethod
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         """Записать произвольный JSON файл в storage."""
+        pass
+
+    @abstractmethod
+    async def update_json_file(
+        self,
+        filename: str,
+        update_fn: "Callable[[Dict[str, Any]], Dict[str, Any]]",
+    ) -> Dict[str, Any]:
+        """Обновить произвольный JSON файл с optimistic merge."""
         pass
     
     # ==================== PAYMENTS ====================

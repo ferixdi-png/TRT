@@ -60,12 +60,21 @@ async def health_handler(request):
     
     # Формируем JSON ответ
     response_data = {
+        "ok": True,
         "status": "ok",
         "uptime": uptime,
         "storage": storage_mode,
         "kie_mode": kie_mode,
         "webhook_route_registered": _webhook_route_registered,
     }
+    try:
+        from app.config import get_settings
+        settings = get_settings()
+        response_data["bot_mode"] = settings.bot_mode
+        response_data["instance"] = settings.bot_instance_id or os.getenv("BOT_INSTANCE_ID", "")
+    except Exception:
+        response_data["bot_mode"] = os.getenv("BOT_MODE", "")
+        response_data["instance"] = os.getenv("BOT_INSTANCE_ID", "")
     
     return web.Response(
         text=json.dumps(response_data),
