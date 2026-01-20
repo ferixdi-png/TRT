@@ -37,6 +37,7 @@ class GitHubConflictError(RuntimeError):
 class GitHubConfig:
     repo: str
     branch: str
+    code_branch: str
     token: str
     committer_name: str
     committer_email: str
@@ -59,6 +60,8 @@ class GitHubStorage(BaseStorage):
         self._session_loop: Optional[asyncio.AbstractEventLoop] = None
         self._stub_enabled = os.getenv("GITHUB_STORAGE_STUB", "0") in ("1", "true", "yes")
         self._stub_store: Dict[str, Tuple[Dict[str, Any], Optional[str]]] = {}
+        self._storage_branch_checked = False
+        self._storage_branch_lock = asyncio.Lock()
 
         self.balances_file = "user_balances.json"
         self.languages_file = "user_languages.json"
@@ -84,7 +87,8 @@ class GitHubStorage(BaseStorage):
 
     def _load_config(self) -> GitHubConfig:
         repo = os.getenv("GITHUB_REPO", "").strip()
-        branch = os.getenv("GITHUB_BRANCH", "main").strip()
+        code_branch = os.getenv("GITHUB_BRANCH", "main").strip()
+        branch = os.getenv("STORAGE_GITHUB_BRANCH", code_branch).strip()
         token = os.getenv("GITHUB_TOKEN", "").strip()
         committer_name = os.getenv("GITHUB_COMMITTER_NAME", "TRT Bot").strip()
         committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "bot@example.com").strip()
@@ -112,6 +116,7 @@ class GitHubStorage(BaseStorage):
         return GitHubConfig(
             repo=repo,
             branch=branch,
+            code_branch=code_branch,
             token=token,
             committer_name=committer_name,
             committer_email=committer_email,
@@ -151,6 +156,60 @@ class GitHubStorage(BaseStorage):
             self._session_loop = loop
         return self._session
 
+    async def _ensure_storage_branch_exists(self) -> None:
+        if self._stub_enabled:
+            return
+        if self._storage_branch_checked:
+            return
+        async with self._storage_branch_lock:
+            if self._storage_branch_checked:
+                return
+            storage_branch = self.config.branch
+            code_branch = self.config.code_branch
+            if storage_branch == code_branch:
+                self._storage_branch_checked = True
+                return
+            ref_url = self._git_url(f"ref/heads/{storage_branch}")
+            response = await self._request_with_retry(
+                "GET",
+                ref_url,
+                op="branch_check",
+                path=storage_branch,
+                ok_statuses=(200, 404),
+            )
+            if response.status == 200:
+                self._storage_branch_checked = True
+                return
+            base_ref_url = self._git_url(f"ref/heads/{code_branch}")
+            base_response = await self._request_with_retry(
+                "GET",
+                base_ref_url,
+                op="branch_base",
+                path=code_branch,
+                ok_statuses=(200,),
+            )
+            base_payload = self._parse_json(base_response.text)
+            base_sha = base_payload.get("object", {}).get("sha")
+            if not base_sha:
+                logger.error(
+                    "[GITHUB] op=branch_base path=%s ok=false error=no_sha",
+                    code_branch,
+                )
+                return
+            create_url = self._git_url("refs")
+            create_payload = {"ref": f"refs/heads/{storage_branch}", "sha": base_sha}
+            create_response = await self._request_with_retry(
+                "POST",
+                create_url,
+                op="branch_create",
+                path=storage_branch,
+                ok_statuses=(201, 422),
+                json=create_payload,
+            )
+            if create_response.status == 201:
+                logger.info("[GITHUB] branch_created=true branch=%s", storage_branch)
+            self._storage_branch_checked = True
+
     async def _request_raw(self, method: str, url: str, **kwargs: Any) -> _ResponsePayload:
         async with self._semaphore:
             session = await self._get_session()
@@ -175,6 +234,9 @@ class GitHubStorage(BaseStorage):
 
     def _contents_url(self, path: str) -> str:
         return f"https://api.github.com/repos/{self.config.repo}/contents/{path}"
+
+    def _git_url(self, path: str) -> str:
+        return f"https://api.github.com/repos/{self.config.repo}/git/{path.lstrip('/')}"
 
     async def _request_with_retry(
         self,
@@ -245,6 +307,7 @@ class GitHubStorage(BaseStorage):
         *,
         force_refresh: bool = False,
     ) -> Tuple[Dict[str, Any], Optional[str]]:
+        await self._ensure_storage_branch_exists()
         cache = self._get_request_cache()
         if not force_refresh:
             cached = cache.get(filename)
@@ -259,6 +322,7 @@ class GitHubStorage(BaseStorage):
         return data, sha
 
     async def _write_json(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> Optional[str]:
+        await self._ensure_storage_branch_exists()
         path = self._storage_path(filename)
         url = self._contents_url(path)
         payload_json = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
@@ -620,16 +684,11 @@ class GitHubStorage(BaseStorage):
         return 0
 
     async def get_user_free_generations_remaining(self, user_id: int) -> int:
-        from app.config import get_settings
+        from app.pricing.free_policy import get_free_daily_limit
 
-        settings = get_settings()
-        free_per_day = 5
+        free_per_day = get_free_daily_limit()
         used = await self.get_user_free_generations_today(user_id)
-        data, _ = await self._read_json(self.free_generations_file)
-        user_key = str(user_id)
-        bonus = data.get(user_key, {}).get("bonus", 0)
-        total_available = free_per_day + bonus
-        return max(0, total_available - used)
+        return max(0, free_per_day - used)
 
     async def increment_free_generations(self, user_id: int) -> None:
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:

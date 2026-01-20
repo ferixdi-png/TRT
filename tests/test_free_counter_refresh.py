@@ -4,6 +4,7 @@ import pytest
 
 import bot_kie
 from app.generations.universal_engine import JobResult
+from app.pricing.ssot_catalog import get_free_sku_ids
 from tests.ptb_harness import PTBHarness
 
 
@@ -24,13 +25,13 @@ async def test_confirm_generation_refreshes_free_counter_line(monkeypatch):
                 "next_refill_in": 3600,
             }
 
-        async def fake_consume(user_id, model_id, correlation_id=None, source=None):
+        async def fake_consume(user_id, sku_id, correlation_id=None, source=None):
             state["used_today"] += 1
             return {
                 "status": "ok",
-                "source": "daily",
-                "base_remaining": state["limit"] - state["used_today"],
-                "referral_remaining": 0,
+                "used_today": state["used_today"],
+                "remaining": state["limit"] - state["used_today"],
+                "limit_per_day": state["limit"],
             }
 
         async def fake_check_available(user_id, sku_id, correlation_id=None):
@@ -64,13 +65,14 @@ async def test_confirm_generation_refreshes_free_counter_line(monkeypatch):
             lambda _model_id: SimpleNamespace(model_mode="image", output_media_type="image"),
         )
 
+        free_sku_id = get_free_sku_ids()[0]
         bot_kie.user_sessions[user_id] = {
             "model_id": "test-model",
             "model_info": {"name": "Test Model"},
             "params": {},
             "properties": {},
             "required": [],
-            "sku_id": "test-sku",
+            "sku_id": free_sku_id,
         }
 
         update = harness.create_mock_update_callback("confirm_generate", user_id=user_id)

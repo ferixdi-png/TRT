@@ -151,7 +151,7 @@ def list_variants_with_prices(
         if param_name not in sku.params:
             continue
         sku_params = {k: _normalize_param_value(v) for k, v in sku.params.items()}
-        if any(normalized_partial.get(k) != v for k, v in normalized_partial.items()):
+        if any(sku_params.get(k) != v for k, v in normalized_partial.items()):
             continue
         value = _normalize_param_value(sku.params.get(param_name))
         current_price = values.get(value)
