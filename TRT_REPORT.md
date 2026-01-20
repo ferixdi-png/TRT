@@ -1,3 +1,32 @@
+## 2026-02-12: Deterministic state machine + stale gen_type auto-reconcile
+**Root cause (from logs):**
+- `active_gen_type/gen_type` persisted across menus (например, `image-to-video`) and was compared against a newly selected text-to-image model, causing false `GEN_TYPE_UNSUPPORTED` blocks.
+
+**What changed (key diffs):**
+- Ввели явную модель UI-контекста (`ui_context`) и семантику `active_gen_type/active_model_id`; меню MAIN/FREE_TOOLS/GEN_TYPE теперь очищают активный тип генерации.
+- Реализована `reset_session_context` + `set_session_context` с логами `SESSION_CONTEXT_RESET/SET` и явной очисткой stale ключей.
+- `select_model` теперь авто-согласует тип генерации: `GEN_TYPE_AUTO_SWITCH_ON_SELECT` вместо блокировки.
+- Добавлены логи UX шагов (`UX_STEP_PROMPTED`) и восстановленного fallback (`UX_UNHANDLED_UPDATE_RECOVERED`).
+- Добавлены регрессионные тесты для stale gen_type и mixed menu.
+- Обновлён аудит готовности: `TRT_MODEL_READINESS.md` + `artifacts/model_readiness.json` с `required_media_expected` и `blocked_reason`.
+
+**Evidence (log snippets):**
+```
+STRUCTURED_LOG {"action":"GEN_TYPE_AUTO_SWITCH_ON_SELECT","model_id":"midjourney/api","gen_type":"text-to-image","outcome":"auto_switched"}
+STRUCTURED_LOG {"action":"SESSION_CONTEXT_RESET","action_path":"free_tools","outcome":"cleared"}
+```
+
+**How verified (commands):**
+- `pytest -q`
+- `python scripts/verify_project.py`
+- `python scripts/verify_button_coverage.py`
+- `python scripts/audit_model_readiness.py`
+
+**Readiness summary (latest audit):**
+- READY: 1
+- PARTIAL: 71
+- BLOCKED: 0
+
 ## 2026-02-11: SSOT media inputs + confirm_generate gate
 **What was broken (log evidence):**
 - Readiness audit flagged media-required models as missing mandatory inputs, which could bypass upload prompts and lead to silent failures at generation. The main offender was `infinitalk/from-audio`, whose SSOT entry lacked required media inputs and had a mismatched type/mode relative to the documented lip-sync requirements. 

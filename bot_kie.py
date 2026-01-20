@@ -1342,7 +1342,25 @@ def _normalize_gen_type(gen_type: Optional[str]) -> Optional[str]:
     return gen_type.replace("_", "-")
 
 
+UI_CONTEXT_MAIN_MENU = "MAIN_MENU"
+UI_CONTEXT_GEN_TYPE_MENU = "GEN_TYPE_MENU"
+UI_CONTEXT_MODEL_MENU = "MODEL_MENU"
+UI_CONTEXT_FREE_TOOLS_MENU = "FREE_TOOLS_MENU"
+UI_CONTEXT_WIZARD = "WIZARD"
+
+
+def _derive_model_gen_type(model_spec: Any | None) -> Optional[str]:
+    if model_spec is None:
+        return None
+    return _normalize_gen_type(
+        getattr(model_spec, "model_mode", None)
+        or getattr(model_spec, "model_type", None)
+    )
+
+
 def _resolve_session_gen_type(session: dict | None, model_spec: Any | None = None) -> Optional[str]:
+    if session and session.get("active_gen_type"):
+        return _normalize_gen_type(session.get("active_gen_type"))
     if session and session.get("gen_type"):
         return _normalize_gen_type(session.get("gen_type"))
     if model_spec is not None:
@@ -1989,12 +2007,8 @@ def update_session_activity(user_id: int):
         user_sessions[user_id]['last_activity'] = time.time()
 
 
-def reset_session_on_navigation(user_id: int, *, reason: str) -> None:
-    """Clear flow-specific session data when user navigates to a new context."""
-    if user_id not in user_sessions:
-        return
-    session = user_sessions[user_id]
-    cleared_keys = []
+def _clear_session_flow_keys(session: dict, *, clear_gen_type: bool) -> list[str]:
+    cleared_keys: list[str] = []
     for key in (
         "waiting_for",
         "current_param",
@@ -2006,25 +2020,119 @@ def reset_session_on_navigation(user_id: int, *, reason: str) -> None:
         "params",
         "properties",
         "required",
+        "required_original",
+        "required_forced_media",
+        "optional_media_params",
+        "image_ref_prompt",
+        "ssot_conflicts",
+        "skipped_params",
         "payment_method",
         "topup_amount",
         "stars_amount",
         "invoice_payload",
         "balance_charged",
+        "active_model_id",
     ):
         if key in session:
             session.pop(key, None)
             cleared_keys.append(key)
+    if clear_gen_type:
+        for key in ("active_gen_type", "gen_type"):
+            if key in session:
+                session.pop(key, None)
+                cleared_keys.append(key)
+    return cleared_keys
+
+
+def reset_session_context(
+    user_id: int,
+    *,
+    reason: str,
+    clear_gen_type: bool,
+    correlation_id: Optional[str] = None,
+    update_id: Optional[int] = None,
+    chat_id: Optional[int] = None,
+) -> None:
+    """Clear flow-specific session data when user navigates to a new context."""
+    if user_id not in user_sessions:
+        return
+    session = user_sessions[user_id]
+    from_context = session.get("ui_context")
+    cleared_keys = _clear_session_flow_keys(session, clear_gen_type=clear_gen_type)
     if cleared_keys:
         logger.info(
             "🧹 SESSION_RESET: action_path=%s cleared=%s",
             reason,
             ",".join(cleared_keys),
         )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="SESSION_CONTEXT_RESET",
+        action_path=reason,
+        model_id=session.get("active_model_id") or session.get("model_id"),
+        gen_type=session.get("active_gen_type") or session.get("gen_type"),
+        stage="SESSION",
+        outcome="cleared" if cleared_keys else "no_op",
+        param={
+            "from_context": from_context,
+            "to_context": session.get("ui_context"),
+            "cleared_keys": cleared_keys,
+        },
+    )
     if session.get("model_id") is None and any(
         key in session for key in ("params", "properties", "required", "waiting_for", "current_param")
     ):
         clear_user_session(user_id, reason=f"{reason}:stale_model_id")
+
+
+def set_session_context(
+    user_id: int,
+    *,
+    to_context: str,
+    reason: str,
+    active_gen_type: Optional[str] = None,
+    active_model_id: Optional[str] = None,
+    clear_gen_type: bool = False,
+    correlation_id: Optional[str] = None,
+    update_id: Optional[int] = None,
+    chat_id: Optional[int] = None,
+) -> None:
+    session = user_sessions.ensure(user_id)
+    from_context = session.get("ui_context")
+    if clear_gen_type:
+        for key in ("active_gen_type", "gen_type"):
+            session.pop(key, None)
+    if active_gen_type is not None:
+        session["active_gen_type"] = active_gen_type
+        session["gen_type"] = active_gen_type
+    if active_model_id is not None:
+        session["active_model_id"] = active_model_id
+    session["ui_context"] = to_context
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="SESSION_CONTEXT_SET",
+        action_path=reason,
+        model_id=session.get("active_model_id") or session.get("model_id"),
+        gen_type=session.get("active_gen_type") or session.get("gen_type"),
+        stage="SESSION",
+        outcome="updated",
+        param={
+            "from_context": from_context,
+            "to_context": to_context,
+            "cleared_keys": ["active_gen_type", "gen_type"] if clear_gen_type else [],
+        },
+    )
+
+
+def reset_session_on_navigation(user_id: int, *, reason: str) -> None:
+    """Backward-compatible wrapper for legacy reset semantics."""
+    reset_session_context(user_id, reason=reason, clear_gen_type=False)
 
 
 def clear_user_session(user_id: int, *, reason: str) -> None:
@@ -4149,17 +4257,33 @@ async def show_main_menu(
         except Exception as exc:
             logger.warning("Failed to resolve user language: %s", exc)
     correlation_id = ensure_correlation_id(update, context)
-    reply_markup = InlineKeyboardMarkup(
-        await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
-    )
-    header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
-    logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
-
     chat_id = None
     if update.effective_chat:
         chat_id = update.effective_chat.id
     elif user_id:
         chat_id = user_id
+    if user_id:
+        reset_session_context(
+            user_id,
+            reason=f"show_main_menu:{source}",
+            clear_gen_type=True,
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            chat_id=chat_id,
+        )
+        set_session_context(
+            user_id,
+            to_context=UI_CONTEXT_MAIN_MENU,
+            reason=f"show_main_menu:{source}",
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            chat_id=chat_id,
+        )
+    reply_markup = InlineKeyboardMarkup(
+        await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
+    )
+    header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
+    logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
     if update.callback_query:
         query = update.callback_query
@@ -5152,7 +5276,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
-            reset_session_on_navigation(user_id, reason="back_to_menu")
             await show_main_menu(update, context, source="back_to_menu")
             return ConversationHandler.END
         
@@ -5718,7 +5841,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
-            reset_session_on_navigation(user_id, reason="gen_type")
+            reset_session_context(
+                user_id,
+                reason="gen_type",
+                clear_gen_type=False,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             
             # User selected a generation type
             parts = data.split(":", 1)
@@ -5737,7 +5867,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             gen_type = parts[1]
             session = ensure_session_cached(context, session_store, user_id, update_id)
+            session["active_gen_type"] = gen_type
             session["gen_type"] = gen_type
+            set_session_context(
+                user_id,
+                to_context=UI_CONTEXT_MODEL_MENU,
+                reason="gen_type",
+                active_gen_type=gen_type,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             gen_info = get_generation_type_info(gen_type)
             models = get_models_by_generation_type(gen_type)
             
@@ -6083,7 +6223,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Error answering callback for free_tools: {e}")
                 pass
-            reset_session_on_navigation(user_id, reason="free_tools")
+            reset_session_context(
+                user_id,
+                reason="free_tools",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
+            set_session_context(
+                user_id,
+                to_context=UI_CONTEXT_FREE_TOOLS_MENU,
+                reason="free_tools",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             logger.info(f"User {user_id} clicked 'free_tools' button")
             
             # Get free tools from pricing config (fixed order)
@@ -6213,6 +6369,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             logger.info(f"User {user_id} clicked 'show_models' or 'all_models' button (data: {data})")
+            reset_session_context(
+                user_id,
+                reason="show_models",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
+            set_session_context(
+                user_id,
+                to_context=UI_CONTEXT_GEN_TYPE_MENU,
+                reason="show_models",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             
             # Show generation types instead of all models with marketing text
             generation_types = get_generation_types()
@@ -10259,7 +10432,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # 🔥 MAXIMUM LOGGING: select_model entry
             logger.debug(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
-            reset_session_on_navigation(user_id, reason="select_model")
+            reset_session_context(
+                user_id,
+                reason="select_model",
+                clear_gen_type=False,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             if not mode_selected and user_id in user_sessions:
                 user_sessions[user_id].pop("mode_index", None)
             
@@ -10351,40 +10531,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return ConversationHandler.END
 
-            session_snapshot = get_session_cached(context, session_store, user_id, update_id, default={}) if user_id is not None else {}
-            session_gen_type = _resolve_session_gen_type(session_snapshot, model_spec)
-            if session_gen_type and not _model_supports_gen_type(model_spec, session_gen_type):
-                user_lang = get_user_language(user_id)
-                error_text = (
-                    "❌ <b>Модель не поддерживает выбранный тип генерации</b>\n\n"
-                    "Пожалуйста, выберите другой тип генерации."
-                    if user_lang == "ru"
-                    else "❌ <b>This model doesn't support the selected generation type</b>\n\nPlease pick another generation type."
-                )
+            session = ensure_session_cached(context, session_store, user_id, update_id)
+            session_gen_type = _resolve_session_gen_type(session, None)
+            model_gen_type = _derive_model_gen_type(model_spec)
+            if session_gen_type and model_gen_type and session_gen_type != model_gen_type:
                 log_structured_event(
                     correlation_id=correlation_id,
                     user_id=user_id,
                     chat_id=query.message.chat_id if query.message else None,
                     update_id=update_id,
-                    action="GEN_TYPE_UNSUPPORTED",
+                    action="GEN_TYPE_AUTO_SWITCH_ON_SELECT",
                     action_path="select_model",
                     model_id=model_id,
-                    gen_type=session_gen_type,
+                    gen_type=model_gen_type,
                     stage="MODEL_SELECT",
-                    outcome="blocked",
-                    error_code="GEN_TYPE_UNSUPPORTED",
-                    param={"model_mode": model_spec.model_mode, "model_type": model_spec.model_type},
+                    outcome="auto_switched",
+                    param={
+                        "previous_gen_type": session_gen_type,
+                        "new_gen_type": model_gen_type,
+                    },
                 )
-                keyboard = [
-                    [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="show_models")],
-                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")],
-                ]
-                await query.edit_message_text(
-                    error_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode="HTML",
-                )
-                return ConversationHandler.END
+                session["active_gen_type"] = model_gen_type
+                session["gen_type"] = model_gen_type
 
             mode_index = user_sessions.get(user_id, {}).get("mode_index")
             if model_spec.modes and len(model_spec.modes) > 1 and mode_index is None:
@@ -10611,11 +10779,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             # Store selected model
-            session = ensure_session_cached(context, session_store, user_id, update_id)
             logger.debug(f"🔥🔥🔥 SELECT_MODEL: Created new session for user_id={user_id}")
             session['model_id'] = model_id
             session['model_info'] = model_info
-            session['gen_type'] = session_gen_type or _resolve_session_gen_type(None, model_spec)
+            session['active_model_id'] = model_id
+            session['active_gen_type'] = model_gen_type or session_gen_type or _resolve_session_gen_type(None, model_spec)
+            session['gen_type'] = session['active_gen_type']
+            set_session_context(
+                user_id,
+                to_context=UI_CONTEXT_WIZARD,
+                reason="select_model",
+                active_gen_type=session.get("active_gen_type"),
+                active_model_id=model_id,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             logger.debug(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(session.keys())}")
 
             log_structured_event(
@@ -11719,6 +11898,22 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 outcome="shown",
                 param={"param_name": param_name, "media_kind": media_kind},
             )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="UX_STEP_PROMPTED",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                gen_type=session.get("gen_type"),
+                waiting_for=param_name,
+                outcome="shown",
+                param={
+                    "param_name": param_name,
+                    "media_kind": media_kind,
+                    "optional": is_optional,
+                },
+            )
             return INPUTTING_PARAMS
 
         if param_type == 'boolean':
@@ -11782,6 +11977,22 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 model_id=model_id,
                 outcome="shown",
                 param={"param_name": param_name, "type": param_type},
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="UX_STEP_PROMPTED",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                gen_type=session.get("gen_type"),
+                waiting_for=param_name,
+                outcome="shown",
+                param={
+                    "param_name": param_name,
+                    "type": param_type,
+                    "optional": is_optional,
+                },
             )
             session['waiting_for'] = param_name
             return INPUTTING_PARAMS
@@ -11852,6 +12063,22 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 model_id=model_id,
                 outcome="shown",
                 param={"param_name": param_name, "type": param_type},
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="UX_STEP_PROMPTED",
+                action_path="start_next_parameter",
+                model_id=model_id,
+                gen_type=session.get("gen_type"),
+                waiting_for=param_name,
+                outcome="shown",
+                param={
+                    "param_name": param_name,
+                    "type": param_type,
+                    "optional": is_optional,
+                },
             )
             session['waiting_for'] = param_name
             return INPUTTING_PARAMS
@@ -11933,6 +12160,22 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             model_id=model_id,
             outcome="shown",
             param={"param_name": param_name, "type": param_type},
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="UX_STEP_PROMPTED",
+            action_path="start_next_parameter",
+            model_id=model_id,
+            gen_type=session.get("gen_type"),
+            waiting_for=param_name,
+            outcome="shown",
+            param={
+                "param_name": param_name,
+                "type": param_type,
+                "optional": is_optional,
+            },
         )
         session['waiting_for'] = param_name
         return INPUTTING_PARAMS
@@ -14516,6 +14759,21 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
                         "current_param": current_param,
                     },
                 )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="UX_UNHANDLED_UPDATE_RECOVERED",
+                    action_path="fallback",
+                    stage="UI_ROUTER",
+                    outcome="routed_to_input_parameters",
+                    param={
+                        "update_type": update_type,
+                        "waiting_for": waiting_for,
+                        "current_param": current_param,
+                    },
+                )
                 await input_parameters(update, context)
                 return
             except Exception as exc:
@@ -14535,6 +14793,21 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
             chat_id=chat_id,
             update_id=update.update_id,
             action="UNHANDLED_UPDATE_FALLBACK_SAFE",
+            action_path="fallback",
+            stage="UI_ROUTER",
+            outcome="waiting_for_param",
+            param={
+                "update_type": update_type,
+                "waiting_for": waiting_for,
+                "current_param": current_param,
+            },
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="UX_UNHANDLED_UPDATE_RECOVERED",
             action_path="fallback",
             stage="UI_ROUTER",
             outcome="waiting_for_param",
@@ -14592,6 +14865,21 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
             chat_id=chat_id,
             update_id=update.update_id,
             action="UNHANDLED_UPDATE_FALLBACK_SAFE",
+            action_path="fallback",
+            stage="UI_ROUTER",
+            outcome="menu_shown",
+            param={
+                "update_type": update_type,
+                "waiting_for": waiting_for,
+                "current_param": current_param,
+            },
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="UX_UNHANDLED_UPDATE_RECOVERED",
             action_path="fallback",
             stage="UI_ROUTER",
             outcome="menu_shown",

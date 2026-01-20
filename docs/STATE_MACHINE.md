@@ -2,6 +2,9 @@
 
 ## Схема состояния
 Каждая сессия содержит:
+* `ui_context`: текущий UI контекст (`MAIN_MENU`, `GEN_TYPE_MENU`, `MODEL_MENU`, `FREE_TOOLS_MENU`, `WIZARD`).
+* `active_gen_type`: активный тип генерации (только для GEN_TYPE/MODEL меню и WIZARD).
+* `active_model_id`: выбранная модель для мастера.
 * `state`: текущее состояние мастера.
 * `waiting_for`: ожидаемый тип ввода (`text`, `photo`, `audio`, `document`).
 * `current_param`: ключ параметра, который сейчас запрашиваем.
@@ -58,7 +61,30 @@
 
 ### /start и Главное меню
 * Безусловный safe reset.
+* `ui_context` → `MAIN_MENU`, `active_gen_type` очищается.
 * Не сбрасывает баланс/реферальные данные.
+
+## UI Context Rules
+
+### MAIN_MENU
+* Всегда очищает `active_gen_type`/`gen_type`.
+* Не зависит от прошлого выбранного типа генерации.
+
+### GEN_TYPE_MENU
+* Показывает типы генерации.
+* `active_gen_type` очищается (mixed menu).
+
+### MODEL_MENU
+* Пользователь выбрал тип генерации.
+* `active_gen_type` фиксируется до выбора модели.
+
+### FREE_TOOLS_MENU
+* Меню смешанных моделей.
+* `active_gen_type` очищается (mixed menu).
+
+### WIZARD
+* Всегда строится по `model_spec` + schema, а не по меню.
+* `active_gen_type` устанавливается из выбранной модели.
 
 ## Input Validation
 * Несоответствие `waiting_for` → сообщение пользователю + повтор запроса.
