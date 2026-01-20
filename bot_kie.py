@@ -1334,11 +1334,11 @@ def format_price_rub(price: float, is_admin: bool = False) -> str:
 
 def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> str:
     """Get formatted price text for a model (from-price for menu cards)."""
-    from app.pricing.ssot_catalog import get_min_price_rub
+    from app.pricing.price_ssot import get_min_price
 
     price = calculate_price_rub(model_id, params, is_admin, user_id)
     if price is None:
-        min_price = get_min_price_rub(model_id)
+        min_price = get_min_price(model_id)
         if min_price is None:
             return "💰 <b>от — ₽</b>"
         return f"💰 <b>от {format_rub_amount(float(min_price))}</b>"
@@ -1347,9 +1347,9 @@ def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = Fa
 
 def get_from_price_value(model_id: str) -> Optional[float]:
     """Return the minimum price in RUB for a model, if available."""
-    from app.pricing.ssot_catalog import get_min_price_rub
+    from app.pricing.price_ssot import get_min_price
 
-    min_price = get_min_price_rub(model_id)
+    min_price = get_min_price(model_id)
     return float(min_price) if min_price is not None else None
 
 
@@ -1781,6 +1781,7 @@ GENERATIONS_HISTORY_FILE = get_data_file_path("generations_history.json")  # Fil
 # Free tools settings
 FREE_TOOLS_CONFIG = get_free_tools_config()
 FREE_TOOL_SKU_IDS = get_free_tools_model_ids()
+FREE_TOOL_MODEL_IDS = [sku_id.split("::", 1)[0] for sku_id in FREE_TOOL_SKU_IDS]
 FREE_SKU_ID = FREE_TOOL_SKU_IDS[0] if FREE_TOOL_SKU_IDS else ""
 
 def is_video_model(model_id: str) -> bool:
@@ -10680,16 +10681,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
-            from app.kie_contract.schema_loader import get_model_schema
-            from app.pricing.ssot_catalog import get_min_price_rub
-            if not get_model_schema(model_id):
+            from app.ux.model_visibility import evaluate_model_visibility, STATUS_READY_VISIBLE
+            visibility = evaluate_model_visibility(model_id)
+            if visibility.status != STATUS_READY_VISIBLE:
                 user_lang = get_user_language(user_id)
-                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
-                await query.edit_message_text(blocked_text, parse_mode="HTML")
-                return ConversationHandler.END
-            if get_min_price_rub(model_id) is None:
-                user_lang = get_user_language(user_id)
-                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                issues = "\n".join(f"• {issue}" for issue in visibility.issues) if visibility.issues else ""
+                if user_lang == "ru":
+                    blocked_text = (
+                        "⛔️ <b>Модель недоступна</b>\n\n"
+                        f"Причина: <code>{visibility.status}</code>\n"
+                        f"{issues or '• Причина не указана'}"
+                    )
+                else:
+                    blocked_text = (
+                        "⛔️ <b>Model unavailable</b>\n\n"
+                        f"Reason: <code>{visibility.status}</code>\n"
+                        f"{issues or '• No details available'}"
+                    )
                 await query.edit_message_text(blocked_text, parse_mode="HTML")
                 return ConversationHandler.END
 
@@ -11397,6 +11405,34 @@ def _get_reset_step_label(user_lang: str) -> str:
     return "🔄 Сбросить шаг" if user_lang == 'ru' else "🔄 Reset step"
 
 
+def _get_param_price_variants(
+    model_id: str,
+    param_name: str,
+    current_params: dict,
+) -> tuple[bool, dict[str, float]]:
+    try:
+        from app.pricing.price_ssot import list_model_skus, list_variants_with_prices
+    except Exception:
+        return False, {}
+    skus = list_model_skus(model_id)
+    if not any(param_name in sku.params for sku in skus):
+        return False, {}
+    variants = list_variants_with_prices(model_id, param_name, current_params or {})
+    return True, {value: float(price) for value, price in variants}
+
+
+def _format_param_price_rows(values: list[str], price_map: dict[str, float]) -> list[str]:
+    from app.pricing.price_resolver import format_price_rub
+
+    rows: list[str] = []
+    for value in values:
+        price_value = price_map.get(str(value))
+        if price_value is None:
+            continue
+        rows.append(f"{value} — {format_price_rub(price_value)}₽")
+    return rows
+
+
 async def prompt_for_specific_param(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -11442,6 +11478,11 @@ async def prompt_for_specific_param(
         user_id=user_id,
         chat_id=chat_id,
         is_admin=get_is_admin(user_id),
+    )
+    price_depends, param_price_map = _get_param_price_variants(
+        model_id,
+        param_name,
+        session.get("params", {}),
     )
 
     logger.info(
@@ -11568,10 +11609,20 @@ async def prompt_for_specific_param(
         return INPUTTING_PARAMS
 
     if param_type == 'boolean':
+        true_label = "✅ Да (true)"
+        false_label = "❌ Нет (false)"
+        if price_depends and param_price_map:
+            true_price = param_price_map.get("true")
+            false_price = param_price_map.get("false")
+            from app.pricing.price_resolver import format_price_rub
+            if true_price is not None:
+                true_label = f"{true_label} — {format_price_rub(true_price)}₽"
+            if false_price is not None:
+                false_label = f"{false_label} — {format_price_rub(false_price)}₽"
         keyboard = [
             [
-                InlineKeyboardButton("✅ Да (true)", callback_data=f"set_param:{param_name}:true"),
-                InlineKeyboardButton("❌ Нет (false)", callback_data=f"set_param:{param_name}:false")
+                InlineKeyboardButton(true_label, callback_data=f"set_param:{param_name}:true"),
+                InlineKeyboardButton(false_label, callback_data=f"set_param:{param_name}:false")
             ]
         ]
         if is_optional:
@@ -11592,15 +11643,38 @@ async def prompt_for_specific_param(
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
-        message_text = _append_free_counter_text(
-            (
-                f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
-                f"{description}\n\n"
-                f"💡 {detail_text}\n\n"
-                f"{price_line}"
-            ),
-            free_counter_line,
+        price_rows = []
+        if price_depends:
+            price_rows = _format_param_price_rows(["true", "false"], param_price_map)
+            if not price_rows:
+                blocked_text = (
+                    "⛔️ <b>Нет цены для выбранного параметра</b>"
+                    if user_lang == "ru"
+                    else "⛔️ <b>No price for the selected parameter</b>"
+                )
+                blocked_keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu"),
+                    ]
+                ])
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=blocked_text,
+                    reply_markup=blocked_keyboard,
+                    parse_mode="HTML",
+                )
+                return INPUTTING_PARAMS
+        price_variants_text = "\n".join(price_rows)
+        detail_block = (
+            f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+            f"{description}\n\n"
+            f"💡 {detail_text}\n\n"
         )
+        if price_variants_text:
+            detail_block += f"{price_variants_text}\n\n"
+        detail_block += f"{price_line}"
+        message_text = _append_free_counter_text(detail_block, free_counter_line)
         await context.bot.send_message(
             chat_id=chat_id,
             text=message_text,
@@ -11622,15 +11696,51 @@ async def prompt_for_specific_param(
         return INPUTTING_PARAMS
 
     if enum_values:
+        display_values = list(enum_values)
+        if price_depends and param_price_map:
+            display_values = [value for value in enum_values if str(value) in param_price_map]
+        if price_depends and not display_values:
+            blocked_text = (
+                "⛔️ <b>Нет цены для доступных вариантов</b>"
+                if user_lang == "ru"
+                else "⛔️ <b>No price for available variants</b>"
+            )
+            blocked_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu"),
+                ]
+            ])
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=blocked_text,
+                reply_markup=blocked_keyboard,
+                parse_mode="HTML",
+            )
+            return INPUTTING_PARAMS
         keyboard = []
-        for i in range(0, len(enum_values), 2):
+        for i in range(0, len(display_values), 2):
+            first_value = display_values[i]
+            first_label = str(first_value)
+            if price_depends and param_price_map:
+                from app.pricing.price_resolver import format_price_rub
+                price_value = param_price_map.get(str(first_value))
+                if price_value is not None:
+                    first_label = f"{first_label} — {format_price_rub(price_value)}₽"
             row = [
-                InlineKeyboardButton(enum_values[i], callback_data=f"set_param:{param_name}:{enum_values[i]}")
+                InlineKeyboardButton(first_label, callback_data=f"set_param:{param_name}:{first_value}")
             ]
-            if i + 1 < len(enum_values):
-                row.append(InlineKeyboardButton(enum_values[i + 1], callback_data=f"set_param:{param_name}:{enum_values[i + 1]}"))
+            if i + 1 < len(display_values):
+                second_value = display_values[i + 1]
+                second_label = str(second_value)
+                if price_depends and param_price_map:
+                    from app.pricing.price_resolver import format_price_rub
+                    price_value = param_price_map.get(str(second_value))
+                    if price_value is not None:
+                        second_label = f"{second_label} — {format_price_rub(price_value)}₽"
+                row.append(InlineKeyboardButton(second_label, callback_data=f"set_param:{param_name}:{second_value}"))
             keyboard.append(row)
-        if is_optional and default_value and default_value in enum_values:
+        if is_optional and default_value and default_value in display_values:
             default_text = f"⏭️ Использовать по умолчанию ({default_value})" if user_lang == 'ru' else f"⏭️ Use default ({default_value})"
             keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
         elif is_optional and not default_value:
@@ -11647,15 +11757,17 @@ async def prompt_for_specific_param(
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
-        message_text = _append_free_counter_text(
-            (
-                f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
-                f"{description}\n\n"
-                f"💡 {detail_text}\n\n"
-                f"{price_line}"
-            ),
-            free_counter_line,
+        price_rows = _format_param_price_rows([str(value) for value in display_values], param_price_map) if price_depends else []
+        price_variants_text = "\n".join(price_rows)
+        detail_block = (
+            f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
+            f"{description}\n\n"
+            f"💡 {detail_text}\n\n"
         )
+        if price_variants_text:
+            detail_block += f"{price_variants_text}\n\n"
+        detail_block += f"{price_line}"
+        message_text = _append_free_counter_text(detail_block, free_counter_line)
         await context.bot.send_message(
             chat_id=chat_id,
             text=message_text,

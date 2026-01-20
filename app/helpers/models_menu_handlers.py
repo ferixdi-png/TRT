@@ -48,7 +48,7 @@ async def handle_show_all_models_list(
                 f"║  📦 ДОСТУПНО: <b>{len(catalog)} МОДЕЛЕЙ</b> 📦        ║\n"
                 f"╚═══════════════════════════════════════════╝\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💰 <b>Цены в рублях</b> (×2 от официальной)\n"
+                f"💰 <b>Цены в рублях</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"💡 <b>Выберите модель для просмотра деталей и генерации</b>\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -60,7 +60,7 @@ async def handle_show_all_models_list(
                 f"╚═══════════════════════════════════╝\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"📦 <b>Available:</b> <b>{len(catalog)} models</b>\n"
-                f"💰 <b>Prices in RUB</b> (×2 from official)\n"
+                f"💰 <b>Prices in RUB</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"💡 <b>Select a model to view details and generate</b>"
             )
@@ -153,6 +153,30 @@ async def handle_model_callback(
         
         return False
     
+    # Проверяем видимость модели по SSOT
+    try:
+        from app.ux.model_visibility import evaluate_model_visibility, STATUS_READY_VISIBLE
+        visibility = evaluate_model_visibility(model.id)
+        if visibility.status != STATUS_READY_VISIBLE:
+            if user_lang == 'ru':
+                issues = "\n".join(f"• {issue}" for issue in visibility.issues) if visibility.issues else "• Причина не указана"
+                blocked_text = (
+                    "⛔️ <b>Модель недоступна</b>\n\n"
+                    f"Причина: <code>{visibility.status}</code>\n"
+                    f"{issues}"
+                )
+            else:
+                issues = "\n".join(f"• {issue}" for issue in visibility.issues) if visibility.issues else "• No details available"
+                blocked_text = (
+                    "⛔️ <b>Model unavailable</b>\n\n"
+                    f"Reason: <code>{visibility.status}</code>\n"
+                    f"{issues}"
+                )
+            await query.edit_message_text(blocked_text, parse_mode='HTML')
+            return False
+    except Exception as exc:
+        logger.warning("Visibility check failed for model %s: %s", model.id, exc)
+
     # Строим карточку модели
     try:
         card_text, keyboard_markup = build_model_card_text(model, mode_index=0, user_lang=user_lang)
@@ -171,4 +195,3 @@ async def handle_model_callback(
         else:
             await query.answer("❌ Error loading model card", show_alert=True)
         return False
-

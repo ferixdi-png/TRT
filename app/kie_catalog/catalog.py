@@ -245,14 +245,12 @@ def _load_yaml_catalog() -> List[Dict[str, Any]]:
 
 def _is_free_model_data(model_data: Dict[str, Any]) -> bool:
     """Определяет бесплатную модель по данным каталога."""
-    if model_data.get("free") is True:
-        return True
-    for mode in model_data.get("modes", []):
-        if mode.get("free") is True:
-            return True
-        if mode.get("credits") == 0 or mode.get("official_usd") == 0 or mode.get("price_rub") == 0:
-            return True
-    return False
+    from app.pricing.price_ssot import model_has_free_sku
+
+    model_id = model_data.get("id")
+    if not model_id:
+        return False
+    return model_has_free_sku(model_id)
 
 
 def _parse_model_spec(
@@ -353,17 +351,17 @@ def load_catalog(force_reload: bool = False) -> List[ModelSpec]:
 def get_free_model_ids() -> List[str]:
     """
     Возвращает список ID бесплатных моделей из каталога.
-    Бесплатность определяется только по данным каталога (free=true или 0 credits).
+    Бесплатность определяется только по явным SKU в прайс-SSOT.
     """
     free_tools = load_config().get("free_tools", {})
     model_ids = free_tools.get("model_ids")
     if isinstance(model_ids, list) and model_ids:
         return list(model_ids)
-    return [model.id for model in load_catalog() if model.free]
+    return []
 
 
 def get_free_tools_model_ids(*, log_selection: bool = True) -> List[str]:
-    """Return 5 cheapest SKU IDs from pricing SSOT (including at least one text-to-video SKU)."""
+    """Return SKU IDs marked as free in the pricing SSOT."""
     from app.pricing.ssot_catalog import get_free_sku_ids
     from app.observability.structured_logs import log_structured_event
 

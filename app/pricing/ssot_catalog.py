@@ -7,15 +7,21 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import yaml
-
 from app.kie_contract.schema_loader import get_model_schema, get_model_meta
+from app.pricing.price_ssot import (
+    PriceSku,
+    get_min_price,
+    list_all_models,
+    list_free_sku_keys,
+    list_model_skus as list_price_model_skus,
+    load_price_ssot,
+    resolve_sku_for_params as resolve_price_sku_for_params,
+)
 
 _sku_callback_map: Dict[str, str] = {}
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PRICING_SSOT_PATH = ROOT / "data" / "kie_pricing_rub.yaml"
 PRICING_COVERAGE_PATH = ROOT / "PRICING_COVERAGE.json"
 
 
@@ -28,6 +34,7 @@ class PricingSku:
     params: Dict[str, Any]
     notes: str = ""
     status: str = "READY"
+    is_free_sku: bool = False
 
 
 def _normalize_param_value(value: Any) -> str:
@@ -45,76 +52,46 @@ def _build_sku_id(model_id: str, params: Dict[str, Any]) -> str:
     return f"{model_id}::" + "|".join(parts)
 
 
-def _load_yaml(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
-    return data if isinstance(data, dict) else {}
-
-
 @lru_cache(maxsize=1)
 def load_pricing_ssot() -> Dict[str, Any]:
-    return _load_yaml(PRICING_SSOT_PATH)
-
-
-def _iter_skus(model_data: Dict[str, Any], model_id: str) -> Iterable[PricingSku]:
-    for sku_data in model_data.get("skus", []) or []:
-        params = sku_data.get("params") or {}
-        price = Decimal(str(sku_data.get("price_rub", "0")))
-        unit = str(sku_data.get("unit", "request"))
-        notes = str(sku_data.get("notes", "")) if sku_data.get("notes") else ""
-        status = str(sku_data.get("status", "READY")).upper()
-        sku_id = _build_sku_id(model_id, params)
-        yield PricingSku(
-            sku_id=sku_id,
-            model_id=model_id,
-            price_rub=price,
-            unit=unit,
-            params=params,
-            notes=notes,
-            status=status,
-        )
+    return load_price_ssot()
 
 
 def list_model_skus(model_id: str, *, include_non_ready: bool = False) -> List[PricingSku]:
-    ssot = load_pricing_ssot()
-    models = ssot.get("models", [])
-    if not isinstance(models, list):
-        return []
-    for model in models:
-        if not isinstance(model, dict):
-            continue
-        if model.get("id") != model_id:
-            continue
-        skus = list(_iter_skus(model, model_id))
-        if include_non_ready:
-            return skus
-        return [sku for sku in skus if sku.status == "READY"]
-    return []
+    skus = list_price_model_skus(model_id)
+    return [
+        PricingSku(
+            sku_id=sku.sku_key,
+            model_id=sku.model_id,
+            price_rub=sku.price_rub,
+            unit=sku.unit,
+            params=sku.params,
+            notes=sku.notes,
+            status="READY",
+            is_free_sku=sku.is_free_sku,
+        )
+        for sku in skus
+    ]
 
 
 def resolve_sku_for_params(model_id: str, params: Dict[str, Any]) -> Optional[PricingSku]:
-    skus = list_model_skus(model_id)
-    if not skus:
+    sku = resolve_price_sku_for_params(model_id, params)
+    if not sku:
         return None
-    normalized = {k: _normalize_param_value(v) for k, v in (params or {}).items()}
-    matches: List[PricingSku] = []
-    for sku in skus:
-        sku_params = {k: _normalize_param_value(v) for k, v in sku.params.items()}
-        if any(normalized.get(k) != v for k, v in sku_params.items()):
-            continue
-        matches.append(sku)
-    if len(matches) == 1:
-        return matches[0]
-    return None
+    return PricingSku(
+        sku_id=sku.sku_key,
+        model_id=sku.model_id,
+        price_rub=sku.price_rub,
+        unit=sku.unit,
+        params=sku.params,
+        notes=sku.notes,
+        status="READY",
+        is_free_sku=sku.is_free_sku,
+    )
 
 
 def get_min_price_rub(model_id: str) -> Optional[Decimal]:
-    skus = list_model_skus(model_id)
-    if not skus:
-        return None
-    return min((sku.price_rub for sku in skus), default=None)
+    return get_min_price(model_id)
 
 
 def get_sku_param_summary(sku: PricingSku) -> str:
@@ -125,6 +102,16 @@ def get_sku_param_summary(sku: PricingSku) -> str:
 
 def _slugify_model_id(model_id: str) -> str:
     return model_id.lower().replace("/", "-").replace("_", "-")
+
+
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    import yaml
+
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    return data if isinstance(data, dict) else {}
 
 
 def get_pricing_coverage_entry(model_id: str) -> Optional[Dict[str, Any]]:
@@ -174,45 +161,13 @@ def _sku_is_text_to_video(sku: PricingSku) -> bool:
 
 
 def get_free_sku_ids() -> List[str]:
-    ssot = load_pricing_ssot()
-    models = ssot.get("models", [])
-    if not isinstance(models, list):
-        return []
-    cheapest_per_model: List[PricingSku] = []
-    for model in models:
-        if not isinstance(model, dict):
-            continue
-        model_id = model.get("id")
-        if not model_id:
-            continue
-        skus = [sku for sku in _iter_skus(model, model_id) if sku.status == "READY"]
-        if not skus:
-            continue
-        cheapest_per_model.append(min(skus, key=lambda sku: sku.price_rub))
-    cheapest_per_model.sort(key=lambda sku: (sku.price_rub, sku.model_id))
-    selected = cheapest_per_model[:5]
-    if selected and not any(_sku_is_text_to_video(sku) for sku in selected):
-        t2v_candidates = [sku for sku in cheapest_per_model if _sku_is_text_to_video(sku)]
-        if t2v_candidates:
-            replacement = min(t2v_candidates, key=lambda sku: sku.price_rub)
-            if selected:
-                selected[-1] = replacement
-    return [sku.sku_id for sku in selected]
+    return list_free_sku_keys()
 
 
 @lru_cache(maxsize=512)
 def get_sku_by_id(sku_id: str) -> Optional[PricingSku]:
-    ssot = load_pricing_ssot()
-    models = ssot.get("models", [])
-    if not isinstance(models, list):
-        return None
-    for model in models:
-        if not isinstance(model, dict):
-            continue
-        model_id = model.get("id")
-        if not model_id:
-            continue
-        for sku in _iter_skus(model, model_id):
+    for model_id in list_all_models():
+        for sku in list_model_skus(model_id):
             if sku.sku_id == sku_id:
                 return sku
     return None
