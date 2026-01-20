@@ -75,6 +75,21 @@
       ],
       "task_id": "1b724b04b87fb79b74c1559df2ec5712",
       "timestamp": 1768917140
+    },
+    {
+      "id": 6,
+      "is_free": true,
+      "model_id": "bytedance/seedream",
+      "model_name": "Seedream 3.0 Text to Image",
+      "params": {
+        "prompt": "woman"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/f/b0d7a82f9bde79231fb57cf2ec80ac90_1768917228_vuh8fx5e.png"
+      ],
+      "task_id": "b0d7a82f9bde79231fb57cf2ec80ac90",
+      "timestamp": 1768917230
     }
   ],
   "8365353562": [
