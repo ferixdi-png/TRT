@@ -4,9 +4,14 @@ Hybrid storage: GitHub storage for static data, local runtime storage for balanc
 from __future__ import annotations
 
 import os
+import time
+import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Callable
 
 from app.storage.base import BaseStorage
+
+logger = logging.getLogger(__name__)
 
 
 class HybridStorage(BaseStorage):
@@ -21,6 +26,15 @@ class HybridStorage(BaseStorage):
         self._primary = primary
         self._runtime = runtime
         self._runtime_files = runtime_files or set()
+        self._primary_cache: Dict[str, HybridStorage._CacheEntry] = {}
+        self._primary_cache_version = 0
+        self._fallback_ttl = float(os.getenv("HYBRID_STORAGE_FALLBACK_TTL", "300"))
+
+    @dataclass(frozen=True)
+    class _CacheEntry:
+        data: Dict[str, Any]
+        updated_at: float
+        version: int
 
     def _is_runtime_file(self, filename: str) -> bool:
         basename = os.path.basename(filename)
@@ -212,13 +226,46 @@ class HybridStorage(BaseStorage):
     async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         if self._is_runtime_file(filename):
             return await self._runtime.read_json_file(filename, default)
-        return await self._primary.read_json_file(filename, default)
+        try:
+            data = await self._primary.read_json_file(filename, default)
+            if data:
+                self._primary_cache_version += 1
+                self._primary_cache[filename] = self._CacheEntry(
+                    data=data,
+                    updated_at=time.monotonic(),
+                    version=self._primary_cache_version,
+                )
+            return data
+        except Exception as exc:
+            entry = self._primary_cache.get(filename)
+            if entry is not None:
+                age_sec = time.monotonic() - entry.updated_at
+                logger.warning(
+                    "STORAGE_FALLBACK_USED path=%s age_sec=%.2f version=%s ttl_sec=%.0f",
+                    filename,
+                    age_sec,
+                    entry.version,
+                    self._fallback_ttl,
+                )
+                return entry.data
+            logger.warning(
+                "[STORAGE] read_failed path=%s error_class=%s",
+                filename,
+                exc.__class__.__name__,
+            )
+            return default or {}
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         if self._is_runtime_file(filename):
             await self._runtime.write_json_file(filename, data)
         else:
             await self._primary.write_json_file(filename, data)
+            self._primary_cache_version += 1
+            self._primary_cache[filename] = self._CacheEntry(
+                data=data,
+                updated_at=time.monotonic(),
+                version=self._primary_cache_version,
+            )
 
     async def update_json_file(
         self,
@@ -227,7 +274,15 @@ class HybridStorage(BaseStorage):
     ) -> Dict[str, Any]:
         if self._is_runtime_file(filename):
             return await self._runtime.update_json_file(filename, update_fn)
-        return await self._primary.update_json_file(filename, update_fn)
+        updated = await self._primary.update_json_file(filename, update_fn)
+        if updated:
+            self._primary_cache_version += 1
+            self._primary_cache[filename] = self._CacheEntry(
+                data=updated,
+                updated_at=time.monotonic(),
+                version=self._primary_cache_version,
+            )
+        return updated
 
     def test_connection(self) -> bool:
         return self._primary.test_connection()
