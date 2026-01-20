@@ -1,7 +1,15 @@
 #!/bin/bash
 # Скрипт для удаления webhook и возврата к polling
 
-BOT_TOKEN="8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y"
+set -euo pipefail
+
+BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-${BOT_TOKEN:-}}"
+
+if [[ -z "${BOT_TOKEN}" ]]; then
+    echo "❌ Ошибка: TELEGRAM_BOT_TOKEN (или BOT_TOKEN) не установлен"
+    echo "   Пример: TELEGRAM_BOT_TOKEN=... ./scripts/remove_webhook.sh"
+    exit 1
+fi
 
 echo "🔧 Удаление webhook и возврат к polling..."
 echo ""
@@ -25,4 +33,3 @@ fi
 echo ""
 echo "📋 Проверка (webhook должен быть пустым):"
 curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo" | python3 -m json.tool
-
