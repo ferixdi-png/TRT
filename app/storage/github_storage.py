@@ -20,6 +20,7 @@ from typing import Dict, Any, Optional, List, Callable, Tuple
 import aiohttp
 
 from app.storage.base import BaseStorage
+from app.config_env import resolve_storage_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class GitHubConfig:
     committer_name: str
     committer_email: str
     storage_prefix: str
+    legacy_storage_prefix: Optional[str]
     bot_instance_id: str
     timeout_seconds: float
     max_parallel: int
@@ -63,6 +65,8 @@ class GitHubStorage(BaseStorage):
         self._stub_store: Dict[str, Tuple[Dict[str, Any], Optional[str]]] = {}
         self._storage_branch_checked = False
         self._storage_branch_lock = asyncio.Lock()
+        self._legacy_prefix = self.config.legacy_storage_prefix
+        self._legacy_warning_logged = False
 
         self.balances_file = "user_balances.json"
         self.languages_file = "user_languages.json"
@@ -90,13 +94,14 @@ class GitHubStorage(BaseStorage):
     def _load_config(self) -> GitHubConfig:
         code_repo = os.getenv("GITHUB_REPO", "").strip()
         code_branch = os.getenv("GITHUB_BRANCH", "main").strip()
-        storage_branch = os.getenv("STORAGE_GITHUB_BRANCH", "storage").strip()
+        storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
         storage_repo = os.getenv("STORAGE_GITHUB_REPO", code_repo).strip()
         token = os.getenv("GITHUB_TOKEN", "").strip()
         committer_name = os.getenv("GITHUB_COMMITTER_NAME", "TRT Bot").strip()
         committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "bot@example.com").strip()
-        storage_prefix = os.getenv("STORAGE_PREFIX", "storage").strip().strip("/")
+        raw_storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
         bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
+        prefix_resolution = resolve_storage_prefix(raw_storage_prefix, bot_instance_id)
         timeout_seconds = float(os.getenv("GITHUB_TIMEOUT_SECONDS", "20"))
         max_parallel = int(os.getenv("GITHUB_MAX_PARALLEL", "4"))
         max_retries = int(os.getenv("GITHUB_WRITE_RETRIES", "5"))
@@ -115,6 +120,10 @@ class GitHubStorage(BaseStorage):
                 + ",".join(missing)
                 + " (BOT_INSTANCE_ID required per deploy)"
             )
+        if storage_repo == code_repo and storage_branch == code_branch:
+            raise ValueError(
+                "[STORAGE][GITHUB] storage_branch_must_differ_from_code_branch"
+            )
 
         return GitHubConfig(
             storage_repo=storage_repo,
@@ -124,7 +133,8 @@ class GitHubStorage(BaseStorage):
             token=token,
             committer_name=committer_name,
             committer_email=committer_email,
-            storage_prefix=storage_prefix,
+            storage_prefix=prefix_resolution.effective_prefix,
+            legacy_storage_prefix=prefix_resolution.legacy_prefix,
             bot_instance_id=bot_instance_id,
             timeout_seconds=timeout_seconds,
             max_parallel=max_parallel,
@@ -239,7 +249,13 @@ class GitHubStorage(BaseStorage):
 
     def _storage_path(self, filename: str) -> str:
         safe_name = filename.strip("/").replace("..", "")
-        return f"{self.config.storage_prefix}/{self.config.bot_instance_id}/{safe_name}"
+        return f"{self.config.storage_prefix}/{safe_name}"
+
+    def _legacy_storage_path(self, filename: str) -> Optional[str]:
+        if not self._legacy_prefix:
+            return None
+        safe_name = filename.strip("/").replace("..", "")
+        return f"{self._legacy_prefix}/{safe_name}".strip("/")
 
     def _contents_url(self, path: str) -> str:
         return f"https://api.github.com/repos/{self.config.storage_repo}/contents/{path}"
@@ -472,6 +488,19 @@ class GitHubStorage(BaseStorage):
         if self._stub_enabled:
             payload = self._stub_store.get(path)
             if payload is None:
+                legacy_path = self._legacy_storage_path(filename)
+                if legacy_path:
+                    legacy_payload = self._stub_store.get(legacy_path)
+                    if legacy_payload is not None:
+                        if not self._legacy_warning_logged:
+                            logger.warning(
+                                "[STORAGE] legacy_path_used=true path=%s new_path=%s",
+                                legacy_path,
+                                path,
+                            )
+                            self._legacy_warning_logged = True
+                        data, sha = legacy_payload
+                        return data, sha, 200
                 return {}, None, 404
             data, sha = payload
             return data, sha, 200
@@ -485,6 +514,35 @@ class GitHubStorage(BaseStorage):
             params={"ref": self.config.storage_branch},
         )
         if response.status == 404:
+            legacy_path = self._legacy_storage_path(filename)
+            if legacy_path:
+                legacy_url = self._contents_url(legacy_path)
+                legacy_response = await self._request_with_retry(
+                    "GET",
+                    legacy_url,
+                    op="read",
+                    path=legacy_path,
+                    ok_statuses=(200, 404),
+                    params={"ref": self.config.storage_branch},
+                )
+                if legacy_response.status == 200:
+                    if not self._legacy_warning_logged:
+                        logger.warning(
+                            "[STORAGE] legacy_path_used=true path=%s new_path=%s",
+                            legacy_path,
+                            path,
+                        )
+                        self._legacy_warning_logged = True
+                    payload = self._parse_json(legacy_response.text)
+                    content = payload.get("content", "")
+                    sha = payload.get("sha")
+                    decoded = base64.b64decode(content).decode("utf-8") if content else "{}"
+                    try:
+                        data = json.loads(decoded) if decoded.strip() else {}
+                    except json.JSONDecodeError:
+                        logger.error("[GITHUB] read_invalid_json path=%s", legacy_path)
+                        data = {}
+                    return data, sha, 200
             return {}, None, 404
         if response.status != 200:
             logger.error(
@@ -863,6 +921,7 @@ class GitHubStorage(BaseStorage):
         operation_id: Optional[str] = None,
     ) -> str:
         from uuid import uuid4
+        from app.services.history_service import append_event
 
         history_id = operation_id or str(uuid4())
 
@@ -883,6 +942,18 @@ class GitHubStorage(BaseStorage):
             return data
 
         await self._update_json(self.generations_history_file, updater)
+        await append_event(
+            self,
+            user_id=user_id,
+            kind="generation",
+            payload={
+                "model_id": model_id,
+                "model_name": model_name,
+                "price": price,
+                "result_urls": result_urls,
+            },
+            event_id=history_id,
+        )
         return history_id
 
     async def get_user_generations_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
@@ -1034,3 +1105,10 @@ class GitHubStorage(BaseStorage):
                 )
                 await self._backoff(attempt)
         raise RuntimeError("Exceeded GitHub write retries") from last_error
+
+    async def update_json_file(
+        self,
+        filename: str,
+        update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        return await self._update_json(filename, update_fn)

@@ -10,6 +10,11 @@ import logging
 from typing import Optional
 
 from pricing.engine import get_settings_source_info
+from app.config_env import (
+    resolve_storage_prefix,
+    validate_config,
+    ConfigValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,20 +52,11 @@ class Settings:
     
     def __init__(self, validate: bool = False):
         """Инициализирует настройки из environment variables"""
-        
+
         # Обязательные переменные
         self.telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
         if not self.telegram_bot_token:
-            if validate:
-                logger.error("=" * 60)
-                logger.error("MISSING REQUIRED ENVIRONMENT VARIABLE")
-                logger.error("=" * 60)
-                logger.error("TELEGRAM_BOT_TOKEN is required but not set")
-                logger.error("Please set TELEGRAM_BOT_TOKEN in environment variables")
-                logger.error("=" * 60)
-                sys.exit(1)
-            else:
-                logger.warning("TELEGRAM_BOT_TOKEN not set - bot will not work")
+            logger.warning("TELEGRAM_BOT_TOKEN not set - bot will not work")
         
         # Опциональные переменные с дефолтами
         admin_id_str = os.getenv('ADMIN_ID', '0')
@@ -69,6 +65,11 @@ class Settings:
         except ValueError:
             self.admin_id = 0
             logger.warning(f"Invalid ADMIN_ID: {admin_id_str}, using 0")
+
+        self.bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
+        raw_storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
+        storage_resolution = resolve_storage_prefix(raw_storage_prefix, self.bot_instance_id)
+        self.storage_prefix = storage_resolution.effective_prefix
         
         self.kie_api_key = os.getenv('KIE_API_KEY', '').strip()
         self.kie_api_url = os.getenv('KIE_API_URL', 'https://api.kie.ai').strip()
@@ -150,25 +151,16 @@ class Settings:
     
     def validate(self):
         """Валидирует обязательные настройки"""
-        errors = []
-        
-        if not self.telegram_bot_token:
-            errors.append("TELEGRAM_BOT_TOKEN is required")
+        try:
+            validate_config(strict=True)
+        except ConfigValidationError:
+            raise
         if self.bot_mode == "webhook":
             logger.info(
                 "[CONFIG] webhook_mode=true storage_mode=%s github_only_storage=%s",
                 self.storage_mode,
                 str(self.github_only_storage).lower(),
             )
-        
-        if errors:
-            error_msg = "\n".join(f"  - {err}" for err in errors)
-            logger.error("=" * 60)
-            logger.error("CONFIGURATION VALIDATION FAILED")
-            logger.error("=" * 60)
-            logger.error(error_msg)
-            logger.error("=" * 60)
-            raise ValueError("Configuration validation failed")
     
     @classmethod
     def from_env(cls, validate: bool = False) -> 'Settings':
@@ -190,6 +182,11 @@ def get_settings(validate: bool = False) -> Settings:
     
     if _settings is None:
         _settings = Settings.from_env(validate=validate)
+        if validate:
+            try:
+                _settings.validate()
+            except ConfigValidationError:
+                sys.exit(1)
     
     return _settings
 
