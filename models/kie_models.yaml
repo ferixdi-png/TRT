@@ -21,7 +21,7 @@ models:
         - '9:16'
     model_mode: text_to_image
   nano-banana-pro:
-    model_type: text_to_image
+    model_type: image_to_image
     input:
       image_input:
         type: array
@@ -87,7 +87,7 @@ models:
         - high
     model_mode: text_to_image
   seedream/4.5-edit:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string
@@ -150,13 +150,13 @@ models:
         required: false
     model_mode: image_to_video
   sora-watermark-remover:
-    model_type: text_to_image
+    model_type: video_editing
     input:
       video_url:
         type: string
         required: true
         max: 500
-    model_mode: text_to_image
+    model_mode: video_editing
   sora-2-text-to-video:
     model_type: text_to_video
     input:
@@ -480,7 +480,7 @@ models:
         required: false
     model_mode: text_to_video
   wan/2-2-animate-move:
-    model_type: text_to_image
+    model_type: image_to_video
     input:
       video_input:
         type: array
@@ -499,7 +499,7 @@ models:
         - 720p
     model_mode: image_to_video
   wan/2-2-animate-replace:
-    model_type: text_to_image
+    model_type: image_to_video
     input:
       video_input:
         type: array
@@ -609,7 +609,7 @@ models:
         - '4'
     model_mode: video_upscale
   kling/v1-avatar-standard:
-    model_type: text_to_image
+    model_type: lip_sync
     input:
       image_input:
         type: array
@@ -623,9 +623,9 @@ models:
         type: string
         required: true
         max: 5000
-    model_mode: image_to_video
+    model_mode: lip_sync
   kling/ai-avatar-v1-pro:
-    model_type: text_to_image
+    model_type: lip_sync
     input:
       image_input:
         type: array
@@ -639,7 +639,7 @@ models:
         type: string
         required: true
         max: 5000
-    model_mode: image_to_video
+    model_mode: lip_sync
   bytedance/seedream-v4-text-to-image:
     model_type: text_to_image
     input:
@@ -674,7 +674,7 @@ models:
         max: 6
     model_mode: text_to_image
   bytedance/seedream-v4-edit:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string
@@ -719,13 +719,13 @@ models:
         required: true
     model_mode: image_edit
   recraft/crisp-upscale:
-    model_type: text_to_image
+    model_type: upscale
     input:
       image_input:
         type: array
         item_type: string
         required: true
-    model_mode: image_edit
+    model_mode: upscale
   ideogram/v3-reframe:
     model_type: outpaint
     input:
@@ -1004,7 +1004,7 @@ models:
         max: 500
     model_mode: image_edit
   ideogram/character-edit:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string
@@ -1049,7 +1049,7 @@ models:
         - '4'
     model_mode: image_edit
   ideogram/character-remix:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string
@@ -1109,7 +1109,7 @@ models:
         max: 500
     model_mode: image_edit
   ideogram/character:
-    model_type: text_to_image
+    model_type: image_to_image
     input:
       prompt:
         type: string
@@ -1158,7 +1158,7 @@ models:
         type: string
         required: false
         max: 5000
-    model_mode: text_to_image
+    model_mode: image_to_image
   bytedance/v1-pro-fast-image-to-video:
     model_type: image_to_video
     input:
@@ -1211,7 +1211,7 @@ models:
         max: 1
     model_mode: image_to_video
   kling/v2-1-standard:
-    model_type: text_to_image
+    model_type: image_to_image
     input:
       prompt:
         type: string
@@ -1238,7 +1238,7 @@ models:
         max: 1
     model_mode: image_to_image
   kling/v2-1-pro:
-    model_type: text_to_image
+    model_type: image_to_image
     input:
       prompt:
         type: string
@@ -1349,7 +1349,7 @@ models:
         max: 5000
     model_mode: text_to_image
   ideogram/v3-edit:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string
@@ -1386,7 +1386,7 @@ models:
         required: false
     model_mode: image_edit
   ideogram/v3-remix:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string
@@ -1642,7 +1642,7 @@ models:
         - auto
     model_mode: text_to_image
   google/nano-banana-edit:
-    model_type: text_to_image
+    model_type: image_edit
     input:
       prompt:
         type: string

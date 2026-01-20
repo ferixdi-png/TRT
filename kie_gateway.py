@@ -117,14 +117,53 @@ class MockKieGateway(KieGateway):
     def __init__(self):
         self._tasks: Dict[str, Dict[str, Any]] = {}
         self._task_counter = 0
+        self._output_kind_map: Optional[Dict[str, str]] = None
     
-    def _generate_mock_url(self, model_id: str, task_id: str, index: int = 0) -> str:
+    def _load_output_kind_map(self) -> Dict[str, str]:
+        if self._output_kind_map is None:
+            try:
+                from app.kie_catalog import load_catalog
+
+                self._output_kind_map = {
+                    spec.id: (spec.output_media_type or "document")
+                    for spec in load_catalog()
+                }
+            except Exception as exc:
+                logger.warning("MOCK: Failed to load catalog output types: %s", exc)
+                self._output_kind_map = {}
+        return self._output_kind_map
+
+    def _guess_kind_from_model_id(self, model_id: str) -> str:
+        output_kind = self._load_output_kind_map().get(model_id)
+        if output_kind:
+            return output_kind
+        model_id_lower = (model_id or "").lower()
+        if any(token in model_id_lower for token in ("audio", "speech", "voice", "tts")):
+            return "audio"
+        if "video" in model_id_lower:
+            return "video"
+        if "text" in model_id_lower:
+            return "text"
+        return "image"
+
+    def _generate_mock_url(
+        self,
+        model_id: str,
+        task_id: str,
+        index: int = 0,
+        output_kind: str = "image",
+    ) -> str:
         """Генерирует детерминированный mock URL."""
-        # Определяем расширение по типу модели
-        is_video = any(keyword in model_id.lower() for keyword in [
-            'video', 'sora', 'kling', 'wan', 'hailuo', 'bytedance'
-        ])
-        ext = '.mp4' if is_video else '.png'
+        ext_map = {
+            "image": ".png",
+            "video": ".mp4",
+            "audio": ".mp3",
+            "text": ".txt",
+            "json": ".json",
+            "document": ".bin",
+            "file": ".bin",
+        }
+        ext = ext_map.get(output_kind, ".bin")
         
         # Создаем хеш для детерминированности
         hash_input = f"{model_id}:{task_id}:{index}"
@@ -146,13 +185,15 @@ class MockKieGateway(KieGateway):
         task_id = f"mock_task_{self._task_counter}_{hash(api_model) % 10000}"
         
         # Сохраняем задачу
+        output_kind = self._guess_kind_from_model_id(api_model)
         self._tasks[task_id] = {
             'task_id': task_id,
             'api_model': api_model,
             'input': input,
             'callback_url': callback_url,
             'status': 'waiting',
-            'created_at': asyncio.get_event_loop().time()
+            'created_at': asyncio.get_event_loop().time(),
+            'output_kind': output_kind,
         }
         
         logger.info(f"🔧 MOCK: Created task {task_id} for model {api_model}")
@@ -189,8 +230,9 @@ class MockKieGateway(KieGateway):
             state = 'success'
             # Генерируем mock URLs
             api_model = task.get('api_model', 'unknown')
+            output_kind = task.get('output_kind') or self._guess_kind_from_model_id(api_model)
             result_urls = [
-                self._generate_mock_url(api_model, task_id, i)
+                self._generate_mock_url(api_model, task_id, i, output_kind)
                 for i in range(1)  # По умолчанию 1 результат
             ]
             task['result_urls'] = result_urls
@@ -275,4 +317,3 @@ def reset_gateway():
     """Сбрасывает глобальный экземпляр gateway (для тестов)."""
     global _gateway_instance
     _gateway_instance = None
-
