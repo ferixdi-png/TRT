@@ -1,3 +1,16 @@
+## 2026-02-10: FERIXDI AI welcome текст + счетчик бесплатных
+**Было → стало (кратко):**
+- **Было:** приветствие для RU лежало в переводах и не учитывало параметры бесплатного лимита/таймера. 
+- **Стало:** единый генератор `build_welcome_text_ru(...)` с подстановками `remaining/limit_per_hour/next_refill_in/next_refill_at_local` и опциональным балансом, плюс компактный режим, когда отдельный счетчик уже показан. 
+
+**Где теперь текст:**
+- `app/ux/texts_ru.py` → `build_welcome_text_ru(...)`
+
+**Проверка (команды):**
+- `python scripts/verify_project.py`
+- `pytest -q`
+- `python scripts/verify_button_coverage.py`
+
 ## 2026-02-09: No-silence SSOT + Render handler registration
 **Причина (root cause):**
 - В webhook-пути Render при fallback на `app.bootstrap.create_application` не регистрировались `ConversationHandler`/message handlers, поэтому после выбора модели текстовые сообщения не попадали в обработчики. 
