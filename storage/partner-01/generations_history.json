@@ -3,17 +3,18 @@
     {
       "id": 1,
       "is_free": false,
-      "model_id": "google/nano-banana",
-      "model_name": "Google Nano Banana Text to Image",
+      "model_id": "z-image",
+      "model_name": "Qwen Z-Image Text to Image",
       "params": {
-        "prompt": "человек"
+        "aspect_ratio": "1:1",
+        "prompt": "кот"
       },
-      "price": 3.14,
+      "price": 0.63,
       "result_urls": [
-        "https://tempfile.aiquickdraw.com/workers/nano/image_1768901604844_zsvtn6.png"
+        "https://tempfile.aiquickdraw.com/f/a0e174ba-3507-4d8b-acaf-efc9fac7c669_0.png"
       ],
-      "task_id": "bde2d11d22c2d523f5112ae696be421a",
-      "timestamp": 1768901616
+      "task_id": "a67385765aae07533300012d2bf9ded8",
+      "timestamp": 1768901887
     }
   ]
 }
