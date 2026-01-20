@@ -2,19 +2,19 @@
   "6913446846": [
     {
       "id": 1,
-      "is_free": false,
+      "is_free": true,
       "model_id": "z-image",
       "model_name": "Qwen Z-Image Text to Image",
       "params": {
-        "aspect_ratio": "1:1",
-        "prompt": "кот"
+        "aspect_ratio": "9:16",
+        "prompt": "котик"
       },
-      "price": 0.63,
+      "price": 0.0,
       "result_urls": [
-        "https://tempfile.aiquickdraw.com/f/a0e174ba-3507-4d8b-acaf-efc9fac7c669_0.png"
+        "https://tempfile.aiquickdraw.com/f/a0e18f4f-6bcb-4484-a786-482336f63268_0.png"
       ],
-      "task_id": "a67385765aae07533300012d2bf9ded8",
-      "timestamp": 1768901887
+      "task_id": "8c90b185a0eabda9dd75298382890c5e",
+      "timestamp": 1768906338
     }
   ]
 }
