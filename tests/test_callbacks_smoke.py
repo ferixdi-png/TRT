@@ -74,6 +74,7 @@ def get_all_known_callbacks():
         'tutorial_complete',
         'confirm_generate',
         'retry_generate:',
+        'retry_delivery:',
         'cancel',
         'back_to_previous_step',
         'set_param:',

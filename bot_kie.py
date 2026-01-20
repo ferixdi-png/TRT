@@ -78,6 +78,7 @@ KNOWN_CALLBACK_PREFIXES = (
     "gen_history:",
     "tutorial_step",
     "retry_generate:",
+    "retry_delivery:",
 )
 
 KNOWN_CALLBACK_EXACT = {
@@ -1240,6 +1241,10 @@ _processed_update_ttl_seconds = 120
 # Structure: active_generations[(user_id, task_id)] = {session_data}
 active_generations = {}
 active_generations_lock = asyncio.Lock()
+
+# Pending result deliveries for retry (user_id, task_id) -> payload
+pending_deliveries: Dict[tuple[int, str], Dict[str, Any]] = {}
+pending_deliveries_lock = asyncio.Lock()
 
 # Generation submit locks to prevent double confirm clicks
 generation_submit_locks: dict[int, float] = {}
@@ -2668,6 +2673,167 @@ def _append_free_counter_text(text: str, line: str) -> str:
     if not line:
         return text
     return f"{text}\n\n{line}"
+
+
+def _ensure_session_task_registry(session: Dict[str, Any], key: str) -> Set[str]:
+    registry = session.get(key)
+    if isinstance(registry, set):
+        return registry
+    if isinstance(registry, list):
+        registry = set(registry)
+    else:
+        registry = set()
+    session[key] = registry
+    return registry
+
+
+async def _commit_post_delivery_charge(
+    *,
+    session: Dict[str, Any],
+    user_id: int,
+    chat_id: Optional[int],
+    task_id: Optional[str],
+    sku_id: str,
+    price: float,
+    is_free: bool,
+    is_admin_user: bool,
+    correlation_id: Optional[str],
+    model_id: Optional[str],
+) -> Dict[str, Any]:
+    outcome: Dict[str, Any] = {"charged": False, "free_consumed": False}
+    task_key = task_id or "task-unknown"
+
+    if is_free:
+        registry = _ensure_session_task_registry(session, "free_consumed_task_ids")
+        if task_key in registry:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="FREE_DEDUCT_COMMIT",
+                action_path="delivery",
+                model_id=model_id,
+                stage="FREE_DEDUCT",
+                outcome="duplicate_skip",
+                param={"task_id": task_id, "sku_id": sku_id, "delivered": True},
+            )
+            return outcome
+        consume_result = await consume_free_generation(
+            user_id,
+            sku_id,
+            correlation_id=correlation_id,
+            source="delivery",
+        )
+        registry.add(task_key)
+        if consume_result.get("status") == "ok":
+            outcome["free_consumed"] = True
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="FREE_DEDUCT_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="FREE_DEDUCT",
+            outcome=consume_result.get("status", "unknown"),
+            param={
+                "task_id": task_id,
+                "sku_id": sku_id,
+                "delivered": True,
+                "used_today": consume_result.get("used_today"),
+                "remaining": consume_result.get("remaining"),
+                "limit_per_day": consume_result.get("limit_per_day"),
+            },
+        )
+        return outcome
+
+    if is_admin_user:
+        if user_id != ADMIN_ID and price > 0:
+            before_spent = get_admin_spent(user_id)
+            add_admin_spent(user_id, price)
+            after_spent = get_admin_spent(user_id)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CHARGE_COMMIT",
+                action_path="delivery",
+                model_id=model_id,
+                stage="CHARGE_COMMIT",
+                outcome="admin_limit",
+                param={
+                    "task_id": task_id,
+                    "amount": price,
+                    "delivered": True,
+                    "charged_before": before_spent,
+                    "charged_after": after_spent,
+                },
+            )
+        return outcome
+
+    if user_id == ADMIN_ID or price <= 0:
+        return outcome
+
+    registry = _ensure_session_task_registry(session, "charged_task_ids")
+    if task_key in registry or session.get("balance_charged"):
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="duplicate_skip",
+            param={"task_id": task_id, "amount": price, "delivered": True},
+        )
+        return outcome
+
+    before_balance = await get_user_balance_async(user_id)
+    success = await subtract_user_balance_async(user_id, price)
+    after_balance = await get_user_balance_async(user_id) if success else before_balance
+    if success:
+        session["balance_charged"] = True
+        registry.add(task_key)
+        outcome["charged"] = True
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="charged",
+            param={
+                "task_id": task_id,
+                "amount": price,
+                "delivered": True,
+                "charged_before": before_balance,
+                "charged_after": after_balance,
+            },
+        )
+    else:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="failed",
+            error_code="BALANCE_DEDUCT_FAIL",
+            fix_hint="Проверьте доступность storage и повторите.",
+            param={
+                "task_id": task_id,
+                "amount": price,
+                "delivered": True,
+                "charged_before": before_balance,
+                "charged_after": after_balance,
+            },
+        )
+    return outcome
 
 
 async def _resolve_free_counter_line(
@@ -4434,6 +4600,23 @@ async def show_main_menu(
         await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
     )
     header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
+    welcome_hash = _safe_text_hash(header_text)
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="MENU_RENDER",
+        action_path=f"menu:{source}",
+        stage="UI_ROUTER",
+        outcome="render",
+        text_length=len(header_text) if header_text else 0,
+        text_hash=welcome_hash,
+        param={
+            "ui_context": UI_CONTEXT_MAIN_MENU,
+            "welcome_version": welcome_hash,
+        },
+    )
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
     if update.callback_query:
@@ -4445,9 +4628,40 @@ async def show_main_menu(
                     reply_markup=reply_markup,
                     parse_mode="HTML",
                 )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_RENDER",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="edit_ok",
+                    text_hash=welcome_hash,
+                    param={
+                        "ui_context": UI_CONTEXT_MAIN_MENU,
+                        "welcome_version": welcome_hash,
+                    },
+                )
                 return
-            except Exception:
-                pass
+            except Exception as exc:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_RENDER",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="edit_failed",
+                    error_code="MENU_EDIT_FAIL",
+                    fix_hint=str(exc),
+                    text_hash=welcome_hash,
+                    param={
+                        "ui_context": UI_CONTEXT_MAIN_MENU,
+                        "welcome_version": welcome_hash,
+                    },
+                )
 
     if chat_id:
         await context.bot.send_message(
@@ -4456,6 +4670,21 @@ async def show_main_menu(
             reply_markup=reply_markup,
             parse_mode="HTML",
             disable_web_page_preview=True,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="MENU_RENDER",
+            action_path=f"menu:{source}",
+            stage="UI_ROUTER",
+            outcome="send_ok",
+            text_hash=welcome_hash,
+            param={
+                "ui_context": UI_CONTEXT_MAIN_MENU,
+                "welcome_version": welcome_hash,
+            },
         )
 
 
@@ -4910,6 +5139,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             track_outgoing_action(update_id, action_type="answerCallbackQuery")
         except Exception as answer_error:
             logger.warning(f"Could not answer callback query: {answer_error}")
+            try:
+                if context and query and query.id:
+                    await context.bot.answer_callback_query(query.id)
+            except Exception:
+                pass
             # Continue anyway - better to process than to fail completely
         
         if _should_dedupe_update(
@@ -5989,6 +6223,93 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='HTML'
             )
             return CONFIRMING_GENERATION
+
+        if data.startswith("retry_delivery:"):
+            task_id = data.split(":", 1)[1] if ":" in data else ""
+            await query.answer("Повторяю доставку...")
+
+            async with pending_deliveries_lock:
+                payload = pending_deliveries.get((user_id, task_id))
+
+            if not payload:
+                await query.edit_message_text(
+                    "❌ Не нашёл результат для повторной доставки. Попробуйте заново через меню.",
+                    parse_mode="HTML",
+                )
+                return ConversationHandler.END
+
+            from app.generations.telegram_sender import deliver_result
+
+            delivered = False
+            try:
+                delivered = bool(
+                    await deliver_result(
+                        context.bot,
+                        payload["chat_id"],
+                        payload["media_type"],
+                        payload["urls"],
+                        payload.get("text"),
+                        model_id=payload.get("model_id"),
+                        gen_type=payload.get("gen_type"),
+                        correlation_id=payload.get("correlation_id"),
+                        params=payload.get("params"),
+                        model_label=payload.get("model_label"),
+                    )
+                )
+            except Exception as exc:
+                log_structured_event(
+                    correlation_id=payload.get("correlation_id"),
+                    user_id=user_id,
+                    chat_id=payload.get("chat_id"),
+                    action="DELIVERY_FAIL",
+                    action_path="retry_delivery",
+                    model_id=payload.get("model_id"),
+                    stage="TG_DELIVER",
+                    outcome="failed",
+                    error_code="TG_DELIVER_EXCEPTION",
+                    fix_hint=str(exc),
+                    param={"task_id": task_id},
+                )
+
+            if delivered:
+                async with pending_deliveries_lock:
+                    pending_deliveries.pop((user_id, task_id), None)
+                dry_run = is_dry_run() or not allow_real_generation()
+                if not dry_run:
+                    await _commit_post_delivery_charge(
+                        session=payload.get("session", {}),
+                        user_id=user_id,
+                        chat_id=payload.get("chat_id"),
+                        task_id=payload.get("task_id"),
+                        sku_id=payload.get("sku_id", ""),
+                        price=float(payload.get("price", 0)),
+                        is_free=bool(payload.get("is_free")),
+                        is_admin_user=bool(payload.get("is_admin_user")),
+                        correlation_id=payload.get("correlation_id"),
+                        model_id=payload.get("model_id"),
+                    )
+                await query.edit_message_text(
+                    "✅ <b>Доставка завершена</b>\n\nРезультат успешно отправлен.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")]]
+                    ),
+                    parse_mode="HTML",
+                )
+                return ConversationHandler.END
+
+            retry_keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("🔁 Повторить доставку", callback_data=f"retry_delivery:{task_id}")],
+                    [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
+                ]
+            )
+            await query.edit_message_text(
+                "⚠️ <b>Доставка снова не удалась</b>\n\n"
+                "Попробуйте ещё раз чуть позже или используйте главное меню.",
+                reply_markup=retry_keyboard,
+                parse_mode="HTML",
+            )
+            return ConversationHandler.END
         
         # Handle category selection (can be called from main menu)
         if data.startswith("gen_type:"):
@@ -11335,7 +11656,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.answer(fallback_text, show_alert=False)
     except Exception:
-        pass
+        try:
+            if context and query and query.id:
+                await context.bot.answer_callback_query(query.id, text=fallback_text, show_alert=False)
+        except Exception:
+            pass
     await show_main_menu(update, context, source="unknown_callback")
     return ConversationHandler.END
 
@@ -16189,16 +16514,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         task_id = job_result.task_id
 
-        if user_id != ADMIN_ID and not dry_run:
-            if is_free:
-                price = 0.0
-            elif is_admin_user:
-                add_admin_spent(user_id, price)
-            else:
-                success = await subtract_user_balance_async(user_id, price)
-                if success:
-                    session["balance_charged"] = True
-
         if user_id not in saved_generations:
             saved_generations[user_id] = {}
         saved_generations[user_id] = {
@@ -16209,73 +16524,159 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "required": session.get("required", []).copy(),
         }
 
+        delivered = False
         if job_result.urls or job_result.text:
             model_name_display = model_info.get("name", model_id) if model_info else model_id
-            await deliver_result(
-                context.bot,
-                user_id,
-                job_result.media_type,
-                job_result.urls,
-                job_result.text,
-                model_id=model_id,
-                gen_type=session.get("gen_type"),
-                correlation_id=correlation_id,
-                params=params,
-                model_label=model_name_display,
-            )
-            if is_free:
-                consume_result = await consume_free_generation(
-                    user_id,
-                    sku_id,
-                    correlation_id=correlation_id,
-                    source="delivery",
+            pending_payload = {
+                "chat_id": user_id,
+                "media_type": job_result.media_type,
+                "urls": job_result.urls,
+                "text": job_result.text,
+                "model_id": model_id,
+                "gen_type": session.get("gen_type"),
+                "correlation_id": correlation_id,
+                "params": params,
+                "model_label": model_name_display,
+                "task_id": job_result.task_id,
+                "sku_id": sku_id,
+                "price": price,
+                "is_free": is_free,
+                "is_admin_user": is_admin_user,
+                "session": session,
+            }
+            async with pending_deliveries_lock:
+                pending_deliveries[(user_id, job_result.task_id)] = pending_payload
+            try:
+                delivered = bool(
+                    await deliver_result(
+                        context.bot,
+                        user_id,
+                        job_result.media_type,
+                        job_result.urls,
+                        job_result.text,
+                        model_id=model_id,
+                        gen_type=session.get("gen_type"),
+                        correlation_id=correlation_id,
+                        params=params,
+                        model_label=model_name_display,
+                    )
                 )
+            except Exception as exc:
+                delivered = False
                 log_structured_event(
                     correlation_id=correlation_id,
                     user_id=user_id,
                     chat_id=chat_id,
-                    action="FREE_QUOTA_UPDATE",
+                    action="DELIVERY_FAIL",
                     action_path="confirm_generate",
                     model_id=model_id,
-                    stage="FREE_QUOTA",
-                    outcome=consume_result.get("status", "unknown"),
-                    param={
-                        "base_remaining": consume_result.get("base_remaining"),
-                        "referral_remaining": consume_result.get("referral_remaining"),
-                        "source": consume_result.get("source"),
-                    },
+                    stage="TG_DELIVER",
+                    outcome="failed",
+                    error_code="TG_DELIVER_EXCEPTION",
+                    fix_hint=str(exc),
+                    param={"task_id": job_result.task_id},
                 )
-                try:
-                    free_counter_line = await get_free_counter_line(
-                        user_id,
-                        user_lang=user_lang,
-                        correlation_id=correlation_id,
-                        action_path="confirm_generate.post_consume",
+
+            if delivered:
+                async with pending_deliveries_lock:
+                    pending_deliveries.pop((user_id, job_result.task_id), None)
+                if not dry_run:
+                    await _commit_post_delivery_charge(
+                        session=session,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        task_id=job_result.task_id,
                         sku_id=sku_id,
+                        price=price,
+                        is_free=is_free,
+                        is_admin_user=is_admin_user,
+                        correlation_id=correlation_id,
+                        model_id=model_id,
                     )
-                except Exception as exc:
-                    logger.warning("Failed to refresh free counter after consume: %s", exc)
-                if consume_result.get("status") == "ok":
+                else:
+                    logger.info(
+                        "🔧 DRY-RUN: Skipping charge/free decrement for task %s user %s",
+                        job_result.task_id,
+                        user_id,
+                    )
+                if is_free:
                     try:
-                        snapshot = await get_free_counter_snapshot(user_id)
-                        log_structured_event(
+                        free_counter_line = await get_free_counter_line(
+                            user_id,
+                            user_lang=user_lang,
                             correlation_id=correlation_id,
-                            user_id=user_id,
-                            chat_id=chat_id,
-                            action="FREE_QUOTA_REFRESH",
-                            action_path="confirm_generate",
-                            model_id=model_id,
-                            stage="FREE_QUOTA",
-                            outcome="snapshot",
-                            param={
-                                "consume_result": consume_result,
-                                "remaining": snapshot.get("remaining"),
-                                "used_today": snapshot.get("used_today"),
-                                "limit_per_day": snapshot.get("limit_per_day"),
-                            },
+                            action_path="confirm_generate.post_consume",
+                            sku_id=sku_id,
                         )
                     except Exception as exc:
-                        logger.warning("Failed to refresh free counter snapshot: %s", exc)
+                        logger.warning("Failed to refresh free counter after consume: %s", exc)
+                try:
+                    snapshot = await get_free_counter_snapshot(user_id)
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        action="FREE_QUOTA_REFRESH",
+                        action_path="confirm_generate",
+                        model_id=model_id,
+                        stage="FREE_QUOTA",
+                        outcome="snapshot",
+                        param={
+                            "remaining": snapshot.get("remaining"),
+                            "used_today": snapshot.get("used_today"),
+                            "limit_per_day": snapshot.get("limit_per_day"),
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to refresh free counter snapshot: %s", exc)
+            else:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="DELIVERY_FAIL",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    stage="TG_DELIVER",
+                    outcome="failed",
+                    error_code="TG_DELIVER_NOT_CONFIRMED",
+                    fix_hint="Проверьте доставку и повторите отправку.",
+                    param={"task_id": job_result.task_id},
+                )
+                retry_keyboard = InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("🔁 Повторить доставку", callback_data=f"retry_delivery:{job_result.task_id}")],
+                        [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
+                    ]
+                )
+                await send_or_edit_message(
+                    "⚠️ <b>Не удалось доставить результат</b>\n\n"
+                    "Результат готов, но Telegram не принял отправку.\n"
+                    "Нажмите «Повторить доставку», чтобы отправить ещё раз.",
+                    parse_mode="HTML",
+                    reply_markup=retry_keyboard,
+                )
+                return ConversationHandler.END
+        else:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="DELIVERY_FAIL",
+                action_path="confirm_generate",
+                model_id=model_id,
+                stage="TG_DELIVER",
+                outcome="failed",
+                error_code="EMPTY_RESULT",
+                fix_hint="Проверьте ответ провайдера (urls/text).",
+                param={"task_id": job_result.task_id},
+            )
+            await send_or_edit_message(
+                "⚠️ <b>Результат пустой</b>\n\n"
+                "Генерация завершилась без результата. Попробуйте ещё раз или выберите другую модель.",
+                parse_mode="HTML",
+            )
+            return ConversationHandler.END
 
         if job_result.urls:
             save_generation_to_history(
@@ -16757,13 +17158,14 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 except Exception as e:
                     logger.warning(f"Could not send completion notification: {e}")
                 
-                # Task completed successfully - deduct balance
-                # Get session data from active_generations (supports multiple concurrent generations)
+                # Task completed successfully - prepare pricing (charge after delivery only)
                 generation_key = (user_id, task_id)
                 saved_session_data = None
                 model_id = ''
                 params = {}
-                
+                sku_id = ''
+                session = None
+
                 async with active_generations_lock:
                     if generation_key in active_generations:
                         session = active_generations[generation_key]
@@ -16774,61 +17176,29 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             'properties': session.get('properties', {}).copy(),
                             'required': session.get('required', []).copy()
                         }
-                        
-                        # Get price and deduct from balance or limit
                         model_id = session.get('model_id', '')
                         params = session.get('params', {})
                         sku_id = session.get('sku_id', '')
                         is_admin_user = get_is_admin(user_id)
                         is_free = session.get('is_free_generation', False)
                     else:
-                        # Session not found - might have been cleaned up
                         logger.warning(f"Generation session not found for {generation_key}")
                         is_admin_user = get_is_admin(user_id)
                         is_free = False
-                    
-                    if is_free:
-                        # Use free generation
-                        if await use_free_generation(
-                            user_id,
-                            sku_id,
-                            correlation_id=ensure_correlation_id(update, context),
-                        ):
-                            price = 0.0
-                        else:
-                            # Free generation limit reached, treat as paid
-                            is_free = False
-                            price = calculate_price_rub(model_id, params, is_admin_user)
-                    else:
-                        price = calculate_price_rub(model_id, params, is_admin_user)
-                    if price is None:
-                        logger.error("Missing price for model %s; skipping charge.", model_id)
-                        price = 0.0
-                    
-                    # DRY-RUN GUARD: Не списываем баланс в тестовом режиме
-                    dry_run = is_dry_run() or not allow_real_generation()
-                    
-                    if user_id != ADMIN_ID and not dry_run:
-                        if is_free:
-                            # Free generation - no deduction needed
-                            pass
-                        elif is_admin_user:
-                            # Limited admin - deduct from limit
-                            add_admin_spent(user_id, price)
-                        else:
-                            # Regular user - commit_charge: deduct from balance (idempotent - check if already charged)
-                            # Check if already charged by looking at session flag
-                            if not session.get('balance_charged', False):
-                                success = await subtract_user_balance_async(user_id, price)
-                                if success:
-                                    session['balance_charged'] = True
-                                    logger.info(f"💰 COMMIT_CHARGE: Charged {price} from user {user_id} for successful task {task_id}")
-                                else:
-                                    logger.error(f"❌ Failed to charge user {user_id} for successful task {task_id}")
-                            else:
-                                logger.warning(f"⚠️ Balance already charged for task {task_id}, skipping (idempotency protection)")
-                    elif dry_run:
-                        logger.info(f"🔧 DRY-RUN: Would deduct {price} from user {user_id} after successful generation (NOT DEDUCTED)")
+
+                if session is None:
+                    session_store = get_session_store(context)
+                    session = ensure_session_cached(context, session_store, user_id, update.update_id) or {}
+
+                if is_free:
+                    price = 0.0
+                else:
+                    price = calculate_price_rub(model_id, params, is_admin_user)
+                if price is None:
+                    logger.error("Missing price for model %s; skipping charge.", model_id)
+                    price = 0.0
+
+                dry_run = is_dry_run() or not allow_real_generation()
                 
                 # Task completed successfully
                 result_json = status_result.get('resultJson', '{}')
@@ -16903,51 +17273,150 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         from app.generations.telegram_sender import deliver_result
                         model_info = saved_session_data.get('model_info', {}) if saved_session_data else {}
                         model_name_display = model_name if model_name else model_id
-                        await deliver_result(
-                            context.bot,
-                            chat_id,
-                            (model_info.get("output_media_type") if model_info else None) or "document",
-                            result_urls[:5],
-                            None,
-                            model_id=model_id,
-                            gen_type=model_info.get('model_mode') if model_info else None,
-                            correlation_id=ensure_correlation_id(update, context),
-                            params=params,
-                            model_label=model_name_display,
-                        )
-                        free_counter_line = ""
+                        pending_payload = {
+                            "chat_id": chat_id,
+                            "media_type": (model_info.get("output_media_type") if model_info else None) or "document",
+                            "urls": result_urls[:5],
+                            "text": None,
+                            "model_id": model_id,
+                            "gen_type": model_info.get('model_mode') if model_info else None,
+                            "correlation_id": ensure_correlation_id(update, context),
+                            "params": params,
+                            "model_label": model_name_display,
+                            "task_id": task_id,
+                            "sku_id": sku_id,
+                            "price": price,
+                            "is_free": is_free,
+                            "is_admin_user": is_admin_user,
+                            "session": session,
+                        }
+                        async with pending_deliveries_lock:
+                            pending_deliveries[(user_id, task_id)] = pending_payload
+                        delivered = False
                         try:
-                            free_counter_line = await get_free_counter_line(
-                                user_id,
-                                user_lang=user_lang,
-                                correlation_id=ensure_correlation_id(update, context),
-                                action_path="gen_done",
+                            delivered = bool(
+                                await deliver_result(
+                                    context.bot,
+                                    chat_id,
+                                    (model_info.get("output_media_type") if model_info else None) or "document",
+                                    result_urls[:5],
+                                    None,
+                                    model_id=model_id,
+                                    gen_type=model_info.get('model_mode') if model_info else None,
+                                    correlation_id=ensure_correlation_id(update, context),
+                                    params=params,
+                                    model_label=model_name_display,
+                                )
                             )
-                        except Exception:
+                        except Exception as exc:
+                            log_structured_event(
+                                correlation_id=ensure_correlation_id(update, context),
+                                user_id=user_id,
+                                chat_id=chat_id,
+                                action="DELIVERY_FAIL",
+                                action_path="poll_task_status",
+                                model_id=model_id,
+                                stage="TG_DELIVER",
+                                outcome="failed",
+                                error_code="TG_DELIVER_EXCEPTION",
+                                fix_hint=str(exc),
+                                param={"task_id": task_id},
+                            )
+
+                        if delivered:
+                            async with pending_deliveries_lock:
+                                pending_deliveries.pop((user_id, task_id), None)
+                            if not dry_run:
+                                await _commit_post_delivery_charge(
+                                    session=session,
+                                    user_id=user_id,
+                                    chat_id=chat_id,
+                                    task_id=task_id,
+                                    sku_id=sku_id,
+                                    price=price,
+                                    is_free=is_free,
+                                    is_admin_user=is_admin_user,
+                                    correlation_id=ensure_correlation_id(update, context),
+                                    model_id=model_id,
+                                )
                             free_counter_line = ""
-                        summary_text = (
-                            "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
-                            if user_lang == 'ru'
-                            else "✅ <b>Generation Completed!</b>\n\nResult is ready."
-                        )
-                        last_message = await _send_with_log(
-                            "send_message",
-                            chat_id=chat_id,
-                            text=_append_free_counter_text(summary_text, free_counter_line),
-                            reply_markup=reply_markup,
-                            parse_mode='HTML'
-                        )
+                            try:
+                                free_counter_line = await get_free_counter_line(
+                                    user_id,
+                                    user_lang=user_lang,
+                                    correlation_id=ensure_correlation_id(update, context),
+                                    action_path="gen_done",
+                                )
+                            except Exception:
+                                free_counter_line = ""
+                            summary_text = (
+                                "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
+                                if user_lang == 'ru'
+                                else "✅ <b>Generation Completed!</b>\n\nResult is ready."
+                            )
+                            last_message = await _send_with_log(
+                                "send_message",
+                                chat_id=chat_id,
+                                text=_append_free_counter_text(summary_text, free_counter_line),
+                                reply_markup=reply_markup,
+                                parse_mode='HTML'
+                            )
+                        else:
+                            log_structured_event(
+                                correlation_id=ensure_correlation_id(update, context),
+                                user_id=user_id,
+                                chat_id=chat_id,
+                                action="DELIVERY_FAIL",
+                                action_path="poll_task_status",
+                                model_id=model_id,
+                                stage="TG_DELIVER",
+                                outcome="failed",
+                                error_code="TG_DELIVER_NOT_CONFIRMED",
+                                fix_hint="Проверьте доставку и повторите отправку.",
+                                param={"task_id": task_id},
+                            )
+                            retry_keyboard = InlineKeyboardMarkup(
+                                [
+                                    [InlineKeyboardButton("🔁 Повторить доставку", callback_data=f"retry_delivery:{task_id}")],
+                                    [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
+                                ]
+                            )
+                            await _send_with_log(
+                                "send_message",
+                                chat_id=chat_id,
+                                text=(
+                                    "⚠️ <b>Не удалось доставить результат</b>\n\n"
+                                    "Результат готов, но Telegram не принял отправку.\n"
+                                    "Нажмите «Повторить доставку», чтобы отправить ещё раз."
+                                ),
+                                parse_mode="HTML",
+                                reply_markup=retry_keyboard,
+                            )
+                            break
                     else:
-                        last_message = await _send_with_log(
+                        log_structured_event(
+                            correlation_id=ensure_correlation_id(update, context),
+                            user_id=user_id,
+                            chat_id=chat_id,
+                            action="DELIVERY_FAIL",
+                            action_path="poll_task_status",
+                            model_id=model_id,
+                            stage="TG_DELIVER",
+                            outcome="failed",
+                            error_code="EMPTY_RESULT",
+                            fix_hint="Проверьте ответ провайдера (resultUrls).",
+                            param={"task_id": task_id},
+                        )
+                        await _send_with_log(
                             "send_message",
                             chat_id=chat_id,
-                            text=_append_free_counter_text(
-                                "✅ <b>Генерация завершена!</b>\n\nРезультат готов.",
-                                free_counter_line,
+                            text=(
+                                "⚠️ <b>Результат пустой</b>\n\n"
+                                "Генерация завершилась без результата. Попробуйте ещё раз или выберите другую модель."
                             ),
-                            reply_markup=reply_markup,
                             parse_mode='HTML'
                         )
+                        break
                 except json.JSONDecodeError:
                     last_message = await _send_with_log(
                         "send_message",
@@ -17654,7 +18123,8 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^gen_history:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'),
-            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$')
+            CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^retry_delivery:')
         ],
         states={
             SELECTING_MODEL: [
@@ -17703,6 +18173,7 @@ async def _register_all_handlers_internal(application: Application):
             CONFIRMING_GENERATION: [
                 CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^retry_generate:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^retry_delivery:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
@@ -17897,6 +18368,15 @@ async def _register_all_handlers_internal(application: Application):
                 track_outgoing_action(update.update_id, action_type="answerCallbackQuery")
             except Exception as e:
                 logger.error(f"Error in unknown_callback_handler: {e}", exc_info=True)
+                try:
+                    if context and query.id:
+                        await context.bot.answer_callback_query(
+                            query.id,
+                            text="Не понял нажатие, обновил меню.",
+                            show_alert=False,
+                        )
+                except Exception:
+                    pass
                 trace_error(
                     correlation_id,
                     "UI_UNKNOWN_CALLBACK",
@@ -18214,6 +18694,7 @@ async def main():
             CONFIRMING_GENERATION: [
                 CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^retry_generate:'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^retry_delivery:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
@@ -18755,7 +19236,7 @@ async def main():
                     'topup_amount:', 'topup_custom', 'referral_info', 'generate_again',
                     'my_generations', 'gen_view:', 'gen_repeat:', 'gen_history:',
                     'tutorial_start', 'tutorial_step', 'tutorial_complete', 'confirm_generate',
-                    'retry_generate:', 'cancel', 'back_to_previous_step', 'set_param:',
+                    'retry_generate:', 'retry_delivery:', 'cancel', 'back_to_previous_step', 'set_param:',
                 ]
                 callback_count = len(known_patterns) + len(get_models_sync())  # Примерная оценка
         except Exception as e:
@@ -18794,6 +19275,7 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^retry_delivery:'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^category:'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'))
