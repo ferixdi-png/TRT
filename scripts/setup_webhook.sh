@@ -1,8 +1,22 @@
 #!/bin/bash
 # Скрипт для настройки webhook для Telegram бота
 
-BOT_TOKEN="8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y"
-WEBHOOK_URL="https://five656.onrender.com/webhook"
+set -euo pipefail
+
+BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-${BOT_TOKEN:-}}"
+WEBHOOK_URL="${WEBHOOK_URL:-${1:-}}"
+
+if [[ -z "${BOT_TOKEN}" ]]; then
+    echo "❌ Ошибка: TELEGRAM_BOT_TOKEN (или BOT_TOKEN) не установлен"
+    echo "   Пример: TELEGRAM_BOT_TOKEN=... WEBHOOK_URL=https://example.com/webhook ./scripts/setup_webhook.sh"
+    exit 1
+fi
+
+if [[ -z "${WEBHOOK_URL}" ]]; then
+    echo "❌ Ошибка: WEBHOOK_URL не установлен"
+    echo "   Пример: WEBHOOK_URL=https://example.com/webhook ./scripts/setup_webhook.sh"
+    exit 1
+fi
 
 echo "🔧 Настройка webhook для Telegram бота..."
 echo ""
@@ -32,4 +46,3 @@ fi
 echo ""
 echo "📋 Финальная проверка:"
 curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo" | python3 -m json.tool
-
