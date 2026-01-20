@@ -25,7 +25,6 @@ REQUIRED_ENV: Tuple[str, ...] = (
     "PAYMENT_CARD_HOLDER",
     "PAYMENT_PHONE",
     "PORT",
-    "STORAGE_MODE",
     "STORAGE_PREFIX",
     "SUPPORT_TELEGRAM",
     "SUPPORT_TEXT",
@@ -47,6 +46,7 @@ OPTIONAL_ENV: Tuple[str, ...] = (
     "KIE_RESULT_CDN_BASE_URL",
     "PORT_ALT",
     "PRICE_MULTIPLIER",
+    "STORAGE_MODE",
     "STORAGE_GITHUB_BRANCH",
     "STORAGE_GITHUB_REPO",
     "STORAGE_BRANCH",
@@ -184,7 +184,7 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
     payment_card_holder = require("PAYMENT_CARD_HOLDER")
     payment_phone = require("PAYMENT_PHONE")
     port = os.getenv("PORT", "").strip()
-    storage_mode = require("STORAGE_MODE")
+    storage_mode = os.getenv("STORAGE_MODE", "").strip()
     storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
     support_telegram = require("SUPPORT_TELEGRAM")
     support_text = require("SUPPORT_TEXT")
