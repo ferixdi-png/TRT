@@ -15,6 +15,21 @@
       ],
       "task_id": "2876dfd04982eb09dad997fa8f22086f",
       "timestamp": 1768908864
+    },
+    {
+      "id": 2,
+      "is_free": true,
+      "model_id": "google/imagen4-fast",
+      "model_name": "Google Imagen 4 Fast",
+      "params": {
+        "prompt": "кот"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/f/a0e1b7d8-244e-4f3b-9286-2d5f34d3a486_0.png"
+      ],
+      "task_id": "94fefa63f11c49097bb5b782af02f5a7",
+      "timestamp": 1768913138
     }
   ]
 }
