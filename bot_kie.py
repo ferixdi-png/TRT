@@ -14588,6 +14588,20 @@ async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if waiting_for or current_param:
         return
 
+    if isinstance(session, dict) and session.get("model_id") and session.get("properties"):
+        _log_route_decision_once(
+            update,
+            context,
+            waiting_for=None,
+            chosen_handler="global_text_router->input_parameters",
+            reason="active_model_session_without_waiting_for",
+        )
+        logger.info(
+            "🔀 GLOBAL_TEXT_ROUTER: Active model session without waiting_for, routing to input_parameters"
+        )
+        await input_parameters(update, context)
+        raise ApplicationHandlerStop
+
     _log_route_decision_once(
         update,
         context,
