@@ -1,10 +1,14 @@
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from telegram import Update
+
 from app.generations.universal_engine import JobResult
 from app.kie_catalog import get_model_map
+from app.pricing.price_resolver import PriceQuote
 from bot_kie import button_callback, confirm_generation, user_sessions, FREE_TOOL_MODEL_IDS
 from tests.ptb_harness import PTBHarness
 
@@ -60,9 +64,13 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
         captured_mode_index["charged"] = amount
         return True
 
-    def fake_price_for_model_rub(model_id, mode_index, settings, *, is_admin=False):
+    def fake_resolve_price_quote(model_id, mode_index, gen_type, selected_params, settings=None, is_admin=False):
         captured_mode_index["mode_index"] = mode_index
-        return 12
+        return PriceQuote(
+            price_rub=Decimal("12.00"),
+            currency="RUB",
+            breakdown={"mode_index": mode_index, "model_id": model_id},
+        )
 
     async def fake_run_generation(*_args, **_kwargs):
         return JobResult(
@@ -76,20 +84,41 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
 
     monkeypatch.setattr("app.services.user_service.get_user_balance", fake_get_balance)
     monkeypatch.setattr("app.services.user_service.subtract_user_balance", fake_subtract_balance)
-    monkeypatch.setattr("app.services.pricing_service.price_for_model_rub", fake_price_for_model_rub)
+    monkeypatch.setattr("app.pricing.price_resolver.resolve_price_quote", fake_resolve_price_quote)
+    monkeypatch.setattr(
+        "bot_kie.check_free_generation_available",
+        AsyncMock(return_value={"status": "skip"}),
+    )
+    monkeypatch.setattr(
+        "bot_kie.is_free_generation_available",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        "bot_kie.get_user_free_generations_remaining",
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(
+        "bot_kie.get_free_counter_line",
+        AsyncMock(return_value=""),
+    )
+    monkeypatch.setattr("bot_kie._kie_readiness_state", lambda: (True, "ok"))
     monkeypatch.setattr(
         "kie_input_adapter.normalize_for_generation",
         lambda _model_id, params: (params, []),
     )
     monkeypatch.setattr("app.generations.universal_engine.run_generation", fake_run_generation)
 
-    update_select = harness.create_mock_update_callback(f"select_model:{spec.id}", user_id=user_id)
+    callback_select = harness.create_mock_callback_query(f"select_model:{spec.id}", user_id=user_id)
+    update_select = Update(update_id=201, callback_query=callback_select)
+    harness._attach_bot(update_select)
     await button_callback(update_select, context)
     mode_prompt = harness.outbox.get_last_edited_message()
     assert mode_prompt is not None
     assert "режим" in mode_prompt["text"].lower()
 
-    update_mode = harness.create_mock_update_callback(f"select_mode:{spec.id}:1", user_id=user_id)
+    callback_mode = harness.create_mock_callback_query(f"select_mode:{spec.id}:1", user_id=user_id)
+    update_mode = Update(update_id=202, callback_query=callback_mode)
+    harness._attach_bot(update_mode)
     await button_callback(update_mode, context)
 
     session = user_sessions[user_id]
@@ -97,7 +126,9 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
     session["waiting_for"] = None
     session["current_param"] = None
 
-    update_confirm = harness.create_mock_update_callback("confirm_generate", user_id=user_id)
+    callback_confirm = harness.create_mock_callback_query("confirm_generate", user_id=user_id)
+    update_confirm = Update(update_id=203, callback_query=callback_confirm)
+    harness._attach_bot(update_confirm)
     await confirm_generation(update_confirm, context)
 
     assert captured_mode_index.get("mode_index") == 1
