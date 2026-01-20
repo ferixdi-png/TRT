@@ -36,5 +36,5 @@ settings:
 free_tools:
   # model_ids are computed dynamically from the pricing catalog (5 cheapest non-audio models)
   model_ids: []
-  base_per_hour: 5
+  base_per_day: 5
   referral_bonus: 10
