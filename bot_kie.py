@@ -2647,7 +2647,9 @@ async def use_free_generation(user_id: int, sku_id: str, *, correlation_id: Opti
 
 async def is_free_generation_available(user_id: int, sku_id: str) -> bool:
     """Check if free generation is available for this user and model."""
-    if not sku_id or sku_id not in FREE_TOOL_SKU_IDS:
+    from app.pricing.free_policy import is_sku_free_daily
+
+    if not is_sku_free_daily(sku_id):
         return False
     status = await get_free_generation_status(user_id)
     return int(status.get("total_remaining", 0)) > 0
@@ -2673,6 +2675,7 @@ async def _resolve_free_counter_line(
     user_lang: str,
     correlation_id: Optional[str],
     action_path: str,
+    sku_id: Optional[str] = None,
 ) -> str:
     try:
         return await get_free_counter_line(
@@ -2680,6 +2683,7 @@ async def _resolve_free_counter_line(
             user_lang=user_lang,
             correlation_id=correlation_id,
             action_path=action_path,
+            sku_id=sku_id,
         )
     except Exception as exc:
         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -2692,8 +2696,15 @@ async def get_free_counter_line(
     user_lang: str,
     correlation_id: Optional[str],
     action_path: str,
+    sku_id: Optional[str] = None,
 ) -> str:
     if not user_id:
+        return ""
+    if sku_id is None:
+        return ""
+    from app.pricing.free_policy import is_sku_free_daily
+
+    if not is_sku_free_daily(sku_id):
         return ""
     snapshot = await get_free_counter_snapshot(user_id)
     line = _format_free_counter_line(
@@ -5672,6 +5683,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang,
                     correlation_id,
                     action_path=f"param_prompt:{image_param_name}",
+                    sku_id=session.get("sku_id"),
                 )
                 step_text = _append_free_counter_text(step_text, free_counter_line)
                 await query.edit_message_text(
@@ -5740,6 +5752,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang,
                     correlation_id,
                     action_path=f"param_prompt:{audio_param_name}",
+                    sku_id=session.get("sku_id"),
                 )
                 audio_text = _append_free_counter_text(audio_text, free_counter_line)
                 await query.edit_message_text(
@@ -5791,6 +5804,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang,
                     correlation_id,
                     action_path=f"param_prompt:{image_param_name}",
+                    sku_id=session.get("sku_id"),
                 )
                 image_text = _append_free_counter_text(image_text, free_counter_line)
                 await query.edit_message_text(
@@ -5875,6 +5889,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang,
                     correlation_id,
                     action_path="param_prompt:prompt",
+                    sku_id=session.get("sku_id"),
                 )
                 prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
                 keyboard = [
@@ -6409,6 +6424,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang=user_lang,
                     correlation_id=correlation_id,
                     action_path="free_tools_menu",
+                    sku_id=free_sku_ids[0] if free_sku_ids else None,
                 )
             except Exception as exc:
                 logger.warning("Failed to resolve free counter line: %s", exc)
@@ -6762,6 +6778,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_lang,
                 correlation_id,
                 action_path=f"param_prompt:{image_param_name}",
+                sku_id=session.get("sku_id"),
             )
             prompt_text = _append_free_counter_text(
                 "📷 <b>Загрузите изображение</b>\n\n"
@@ -6871,6 +6888,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang=user_lang,
                             correlation_id=correlation_id,
                             action_path="confirm_screen",
+                            sku_id=sku_id,
                         )
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -6882,6 +6900,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang=user_lang,
                             correlation_id=correlation_id,
                             action_path="confirm_screen",
+                            sku_id=sku_id,
                         )
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -6893,6 +6912,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang=user_lang,
                             correlation_id=correlation_id,
                             action_path="confirm_screen",
+                            sku_id=sku_id,
                         )
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -7103,6 +7123,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
                     
                     user_lang = get_user_language(user_id)
+                    sku_id = session.get("sku_id")
                     free_counter_line = ""
                     try:
                         free_counter_line = await get_free_counter_line(
@@ -7110,6 +7131,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang=user_lang,
                             correlation_id=correlation_id,
                             action_path="confirm_screen",
+                            sku_id=sku_id,
                         )
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -10866,9 +10888,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Check for free generations for z-image
             sku_id = session.get("sku_id", "")
             is_free_available = await is_free_generation_available(user_id, sku_id)
+            from app.pricing.free_policy import is_sku_free_daily
             remaining_free = (
                 await get_user_free_generations_remaining(user_id)
-                if sku_id in FREE_TOOL_SKU_IDS
+                if is_sku_free_daily(sku_id)
                 else 0
             )
             
@@ -10904,6 +10927,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_lang=user_lang,
                     correlation_id=correlation_id,
                     action_path="model_select_info",
+                    sku_id=sku_id,
                 )
             except Exception as exc:
                 logger.warning("Failed to resolve free counter line: %s", exc)
@@ -11652,6 +11676,7 @@ async def prompt_for_specific_param(
         user_lang,
         correlation_id,
         action_path=f"param_prompt:{param_name}",
+        sku_id=session.get("sku_id"),
     )
     model_id = session.get("model_id", "")
     mode_index = _resolve_mode_index(model_id, session.get("params", {}), user_id)
@@ -12081,12 +12106,14 @@ async def send_confirmation_message(
         )
 
     free_counter_line = ""
+    sku_id = session.get("sku_id")
     try:
         free_counter_line = await get_free_counter_line(
             user_id,
             user_lang=user_lang,
             correlation_id=correlation_id,
             action_path="confirm_screen",
+            sku_id=sku_id,
         )
     except Exception as exc:
         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -12176,6 +12203,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     params = session.get('params', {})
     required = session.get('required', [])
     model_id = session.get('model_id', '')
+    sku_id = session.get("sku_id")
     user_lang = get_user_language(user_id)
     correlation_id = ensure_correlation_id(update, context)
     mode_index = _resolve_mode_index(model_id, params, user_id)
@@ -12308,6 +12336,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 user_lang,
                 correlation_id,
                 action_path=f"param_prompt:{param_name}",
+                sku_id=sku_id,
             )
             title_map = {
                 "image": "Загрузите изображение",
@@ -12411,6 +12440,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 user_lang,
                 correlation_id,
                 action_path=f"param_prompt:{param_name}",
+                sku_id=sku_id,
             )
             message_text = _append_free_counter_text(
                 (
@@ -12540,18 +12570,32 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     if user_lang == 'ru'
                     else f"\n\n💡 Default: <b>{default_value}</b>"
                 )
+            param_label = _humanize_param_name(param_name, user_lang)
             free_counter_line = await _resolve_free_counter_line(
                 user_id,
                 user_lang,
                 correlation_id,
                 action_path=f"param_prompt:{param_name}",
+                sku_id=sku_id,
             )
+            header_text = (
+                f"⚙️ <b>Выберите {param_label}:</b>"
+                if user_lang == "ru"
+                else f"⚙️ <b>Select {param_label}:</b>"
+            )
+            instructions_text = (
+                "💡 Нажмите одну из кнопок ниже"
+                if user_lang == "ru"
+                else "💡 Tap one of the buttons below"
+            )
+            variants_block = f"\n\n{price_variants_text}" if price_variants_text else ""
             message_text = _append_free_counter_text(
                 (
-                    f"📝 <b>Выберите {param_name}:</b>\n\n"
+                    f"{header_text}\n\n"
                     f"{param_desc}{default_info}\n\n"
-                    f"💡 Нажмите одну из кнопок ниже\n\n"
-                    f"{price_variants_text}\n\n{price_line}" if price_variants_text else f"{price_line}"
+                    f"{instructions_text}"
+                    f"{variants_block}\n\n"
+                    f"{price_line}"
                 ),
                 free_counter_line,
             )
@@ -12637,6 +12681,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             user_lang,
             correlation_id,
             action_path=f"param_prompt:{param_name}",
+            sku_id=sku_id,
         )
         message_text = _append_free_counter_text(
             (
@@ -14539,6 +14584,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 user_lang,
                                 correlation_id,
                                 action_path=f"param_prompt:{audio_param_name}",
+                                sku_id=session.get("sku_id"),
                             )
                             audio_text = _append_free_counter_text(
                                 "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
@@ -14584,6 +14630,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang,
                             correlation_id,
                             action_path=f"param_prompt:{audio_param_name}",
+                            sku_id=session.get("sku_id"),
                         )
                         audio_text = _append_free_counter_text(
                             "🎤 <b>Загрузите аудио-файл для транскрибации</b>\n\n"
@@ -14611,6 +14658,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang,
                             correlation_id,
                             action_path=f"param_prompt:{audio_param_name}",
+                            sku_id=session.get("sku_id"),
                         )
                         audio_prompt = _append_free_counter_text(
                             "🎤 <b>Вы можете загрузить аудио-файл (опционально)</b>\n\n"
@@ -14646,6 +14694,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang,
                             correlation_id,
                             action_path=f"param_prompt:{image_param_name}",
+                            sku_id=session.get("sku_id"),
                         )
                         image_text = _append_free_counter_text(
                             "📷 <b>Загрузите изображение для редактирования</b>\n\n"
@@ -14674,6 +14723,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 user_lang,
                                 correlation_id,
                                 action_path="param_prompt:image_ref",
+                                sku_id=session.get("sku_id"),
                             )
                             image_prompt = _append_free_counter_text(
                                 "📷 <b>Добавить реф-картинку?</b>\n\n"
@@ -14697,6 +14747,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 user_lang,
                                 correlation_id,
                                 action_path="param_prompt:image_optional",
+                                sku_id=session.get("sku_id"),
                             )
                             image_prompt = _append_free_counter_text(
                                 "📷 <b>Хотите добавить изображение?</b>\n\n"
@@ -14835,6 +14886,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             user_lang=user_lang,
                             correlation_id=correlation_id,
                             action_path="confirm_screen",
+                            sku_id=sku_id,
                         )
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -16000,6 +16052,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             user_lang=user_lang,
             correlation_id=correlation_id,
             action_path="confirm_generate",
+            sku_id=sku_id,
         )
     except Exception as exc:
         logger.warning("Failed to resolve free counter line: %s", exc)
@@ -16173,7 +16226,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if is_free:
                 consume_result = await consume_free_generation(
                     user_id,
-                    model_id,
+                    sku_id,
                     correlation_id=correlation_id,
                     source="delivery",
                 )
@@ -16198,6 +16251,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         user_lang=user_lang,
                         correlation_id=correlation_id,
                         action_path="confirm_generate.post_consume",
+                        sku_id=sku_id,
                     )
                 except Exception as exc:
                     logger.warning("Failed to refresh free counter after consume: %s", exc)
@@ -16248,8 +16302,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if user_lang == "ru"
             else "✅ <b>Generation completed!</b>\n\nResult is ready."
         )
+        balance_line = ""
+        if not is_free and not is_admin_user and session.get("balance_charged"):
+            updated_balance = await get_user_balance_async(user_id)
+            balance_line = (
+                f"\n\n💳 Баланс: {format_rub_amount(updated_balance)}"
+                if user_lang == "ru"
+                else f"\n\n💳 Balance: {format_rub_amount(updated_balance)}"
+            )
         await send_or_edit_message(
-            _append_free_counter_text(summary_text, free_counter_line),
+            _append_free_counter_text(f"{summary_text}{balance_line}", free_counter_line),
             parse_mode="HTML",
             reply_markup=keyboard,
         )
