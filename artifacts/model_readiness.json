@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-20T03:53:42.025068+00:00",
+  "generated_at": "2026-01-20T04:25:49.940215+00:00",
   "models": {
     "bytedance/seedream": {
       "model_id": "bytedance/seedream",
@@ -1126,12 +1126,14 @@
     },
     "infinitalk/from-audio": {
       "model_id": "infinitalk/from-audio",
-      "status": "BLOCKED",
-      "status_symbol": "⛔",
-      "gen_type": "audio-to-audio",
-      "model_type": "audio_to_audio",
+      "status": "PARTIAL",
+      "status_symbol": "⚠️",
+      "gen_type": "lip-sync",
+      "model_type": "lip_sync",
       "schema_key": "lip_sync",
       "required_inputs": [
+        "audio_input",
+        "image_input",
         "prompt"
       ],
       "optional_inputs": [],
@@ -1141,9 +1143,7 @@
       "has_price_mapping": true,
       "can_build_api_request": true,
       "can_deliver_output": true,
-      "ssot_conflicts": [
-        "SSOT_CONFLICT_AUDIO_MODEL_MISSING_AUDIO_INPUT"
-      ],
+      "ssot_conflicts": [],
       "missing_fields": [
         "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].description_ru",
         "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].modes[0].short_hint_ru",
