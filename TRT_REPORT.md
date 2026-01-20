@@ -1,32 +1,99 @@
-## 2026-02-14: Итерация 1 финальной полировки (P0/P1)
-**Top remaining P0/P1 (после этой итерации):**
-- P0-2) Единая история генераций (дедуп/сортировка/лимит) + тесты на retry/deliver fail.
-- P0-3) Гарантия сумм/квоты при параллели + тест на concurrent deliveries.
-- P1-4) Промежуточные статусы без спама (edit предпочтительно) + кнопка “Повторить доставку” только при delivery failed.
-- P1-5) Нормализация ошибок UI (коротко + действие).
-- P1-6) Unit-тест storage branch guard (fail-fast, если STORAGE_BRANCH == GITHUB_BRANCH).
-- P1-8) Webhook flow audit: быстрый 200 и async обработка без блокировок.
-- P1-10) Env validator для партнёров с fail-fast только для критичных переменных.
+## 2026-02-14: SSOT для презентации партнёрам (audit + фиксы)
 
-**Next 3 changes (итерация 2):**
-1) История генераций: дедуп/сортировка/лимит + тесты на retry/deliver fail.
-2) Конкурентные списания: единый commit-path + тест two concurrent deliveries.
-3) Нормализация ошибок UI (короткие сообщения + next step).
+### Актуальный список (single source of truth)
+- **ID:** PR-001  
+  **Priority:** P0  
+  **Status:** DONE  
+  **Evidence:** `ensure_main_menu` используется для unknown/cancel/fallback; fallback handler переводит в MAIN_MENU и чистит контекст.【F:bot_kie.py†L4588-L4699】【F:bot_kie.py†L18645-L18676】【F:app/buttons/fallback.py†L33-L83】  
+  **How to verify:** `pytest -q tests/test_menu_anchor.py tests/test_cancel_unknown.py`  
+  **Risk:** Low (UI routing).  
+  **Owner:** codex  
 
-**Было → стало (ключевые изменения):**
-- Убран текст “file-lock/резервный” из пользовательского меню; admin notice теперь нейтральный “fallback режим”. 
-- Добавлен тест, гарантирующий отсутствие внутренних предупреждений в welcome/menu.
-- Шумный контекстный лог callback теперь включается только при `DEBUG_VERBOSE_LOGS=1`.
-- Добавлен `scripts/verify_release.py` для compileall/pytest/guard-проверок с итогом OK/FAIL.
+- **ID:** PR-002  
+  **Priority:** P0  
+  **Status:** DONE  
+  **Evidence:** админ-нотификация не содержит file-lock/fallback-текст; тест проверяет отсутствие внутренних предупреждений в меню.【F:app/utils/singleton_lock.py†L93-L109】【F:tests/test_menu_no_internal_warnings.py†L1-L35】  
+  **How to verify:** `pytest -q tests/test_menu_no_internal_warnings.py`  
+  **Risk:** Low (text-only).  
+  **Owner:** codex  
 
-**Проверка (команды):**
-- `python -m compileall -q .`
-- `pytest -q tests/test_main_menu.py tests/test_menu_no_internal_warnings.py`
-- `GITHUB_REPO=owner/repo GITHUB_TOKEN=test-token BOT_INSTANCE_ID=test-instance GITHUB_BRANCH=main STORAGE_BRANCH=storage python scripts/run_smoke.py`
-  - Примечание: storage test_connection предупреждает о ClientConnectorError (нет сетевого доступа в локальном smoke).
+- **ID:** PR-003  
+  **Priority:** P1  
+  **Status:** DONE  
+  **Evidence:** free SKU резолвится в цену 0.00; добавлен тест на zero-price quote.【F:app/pricing/price_resolver.py†L33-L63】【F:bot_kie.py†L1607-L1687】【F:tests/test_free_model_price_quote.py†L1-L29】  
+  **How to verify:** `pytest -q tests/test_free_model_price_quote.py`  
+  **Risk:** Low (pricing fallback).  
+  **Owner:** codex  
 
-**Риск/откат:**
-- Риск минимален (текст/лог-гейт/скрипт). Откат: revert коммита или вернуть прежнюю строку admin notice и снять гейт DEBUG_VERBOSE_LOGS.
+- **ID:** PR-004  
+  **Priority:** P1  
+  **Status:** DONE  
+  **Evidence:** при отсутствии цены логи содержат error_code + fix_hint; пользовательское сообщение объясняет причину и шаг дальше.【F:bot_kie.py†L1629-L1641】【F:bot_kie.py†L4869-L4945】【F:tests/test_price_observability.py†L1-L99】  
+  **How to verify:** `pytest -q tests/test_price_observability.py`  
+  **Risk:** Low (logging + copy).  
+  **Owner:** codex  
+
+- **ID:** PR-005  
+  **Priority:** P1  
+  **Status:** DONE  
+  **Evidence:** guard запрещает STORAGE_BRANCH == GITHUB_BRANCH; тест покрывает fail-fast сценарий.【F:app/config_env.py†L193-L236】【F:tests/test_storage_branch_guard.py†L1-L78】  
+  **How to verify:** `pytest -q tests/test_storage_branch_guard.py`  
+  **Risk:** Low (config validation).  
+  **Owner:** codex  
+
+- **ID:** PR-006  
+  **Priority:** P0  
+  **Status:** OPEN  
+  **Evidence:** не пере-проверено в этом проходе; требуется аудит истории генераций (дедуп/сортировка/лимит).  
+  **How to verify:** добавить тесты retry/deliver fail после аудита.  
+  **Risk:** Medium (качество истории).  
+  **Owner:** codex  
+
+- **ID:** PR-007  
+  **Priority:** P0  
+  **Status:** OPEN  
+  **Evidence:** не пере-проверено в этом проходе; требуется тест конкурентных списаний/квоты.  
+  **How to verify:** добавить тест two concurrent deliveries.  
+  **Risk:** High (деньги/квота).  
+  **Owner:** codex  
+
+- **ID:** PR-008  
+  **Priority:** P1  
+  **Status:** OPEN  
+  **Evidence:** не пере-проверено в этом проходе; требуется UX-нормализация ошибок.  
+  **How to verify:** UX тесты с короткими сообщениями и action hints.  
+  **Risk:** Low (UX clarity).  
+  **Owner:** codex  
+
+- **ID:** PR-009  
+  **Priority:** P1  
+  **Status:** OPEN  
+  **Evidence:** не пере-проверено в этом проходе; требуется webhook flow audit (быстрый 200 + async).  
+  **How to verify:** perf/smoke по webhook + лог трассировки.  
+  **Risk:** Medium (latency).  
+  **Owner:** codex  
+
+- **ID:** PR-010  
+  **Priority:** P1  
+  **Status:** OPEN  
+  **Evidence:** не пере-проверено в этом проходе; требуется env validator для партнёров.  
+  **How to verify:** config validation tests.  
+  **Risk:** Low (deploy ergonomics).  
+  **Owner:** codex  
+
+### Было → стало (текущий проход)
+- Было: free price иногда уходил в `PRICE_MISSING_RULE` и показывал “Цена не определена”.  
+  Стало: free SKU получает цену 0.00 + тест на нулевую цену.  
+- Было: user-facing admin notice содержал “fallback”/file-lock формулировки.  
+  Стало: нейтральная формулировка без внутренних предупреждений.  
+- Было: fallback handler редактировал меню без гарантий UI-контекста.  
+  Стало: единый `ensure_main_menu` устанавливает MAIN_MENU.
+
+### Как проверял
+- Запускать тесты из раздела “How to verify” для пунктов PR-001…PR-005.
+
+---
+Ниже сохранён исторический лог изменений; актуальный статус фиксируется в разделе SSOT выше.
 
 ## 2026-02-13: User Action Audit Layer + UX completeness audit
 **What was missing (log gap):**
