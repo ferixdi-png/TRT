@@ -1,3 +1,22 @@
+## 2026-02-13: User Action Audit Layer + UX completeness audit
+**What was missing (log gap):**
+- Render webhook logs did not show per-action visibility for callback presses and message inputs, so user activity was invisible across the flow.
+
+**What changed (key diffs):**
+- Added a global User Action Audit Layer (group=-100) for callbacks + messages with structured fields (correlation_id, update_id, user_id, chat_id, update_type, action, callback_data/message_type, model_id, waiting_for, sku/price, outcome, handler).
+- Added safe message hashing/preview logging (length + sha256 hash + sanitized preview).
+- Added required/optional labels in parameter prompts and a media-first guard that blocks text until required uploads are provided.
+- Standardized output captions/filenames to “<model> • <key params> • <timestamp>” and added Telegram upload URL fallback with structured error logs.
+- Extended SSOT reporting with UX completeness: `TRT_MODEL_UX_AUDIT.md` + `artifacts/model_ux_audit.json`.
+
+**How to verify on Render (example log line):**
+```
+STRUCTURED_LOG {"correlation_id":"corr-12345-67890-1a2b3c4d","update_type":"callback","action":"USER_ACTION","action_path":"menu>show_models","callback_data":"show_models","message_type":null,"model_id":"seedream/4.5-text-to-image","waiting_for":"prompt","stage":"USER_ACTION_AUDIT","outcome":"observed","sku_id":"seedream/4.5-text-to-image::aspect_ratio=1:1","price_rub":"12.34"}
+```
+
+**Models with UNKNOWN required/optional metadata:**
+- ✅ None
+
 ## 2026-02-12: Deterministic state machine + stale gen_type auto-reconcile
 **Root cause (from logs):**
 - `active_gen_type/gen_type` persisted across menus (например, `image-to-video`) and was compared against a newly selected text-to-image model, causing false `GEN_TYPE_UNSUPPORTED` blocks.

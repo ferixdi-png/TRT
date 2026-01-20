@@ -100,9 +100,20 @@ def _media_method_from_type(media_kind: str, content_type: str, url: str) -> str
     return "send_document"
 
 
-def _infer_filename(url: str, content_type: str, media_kind: str) -> str:
+def _infer_filename(url: str, content_type: str, media_kind: str, filename_prefix: Optional[str] = None) -> str:
     parsed = urlparse(url)
     name = os.path.basename(parsed.path)
+    if filename_prefix:
+        extension = mimetypes.guess_extension(content_type or "")
+        if not extension:
+            fallback = {
+                "image": ".png",
+                "video": ".mp4",
+                "audio": ".mp3",
+                "voice": ".ogg",
+            }
+            extension = fallback.get(media_kind, ".bin")
+        return f"{filename_prefix}{extension}"
     if name:
         return name
     extension = mimetypes.guess_extension(content_type or "")
@@ -191,6 +202,7 @@ async def _resolve_single_media(
     correlation_id: Optional[str],
     kie_client: Any,
     http_client: aiohttp.ClientSession,
+    filename_prefix: Optional[str] = None,
 ) -> ResolvedMedia:
     resolved_url = url
     if _is_kie_url(url, kie_client):
@@ -227,7 +239,7 @@ async def _resolve_single_media(
             error_code="TG_MEDIA_TOO_LARGE",
         )
 
-    filename = _infer_filename(resolved_url, sniffed_type, media_kind)
+    filename = _infer_filename(resolved_url, sniffed_type, media_kind, filename_prefix)
     payload = InputFile(io.BytesIO(data), filename=filename)
     return ResolvedMedia(
         url=resolved_url,
@@ -248,6 +260,8 @@ async def resolve_and_prepare_telegram_payload(
     media_kind: str,
     kie_client: Any,
     http_client: aiohttp.ClientSession,
+    *,
+    filename_prefix: Optional[str] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     Resolve generation result into a Telegram method + payload kwargs.
@@ -277,7 +291,14 @@ async def resolve_and_prepare_telegram_payload(
     for url in urls:
         try:
             resolved_items.append(
-                await _resolve_single_media(url, media_kind, correlation_id, kie_client, http_client)
+                await _resolve_single_media(
+                    url,
+                    media_kind,
+                    correlation_id,
+                    kie_client,
+                    http_client,
+                    filename_prefix=filename_prefix,
+                )
             )
         except MediaNotMediaError as exc:
             invalid_urls.append(exc.url)

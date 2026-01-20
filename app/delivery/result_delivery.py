@@ -148,10 +148,12 @@ def _extension_for_type(content_type: str) -> str:
     return guessed or ".bin"
 
 
-def _derive_filename(url: str, content_type: str, index: int) -> str:
+def _derive_filename(url: str, content_type: str, index: int, filename_prefix: Optional[str] = None) -> str:
     parsed = urlparse(url)
     name = os.path.basename(parsed.path or "")
     extension = _extension_for_type(content_type)
+    if filename_prefix:
+        return f"{filename_prefix}_{index}{extension}"
     if name:
         base, ext = os.path.splitext(name)
         return f"{base or f'result_{index}'}{ext or extension}"
@@ -198,6 +200,7 @@ async def deliver_generation_result(
     caption_text: Optional[str],
     *,
     prefer_upload: bool = True,
+    filename_prefix: Optional[str] = None,
 ) -> None:
     """Deliver generation results through a unified delivery layer."""
     urls = [url for url in result_urls if url]
@@ -271,7 +274,7 @@ async def deliver_generation_result(
                     continue
 
                 if _is_textual_type(real_type):
-                    filename = _derive_filename(target.url, real_type, index)
+                    filename = _derive_filename(target.url, real_type, index, filename_prefix)
                     payload = InputFile(io.BytesIO(target.data), filename=filename)
                     await context.bot.send_document(chat_id=chat_id, document=payload)
                     continue
@@ -288,7 +291,7 @@ async def deliver_generation_result(
                     )
                     continue
 
-                filename = _derive_filename(target.url, real_type, index)
+                filename = _derive_filename(target.url, real_type, index, filename_prefix)
                 payload = InputFile(io.BytesIO(target.data), filename=filename)
                 method = _method_for_type(real_type)
                 payload_key = {
@@ -329,9 +332,16 @@ async def deliver_generation_result(
                     outcome="failed",
                     duration_ms=int((time.monotonic() - start_ts) * 1000),
                     error_id=error_id,
+                    error_code="TG_DELIVERY_FAILED",
+                    fix_hint="send_url_fallback",
                     param={"url": url_summary(url), "error": str(exc)},
                 )
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"Ошибка выдачи результата. ID: {error_id}. Отправь в поддержку.",
+                    text=(
+                        "⚠️ Не удалось отправить файл через Telegram.\n"
+                        f"Ссылка: {url}\n"
+                        f"ID: {error_id}"
+                    ),
+                    disable_web_page_preview=True,
                 )
