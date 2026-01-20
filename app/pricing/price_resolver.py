@@ -55,7 +55,10 @@ def resolve_price_quote(
     if not sku:
         return None
 
-    price_rub = _quantize_price(_to_decimal(sku.price_rub))
+    if sku.is_free_sku:
+        price_rub = Decimal("0")
+    else:
+        price_rub = _quantize_price(_to_decimal(sku.price_rub))
     breakdown = {
         "model_id": model_id,
         "mode_index": mode_index,
@@ -63,5 +66,6 @@ def resolve_price_quote(
         "params": dict(selected_params or {}),
         "sku_id": sku.sku_key,
         "unit": sku.unit,
+        "free_sku": sku.is_free_sku,
     }
     return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_key)
