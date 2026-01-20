@@ -199,6 +199,19 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                         track_outgoing_action(update_id)
                 except Exception as send_exc:
                     logger.warning("Could not send error message: %s", send_exc)
+            if isinstance(update, Update):
+                try:
+                    from bot_kie import ensure_main_menu
+
+                    await ensure_main_menu(
+                        update,
+                        context,
+                        source="error_handler",
+                        correlation_id=correlation_id,
+                        prefer_edit=False,
+                    )
+                except Exception as menu_exc:
+                    logger.warning("Error handler failed to anchor menu: %s", menu_exc)
 
             if update_id:
                 await guard.check_and_ensure_response(update, context)
