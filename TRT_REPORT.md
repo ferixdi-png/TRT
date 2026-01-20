@@ -1704,3 +1704,21 @@ tests/test_409_conflict_fix.py ........
 **Root cause:** GitHubStorage закрывал aiohttp session на чужом event loop (webhook/ptb), что приводило к `attached to a different loop`.  
 **Решение:** per-loop sessions + safe close + reset/retry + single-flight read/write.  
 **Как проверить:** `pytest tests/test_github_storage_loop.py tests/test_storage_resilience.py`.
+
+## 2026-02-21: Anchor MAIN_MENU + price undefined observability
+**Почему меню не возвращалось:**
+- Cancel/unknown callback/error paths завершались сообщением без гарантированного рендера MAIN_MENU, оставляя пользователя в «полу-состоянии» без якорной клавиатуры.
+- Guard-ветка «Цена не определена» отправляла сообщение и завершалась без возврата к MAIN_MENU.
+
+**Почему в логах молчало:**
+- «Цена не определена» была guard-веткой UX, не exception — логировалась как обычный INFO, без WARNING-сигнала.
+
+**Что добавлено:**
+- Введён helper `ensure_main_menu(...)` с fallback edit→send, reset/cleanup session и structured log `MENU_ANCHOR_RENDER`.
+- Cancel/unknown callback/unhandled fallback и guard «Цена не определена» теперь вызывают `ensure_main_menu(...)`.
+- Для «Цена не определена» добавлены WARNING structured logs `PRICE_UNDEFINED` и `GUARD_BLOCK` с reason_code и param_snapshot.
+- Статус lock убран из welcome для обычных пользователей; детали фиксируются structured log `LOCK_STATUS`.
+
+**Как проверено:**
+- `pytest -q tests/test_menu_anchor.py tests/test_*cancel* tests/test_*unknown*`
+- `pytest -q tests/test_*price* tests/test_*observability*`

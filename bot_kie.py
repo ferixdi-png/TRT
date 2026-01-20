@@ -6,6 +6,7 @@ Enhanced version with KIE AI model selection and generation
 from __future__ import annotations
 
 import logging
+import json
 import asyncio
 import concurrent.futures
 import sys
@@ -194,6 +195,45 @@ def _safe_text_hash(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def _log_structured_warning(**fields: Any) -> None:
+    """Emit a structured warning log (JSON payload)."""
+    from app.observability.context import get_context_fields
+    from app.observability.trace import get_correlation_id as get_trace_correlation_id
+
+    correlation_id = fields.get("correlation_id") or get_trace_correlation_id()
+    context_fields = get_context_fields()
+    payload = {
+        "correlation_id": correlation_id,
+        "user_id": fields.get("user_id") or context_fields.get("user_id"),
+        "chat_id": fields.get("chat_id") or context_fields.get("chat_id"),
+        "update_id": fields.get("update_id") or context_fields.get("update_id"),
+        "update_type": fields.get("update_type") or context_fields.get("update_type"),
+        "action": fields.get("action"),
+        "action_path": fields.get("action_path"),
+        "command": fields.get("command"),
+        "callback_data": fields.get("callback_data"),
+        "message_type": fields.get("message_type"),
+        "text_length": fields.get("text_length"),
+        "text_hash": fields.get("text_hash"),
+        "text_preview": fields.get("text_preview"),
+        "model_id": fields.get("model_id"),
+        "gen_type": fields.get("gen_type"),
+        "task_id": fields.get("task_id"),
+        "job_id": fields.get("job_id"),
+        "sku_id": fields.get("sku_id"),
+        "price_rub": fields.get("price_rub"),
+        "stage": fields.get("stage"),
+        "waiting_for": fields.get("waiting_for"),
+        "param": fields.get("param"),
+        "outcome": fields.get("outcome"),
+        "duration_ms": fields.get("duration_ms"),
+        "error_id": fields.get("error_id"),
+        "error_code": fields.get("error_code"),
+        "fix_hint": fields.get("fix_hint"),
+    }
+    logger.warning("STRUCTURED_LOG %s", json.dumps(payload, ensure_ascii=False, default=str))
 
 
 def _extract_session_snapshot(
@@ -4328,12 +4368,27 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     else:
         header_text += "\n👇 Выберите раздел в меню ниже."
 
-    from app.utils.singleton_lock import get_lock_admin_notice
+    from app.utils.singleton_lock import get_lock_admin_notice, get_lock_mode, is_lock_degraded
 
     is_admin_user = get_is_admin(user_id) if user_id else False
     admin_lock_notice = get_lock_admin_notice(user_lang) if is_admin_user else ""
     if admin_lock_notice:
         header_text += f"\n\n{admin_lock_notice}"
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else user_id,
+        update_id=update.update_id,
+        action="LOCK_STATUS",
+        action_path="menu:lock_status",
+        stage="UI_ROUTER",
+        outcome="observed",
+        param={
+            "lock_mode": get_lock_mode(),
+            "lock_degraded": is_lock_degraded(),
+            "lock_notice": admin_lock_notice or None,
+        },
+    )
 
     details_parts = []
     if referral_bonus_text:
@@ -4560,11 +4615,50 @@ async def send_long_message(
     return sent_messages
 
 
+async def ensure_main_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    source: str,
+    correlation_id: Optional[str] = None,
+    prefer_edit: bool = True,
+) -> dict:
+    """Гарантирует MAIN_MENU и якорную клавиатуру после любых выходов."""
+    result = await show_main_menu(
+        update,
+        context,
+        source=source,
+        correlation_id=correlation_id,
+        prefer_edit=prefer_edit,
+    )
+    log_structured_event(
+        correlation_id=result.get("correlation_id"),
+        user_id=result.get("user_id"),
+        chat_id=result.get("chat_id"),
+        update_id=result.get("update_id"),
+        action="MENU_ANCHOR_RENDER",
+        action_path=f"menu_anchor:{source}",
+        stage="UI_ROUTER",
+        outcome="render",
+        param={
+            "source": source,
+            "ui_context_before": result.get("ui_context_before"),
+            "ui_context_after": result.get("ui_context_after"),
+            "used_edit": result.get("used_edit"),
+            "fallback_send": result.get("fallback_send"),
+            "message_id": result.get("message_id"),
+        },
+    )
+    return result
+
+
 async def show_main_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    source: str = "unknown"
-) -> None:
+    source: str = "unknown",
+    *,
+    correlation_id: Optional[str] = None,
+    prefer_edit: bool = True,
+) -> dict:
     """Показывает единое главное меню для всех входов."""
     user_id = update.effective_user.id if update.effective_user else None
     user_lang = "ru"
@@ -4574,12 +4668,15 @@ async def show_main_menu(
             user_lang = await get_user_language_async(user_id)
         except Exception as exc:
             logger.warning("Failed to resolve user language: %s", exc)
-    correlation_id = ensure_correlation_id(update, context)
+    correlation_id = correlation_id or ensure_correlation_id(update, context)
     chat_id = None
     if update.effective_chat:
         chat_id = update.effective_chat.id
     elif user_id:
         chat_id = user_id
+    ui_context_before = None
+    if user_id and user_id in user_sessions:
+        ui_context_before = user_sessions[user_id].get("ui_context")
     if user_id:
         reset_session_context(
             user_id,
@@ -4620,14 +4717,22 @@ async def show_main_menu(
     )
     logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
-    if update.callback_query:
+    used_edit = False
+    fallback_send = False
+    message_id = None
+
+    if update.callback_query and prefer_edit:
         query = update.callback_query
         if len(header_text) <= TELEGRAM_TEXT_LIMIT:
             try:
-                await query.edit_message_text(
+                edit_result = await query.edit_message_text(
                     header_text,
                     reply_markup=reply_markup,
                     parse_mode="HTML",
+                )
+                used_edit = True
+                message_id = getattr(edit_result, "message_id", None) or (
+                    query.message.message_id if query.message else None
                 )
                 log_structured_event(
                     correlation_id=correlation_id,
@@ -4644,8 +4749,19 @@ async def show_main_menu(
                         "welcome_version": welcome_hash,
                     },
                 )
-                return
+                return {
+                    "correlation_id": correlation_id,
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "update_id": update.update_id,
+                    "ui_context_before": ui_context_before,
+                    "ui_context_after": UI_CONTEXT_MAIN_MENU,
+                    "used_edit": used_edit,
+                    "fallback_send": fallback_send,
+                    "message_id": message_id,
+                }
             except Exception as exc:
+                fallback_send = True
                 log_structured_event(
                     correlation_id=correlation_id,
                     user_id=user_id,
@@ -4665,13 +4781,14 @@ async def show_main_menu(
                 )
 
     if chat_id:
-        await context.bot.send_message(
+        send_result = await context.bot.send_message(
             chat_id=chat_id,
             text=header_text,
             reply_markup=reply_markup,
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
+        message_id = getattr(send_result, "message_id", None)
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -4687,6 +4804,146 @@ async def show_main_menu(
                 "welcome_version": welcome_hash,
             },
         )
+    return {
+        "correlation_id": correlation_id,
+        "user_id": user_id,
+        "chat_id": chat_id,
+        "update_id": update.update_id,
+        "ui_context_before": ui_context_before,
+        "ui_context_after": UI_CONTEXT_MAIN_MENU,
+        "used_edit": used_edit,
+        "fallback_send": fallback_send,
+        "message_id": message_id,
+    }
+
+
+async def respond_price_undefined(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    session: dict,
+    user_lang: str,
+    model_id: Optional[str],
+    gen_type: Optional[str],
+    sku_id: Optional[str],
+    price_quote: Optional[dict],
+    free_remaining: Optional[int],
+    correlation_id: Optional[str],
+    action_path: str,
+    source: str = "price_undefined",
+    prefer_edit: bool = True,
+) -> None:
+    """Respond to price undefined guard-block with warning logs and anchored main menu."""
+    from app.pricing.free_policy import is_sku_free_daily
+
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else user_id
+    storage_mode = os.getenv("STORAGE_MODE", "unknown")
+    free_remaining_value = free_remaining if free_remaining is not None else 0
+    free_eligible = bool(sku_id and is_sku_free_daily(sku_id))
+    price_quote_missing = price_quote is None
+
+    if free_remaining_value > 0 and free_eligible and price_quote_missing:
+        reason_code = "FREE_BYPASS_EXPECTED_BUT_MISSING_QUOTE"
+        fix_hint = (
+            "BUG: free_should_bypass_price=true but price_quote_missing=true; "
+            "price_quote is None; run quote resolve; check YAML price mapping."
+        )
+    elif not sku_id:
+        reason_code = "MODEL_HAS_NO_SKU"
+        fix_hint = "model_id/gen_type did not resolve sku_id; check catalog mapping."
+    elif "price_quote" not in session:
+        reason_code = "QUOTE_RESOLVER_NOT_CALLED"
+        fix_hint = "price_quote missing in session; ensure quote resolver is invoked."
+    elif free_remaining_value == 0 and price_quote_missing:
+        reason_code = "PAID_NO_QUOTE"
+        fix_hint = "paid flow missing quote; check pricing resolver and YAML mappings."
+    else:
+        reason_code = "PRICE_MAP_MISSING_FOR_SKU"
+        fix_hint = "price mapping missing for sku_id; check pricing catalog."
+
+    param_snapshot = {
+        "gen_type": gen_type,
+        "model_id": model_id,
+        "sku_id": sku_id,
+        "ui_context": session.get("ui_context"),
+        "waiting_for": session.get("waiting_for"),
+        "free_remaining": free_remaining_value,
+        "storage_mode": storage_mode,
+    }
+    welcome_version = session.get("welcome_version") if isinstance(session, dict) else None
+
+    _log_structured_warning(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="PRICE_UNDEFINED",
+        action_path=action_path,
+        model_id=model_id,
+        gen_type=gen_type,
+        sku_id=sku_id,
+        stage="PRICE_RESOLVE",
+        outcome="blocked",
+        error_code=reason_code,
+        fix_hint=fix_hint,
+        param={
+            "reason_code": reason_code,
+            "param_snapshot": param_snapshot,
+            "free_eligible": free_eligible,
+            "free_remaining": free_remaining_value,
+            "storage_mode": storage_mode,
+            "welcome_version": welcome_version,
+        },
+    )
+    _log_structured_warning(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="GUARD_BLOCK",
+        action_path=action_path,
+        model_id=model_id,
+        gen_type=gen_type,
+        sku_id=sku_id,
+        stage="PRICE_RESOLVE",
+        outcome="blocked",
+        error_code=reason_code,
+        fix_hint=fix_hint,
+        param={
+            "reason_code": reason_code,
+            "reason": "price_undefined",
+            "param_snapshot": param_snapshot,
+        },
+    )
+
+    message_text = (
+        "❌ <b>Цена не определена</b>\n\n"
+        "Пожалуйста, выберите другую модель или попробуйте позже."
+        if user_lang == "ru"
+        else "❌ <b>Price is unavailable</b>\n\nPlease select another model or try again later."
+    )
+
+    sent = False
+    if update.callback_query and prefer_edit:
+        try:
+            await update.callback_query.edit_message_text(message_text, parse_mode="HTML")
+            sent = True
+        except Exception as exc:
+            logger.warning("Price undefined edit failed: %s", exc)
+    if not sent:
+        if update.message:
+            await update.message.reply_text(message_text, parse_mode="HTML")
+        elif chat_id:
+            await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode="HTML")
+
+    await ensure_main_menu(
+        update,
+        context,
+        source=source,
+        correlation_id=correlation_id,
+        prefer_edit=False,
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -5663,7 +5920,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             except:
                 pass
-            await show_main_menu(update, context, source="back_to_menu")
+            await ensure_main_menu(update, context, source="back", prefer_edit=True)
             return ConversationHandler.END
         
     
@@ -6174,21 +6431,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer(t('btn_cancel', lang=user_lang).replace('❌ ', ''))
             session_store.clear(user_id)
             try:
-                keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
                 await query.edit_message_text(
                     t('msg_operation_cancelled', lang=user_lang),
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                    parse_mode="HTML",
                 )
             except Exception as e:
                 logger.error(f"Error editing message on cancel: {e}")
                 try:
-                    keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
                     await query.message.reply_text(
                         t('msg_operation_cancelled', lang=user_lang),
-                        reply_markup=InlineKeyboardMarkup(keyboard)
+                        parse_mode="HTML",
                     )
                 except:
                     pass
+            await ensure_main_menu(update, context, source="cancel", prefer_edit=False)
             return ConversationHandler.END
         
         if data.startswith("retry_generate:"):
@@ -15590,7 +15846,7 @@ async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info("🔀 GLOBAL_TEXT_ROUTER: No waiting_for, showing main menu")
     try:
-        await show_main_menu(update, context, source="global_text_router")
+        await ensure_main_menu(update, context, source="global_text_router", prefer_edit=True)
         track_outgoing_action(update_id)
     except Exception as exc:
         logger.error("Error in global_text_router fallback: %s", exc, exc_info=True)
@@ -15704,7 +15960,7 @@ async def global_audio_router(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     logger.info("🔀 GLOBAL_AUDIO_ROUTER: Not expecting audio, showing guidance")
     try:
-        await show_main_menu(update, context, source="global_audio_router")
+        await ensure_main_menu(update, context, source="global_audio_router", prefer_edit=True)
         track_outgoing_action(update_id)
     except Exception as exc:
         logger.error("Error in global_audio_router fallback: %s", exc, exc_info=True)
@@ -15882,7 +16138,7 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
                 "current_param": current_param,
             },
         )
-        await show_main_menu(update, context, source="unhandled_update_fallback")
+        await ensure_main_menu(update, context, source="unhandled_update_fallback", prefer_edit=True)
         track_outgoing_action(update.update_id, action_type="fallback")
     except Exception as exc:
         logger.error("Error in unhandled_update_fallback: %s", exc, exc_info=True)
@@ -16273,11 +16529,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     if not price_quote:
         user_lang = get_user_language(user_id)
-        await send_or_edit_message(
-            "❌ <b>Цена не определена</b>\n\n"
-            "Пожалуйста, выберите другую модель или попробуйте позже."
-            if user_lang == "ru"
-            else "❌ <b>Price is unavailable</b>\n\nPlease select another model or try again later."
+        free_remaining = free_result.get("base_remaining") if isinstance(free_result, dict) else None
+        if free_remaining is None and isinstance(free_result, dict):
+            free_remaining = free_result.get("remaining")
+        await respond_price_undefined(
+            update,
+            context,
+            session=session,
+            user_lang=user_lang,
+            model_id=model_id,
+            gen_type=session.get("gen_type"),
+            sku_id=session.get("sku_id"),
+            price_quote=price_quote,
+            free_remaining=free_remaining,
+            correlation_id=correlation_id,
+            action_path="confirm_generate",
         )
         return ConversationHandler.END
     price = float(price_quote.get("price_rub", 0))
@@ -17660,11 +17926,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         query = update.callback_query
         await query.answer("Операция отменена")
-        
-        # Clean up session
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        
+
         try:
             await query.edit_message_text(
                 "❌ Операция отменена.\n\n"
@@ -17676,15 +17938,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("❌ Операция отменена.")
             except:
                 pass
+        await ensure_main_menu(update, context, source="cancel", prefer_edit=False)
         return ConversationHandler.END
     
     # Handle command
     if update.message:
-        # Clean up session
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        
         await update.message.reply_text("❌ Операция отменена.")
+        await ensure_main_menu(update, context, source="cancel", prefer_edit=False)
         return ConversationHandler.END
 
 
@@ -18408,7 +18668,7 @@ async def _register_all_handlers_internal(application: Application):
                     e,
                     callback_data=query.data if query else None,
                 )
-        await show_main_menu(update, context, source="unknown_callback_handler")
+        await ensure_main_menu(update, context, source="unknown_callback", prefer_edit=True)
     
     # Add fallback handlers with lowest priority (group=100, added last)
     application.add_handler(CallbackQueryHandler(unknown_callback_handler), group=100)
