@@ -6,5 +6,13 @@
     "status": "completed",
     "timestamp": 1768904656.1993213,
     "user_id": 6913446846
+  },
+  "2": {
+    "amount": 100.0,
+    "id": 2,
+    "screenshot_file_id": "AgACAgIAAxkBAAIZd2lvjWkohCjJw-MjOxHRkamT_NzBAAJyFGsbsO55S-kmCvhHIgGVAQADAgADeQADOAQ",
+    "status": "completed",
+    "timestamp": 1768918378.6990411,
+    "user_id": 908969649
   }
 }
