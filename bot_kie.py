@@ -12,6 +12,7 @@ import os
 import re
 import math
 import uuid
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -29,6 +30,7 @@ from app.observability.trace import (
 )
 from app.observability.error_catalog import ERROR_CATALOG
 from app.middleware.rate_limit import PerUserRateLimiter, TTLCache
+from app.session_store import get_session_store, get_session_cached
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -160,6 +162,58 @@ def _resolve_update_type(update: Update) -> str:
     return "unknown"
 
 
+def _resolve_message_type(message: Optional[Any]) -> str:
+    if not message:
+        return "unknown"
+    if getattr(message, "text", None):
+        return "text"
+    if getattr(message, "photo", None):
+        return "photo"
+    if getattr(message, "audio", None) or getattr(message, "voice", None):
+        return "audio"
+    if getattr(message, "document", None):
+        return "document"
+    if getattr(message, "video", None):
+        return "video"
+    return "unknown"
+
+
+def _safe_text_preview(text: Optional[str], limit: int = 40) -> Optional[str]:
+    if not text:
+        return None
+    cleaned = re.sub(r"\s+", " ", str(text)).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return f"{cleaned[:limit]}…"
+
+
+def _safe_text_hash(text: Optional[str]) -> Optional[str]:
+    if not text:
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def _extract_session_snapshot(
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: Optional[int],
+    update_id: Optional[int],
+) -> Dict[str, Any]:
+    if user_id is None:
+        return {}
+    store = get_session_store(context)
+    session = get_session_cached(context, store, user_id, update_id, default={})
+    if not isinstance(session, dict):
+        return {}
+    price_quote = session.get("price_quote") if isinstance(session.get("price_quote"), dict) else {}
+    return {
+        "waiting_for": session.get("waiting_for"),
+        "current_param": session.get("current_param"),
+        "model_id": session.get("model_id"),
+        "sku_id": session.get("sku_id"),
+        "price_rub": price_quote.get("price_rub"),
+    }
+
+
 def _log_route_decision_once(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -219,6 +273,76 @@ async def inbound_update_logger(update: Update, context: ContextTypes.DEFAULT_TY
         command=_truncate_log_value(command),
         callback_data=_truncate_log_value(callback_data),
         outcome="received",
+    )
+
+
+async def user_action_audit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Audit layer for all callback queries (non-blocking)."""
+    if not update.callback_query:
+        return
+    query = update.callback_query
+    correlation_id = ensure_correlation_id(update, context)
+    user_id = query.from_user.id if query.from_user else None
+    chat_id = query.message.chat_id if query.message else None
+    update_id = getattr(update, "update_id", None)
+    session_snapshot = _extract_session_snapshot(context, user_id, update_id)
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        update_type="callback",
+        action="USER_ACTION",
+        action_path=build_action_path(query.data),
+        callback_data=_truncate_log_value(query.data),
+        message_type=None,
+        model_id=session_snapshot.get("model_id"),
+        waiting_for=session_snapshot.get("waiting_for"),
+        sku_id=session_snapshot.get("sku_id"),
+        price_rub=session_snapshot.get("price_rub"),
+        stage="USER_ACTION_AUDIT",
+        outcome="observed",
+        param={
+            "handled_by": "user_action_audit_callback",
+            "current_param": session_snapshot.get("current_param"),
+        },
+    )
+
+
+async def user_action_audit_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Audit layer for all incoming messages (non-blocking)."""
+    if not update.message:
+        return
+    correlation_id = ensure_correlation_id(update, context)
+    update_id = getattr(update, "update_id", None)
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    message = update.message
+    message_type = _resolve_message_type(message)
+    text_value = message.text or message.caption or ""
+    session_snapshot = _extract_session_snapshot(context, user_id, update_id)
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        update_type="message",
+        action="USER_ACTION",
+        action_path=f"message_input:{message_type}",
+        message_type=message_type,
+        text_length=len(text_value) if text_value else 0,
+        text_hash=_safe_text_hash(text_value),
+        text_preview=_safe_text_preview(text_value),
+        model_id=session_snapshot.get("model_id"),
+        waiting_for=session_snapshot.get("waiting_for"),
+        sku_id=session_snapshot.get("sku_id"),
+        price_rub=session_snapshot.get("price_rub"),
+        stage="USER_ACTION_AUDIT",
+        outcome="observed",
+        param={
+            "handled_by": "user_action_audit_message",
+            "current_param": session_snapshot.get("current_param"),
+        },
     )
 
 
@@ -6284,16 +6408,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
                 if user_lang == 'ru':
                     await query.edit_message_text(
-                        "ℹ️ <b>Бесплатные инструменты временно недоступны</b>\n\n"
-                        "Сейчас нет бесплатных инструментов, но скоро появятся новые.\n\n"
+                        "ℹ️ <b>Нет доступных бесплатных SKU</b>\n\n"
+                        "В прайс-SSOT пока нет бесплатных вариантов.\n\n"
                         "Пока можно выбрать модель из каталога.",
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
                 else:
                     await query.edit_message_text(
-                        "ℹ️ <b>Free tools are temporarily unavailable</b>\n\n"
-                        "There are no free tools right now, but new ones will appear soon.\n\n"
+                        "ℹ️ <b>No free SKUs available</b>\n\n"
+                        "Pricing SSOT does not include free variants yet.\n\n"
                         "You can pick a model from the catalog.",
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
@@ -11405,6 +11529,18 @@ def _get_reset_step_label(user_lang: str) -> str:
     return "🔄 Сбросить шаг" if user_lang == 'ru' else "🔄 Reset step"
 
 
+def _format_required_label(is_optional: bool, user_lang: str) -> str:
+    if user_lang == "ru":
+        return "✅ Обязательный" if not is_optional else "⚪️ Опциональный"
+    return "✅ Required" if not is_optional else "⚪️ Optional"
+
+
+def _media_first_instruction(user_lang: str) -> str:
+    if user_lang == "ru":
+        return "📌 Сначала загрузите файл, затем сможете ввести текст и параметры."
+    return "📌 Upload the file first, then you can enter text and parameters."
+
+
 def _get_param_price_variants(
     model_id: str,
     param_name: str,
@@ -11455,6 +11591,7 @@ async def prompt_for_specific_param(
     default_value = param_info.get('default')
     format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
     example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
+    required_label = _format_required_label(is_optional, user_lang)
     chat_id = _get_chat_id_from_update(update)
     correlation_id = ensure_correlation_id(update, context)
     free_counter_line = await _resolve_free_counter_line(
@@ -11525,11 +11662,15 @@ async def prompt_for_specific_param(
             keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
         keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+        instruction_line = _media_first_instruction(user_lang) if not is_optional else ""
         prompt_text = (
             f"📷 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
             f"{param_info.get('description', '')}\n\n"
             f"💡 {format_hint}\n"
+            f"{required_label}\n"
         )
+        if instruction_line:
+            prompt_text += f"{instruction_line}\n"
         if example_hint:
             prompt_text += f"🧪 {example_hint}\n"
         prompt_text += "📏 Максимальный размер: 10 MB" if user_lang == 'ru' else "📏 Max size: 10 MB"
@@ -11578,11 +11719,15 @@ async def prompt_for_specific_param(
             keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
         keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
+        instruction_line = _media_first_instruction(user_lang) if not is_optional else ""
         prompt_text = (
             f"🎤 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
             f"{param_info.get('description', '')}\n\n"
             f"💡 {format_hint}\n"
+            f"{required_label}\n"
         )
+        if instruction_line:
+            prompt_text += f"{instruction_line}\n"
         if example_hint:
             prompt_text += f"🧪 {example_hint}\n"
         prompt_text += (
@@ -11639,7 +11784,7 @@ async def prompt_for_specific_param(
         keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         description = param_info.get('description', '')
-        detail_lines = [format_hint]
+        detail_lines = [format_hint, required_label]
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
@@ -11753,7 +11898,7 @@ async def prompt_for_specific_param(
         keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         description = param_info.get('description', '')
-        detail_lines = [format_hint]
+        detail_lines = [format_hint, required_label]
         if example_hint:
             detail_lines.append(example_hint)
         detail_text = "\n".join(detail_lines)
@@ -11803,7 +11948,7 @@ async def prompt_for_specific_param(
     keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
     keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
     description = param_info.get('description', '')
-    detail_lines = [format_hint]
+    detail_lines = [format_hint, required_label]
     if example_hint:
         detail_lines.append(example_hint)
     detail_text = "\n".join(detail_lines)
@@ -12064,6 +12209,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         is_optional = not param_info.get('required', False)
         if param_name in required:
             is_optional = False
+        required_label = _format_required_label(is_optional, user_lang)
         session['current_param'] = param_name
         media_kind = _get_media_kind(param_name)
         reason = "missing_required"
@@ -12140,11 +12286,18 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 "audio": "Загрузите аудио",
             }
             title = title_map.get(media_kind, "Загрузите файл")
+            instruction_line = _media_first_instruction(user_lang) if not is_optional else ""
             prompt_text = (
                 f"📥 <b>{step_prefix}{title}</b>\n\n"
                 f"{param_desc}\n\n"
                 f"💡 {format_hint}\n"
-                f"{example_line}"
+                f"{required_label}\n"
+            )
+            if instruction_line:
+                prompt_text += f"{instruction_line}\n"
+            if example_hint:
+                prompt_text += f"{example_line}"
+            prompt_text += (
                 f"📏 Максимальный размер: 30 MB\n\n"
                 f"{price_line}"
             )
@@ -12223,7 +12376,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
             example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
             example_line = f"🧪 {example_hint}\n" if example_hint else ""
-            details_text = "\n".join([format_hint, example_hint] if example_hint else [format_hint])
+            details_text = "\n".join([format_hint, required_label, example_hint] if example_hint else [format_hint, required_label])
             free_counter_line = await _resolve_free_counter_line(
                 user_id,
                 user_lang,
@@ -12613,6 +12766,56 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     image_only_model = _is_image_only_model(properties)
     logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS SESSION KEYS: {list(session.keys())[:15]}")
     logger.debug(f"🔥🔥🔥 INPUT_PARAMETERS PARAMS: keys={list(params.keys())}, values={[(k, type(v).__name__, len(v) if isinstance(v, (list, dict)) else 'N/A') for k, v in params.items()][:5]}")
+
+    missing_media = _collect_missing_required_media(session) if model_id and properties else []
+    if update.message and update.message.text and missing_media:
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        missing_param = missing_media[0]
+        param_label = _humanize_param_name(missing_param, user_lang)
+        media_kind = _get_media_kind(missing_param) or "media"
+        media_label_ru = {
+            "image": "изображение",
+            "video": "видео",
+            "audio": "аудио",
+            "document": "файл",
+            "media": "медиа",
+        }.get(media_kind, "медиа")
+        media_label_en = {
+            "image": "image",
+            "video": "video",
+            "audio": "audio",
+            "document": "file",
+            "media": "media",
+        }.get(media_kind, "media")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="MEDIA_REQUIRED_FIRST",
+            action_path="input_parameters",
+            model_id=model_id,
+            stage="INPUT_GUARD",
+            waiting_for=waiting_for,
+            outcome="blocked",
+            param={"missing_media": missing_media},
+        )
+        await update.message.reply_text(
+            (
+                f"📎 <b>Сначала нужно загрузить {media_label_ru}</b>\n\n"
+                f"Пожалуйста, загрузите: <b>{param_label}</b>.\n"
+                "После загрузки сможете ввести текст и параметры."
+                if user_lang == "ru"
+                else (
+                    f"📎 <b>Please upload the required {media_label_en} first</b>\n\n"
+                    f"Please upload: <b>{param_label}</b>.\n"
+                    "After upload you can enter text and parameters."
+                )
+            ),
+            parse_mode="HTML",
+        )
+        await prompt_for_specific_param(update, context, user_id, missing_param, source="media_first_guard")
+        return INPUTTING_PARAMS
 
     trace_event(
         "info",
@@ -15877,20 +16080,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if job_result.urls or job_result.text:
             model_name_display = model_info.get("name", model_id) if model_info else model_id
-            caption = (
-                f"✅ <b>Генерация завершена!</b>\n\n🤖 <b>Модель:</b> {model_name_display}"
-                if user_lang == "ru"
-                else f"✅ <b>Generation completed!</b>\n\n🤖 <b>Model:</b> {model_name_display}"
-            )
             await deliver_result(
                 context.bot,
                 user_id,
                 job_result.media_type,
                 job_result.urls,
-                job_result.text or caption,
+                job_result.text,
                 model_id=model_id,
                 gen_type=session.get("gen_type"),
                 correlation_id=correlation_id,
+                params=params,
+                model_label=model_name_display,
             )
             if is_free:
                 consume_result = await consume_free_generation(
@@ -16533,25 +16733,17 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         from app.generations.telegram_sender import deliver_result
                         model_info = saved_session_data.get('model_info', {}) if saved_session_data else {}
                         model_name_display = model_name if model_name else model_id
-                        if user_lang == 'ru':
-                            caption = (
-                                "✅ <b>Генерация завершена!</b>\n\n"
-                                f"🤖 <b>Модель:</b> {model_name_display}"
-                            )
-                        else:
-                            caption = (
-                                "✅ <b>Generation Completed!</b>\n\n"
-                                f"🤖 <b>Model:</b> {model_name_display}"
-                            )
                         await deliver_result(
                             context.bot,
                             chat_id,
                             (model_info.get("output_media_type") if model_info else None) or "document",
                             result_urls[:5],
-                            caption,
+                            None,
                             model_id=model_id,
                             gen_type=model_info.get('model_mode') if model_info else None,
                             correlation_id=ensure_correlation_id(update, context),
+                            params=params,
+                            model_label=model_name_display,
                         )
                         free_counter_line = ""
                         try:
@@ -17246,6 +17438,8 @@ async def _register_all_handlers_internal(application: Application):
     """
     # Inbound update logger/context middleware (must be first)
     application.add_handler(TypeHandler(Update, inbound_update_logger), group=-100)
+    application.add_handler(CallbackQueryHandler(user_action_audit_callback, pattern=".*"), group=-100)
+    application.add_handler(MessageHandler(filters.ALL, user_action_audit_message), group=-100)
     application.add_handler(TypeHandler(Update, inbound_rate_limit_guard), group=-99)
     application.add_handler(TypeHandler(Update, inbound_rate_limit_guard), group=-99)
     # Create conversation handler for generation
@@ -18102,6 +18296,8 @@ async def main():
 
     # Inbound update logger/context middleware (must be first)
     application.add_handler(TypeHandler(Update, inbound_update_logger), group=-100)
+    application.add_handler(CallbackQueryHandler(user_action_audit_callback, pattern=".*"), group=-100)
+    application.add_handler(MessageHandler(filters.ALL, user_action_audit_message), group=-100)
     
     # ==================== PHASE 1: GLOBAL INPUT ROUTERS (BEFORE ConversationHandler) ====================
     # These routers catch TEXT/PHOTO/AUDIO OUTSIDE conversation and route to input_parameters if waiting_for exists

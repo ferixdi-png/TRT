@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import yaml
 
@@ -26,14 +27,17 @@ from app.ux.model_visibility import (
     STATUS_HIDDEN_NO_INSTRUCTIONS,
     STATUS_READY_VISIBLE,
 )
+from app.kie_catalog import get_model_map
 
 
 READINESS_MD = ROOT / "TRT_MODEL_READINESS.md"
 MISMATCH_MD = ROOT / "TRT_MODEL_MISMATCHES.md"
 SNAPSHOT_MD = ROOT / "TRT_PRICE_SNAPSHOT.md"
+UX_AUDIT_MD = ROOT / "TRT_MODEL_UX_AUDIT.md"
 READINESS_JSON = ROOT / "artifacts" / "model_readiness.json"
 MISMATCH_JSON = ROOT / "artifacts" / "model_mismatches.json"
 SNAPSHOT_JSON = ROOT / "artifacts" / "price_snapshot.json"
+UX_AUDIT_JSON = ROOT / "artifacts" / "model_ux_audit.json"
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,19 @@ class ModelReadiness:
     api_required_fields: List[str]
     api_optional_fields: List[str]
     defaults: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ModelUxAudit:
+    model_id: str
+    status: str
+    has_instructions: bool
+    has_priced_skus: bool
+    has_required_fields_metadata: Optional[bool]
+    has_upload_rules: Optional[bool]
+    has_output_mapper: bool
+    has_smoke_flow_test: bool
+    missing_metadata: List[str]
 
 
 def _load_registry_models() -> Dict[str, Any]:
@@ -77,6 +94,167 @@ def _extract_schema_fields(schema: Dict[str, Any]) -> Tuple[List[str], List[str]
         if "default" in spec:
             defaults[name] = spec.get("default")
     return sorted(required), sorted(optional), defaults
+
+
+def _normalize_model_id_for_filename(model_id: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]+", "_", model_id).strip("_").lower()
+
+
+def _has_upload_rules(param_spec: Dict[str, Any]) -> bool:
+    if not isinstance(param_spec, dict):
+        return False
+    rule_keys = {
+        "description",
+        "max",
+        "max_size",
+        "formats",
+        "mime_types",
+        "allowed_extensions",
+        "allowed",
+        "item_type",
+    }
+    return any(key in param_spec for key in rule_keys)
+
+
+def _is_media_param(param_name: str) -> bool:
+    lowered = param_name.lower()
+    return any(token in lowered for token in ("image", "video", "audio", "voice", "file", "document", "mask"))
+
+
+def _audit_required_metadata(schema: Dict[str, Any]) -> Tuple[Optional[bool], List[str]]:
+    if not schema:
+        return None, ["Missing required/optional metadata: no schema"]
+    missing: List[str] = []
+    for name, spec in schema.items():
+        if not isinstance(spec, dict):
+            continue
+        if "required" not in spec:
+            missing.append(name)
+    if missing:
+        return None, [f"Missing required/optional metadata for params: {', '.join(sorted(missing))}"]
+    return True, []
+
+
+def _audit_upload_rules(schema: Dict[str, Any]) -> Tuple[Optional[bool], List[str]]:
+    if not schema:
+        return None, ["Missing upload rules: no schema"]
+    required_media = [
+        name for name, spec in schema.items()
+        if _is_media_param(name) and isinstance(spec, dict) and spec.get("required")
+    ]
+    if not required_media:
+        return True, []
+    missing: List[str] = []
+    for name in required_media:
+        spec = schema.get(name, {})
+        if not _has_upload_rules(spec):
+            missing.append(name)
+    if missing:
+        return False, [f"Missing upload rules for params: {', '.join(sorted(missing))}"]
+    return True, []
+
+
+def _has_smoke_test(model_id: str) -> bool:
+    normalized = _normalize_model_id_for_filename(model_id)
+    candidates = {f"validate_{normalized}.py"}
+    if "_" in normalized:
+        candidates.add(f"validate_{normalized.split('_', 1)[-1]}.py")
+    return any((ROOT / candidate).exists() for candidate in candidates)
+
+
+def _build_ux_audit_models(registry_ids: List[str], price_ids: List[str]) -> List[ModelUxAudit]:
+    entries: List[ModelUxAudit] = []
+    registry_models = _load_registry_models()
+    model_map = get_model_map()
+
+    for model_id in sorted(set(registry_ids).union(price_ids)):
+        model_data = registry_models.get(model_id, {}) if isinstance(registry_models, dict) else {}
+        schema = model_data.get("input") if isinstance(model_data, dict) else {}
+        skus = list_model_skus(model_id)
+        status, _, _, _, _ = _evaluate_visibility(schema or {}, skus)
+
+        has_instructions = bool(schema)
+        has_priced_skus = bool(skus)
+        required_meta, required_missing = _audit_required_metadata(schema or {})
+        upload_rules, upload_missing = _audit_upload_rules(schema or {})
+
+        spec = model_map.get(model_id)
+        has_output_mapper = bool(spec and getattr(spec, "output_media_type", None))
+        has_smoke_flow_test = _has_smoke_test(model_id)
+
+        missing_metadata = []
+        missing_metadata.extend(required_missing)
+        missing_metadata.extend(upload_missing)
+        if not has_output_mapper:
+            missing_metadata.append("Missing output mapper")
+        if not has_smoke_flow_test:
+            missing_metadata.append("Missing smoke flow test")
+
+        entries.append(
+            ModelUxAudit(
+                model_id=model_id,
+                status=status,
+                has_instructions=has_instructions,
+                has_priced_skus=has_priced_skus,
+                has_required_fields_metadata=required_meta,
+                has_upload_rules=upload_rules,
+                has_output_mapper=has_output_mapper,
+                has_smoke_flow_test=has_smoke_flow_test,
+                missing_metadata=missing_metadata,
+            )
+        )
+    return entries
+
+
+def _render_boolean(value: Optional[bool]) -> str:
+    if value is None:
+        return "UNKNOWN"
+    return "Yes" if value else "No"
+
+
+def _write_ux_audit_report(models: List[ModelUxAudit]) -> None:
+    lines: List[str] = []
+    lines.append("# TRT Model UX Audit")
+    lines.append("")
+    lines.append("| Model | Status | Instructions | Priced SKUs | Required metadata | Upload rules | Output mapper | Smoke test |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+    for entry in models:
+        lines.append(
+            "| {model} | {status} | {instructions} | {skus} | {required} | {upload} | {output} | {smoke} |".format(
+                model=entry.model_id,
+                status=entry.status,
+                instructions="Yes" if entry.has_instructions else "No",
+                skus="Yes" if entry.has_priced_skus else "No",
+                required=_render_boolean(entry.has_required_fields_metadata),
+                upload=_render_boolean(entry.has_upload_rules),
+                output="Yes" if entry.has_output_mapper else "No",
+                smoke="Yes" if entry.has_smoke_flow_test else "No",
+            )
+        )
+    lines.append("")
+
+    for entry in models:
+        lines.append(f"## {entry.model_id}")
+        lines.append(f"**{entry.status}**")
+        lines.append("")
+        lines.append("- has_instructions: {value}".format(value="Yes" if entry.has_instructions else "No"))
+        lines.append("- has_priced_skus: {value}".format(value="Yes" if entry.has_priced_skus else "No"))
+        lines.append(f"- has_required_fields_metadata: {_render_boolean(entry.has_required_fields_metadata)}")
+        lines.append(f"- has_upload_rules: {_render_boolean(entry.has_upload_rules)}")
+        lines.append("- has_output_mapper: {value}".format(value="Yes" if entry.has_output_mapper else "No"))
+        lines.append("- has_smoke_flow_test: {value}".format(value="Yes" if entry.has_smoke_flow_test else "No"))
+        if entry.missing_metadata:
+            lines.append("")
+            lines.append("Missing metadata:")
+            for item in entry.missing_metadata:
+                lines.append(f"- {item}")
+        lines.append("")
+
+    UX_AUDIT_MD.write_text("\n".join(lines), encoding="utf-8")
+    UX_AUDIT_JSON.write_text(
+        json.dumps([asdict(entry) for entry in models], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def _find_missing_price_variants(schema: Dict[str, Any], skus: List[Any]) -> Dict[str, List[str]]:
@@ -328,6 +506,8 @@ def main() -> None:
 
     _write_mismatch_report(price_only, missing_price_variants, required_mismatches)
     _write_snapshot_report(registry_ids, price_ids)
+    ux_audit = _build_ux_audit_models(registry_ids, price_ids)
+    _write_ux_audit_report(ux_audit)
 
 
 if __name__ == "__main__":

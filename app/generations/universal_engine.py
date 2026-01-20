@@ -125,6 +125,41 @@ def _extract_text(record: Dict[str, Any], result_json: Dict[str, Any]) -> Option
     return str(value)
 
 
+def _extract_media_hint(record: Dict[str, Any], result_json: Dict[str, Any]) -> Optional[str]:
+    raw = (
+        result_json.get("mediaType")
+        or result_json.get("outputType")
+        or result_json.get("output_type")
+        or result_json.get("type")
+        or record.get("mediaType")
+        or record.get("outputType")
+        or record.get("output_type")
+        or record.get("type")
+    )
+    if not isinstance(raw, str):
+        return None
+    normalized = raw.lower()
+    if normalized in {"image", "img", "photo", "picture"}:
+        return "image"
+    if normalized in {"video", "mp4", "mov"}:
+        return "video"
+    if normalized in {"audio", "voice", "speech"}:
+        return "audio"
+    if normalized in {"text", "json", "markdown"}:
+        return "text"
+    if normalized in {"document", "file", "binary"}:
+        return "document"
+    if "image" in normalized:
+        return "image"
+    if "video" in normalized:
+        return "video"
+    if "audio" in normalized or "speech" in normalized:
+        return "audio"
+    if "text" in normalized:
+        return "text"
+    return None
+
+
 def _infer_media_from_urls(urls: List[str], fallback: str) -> str:
     if fallback in {"image", "video", "audio", "text", "document"}:
         return fallback
@@ -181,7 +216,8 @@ def parse_record_info(
     text = _extract_text(record, result_json)
 
     supported_media = {"image", "video", "audio", "text", "document"}
-    hint_media = media_type if media_type in supported_media else ""
+    media_hint = _extract_media_hint(record, result_json)
+    hint_media = media_hint if media_hint in supported_media else (media_type if media_type in supported_media else "")
 
     if text and not urls:
         resolved_media = "text"
