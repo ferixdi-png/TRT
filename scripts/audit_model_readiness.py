@@ -51,6 +51,10 @@ def _generation_type_from_model_type(model_type: Optional[str]) -> str:
     return model_type.replace("_", "-")
 
 
+def _derive_model_gen_type(model_mode: Optional[str], model_type: Optional[str]) -> str:
+    return _generation_type_from_model_type(model_mode or model_type)
+
+
 def _collect_schema_fields(schema: Dict[str, Any]) -> Tuple[List[str], List[str]]:
     required: List[str] = []
     optional: List[str] = []
@@ -62,6 +66,40 @@ def _collect_schema_fields(schema: Dict[str, Any]) -> Tuple[List[str], List[str]
         else:
             optional.append(name)
     return sorted(required), sorted(optional)
+
+
+def _infer_media_kind(field_name: str) -> Optional[str]:
+    field_lower = field_name.lower()
+    if "video" in field_lower:
+        return "video"
+    if "audio" in field_lower or "voice" in field_lower:
+        return "audio"
+    if "image" in field_lower or "mask" in field_lower:
+        return "image"
+    if "document" in field_lower or "file" in field_lower:
+        return "document"
+    return None
+
+
+def _derive_required_media_expected(model_type: str, schema: Dict[str, Any]) -> List[str]:
+    required_fields, _ = _collect_schema_fields(schema)
+    media_expected = {
+        _infer_media_kind(field)
+        for field in required_fields
+    }
+    media_expected.discard(None)
+    if media_expected:
+        return sorted(media_expected)
+
+    model_type_lower = (model_type or "").lower()
+    inferred: List[str] = []
+    if model_type_lower in {"image_edit", "image_to_image", "image_to_video", "outpaint", "image_upscale", "upscale"}:
+        inferred.append("image")
+    if model_type_lower in {"video_upscale", "video_editing", "video_to_video", "v2v"}:
+        inferred.append("video")
+    if model_type_lower in {"speech_to_text", "audio_to_audio"}:
+        inferred.append("audio")
+    return sorted(set(inferred))
 
 
 def _detect_ssot_conflicts(model_type: str, schema: Dict[str, Any]) -> List[str]:
@@ -222,10 +260,12 @@ class ModelReadiness:
     status: str
     status_symbol: str
     gen_type: str
+    model_mode: str
     model_type: str
     schema_key: str
     required_inputs: List[str]
     optional_inputs: List[str]
+    required_media_expected: List[str]
     mode_count: int
     has_ru_mode_titles: bool
     has_ru_model_card: bool
@@ -234,6 +274,7 @@ class ModelReadiness:
     can_deliver_output: bool
     ssot_conflicts: List[str]
     missing_fields: List[str]
+    blocked_reason: List[str]
     notes: str
 
 
@@ -254,7 +295,6 @@ async def audit() -> List[ModelReadiness]:
         if not isinstance(schema, dict):
             schema = {}
         model_type = registry_data.get("model_type", "") if isinstance(registry_data, dict) else ""
-        gen_type = _generation_type_from_model_type(model_type)
         schema_key = pricing_data.get("type", "") if isinstance(pricing_data, dict) else ""
 
         missing_fields: List[str] = []
@@ -270,6 +310,7 @@ async def audit() -> List[ModelReadiness]:
             missing_fields.append(f"app/kie_catalog/models_pricing.yaml:models[id={model_id}]")
 
         schema_required, schema_optional = _collect_schema_fields(schema)
+        required_media_expected = _derive_required_media_expected(model_type, schema)
         ssot_conflicts = _detect_ssot_conflicts(model_type, schema) if model_type else []
 
         if schema_key and not get_schema_for_type(schema_key):
@@ -298,6 +339,10 @@ async def audit() -> List[ModelReadiness]:
             missing_fields.extend(_collect_model_card_missing_fields(model_id, pricing_data))
 
         model_spec = catalog_map.get(model_id)
+        model_mode = ""
+        if model_spec:
+            model_mode = getattr(model_spec, "model_mode", "") or ""
+        gen_type = _derive_model_gen_type(model_mode, model_type)
         can_build_api_request = False
         can_deliver_output = False
         if model_spec and schema:
@@ -334,6 +379,21 @@ async def audit() -> List[ModelReadiness]:
             or not registry_data
         )
         partial = (not blocked) and (not has_ru_mode_titles or not has_ru_model_card)
+        blocked_reason: List[str] = []
+        if ssot_conflicts:
+            blocked_reason.append("SSOT_CONFLICT")
+        if not required_inputs_ok:
+            blocked_reason.append("MISSING_REQUIRED_INPUTS")
+        if not can_build_api_request:
+            blocked_reason.append("CANNOT_BUILD_API_REQUEST")
+        if not can_deliver_output:
+            blocked_reason.append("CANNOT_DELIVER_OUTPUT")
+        if not has_price_mapping or not pricing_data:
+            blocked_reason.append("MISSING_PRICING")
+        if not registry_data:
+            blocked_reason.append("MISSING_REGISTRY_ENTRY")
+        if not schema:
+            blocked_reason.append("MISSING_SCHEMA")
 
         if blocked:
             status = "BLOCKED"
@@ -351,10 +411,12 @@ async def audit() -> List[ModelReadiness]:
                 status=status,
                 status_symbol=status_symbol,
                 gen_type=gen_type,
+                model_mode=model_mode,
                 model_type=model_type,
                 schema_key=schema_key,
                 required_inputs=schema_required,
                 optional_inputs=schema_optional,
+                required_media_expected=required_media_expected,
                 mode_count=mode_count,
                 has_ru_mode_titles=has_ru_mode_titles,
                 has_ru_model_card=has_ru_model_card,
@@ -363,6 +425,7 @@ async def audit() -> List[ModelReadiness]:
                 can_deliver_output=can_deliver_output,
                 ssot_conflicts=ssot_conflicts,
                 missing_fields=sorted(set(missing_fields)),
+                blocked_reason=sorted(set(blocked_reason)),
                 notes="; ".join(sorted(set(notes))),
             )
         )
@@ -402,19 +465,21 @@ def _render_markdown(results: List[ModelReadiness]) -> str:
         "",
         "## Model readiness matrix",
         "",
-        "| status | model_id | gen_type | model_type | schema_key | required_inputs | optional_inputs | mode_count | has_ru_mode_titles | has_ru_model_card | has_price_mapping | can_build_api_request | can_deliver_output | ssot_conflicts | missing_fields | notes |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| status | model_id | gen_type | model_mode | model_type | schema_key | required_inputs | required_media_expected | optional_inputs | mode_count | has_ru_mode_titles | has_ru_model_card | has_price_mapping | can_build_api_request | can_deliver_output | ssot_conflicts | missing_fields | blocked_reason | notes |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
 
     for result in results:
         lines.append(
-            "| {status_symbol} | {model_id} | {gen_type} | {model_type} | {schema_key} | {required_inputs} | {optional_inputs} | {mode_count} | {has_ru_mode_titles} | {has_ru_model_card} | {has_price_mapping} | {can_build_api_request} | {can_deliver_output} | {ssot_conflicts} | {missing_fields} | {notes} |".format(
+            "| {status_symbol} | {model_id} | {gen_type} | {model_mode} | {model_type} | {schema_key} | {required_inputs} | {required_media_expected} | {optional_inputs} | {mode_count} | {has_ru_mode_titles} | {has_ru_model_card} | {has_price_mapping} | {can_build_api_request} | {can_deliver_output} | {ssot_conflicts} | {missing_fields} | {blocked_reason} | {notes} |".format(
                 status_symbol=result.status_symbol,
                 model_id=result.model_id,
                 gen_type=result.gen_type or "—",
+                model_mode=result.model_mode or "—",
                 model_type=result.model_type or "—",
                 schema_key=result.schema_key or "—",
                 required_inputs=", ".join(result.required_inputs) if result.required_inputs else "—",
+                required_media_expected=", ".join(result.required_media_expected) if result.required_media_expected else "—",
                 optional_inputs=", ".join(result.optional_inputs) if result.optional_inputs else "—",
                 mode_count=result.mode_count,
                 has_ru_mode_titles="yes" if result.has_ru_mode_titles else "no",
@@ -424,6 +489,7 @@ def _render_markdown(results: List[ModelReadiness]) -> str:
                 can_deliver_output="yes" if result.can_deliver_output else "no",
                 ssot_conflicts=", ".join(result.ssot_conflicts) if result.ssot_conflicts else "—",
                 missing_fields=", ".join(result.missing_fields) if result.missing_fields else "—",
+                blocked_reason=", ".join(result.blocked_reason) if result.blocked_reason else "—",
                 notes=result.notes or "—",
             )
         )
