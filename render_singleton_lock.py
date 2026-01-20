@@ -1,139 +1,24 @@
 """
-PostgreSQL Advisory Lock для предотвращения 409 Conflict на Render.
-
-Использует pg_advisory_lock для гарантии что только один инстанс бота запущен.
-Это критически важно для предотвращения Telegram 409 Conflict ошибок,
-которые возникают когда несколько инстансов пытаются использовать polling одновременно.
-
-Механизм:
-- Генерирует уникальный lock_key на основе TELEGRAM_BOT_TOKEN
-- Пытается получить advisory lock через pg_try_advisory_lock
-- Если lock не получен (уже занят другим инстансом) - процесс завершается
-- Соединение держится в течение всего runtime для сохранения lock
-- Lock освобождается только при shutdown процесса
+Render singleton lock (disabled).
+Legacy module retained for imports only.
 """
-
-import os
 import logging
-import hashlib
 from typing import Optional
-import psycopg2
-from psycopg2.extensions import connection
 
 logger = logging.getLogger(__name__)
 
-
-def make_lock_key(token: str, namespace: str = "telegram_polling") -> int:
-    """
-    Создает стабильный bigint ключ из токена и namespace.
-    
-    Args:
-        token: TELEGRAM_BOT_TOKEN
-        namespace: Имя namespace для lock (default: "telegram_polling")
-    
-    Returns:
-        int64 ключ для pg_advisory_lock
-    """
-    # Комбинируем namespace и token для уникальности
-    combined = f"{namespace}:{token}".encode('utf-8')
-    
-    # Используем SHA256 и берем первые 8 байт (64 бита) для bigint
-    hash_bytes = hashlib.sha256(combined).digest()[:8]
-    
-    # Конвертируем в unsigned int64, затем приводим к signed bigint
-    # PostgreSQL advisory lock использует signed bigint (-2^63 to 2^63-1)
-    unsigned_key = int.from_bytes(hash_bytes, byteorder='big', signed=False)
-    
-    # Приводим к signed bigint: используем модуль для гарантии положительного значения
-    # MAX_BIGINT = 9223372036854775807 (2^63 - 1)
-    MAX_BIGINT = 9223372036854775807
-    lock_key = unsigned_key % (MAX_BIGINT + 1)
-    
-    # Убеждаемся что ключ в допустимом диапазоне (должно быть автоматически)
-    if lock_key > MAX_BIGINT or lock_key < 0:
-        # Fallback: используем только младшие 63 бита
-        lock_key = unsigned_key & 0x7FFFFFFFFFFFFFFF
-    
-    # Маскируем токен для логов
-    masked_token = token[:4] + "..." + token[-4:] if len(token) > 8 else "****"
-    logger.debug(f"Lock key generated: namespace={namespace}, token={masked_token}, key={lock_key}")
-    
-    return lock_key
+DB_DISABLED_MESSAGE = "DB_DISABLED: github-only mode"
 
 
-def acquire_lock_session(pool, lock_key: int) -> Optional[connection]:
-    """
-    Пытается получить PostgreSQL advisory lock.
-    
-    Args:
-        pool: psycopg2.pool.SimpleConnectionPool
-        lock_key: int64 ключ для lock
-    
-    Returns:
-        connection если lock получен, None если другой инстанс уже держит lock
-        ВАЖНО: соединение НЕ должно возвращаться в пул пока lock активен!
-    """
-    try:
-        # Получаем соединение из пула
-        conn = pool.getconn()
-        
-        # Пытаемся получить advisory lock (неблокирующий)
-        with conn.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
-            lock_acquired = cur.fetchone()[0]
-        
-        if lock_acquired:
-            logger.info(f"✅ PostgreSQL advisory lock acquired: key={lock_key}")
-            # ВАЖНО: НЕ возвращаем соединение в пул!
-            return conn
-        else:
-            # Lock уже занят другим инстансом
-            logger.warning(f"⚠️ PostgreSQL advisory lock already held: key={lock_key}")
-            # Возвращаем соединение в пул
-            pool.putconn(conn)
-            return None
-            
-    except Exception as e:
-        logger.error(f"❌ Error acquiring advisory lock: {e}", exc_info=True)
-        # Если была ошибка и соединение получено - возвращаем в пул
-        if 'conn' in locals():
-            try:
-                pool.putconn(conn)
-            except:
-                pass
-        return None
+def make_lock_key(_token: str, _namespace: str = "telegram_polling") -> int:
+    logger.info("%s action=make_lock_key", DB_DISABLED_MESSAGE)
+    return 0
 
 
-def release_lock_session(pool, conn: connection, lock_key: int) -> None:
-    """
-    Освобождает PostgreSQL advisory lock и возвращает соединение в пул.
-    
-    Args:
-        pool: psycopg2.pool.SimpleConnectionPool
-        conn: Соединение с активным lock
-        lock_key: int64 ключ lock
-    """
-    try:
-        if conn and not conn.closed:
-            # Освобождаем advisory lock
-            with conn.cursor() as cur:
-                cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
-                unlocked = cur.fetchone()[0]
-            
-            if unlocked:
-                logger.info(f"✅ PostgreSQL advisory lock released: key={lock_key}")
-            else:
-                logger.warning(f"⚠️ Lock was not held (already released?): key={lock_key}")
-            
-            # Возвращаем соединение в пул
-            pool.putconn(conn)
-        else:
-            logger.warning(f"⚠️ Connection already closed, cannot release lock: key={lock_key}")
-    except Exception as e:
-        logger.error(f"❌ Error releasing advisory lock: {e}", exc_info=True)
-        # Пытаемся вернуть соединение в пул даже при ошибке
-        if conn and not conn.closed:
-            try:
-                pool.putconn(conn)
-            except:
-                pass
+def acquire_lock_session(_pool, _lock_key: int) -> Optional[object]:
+    logger.info("%s action=acquire_lock_session", DB_DISABLED_MESSAGE)
+    return None
+
+
+def release_lock_session(_pool, _conn, _lock_key: int) -> None:
+    logger.info("%s action=release_lock_session", DB_DISABLED_MESSAGE)

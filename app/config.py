@@ -8,7 +8,6 @@ from urllib.parse import urlsplit, urlunsplit
 import sys
 import logging
 from typing import Optional
-from pathlib import Path
 
 from pricing.engine import get_settings_source_info
 
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 _settings: Optional['Settings'] = None
 
 # Явный экспорт для импорта
-__all__ = ['Settings', 'get_settings', 'reset_settings', 'BOT_TOKEN', 'DATABASE_URL', 'BOT_MODE', 'WEBHOOK_URL', 'WEBHOOK_BASE_URL', 'resolve_webhook_url']
+__all__ = ['Settings', 'get_settings', 'reset_settings', 'BOT_TOKEN', 'BOT_MODE', 'WEBHOOK_URL', 'WEBHOOK_BASE_URL', 'resolve_webhook_url']
 
 
 def _normalize_webhook_url(url: str) -> str:
@@ -71,7 +70,6 @@ class Settings:
             self.admin_id = 0
             logger.warning(f"Invalid ADMIN_ID: {admin_id_str}, using 0")
         
-        self.database_url = os.getenv('DATABASE_URL', '').strip()
         self.kie_api_key = os.getenv('KIE_API_KEY', '').strip()
         self.kie_api_url = os.getenv('KIE_API_URL', 'https://api.kie.ai').strip()
         
@@ -81,7 +79,8 @@ class Settings:
         self.allow_real_generation = os.getenv('ALLOW_REAL_GENERATION', '1') != '0'
         
         # Storage configuration
-        self.storage_mode = os.getenv('STORAGE_MODE', 'github').lower()
+        self.github_only_storage = os.getenv('GITHUB_ONLY_STORAGE', 'true').lower() in ('1', 'true', 'yes')
+        self.storage_mode = 'github_json'
         self.data_dir = os.getenv('DATA_DIR', '/app/data')
         
         # Bot mode
@@ -147,9 +146,7 @@ class Settings:
         Returns:
             'github' (единственный режим хранения)
         """
-        if self.storage_mode == "github":
-            return "github"
-        return "github"
+        return "github_json"
     
     def validate(self):
         """Валидирует обязательные настройки"""
@@ -157,20 +154,12 @@ class Settings:
         
         if not self.telegram_bot_token:
             errors.append("TELEGRAM_BOT_TOKEN is required")
-        if self.bot_mode == "webhook" and not self.database_url:
-            db_disabled = os.getenv("DISABLE_DB_LOCKS", "0").lower() in ("1", "true", "yes")
-            if self.storage_mode == "github" or db_disabled:
-                logger.warning(
-                    "[CONFIG] webhook_without_db_allowed=true storage_mode=%s db_disabled=%s "
-                    "note=singleton_lock_fallback_required",
-                    self.storage_mode,
-                    str(db_disabled).lower(),
-                )
-            else:
-                errors.append("DATABASE_URL is required for webhook mode")
-                logger.error(
-                    "[CONFIG] error_code=CONFIG_DB_REQUIRED fix_hint=set_DATABASE_URL_or_use_BOT_MODE=polling"
-                )
+        if self.bot_mode == "webhook":
+            logger.info(
+                "[CONFIG] webhook_mode=true storage_mode=%s github_only_storage=%s",
+                self.storage_mode,
+                str(self.github_only_storage).lower(),
+            )
         
         if errors:
             error_msg = "\n".join(f"  - {err}" for err in errors)
@@ -212,7 +201,6 @@ def reset_settings():
 
 
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
-DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 BOT_MODE = os.getenv('BOT_MODE', 'polling').lower()
 WEBHOOK_BASE_URL = os.getenv('WEBHOOK_BASE_URL', '').strip()
 WEBHOOK_URL = resolve_webhook_url(

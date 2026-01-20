@@ -16,9 +16,12 @@ async def test_webhook_without_db_github_storage_registers_route(harness, monkey
         port = sock.getsockname()[1]
 
     monkeypatch.setenv("BOT_MODE", "webhook")
-    monkeypatch.setenv("STORAGE_MODE", "github")
+    monkeypatch.setenv("STORAGE_MODE", "github_json")
+    monkeypatch.setenv("GITHUB_REPO", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("BOT_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("GITHUB_STORAGE_STUB", "1")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    monkeypatch.delenv("DATABASE_URL", raising=False)
 
     reset_settings()
     settings = Settings()

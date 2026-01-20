@@ -186,6 +186,18 @@ class BaseStorage(ABC):
     async def get_user_generations_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Получить историю генераций пользователя"""
         pass
+
+    # ==================== GENERIC JSON FILES ====================
+
+    @abstractmethod
+    async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Прочитать произвольный JSON файл из storage."""
+        pass
+
+    @abstractmethod
+    async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
+        """Записать произвольный JSON файл в storage."""
+        pass
     
     # ==================== PAYMENTS ====================
     

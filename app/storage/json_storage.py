@@ -526,6 +526,19 @@ class JsonStorage(BaseStorage):
         
         data[user_key]['bonus'] = data[user_key].get('bonus', 0) + bonus_generations
         await self._save_json(self.free_generations_file, data)
+
+    # ==================== GENERIC JSON FILES ====================
+
+    async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        target = self.data_dir / filename
+        payload = await self._load_json(target)
+        if payload:
+            return payload
+        return default or {}
+
+    async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
+        target = self.data_dir / filename
+        await self._save_json(target, data)
     
     # ==================== UTILITY ====================
     
