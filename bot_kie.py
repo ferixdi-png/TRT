@@ -39,6 +39,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+DEBUG_VERBOSE_LOGS = os.getenv("DEBUG_VERBOSE_LOGS", "0").lower() in ("1", "true", "yes")
 
 # ==================== CALLBACK REGISTRY HELPERS ====================
 KNOWN_CALLBACK_PREFIXES = (
@@ -5203,26 +5204,27 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session_properties_keys = list(session.get('properties', {}).keys()) if session else []
             chat_id = query.message.chat_id if query and query.message else None
             message_id = query.message.message_id if query and query.message else None
-            logger.info(
-                "🔍🔍🔍 BUTTON_CALLBACK CONTEXT: "
-                "user_id=%s data=%s chat_id=%s message_id=%s update_id=%s user_lang=%s "
-                "session_exists=%s model_id=%s waiting_for=%s current_param=%s "
-                "params_keys=%s required=%s properties_keys=%s session_keys=%s",
-                user_id,
-                data,
-                chat_id,
-                message_id,
-                update_id,
-                user_lang,
-                bool(session),
-                session_model_id,
-                session_waiting_for,
-                session_current_param,
-                session_params_keys[:15],
-                session_required[:15],
-                session_properties_keys[:15],
-                session_keys[:15],
-            )
+            if DEBUG_VERBOSE_LOGS:
+                logger.info(
+                    "BUTTON_CALLBACK_CONTEXT "
+                    "user_id=%s data=%s chat_id=%s message_id=%s update_id=%s user_lang=%s "
+                    "session_exists=%s model_id=%s waiting_for=%s current_param=%s "
+                    "params_keys=%s required=%s properties_keys=%s session_keys=%s",
+                    user_id,
+                    data,
+                    chat_id,
+                    message_id,
+                    update_id,
+                    user_lang,
+                    bool(session),
+                    session_model_id,
+                    session_waiting_for,
+                    session_current_param,
+                    session_params_keys[:15],
+                    session_required[:15],
+                    session_properties_keys[:15],
+                    session_keys[:15],
+                )
             try:
                 trace_event(
                     "info",
