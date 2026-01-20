@@ -1,3 +1,33 @@
+## 2026-02-14: Итерация 1 финальной полировки (P0/P1)
+**Top remaining P0/P1 (после этой итерации):**
+- P0-2) Единая история генераций (дедуп/сортировка/лимит) + тесты на retry/deliver fail.
+- P0-3) Гарантия сумм/квоты при параллели + тест на concurrent deliveries.
+- P1-4) Промежуточные статусы без спама (edit предпочтительно) + кнопка “Повторить доставку” только при delivery failed.
+- P1-5) Нормализация ошибок UI (коротко + действие).
+- P1-6) Unit-тест storage branch guard (fail-fast, если STORAGE_BRANCH == GITHUB_BRANCH).
+- P1-8) Webhook flow audit: быстрый 200 и async обработка без блокировок.
+- P1-10) Env validator для партнёров с fail-fast только для критичных переменных.
+
+**Next 3 changes (итерация 2):**
+1) История генераций: дедуп/сортировка/лимит + тесты на retry/deliver fail.
+2) Конкурентные списания: единый commit-path + тест two concurrent deliveries.
+3) Нормализация ошибок UI (короткие сообщения + next step).
+
+**Было → стало (ключевые изменения):**
+- Убран текст “file-lock/резервный” из пользовательского меню; admin notice теперь нейтральный “fallback режим”. 
+- Добавлен тест, гарантирующий отсутствие внутренних предупреждений в welcome/menu.
+- Шумный контекстный лог callback теперь включается только при `DEBUG_VERBOSE_LOGS=1`.
+- Добавлен `scripts/verify_release.py` для compileall/pytest/guard-проверок с итогом OK/FAIL.
+
+**Проверка (команды):**
+- `python -m compileall -q .`
+- `pytest -q tests/test_main_menu.py tests/test_menu_no_internal_warnings.py`
+- `GITHUB_REPO=owner/repo GITHUB_TOKEN=test-token BOT_INSTANCE_ID=test-instance GITHUB_BRANCH=main STORAGE_BRANCH=storage python scripts/run_smoke.py`
+  - Примечание: storage test_connection предупреждает о ClientConnectorError (нет сетевого доступа в локальном smoke).
+
+**Риск/откат:**
+- Риск минимален (текст/лог-гейт/скрипт). Откат: revert коммита или вернуть прежнюю строку admin notice и снять гейт DEBUG_VERBOSE_LOGS.
+
 ## 2026-02-13: User Action Audit Layer + UX completeness audit
 **What was missing (log gap):**
 - Render webhook logs did not show per-action visibility for callback presses and message inputs, so user activity was invisible across the flow.
