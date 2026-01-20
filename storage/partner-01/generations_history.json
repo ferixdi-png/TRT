@@ -158,5 +158,22 @@
       "task_id": "2bd324db8dcab0df053ab895efee32b4",
       "timestamp": 1768914366
     }
+  ],
+  "894218750": [
+    {
+      "id": 1,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "Рекламный баннер, горизонтальный формат. На зимних московских улицах стоит автомобиль Belgee X70 брендированный в Яндекс.такси. автомобиль жёлтого цвета."
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768922794530_9jcuro.png"
+      ],
+      "task_id": "6dd03dc300c8609d665e4f2cba256b3a",
+      "timestamp": 1768922806
+    }
   ]
 }
