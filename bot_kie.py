@@ -44,6 +44,9 @@ KNOWN_CALLBACK_PREFIXES = (
     "select_model:",
     "edit_param:",
     "set_param:",
+    "confirm_param:",
+    "sku:",
+    "sk:",
     "model:",
     "modelk:",
     "select_mode:",
@@ -457,6 +460,7 @@ from app.services.free_tools_service import (
     get_free_tools_config,
     get_free_tools_model_ids,
 )
+from app.pricing.ssot_catalog import format_pricing_blocked_message
 from kie_models import (
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
@@ -540,8 +544,7 @@ def get_model_by_id_from_registry(model_id: str) -> Optional[Dict[str, Any]]:
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
     models = get_models_sync()
-    free_ids = set(get_free_tools_model_ids())
-    return [m for m in models if m.get('category') == category and m.get('id') not in free_ids]
+    return [m for m in models if m.get('category') == category]
 
 def get_categories_from_registry() -> List[str]:
     """Получает список категорий из реестра"""
@@ -1252,7 +1255,7 @@ def _resolve_mode_index(model_id: str, params: Optional[dict], user_id: Optional
 
 # COMPATIBILITY WRAPPER: calculate_price_rub для обратной совместимости
 # Использует services.pricing_service.get_price() под капотом
-def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> float:
+def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> Optional[float]:
     """
     Thin-wrapper для обратной совместимости.
     Использует services.pricing_service.get_price() под капотом.
@@ -1281,16 +1284,15 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
             is_admin=is_admin,
         )
         if quote is None:
-            logger.warning(f"Price not found for model {model_id}, using fallback")
-            return 1.0
+            logger.warning("Price not found for model %s", model_id)
+            return None
         return float(quote.price_rub)
     except ImportError as e:
-        logger.warning(f"app.services.pricing_service not available: {e}, using fallback pricing")
-        return 1.0
+        logger.warning("Pricing resolver unavailable: %s", e)
+        return None
     except Exception as e:
         logger.error(f"Error in calculate_price_rub: {e}", exc_info=True)
-        # Fallback: возвращаем минимальную цену
-        return 1.0
+        return None
 
 # Conversation states for model selection and parameter input
 SELECTING_MODEL, INPUTTING_PARAMS, CONFIRMING_GENERATION = range(3)
@@ -1331,9 +1333,24 @@ def format_price_rub(price: float, is_admin: bool = False) -> str:
 
 
 def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> str:
-    """Get formatted price text for a model."""
+    """Get formatted price text for a model (from-price for menu cards)."""
+    from app.pricing.ssot_catalog import get_min_price_rub
+
     price = calculate_price_rub(model_id, params, is_admin, user_id)
+    if price is None:
+        min_price = get_min_price_rub(model_id)
+        if min_price is None:
+            return "💰 <b>от — ₽</b>"
+        return f"💰 <b>от {format_rub_amount(float(min_price))}</b>"
     return format_price_rub(price, is_admin)
+
+
+def get_from_price_value(model_id: str) -> Optional[float]:
+    """Return the minimum price in RUB for a model, if available."""
+    from app.pricing.ssot_catalog import get_min_price_rub
+
+    min_price = get_min_price_rub(model_id)
+    return float(min_price) if min_price is not None else None
 
 
 def _normalize_gen_type(gen_type: Optional[str]) -> Optional[str]:
@@ -1429,6 +1446,7 @@ def _update_price_quote(
         "currency": quote.currency,
         "breakdown": quote.breakdown,
     }
+    session["sku_id"] = quote.sku_id
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
@@ -1501,6 +1519,26 @@ def _build_current_price_line(
         },
     )
     return price_text
+
+
+def build_option_confirm_text(
+    user_lang: str,
+    param_label: str,
+    display_value: str,
+    price_rub: float,
+) -> str:
+    price_line = f"{price_rub:.2f} ₽"
+    if user_lang == "ru":
+        return (
+            f"✅ {param_label}: <b>{display_value}</b>\n"
+            f"💰 <b>Эта опция:</b> {price_line}\n\n"
+            "Подтвердить выбор?"
+        )
+    return (
+        f"✅ {param_label}: <b>{display_value}</b>\n"
+        f"💰 <b>This option:</b> {price_line}\n\n"
+        "Confirm selection?"
+    )
 
 
 def _build_price_preview_text(user_lang: str, price: float, balance: float) -> str:
@@ -1742,8 +1780,8 @@ GENERATIONS_HISTORY_FILE = get_data_file_path("generations_history.json")  # Fil
 
 # Free tools settings
 FREE_TOOLS_CONFIG = get_free_tools_config()
-FREE_TOOL_MODEL_IDS = get_free_tools_model_ids()
-FREE_MODEL_ID = FREE_TOOL_MODEL_IDS[0] if FREE_TOOL_MODEL_IDS else "z-image"
+FREE_TOOL_SKU_IDS = get_free_tools_model_ids()
+FREE_SKU_ID = FREE_TOOL_SKU_IDS[0] if FREE_TOOL_SKU_IDS else ""
 
 def is_video_model(model_id: str) -> bool:
     """Check if model is a video generation model"""
@@ -2419,15 +2457,15 @@ async def get_user_free_generations_remaining(user_id: int) -> int:
     return int(status.get("total_remaining", 0))
 
 
-async def use_free_generation(user_id: int, model_id: str, *, correlation_id: Optional[str] = None) -> bool:
+async def use_free_generation(user_id: int, sku_id: str, *, correlation_id: Optional[str] = None) -> bool:
     """Consume a free generation if available."""
-    result = await check_and_consume_free_generation(user_id, model_id, correlation_id=correlation_id)
+    result = await check_and_consume_free_generation(user_id, sku_id, correlation_id=correlation_id)
     return result.get("status") == "ok"
 
 
-async def is_free_generation_available(user_id: int, model_id: str) -> bool:
+async def is_free_generation_available(user_id: int, sku_id: str) -> bool:
     """Check if free generation is available for this user and model."""
-    if model_id not in FREE_TOOL_MODEL_IDS:
+    if not sku_id or sku_id not in FREE_TOOL_SKU_IDS:
         return False
     status = await get_free_generation_status(user_id)
     return int(status.get("total_remaining", 0)) > 0
@@ -5324,13 +5362,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif model_id == "seedream/4.5-text-to-image" or model_id == "seedream/4.5-edit":
                 default_params = {"quality": "basic"}  # Basic quality (same price, but for consistency)
             
-            min_price = calculate_price_rub(model_id, default_params, is_admin)
-            price_text = format_price_rub(min_price, is_admin)
+            min_price = get_from_price_value(model_id)
+            price_text = format_price_rub(min_price, is_admin) if min_price is not None else "💰 <b>от — ₽</b>"
             
             # Calculate how many generations available
             if is_admin:
                 available_count = "Безлимит"
-            elif user_balance >= min_price:
+            elif min_price and user_balance >= min_price:
                 available_count = int(user_balance / min_price)
             else:
                 available_count = 0
@@ -5472,7 +5510,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return INPUTTING_PARAMS
             
             # Store session data
-            session['params'] = {}
+            prefill_params = session.pop("prefill_params", {}) if isinstance(session, dict) else {}
+            session['params'] = dict(prefill_params or {})
             session['properties'] = input_params
             session['required'] = required_params
             session['required_forced_media'] = forced_media_required
@@ -5974,16 +6013,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_id = model.get('id')
                 
                 # Calculate price for display
-                default_params = {}
-                if model_id == "nano-banana-pro":
-                    default_params = {"resolution": "1K"}
-                elif model_id in ["seedream/4.5-text-to-image", "seedream/4.5-edit"]:
-                    default_params = {"quality": "basic"}
-                
                 # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
                 is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-                min_price = calculate_price_rub(model_id, default_params, is_admin_check, user_id)
-                price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
+                min_price = get_from_price_value(model_id)
+                price_text = get_model_price_text(model_id, None, is_admin_check, user_id)
                 
                 # Extract price number from price_text for compact display
                 import re
@@ -5998,8 +6031,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
                     price_display = "бесплатно"
                 else:
-                    # Fallback: show calculated price
-                    price_display = format_rub_amount(min_price)
+                    price_display = format_rub_amount(min_price) if min_price is not None else "—"
                 
                 # Compact button text (Telegram limit: 64 characters for button text)
                 # Make it shorter to fit price and avoid overlap
@@ -6115,16 +6147,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = []
             for model in models:
                 # Calculate price for display
-                default_params = {}
-                if model['id'] == "nano-banana-pro":
-                    default_params = {"resolution": "1K"}
-                elif model['id'] in ["seedream/4.5-text-to-image", "seedream/4.5-edit"]:
-                    default_params = {"quality": "basic"}
-                
                 # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
                 is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-                min_price = calculate_price_rub(model['id'], default_params, is_admin_check, user_id)
-                price_text = get_model_price_text(model['id'], default_params, is_admin_check, user_id)
+                min_price = get_from_price_value(model['id'])
+                price_text = get_model_price_text(model['id'], None, is_admin_check, user_id)
                 
                 # Extract price number from price_text for compact display
                 import re
@@ -6139,8 +6165,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
                     price_display = "бесплатно"
                 else:
-                    # Fallback: show calculated price
-                    price_display = format_rub_amount(min_price)
+                    price_display = format_rub_amount(min_price) if min_price is not None else "—"
                 
                 # Compact button text with price (Telegram limit: 64 characters)
                 model_name = model.get('name', model.get('id', 'Unknown'))
@@ -6159,7 +6184,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
                     price_display = "бесплатно"
                 else:
-                    price_display = format_rub_amount(min_price)
+                    price_display = format_rub_amount(min_price) if min_price is not None else "—"
                 
                 # Compact button text (Telegram limit: 64 characters for button text)
                 max_name_length = 20  # Shorter to fit price
@@ -6242,12 +6267,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             logger.info(f"User {user_id} clicked 'free_tools' button")
             
-            # Get free tools from pricing config (fixed order)
-            free_ids = get_free_tools_model_ids()
+            # Get free tools from pricing SSOT (fixed order)
+            free_sku_ids = get_free_tools_model_ids()
+            from app.pricing.ssot_catalog import (
+                get_sku_by_id,
+                get_sku_param_summary,
+                encode_sku_callback,
+            )
             models_map = {model.get('id'): model for model in get_models_sync()}
-            free_models = [models_map[model_id] for model_id in free_ids if model_id in models_map]
-            
-            if not free_models:
+            free_skus = [get_sku_by_id(sku_id) for sku_id in free_sku_ids]
+            free_skus = [sku for sku in free_skus if sku and sku.model_id in models_map]
+
+            if not free_skus:
                 user_lang = get_user_language(user_id)
                 keyboard = [[InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")]]
                 if user_lang == 'ru':
@@ -6284,7 +6315,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>Все инструменты в этом разделе полностью бесплатны!</b>\n\n"
-                    f"🤖 <b>Доступные инструменты ({len(free_models)}):</b>\n\n"
+                    f"🤖 <b>Доступные инструменты ({len(free_skus)}):</b>\n\n"
                     f"💡 <b>Выберите инструмент ниже</b>"
                 )
             else:
@@ -6292,7 +6323,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🆓 <b>FREE TOOLS</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>All tools in this section are completely free!</b>\n\n"
-                    f"🤖 <b>Available tools ({len(free_models)}):</b>\n\n"
+                    f"🤖 <b>Available tools ({len(free_skus)}):</b>\n\n"
                     f"💡 <b>Select a tool below</b>"
                 )
             free_tools_text = _append_free_counter_text(free_tools_text, free_counter_line)
@@ -6300,22 +6331,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Create keyboard with free models (2 per row)
             keyboard = []
             model_rows = []
-            for i, model in enumerate(free_models):
-                model_name = model.get('name', model.get('id', 'Unknown'))
+            for i, sku in enumerate(free_skus):
+                model = models_map.get(sku.model_id, {})
+                model_name = model.get('name', sku.model_id)
                 model_emoji = model.get('emoji', '🆓')
-                model_id = model.get('id')
+                option_summary = get_sku_param_summary(sku)
                 
                 # Compact button text
                 max_name_length = 25
-                button_text = f"{model_emoji} {model_name}"
+                button_text = f"{model_emoji} {model_name} ({option_summary})"
                 if len(button_text) > max_name_length:
                     button_text = f"{model_emoji} {model_name[:max_name_length-4]}..."
                 
                 # Ensure callback_data is not too long
-                callback_data = f"select_model:{model_id}"
-                if len(callback_data.encode('utf-8')) > 64:
-                    logger.error(f"Callback data too long for model {model_id}: {len(callback_data.encode('utf-8'))} bytes")
-                    callback_data = f"sel:{model_id[:50]}"
+                callback_data = encode_sku_callback(sku.sku_id)
                 
                 if i % 2 == 0:
                     # First button in row
@@ -6698,8 +6727,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Calculate price for confirmation message
                     is_admin_user = get_is_admin(user_id)
-                    is_free = await is_free_generation_available(user_id, model_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
+                    if price is None:
+                        blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                        await query.edit_message_text(blocked_text, parse_mode="HTML")
+                        return ConversationHandler.END
+                    sku_id = session.get("sku_id", "")
+                    is_free = await is_free_generation_available(user_id, sku_id)
+                    if price is None:
+                        blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                        await query.edit_message_text(blocked_text, parse_mode="HTML")
+                        return ConversationHandler.END
                     if is_free:
                         price = 0.0
                     price_str = format_rub_amount(price)
@@ -6866,7 +6904,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Calculate price for confirmation message
                     is_admin_user = get_is_admin(user_id)
-                    is_free = await is_free_generation_available(user_id, model_id)
+                    sku_id = session.get("sku_id", "")
+                    is_free = await is_free_generation_available(user_id, sku_id)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
                         price = 0.0
@@ -7065,6 +7104,89 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['current_param'] = param_name
             return await prompt_for_specific_param(update, context, user_id, param_name, source="edit_param")
 
+        if data.startswith("confirm_param:"):
+            parts = data.split(":", 2)
+            if len(parts) != 3:
+                await query.answer("Ошибка: неверный формат параметра", show_alert=True)
+                return ConversationHandler.END
+            if user_id not in user_sessions:
+                await query.edit_message_text("❌ Сессия не найдена.")
+                return ConversationHandler.END
+            session = user_sessions[user_id]
+            param_name = parts[1]
+            pending = session.pop("pending_param", None)
+            pending_params = session.pop("pending_params", None)
+            session.pop("pending_price", None)
+            if not pending or pending.get("name") != param_name or not isinstance(pending_params, dict):
+                await query.edit_message_text("❌ Параметр не найден для подтверждения.")
+                return ConversationHandler.END
+            skip_param = pending.get("skip", False)
+            session['params'] = pending_params
+            skipped_params = session.setdefault("skipped_params", set())
+            if skip_param:
+                skipped_params.add(param_name)
+            else:
+                skipped_params.discard(param_name)
+            _record_param_history(session, param_name)
+            session['current_param'] = None
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                update_id=update_id,
+                action="PARAM_CONFIRM",
+                action_path="button_callback.confirm_param",
+                param={"param_name": param_name, "source": "callback"},
+                outcome="confirmed",
+            )
+            model_id = session.get("model_id", "")
+            mode_index = _resolve_mode_index(model_id, session.get("params", {}), user_id)
+            _update_price_quote(
+                session,
+                model_id=model_id,
+                mode_index=mode_index,
+                gen_type=session.get("gen_type"),
+                params=session.get("params", {}),
+                correlation_id=correlation_id,
+                update_id=update_id,
+                action_path="button_callback.confirm_param",
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                is_admin=get_is_admin(user_id),
+            )
+
+            required = session.get('required', [])
+            params = session.get('params', {})
+            missing = [p for p in required if p not in params]
+
+            if missing:
+                price_line = _build_current_price_line(
+                    session,
+                    user_lang=user_lang,
+                    model_id=model_id,
+                    mode_index=mode_index,
+                    gen_type=session.get("gen_type"),
+                    params=session.get("params", {}),
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    action_path="button_callback.confirm_param",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    is_admin=get_is_admin(user_id),
+                )
+                await query.edit_message_text(f"✅ {param_name} сохранён.\n{price_line}")
+                next_param_result = await start_next_parameter(update, context, user_id)
+                if next_param_result:
+                    return next_param_result
+                return INPUTTING_PARAMS
+
+            session['waiting_for'] = None
+            if not model_id:
+                logger.error(f"❌ model_id not found in session for user_id={user_id}")
+                await query.edit_message_text("❌ Ошибка: модель не найдена в сессии.")
+                return ConversationHandler.END
+            return await send_confirmation_message(update, context, user_id, source="confirm_param_complete")
+
         if data == "back_to_confirmation":
             await query.answer()
             return await send_confirmation_message(update, context, user_id, source="back_to_confirmation")
@@ -7188,40 +7310,60 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if 'params' not in session:
                 session['params'] = {}
-            if not skip_param:
-                skipped_params = session.setdefault("skipped_params", set())
-                skipped_params.discard(param_name)
-                session['params'][param_name] = param_value
-                _record_param_history(session, param_name)
-            session['current_param'] = None
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=query.message.chat_id if query.message else None,
-                update_id=update_id,
-                action="PARAM_SAVE",
-                action_path="button_callback.set_param",
-                param={"param_name": param_name, "source": "callback"},
-                outcome="saved" if not skip_param else "skipped",
+            candidate_params = dict(session.get("params", {}))
+            display_value = param_value
+            if skip_param:
+                default_value = param_info.get("default")
+                if default_value is not None:
+                    candidate_params[param_name] = default_value
+                    display_value = default_value
+                else:
+                    candidate_params.pop(param_name, None)
+            else:
+                candidate_params[param_name] = param_value
+
+            from app.pricing.price_resolver import resolve_price_quote
+            from app.config import get_settings
+            model_id = session.get("model_id", "")
+            mode_index = _resolve_mode_index(model_id, candidate_params, user_id)
+            quote = resolve_price_quote(
+                model_id=model_id,
+                mode_index=mode_index,
+                gen_type=session.get("gen_type"),
+                selected_params=candidate_params,
+                settings=get_settings(),
+                is_admin=get_is_admin(user_id),
             )
-            if not skip_param:
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=query.message.chat_id if query.message else None,
-                    update_id=update_id,
-                    action="PARAM_SET",
-                    action_path="button_callback.set_param",
-                    param={"param_name": param_name, "source": "callback"},
-                    outcome="stored",
-                )
-            logger.info(
-                "🧩 PARAM_SET: action_path=button_set_param model_id=%s waiting_for=%s current_param=%s outcome=%s",
-                session.get('model_id'),
-                session.get('waiting_for'),
-                param_name,
-                "skipped" if skip_param else "stored",
+            if quote is None:
+                user_lang = get_user_language(user_id) if user_id else 'ru'
+                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                await query.edit_message_text(blocked_text, parse_mode="HTML")
+                return ConversationHandler.END
+
+            session["pending_param"] = {
+                "name": param_name,
+                "value": param_value,
+                "skip": skip_param,
+            }
+            session["pending_params"] = candidate_params
+            session["pending_price"] = float(quote.price_rub)
+            option_label = _humanize_param_name(param_name, user_lang)
+            confirm_text = build_option_confirm_text(
+                user_lang,
+                option_label,
+                str(display_value),
+                float(quote.price_rub),
             )
+            confirm_button = "✅ Подтвердить" if user_lang == "ru" else "✅ Confirm"
+            back_button = "↩️ Назад" if user_lang == "ru" else "↩️ Back"
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton(confirm_button, callback_data=f"confirm_param:{param_name}:{param_value}")],
+                    [InlineKeyboardButton(back_button, callback_data=f"edit_param:{param_name}")],
+                ]
+            )
+            await query.edit_message_text(confirm_text, reply_markup=keyboard, parse_mode="HTML")
+            return INPUTTING_PARAMS
 
             # Check if there are more parameters
             required = session.get('required', [])
@@ -10283,24 +10425,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_admin = get_is_admin(user_id)
             user_lang = get_user_language(user_id)
             
-            # Calculate price
-            default_params = {}
-            if model_id == "nano-banana-pro":
-                default_params = {"resolution": "1K"}
-            elif model_id in ["seedream/4.5-text-to-image", "seedream/4.5-edit"]:
-                default_params = {"quality": "basic"}
-            elif model_id == "topaz/image-upscale":
-                default_params = {"upscale_factor": "1"}
-            
             is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-            min_price = calculate_price_rub(model_id, default_params, is_admin_check, user_id)
-            price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
+            min_price = get_from_price_value(model_id)
+            price_text = get_model_price_text(model_id, None, is_admin_check, user_id)
             try:
                 from app.services.pricing_service import get_model_price_info
                 from app.config import get_settings
 
                 settings = get_settings()
-                mode_index = _resolve_mode_index(model_id, default_params, user_id)
+                mode_index = _resolve_mode_index(model_id, {}, user_id)
                 price_info = get_model_price_info(model_id, mode_index, settings, is_admin=is_admin_check)
                 trace_event(
                     "info",
@@ -10411,6 +10544,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             data = f"select_model:{model_id}"
             mode_selected = True
+
+        if data.startswith("sku:") or data.startswith("sk:"):
+            await query.answer()
+            from app.pricing.ssot_catalog import get_sku_by_id, resolve_sku_callback
+
+            sku_id = resolve_sku_callback(data)
+            sku = get_sku_by_id(sku_id) if sku_id else None
+            if not sku:
+                user_lang = get_user_language(user_id)
+                await query.edit_message_text(
+                    "❌ Неверная бесплатная опция" if user_lang == "ru" else "❌ Invalid free option",
+                )
+                return ConversationHandler.END
+            session = ensure_session_cached(context, session_store, user_id, update_id)
+            session["prefill_params"] = dict(sku.params)
+            session["sku_id"] = sku.sku_id
+            data = f"select_model:{sku.model_id}"
 
         # Handle select_model: callback - starts generation flow directly (legacy, still supported)
         # Also handles start: callback (redirects to select_model:)
@@ -10530,6 +10680,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
+            from app.kie_contract.schema_loader import get_model_schema
+            from app.pricing.ssot_catalog import get_min_price_rub
+            if not get_model_schema(model_id):
+                user_lang = get_user_language(user_id)
+                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                await query.edit_message_text(blocked_text, parse_mode="HTML")
+                return ConversationHandler.END
+            if get_min_price_rub(model_id) is None:
+                user_lang = get_user_language(user_id)
+                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                await query.edit_message_text(blocked_text, parse_mode="HTML")
+                return ConversationHandler.END
 
             session = ensure_session_cached(context, session_store, user_id, update_id)
             session_gen_type = _resolve_session_gen_type(session, None)
@@ -10574,25 +10736,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_balance = await get_user_balance_async(user_id)
             is_admin = get_is_admin(user_id)
             
-            # Calculate price for default parameters (minimum price)
-            default_params = {}
-            if model_id == "nano-banana-pro":
-                default_params = {"resolution": "1K"}  # Cheapest option
-            elif model_id == "seedream/4.5-text-to-image" or model_id == "seedream/4.5-edit":
-                default_params = {"quality": "basic"}  # Basic quality (same price, but for consistency)
-            elif model_id == "topaz/image-upscale":
-                default_params = {"upscale_factor": "1"}  # Cheapest option (1x = ≤2K)
-            
             # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
             is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-            min_price = calculate_price_rub(model_id, default_params, is_admin_check, user_id)
-            price_text = get_model_price_text(model_id, default_params, is_admin_check, user_id)
+            min_price = get_from_price_value(model_id)
+            price_text = get_model_price_text(model_id, None, is_admin_check, user_id)
             
             # Check for free generations for z-image
-            is_free_available = await is_free_generation_available(user_id, model_id)
+            sku_id = session.get("sku_id", "")
+            is_free_available = await is_free_generation_available(user_id, sku_id)
             remaining_free = (
                 await get_user_free_generations_remaining(user_id)
-                if model_id in FREE_TOOL_MODEL_IDS
+                if sku_id in FREE_TOOL_SKU_IDS
                 else 0
             )
             
@@ -10602,7 +10756,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif is_free_available:
                 # For z-image with free generations, show free count
                 available_count = f"🎁 {remaining_free} бесплатно в час"
-            elif user_balance >= min_price:
+            elif min_price and user_balance >= min_price:
                 available_count = int(user_balance / min_price)
             else:
                 available_count = 0
@@ -10665,7 +10819,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info_text += f"💰 <b>Цена:</b> {price_display}\n"
             
             # Add hint for new users
-            if is_new and model_id in FREE_TOOL_MODEL_IDS:
+            if is_new and sku_id in FREE_TOOL_SKU_IDS:
                 model_info_text += (
                     f"\n💡 <b>Отлично для начала!</b>\n"
                     f"Эта модель бесплатна для первых {FREE_GENERATIONS_PER_DAY} генераций в час.\n"
@@ -10684,7 +10838,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     model_info_text += (
                         f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в час\n"
                     )
-                    if user_balance >= min_price:
+                    if min_price and user_balance >= min_price:
                         paid_count = int(user_balance / min_price)
                         model_info_text += f"💳 <b>Платных:</b> {paid_count} генераций\n"
                     model_info_text += f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)}\n\n"
@@ -10698,7 +10852,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     model_info_text += (
                         f"\n❌ <b>Недостаточно средств</b>\n\n"
                         f"💵 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
-                        f"💰 <b>Требуется:</b> {format_price_rub(min_price, is_admin)}\n\n"
+                        f"💰 <b>Требуется:</b> {format_price_rub(min_price, is_admin) if min_price is not None else 'от — ₽'}\n\n"
                         f"💡 Пополните баланс для генерации"
                     )
 
@@ -10721,7 +10875,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info_text = _append_free_counter_text(model_info_text, free_counter_line)
             
             # Check balance before starting generation (but allow free generations)
-            if not is_admin and not is_free_available and user_balance < min_price:
+            if not is_admin and not is_free_available and min_price is not None and user_balance < min_price:
                 user_lang = get_user_language(user_id)
                 keyboard = [
                     [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang), callback_data="topup_balance")],
@@ -11587,7 +11741,8 @@ async def send_confirmation_message(
     params_text = "\n".join([f"  • {k}: {str(v)[:50]}{'...' if len(str(v)) > 50 else ''}" for k, v in params.items()])
     user_lang = get_user_language(user_id)
     is_admin_user = get_is_admin(user_id)
-    is_free = await is_free_generation_available(user_id, model_id)
+    sku_id = session.get("sku_id", "")
+    is_free = await is_free_generation_available(user_id, sku_id)
     mode_index = _resolve_mode_index(model_id, params, user_id)
     price_quote = _update_price_quote(
         session,
@@ -11608,6 +11763,16 @@ async def send_confirmation_message(
         price_display = price_quote.get("price_rub")
     else:
         price_display = None
+    if not is_free and not price_display:
+        blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(blocked_text, parse_mode="HTML")
+        elif update.message:
+            await update.message.reply_text(blocked_text, parse_mode="HTML")
+        else:
+            await context.bot.send_message(chat_id=user_id, text=blocked_text, parse_mode="HTML")
+        return ConversationHandler.END
+    price_str = price_display
     price_line = (
         f"Текущая цена: {price_display} ₽"
         if price_display
@@ -13696,8 +13861,13 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         
                         # Calculate price for confirmation
-                        is_free = await is_free_generation_available(user_id, model_id)
+                        sku_id = session.get("sku_id", "")
+                        is_free = await is_free_generation_available(user_id, sku_id)
                         price = calculate_price_rub(model_id, params, is_admin_user)
+                        if price is None:
+                            blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                            await update.message.reply_text(blocked_text, parse_mode="HTML")
+                            return INPUTTING_PARAMS
                         if is_free:
                             price = 0.0
                         price_str = format_rub_amount(price)
@@ -14244,7 +14414,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # КРИТИЧНО: Всегда показываем цену или информацию о бесплатной генерации
                     is_admin_user = get_is_admin(user_id)
-                    is_free = await is_free_generation_available(user_id, model_id)
+                    sku_id = session.get("sku_id", "")
+                    is_free = await is_free_generation_available(user_id, sku_id)
                     free_info = ""
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
@@ -14253,6 +14424,10 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     else:
                         # КРИТИЧНО: Всегда показываем цену
                         price = calculate_price_rub(model_id, params, is_admin_user)
+                        if price is None:
+                            blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                            await update.message.reply_text(blocked_text, parse_mode="HTML")
+                            return INPUTTING_PARAMS
                         price_str = format_rub_amount(price)
                         if is_admin_user:
                             free_info = f"\n\n💰 <b>Стоимость:</b> Безлимит (цена: {price_str})"
@@ -14377,7 +14552,8 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         params_text = "\n".join([f"  • {k}: {str(v)[:50]}..." for k, v in params.items()])
                         
                         is_admin_user = get_is_admin(user_id)
-                        is_free = await is_free_generation_available(user_id, model_id)
+                        sku_id = session.get("sku_id", "")
+                        is_free = await is_free_generation_available(user_id, sku_id)
                         free_info = ""
                         if is_free:
                             remaining = await get_user_free_generations_remaining(user_id)
@@ -14385,6 +14561,16 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             free_info += f"Осталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
                         else:
                             price = calculate_price_rub(model_id, params, is_admin_user)
+                            if price is None:
+                                logger.error("Missing price for refund on model %s", model_id)
+                                price = 0.0
+                            if price is None:
+                                logger.error("Missing price for refund on model %s", model_id)
+                                price = 0.0
+                            if price is None:
+                                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                                await update.message.reply_text(blocked_text, parse_mode="HTML")
+                                return INPUTTING_PARAMS
                             price_str = format_rub_amount(price)
                             free_info = f"\n\n💰 <b>Стоимость:</b> {price_str}"
                         
@@ -15254,9 +15440,10 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     
     # Check if this is a free generation (do not consume upfront)
+    sku_id = session.get("sku_id", "")
     free_result = await check_free_generation_available(
         user_id,
-        model_id,
+        sku_id,
         correlation_id=correlation_id,
     )
     if free_result.get("status") == "deny":
@@ -16109,6 +16296,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         # Get price and deduct from balance or limit
                         model_id = session.get('model_id', '')
                         params = session.get('params', {})
+                        sku_id = session.get('sku_id', '')
                         is_admin_user = get_is_admin(user_id)
                         is_free = session.get('is_free_generation', False)
                     else:
@@ -16121,7 +16309,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         # Use free generation
                         if await use_free_generation(
                             user_id,
-                            model_id,
+                            sku_id,
                             correlation_id=ensure_correlation_id(update, context),
                         ):
                             price = 0.0
@@ -16131,6 +16319,9 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             price = calculate_price_rub(model_id, params, is_admin_user)
                     else:
                         price = calculate_price_rub(model_id, params, is_admin_user)
+                    if price is None:
+                        logger.error("Missing price for model %s; skipping charge.", model_id)
+                        price = 0.0
                     
                     # DRY-RUN GUARD: Не списываем баланс в тестовом режиме
                     dry_run = is_dry_run() or not allow_real_generation()
@@ -16458,6 +16649,9 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 # AUTO-REFUND on timeout
                 if not is_free and user_id != ADMIN_ID:
                     price = calculate_price_rub(model_id, params, is_admin_user)
+                    if price is None:
+                        logger.error("Missing price for refund on model %s", model_id)
+                        price = 0.0
                     try:
                         await add_user_balance_async(user_id, price)
                         logger.info(f"💰 AUTO-REFUND: Refunded {price} to user {user_id} for timeout task {task_id}")
