@@ -10,6 +10,7 @@ import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+from collections.abc import MutableMapping
 
 from app.observability.context import get_context_fields
 
@@ -71,7 +72,7 @@ def ensure_correlation_id(update: Any, context: Any) -> str:
         user_id = update.callback_query.from_user.id
 
     correlation_id = get_correlation_id()
-    if context and getattr(context, "user_data", None) is not None:
+    if context and isinstance(getattr(context, "user_data", None), MutableMapping):
         if context.user_data.get("correlation_update_id") == update_id:
             correlation_id = context.user_data.get("correlation_id")
         if correlation_id and context.user_data.get("correlation_id") != correlation_id:
@@ -81,7 +82,7 @@ def ensure_correlation_id(update: Any, context: Any) -> str:
             correlation_id = make_correlation_id(update)
             context.user_data["correlation_id"] = correlation_id
             context.user_data["correlation_update_id"] = update_id
-    elif context and getattr(context, "chat_data", None) is not None:
+    elif context and isinstance(getattr(context, "chat_data", None), MutableMapping):
         if context.chat_data.get("correlation_update_id") == update_id:
             correlation_id = context.chat_data.get("correlation_id")
         if correlation_id and context.chat_data.get("correlation_id") != correlation_id:
