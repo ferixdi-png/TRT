@@ -1,1 +1,19 @@
-{}
+{
+  "6913446846": [
+    {
+      "id": 1,
+      "is_free": false,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "человек"
+      },
+      "price": 3.14,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768901604844_zsvtn6.png"
+      ],
+      "task_id": "bde2d11d22c2d523f5112ae696be421a",
+      "timestamp": 1768901616
+    }
+  ]
+}
