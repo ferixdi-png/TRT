@@ -36,7 +36,9 @@ async def test_recraft_crisp_upscale_requires_image(harness):
     result = await harness.process_callback("confirm_generate", user_id=user_id)
     assert result["success"]
     latest = (result["outbox"]["messages"] or result["outbox"]["edited_messages"])[-1]
-    assert "обязатель" in latest["text"].lower()
+    latest_text = latest["text"].lower()
+    assert "нужно загрузить" in latest_text
+    assert "изображ" in latest_text
     session = user_sessions.get(user_id)
     assert session and session.get("waiting_for") in {"image_input", "image_urls"}
 
