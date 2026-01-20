@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
+from datetime import datetime
 from types import SimpleNamespace
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -25,6 +27,76 @@ from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
 
+CAPTION_PARAM_LIMIT = 3
+CAPTION_VALUE_LIMIT = 40
+
+
+def _sanitize_caption_value(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", value).strip()
+    if len(cleaned) <= CAPTION_VALUE_LIMIT:
+        return cleaned
+    return f"{cleaned[:CAPTION_VALUE_LIMIT]}…"
+
+
+def _summarize_params(params: Optional[Dict[str, Any]]) -> str:
+    if not params:
+        return "params: n/a"
+    parts: List[str] = []
+    for key, value in params.items():
+        if len(parts) >= CAPTION_PARAM_LIMIT:
+            break
+        if value is None:
+            continue
+        if isinstance(value, str):
+            if key in {"prompt", "text"}:
+                display = _sanitize_caption_value(value)
+            elif value.startswith("http"):
+                display = url_summary(value) or _sanitize_caption_value(value)
+            else:
+                display = _sanitize_caption_value(value)
+        elif isinstance(value, list):
+            if value and isinstance(value[0], str) and value[0].startswith("http"):
+                display = url_summary(value[0]) or f"list({len(value)})"
+            else:
+                display = f"list({len(value)})"
+        else:
+            display = str(value)
+        parts.append(f"{key}={display}")
+    return ", ".join(parts) if parts else "params: n/a"
+
+
+def _sanitize_filename_component(value: str) -> str:
+    safe = re.sub(r"[^\w\-\.]+", "_", value.strip())
+    safe = re.sub(r"_+", "_", safe)
+    return safe[:80] if safe else "result"
+
+
+def build_result_caption(
+    model_label: str,
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    timestamp: Optional[str] = None,
+    extra_text: Optional[str] = None,
+) -> str:
+    ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M")
+    params_text = _summarize_params(params)
+    base = f"{model_label} • {params_text} • {ts}"
+    if extra_text:
+        return f"{base}\n{extra_text}"
+    return base
+
+
+def build_result_filename_prefix(
+    model_label: str,
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    timestamp: Optional[str] = None,
+) -> str:
+    ts = timestamp or datetime.now().strftime("%Y-%m-%d_%H-%M")
+    params_text = _summarize_params(params)
+    base = f"{model_label}_{params_text}_{ts}"
+    return _sanitize_filename_component(base)
+
 
 async def deliver_result(
     bot,
@@ -37,10 +109,22 @@ async def deliver_result(
     gen_type: Optional[str] = None,
     correlation_id: Optional[str] = None,
     kie_client: Optional[object] = None,
+    params: Optional[Dict[str, Any]] = None,
+    model_label: Optional[str] = None,
 ) -> None:
     """Deliver generation result to Telegram with unified delivery."""
     media_type = (media_type or "").lower()
-    caption_text = text or f"✅ Готово. ID: {correlation_id or 'corr-na-na'}"
+    label = model_label or model_id or "model"
+    caption_text = text
+    if media_type != "text":
+        caption_text = build_result_caption(
+            label,
+            params,
+            extra_text=text,
+        )
+    if not caption_text:
+        caption_text = f"✅ Готово. ID: {correlation_id or 'corr-na-na'}"
+    filename_prefix = build_result_filename_prefix(label, params)
     start_ts = time.monotonic()
     normalized_urls: List[str] = []
     try:
@@ -157,6 +241,7 @@ async def deliver_result(
             media_type or "document",
             kie_client,
             session,
+            filename_prefix=filename_prefix,
         )
         try:
             await getattr(bot, tg_method)(chat_id=chat_id, **payload)
@@ -186,6 +271,7 @@ async def deliver_result(
                 param={"media_type": media_type, "tg_method": tg_method},
             )
         except Exception as exc:
+            fallback_urls = ", ".join(normalized_urls[:3]) if normalized_urls else "URL missing"
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=chat_id,
@@ -198,9 +284,31 @@ async def deliver_result(
                 outcome="failed",
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
                 error_code="TG_DELIVER_FAILED",
-                fix_hint=str(exc),
+                fix_hint="send_url_fallback",
+                param={"error": str(exc), "urls": [url_summary(url) for url in normalized_urls[:3]]},
             )
-            raise
+            await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    "⚠️ Не удалось отправить файл через Telegram. Вот ссылка:\n"
+                    f"{fallback_urls}"
+                ),
+                disable_web_page_preview=True,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=chat_id,
+                chat_id=chat_id,
+                model_id=model_id,
+                gen_type=gen_type or media_type,
+                action="TG_DELIVER_FALLBACK",
+                action_path="telegram_sender.deliver_result",
+                stage="TG_DELIVER",
+                outcome="sent",
+                error_code="TG_DELIVER_FALLBACK_URL",
+                fix_hint="Sent URL fallback after upload failure.",
+            )
+            return
 
 
 async def send_job_result(
@@ -219,6 +327,11 @@ async def send_job_result(
     media_type = spec.output_media_type or job_result.media_type
     urls = job_result.urls
 
+    caption_text = job_result.text
+    filename_prefix = None
+    if urls:
+        caption_text = build_result_caption(spec.name or spec.id, extra_text=job_result.text)
+        filename_prefix = build_result_filename_prefix(spec.name or spec.id)
     await deliver_generation_result(
         SimpleNamespace(bot=bot),
         chat_id,
@@ -226,8 +339,9 @@ async def send_job_result(
         spec.id,
         spec.model_mode,
         urls,
-        job_result.text or f"✅ Готово. ID: {correlation_id or 'corr-na-na'}",
+        caption_text or f"✅ Готово. ID: {correlation_id or 'corr-na-na'}",
         prefer_upload=True,
+        filename_prefix=filename_prefix,
     )
 
     price_text = ""

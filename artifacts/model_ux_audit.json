@@ -1,0 +1,837 @@
+[
+  {
+    "model_id": "bytedance/seedream",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "bytedance/seedream-v4-edit",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "bytedance/seedream-v4-text-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "elevenlabs/audio-isolation",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": false,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing upload rules for params: audio_url",
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "elevenlabs/sound-effect",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "elevenlabs/speech-to-text",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": false,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": [
+      "Missing upload rules for params: audio_url"
+    ]
+  },
+  {
+    "model_id": "elevenlabs/text-to-speech",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "flux-2/flex-image-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "flux-2/flex-text-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "flux-2/pro-image-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "flux-2/pro-text-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "flux/kontext",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "google/imagen4",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "google/imagen4-fast",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "google/imagen4-ultra",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "google/nano-banana",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "google/nano-banana-edit",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "google/nanobanana-gemini-2.5-flash",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "google/veo-3",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "google/veo-3.1",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "grok/imagine",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "hailuo/02-image-to-video-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "hailuo/02-image-to-video-standard",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "hailuo/02-text-to-video-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "hailuo/02-text-to-video-standard",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "hailuo/2.3",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "ideogram/character",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "ideogram/character-edit",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "ideogram/character-remix",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "ideogram/v3-edit",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "ideogram/v3-reframe",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": false,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": [
+      "Missing upload rules for params: image_size"
+    ]
+  },
+  {
+    "model_id": "ideogram/v3-remix",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "ideogram/v3-text-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "infinitalk/from-audio",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "kling-2.6/image-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling-2.6/text-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/ai-avatar-v1-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v1-avatar-standard",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v2-1-master-image-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v2-1-master-text-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v2-1-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v2-1-standard",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v2-5-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "kling/v2-5-turbo-image-to-video-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "kling/v2-5-turbo-text-to-video-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "midjourney/api",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "nano-banana-pro",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "openai/4o-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "qwen/image-edit",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "qwen/image-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "qwen/text-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "recraft/crisp-upscale",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "recraft/remove-background",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "runway/gen-4",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "seedream/4.5-edit",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "seedream/4.5-text-to-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "sora-2-pro-image-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "sora-2-pro-storyboard",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "sora-2-text-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "sora-watermark-remover",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "suno/v5",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "topaz/image-upscale",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "topaz/video-upscale",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "wan/2-2-a14b-image-to-video-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "wan/2-2-a14b-text-to-video-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "has_instructions": true,
+    "has_priced_skus": false,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "wan/2-2-animate-move",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "wan/2-2-animate-replace",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": false,
+    "missing_metadata": [
+      "Missing smoke flow test"
+    ]
+  },
+  {
+    "model_id": "wan/2-5-image-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "wan/2-5-text-to-video",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  },
+  {
+    "model_id": "z-image",
+    "status": "READY_VISIBLE",
+    "has_instructions": true,
+    "has_priced_skus": true,
+    "has_required_fields_metadata": true,
+    "has_upload_rules": true,
+    "has_output_mapper": true,
+    "has_smoke_flow_test": true,
+    "missing_metadata": []
+  }
+]
