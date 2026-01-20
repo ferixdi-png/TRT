@@ -1,0 +1,437 @@
+{
+  "models": [
+    {
+      "model_id": "bytedance/seedream",
+      "min_price_rub": 2.75,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "bytedance/seedream-v4-edit",
+      "min_price_rub": 3.93,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "bytedance/seedream-v4-text-to-image",
+      "min_price_rub": 3.93,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "bytedance/v1-pro-fast-image-to-video",
+      "min_price_rub": 12.57,
+      "count_variants_priced": 4,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "elevenlabs/audio-isolation",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "elevenlabs/sound-effect",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "elevenlabs/speech-to-text",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "elevenlabs/text-to-speech",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "flux-2/flex-image-to-image",
+      "min_price_rub": 11.0,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "flux-2/flex-text-to-image",
+      "min_price_rub": 11.0,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "flux-2/pro-image-to-image",
+      "min_price_rub": 3.93,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "flux-2/pro-text-to-image",
+      "min_price_rub": 3.93,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "flux/kontext",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/imagen4",
+      "min_price_rub": 6.29,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/imagen4-fast",
+      "min_price_rub": 3.14,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/imagen4-ultra",
+      "min_price_rub": 9.43,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/nano-banana",
+      "min_price_rub": 3.14,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/nano-banana-edit",
+      "min_price_rub": 3.14,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/nanobanana-gemini-2.5-flash",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/veo-3",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "google/veo-3.1",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "grok/imagine",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-pro",
+      "min_price_rub": 44.78,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "hailuo/02-image-to-video-standard",
+      "min_price_rub": 9.43,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-pro",
+      "min_price_rub": 44.78,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "hailuo/02-text-to-video-standard",
+      "min_price_rub": 23.57,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "hailuo/2.3",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/character",
+      "min_price_rub": 9.43,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/character-edit",
+      "min_price_rub": 9.43,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/character-remix",
+      "min_price_rub": 9.43,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/v3-edit",
+      "min_price_rub": 2.75,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/v3-reframe",
+      "min_price_rub": 2.75,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/v3-remix",
+      "min_price_rub": 2.75,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "ideogram/v3-text-to-image",
+      "min_price_rub": 2.75,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "infinitalk/from-audio",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling-2.6/image-to-video",
+      "min_price_rub": 43.21,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling-2.6/text-to-video",
+      "min_price_rub": 43.21,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "min_price_rub": 12.57,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v1-avatar-standard",
+      "min_price_rub": 6.29,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-1-master-image-to-video",
+      "min_price_rub": 125.71,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-1-master-text-to-video",
+      "min_price_rub": 125.71,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-1-pro",
+      "min_price_rub": 39.29,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-1-standard",
+      "min_price_rub": 19.64,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-5-turbo",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "min_price_rub": 33.0,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "min_price_rub": 33.0,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "midjourney/api",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "nano-banana-pro",
+      "min_price_rub": 14.14,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "openai/4o-image",
+      "min_price_rub": 4.71,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "qwen/image-edit",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "qwen/image-to-image",
+      "min_price_rub": 3.14,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "qwen/text-to-image",
+      "min_price_rub": 3.14,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "recraft/crisp-upscale",
+      "min_price_rub": 0.39,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "recraft/remove-background",
+      "min_price_rub": 0.79,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "runway/gen-4",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "seedream/4.5-edit",
+      "min_price_rub": 5.11,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "seedream/4.5-text-to-image",
+      "min_price_rub": 5.11,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "sora-2-pro-image-to-video",
+      "min_price_rub": 117.85,
+      "count_variants_priced": 4,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "sora-2-pro-storyboard",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "sora-2-text-to-video",
+      "min_price_rub": 15.71,
+      "count_variants_priced": 2,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "sora-watermark-remover",
+      "min_price_rub": 7.86,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "suno/v5",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "topaz/image-upscale",
+      "min_price_rub": 7.86,
+      "count_variants_priced": 4,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "topaz/video-upscale",
+      "min_price_rub": 9.43,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-2-a14b-image-to-video-turbo",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-2-a14b-text-to-video-turbo",
+      "min_price_rub": null,
+      "count_variants_priced": 0,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-2-animate-move",
+      "min_price_rub": 4.71,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-2-animate-replace",
+      "min_price_rub": 4.71,
+      "count_variants_priced": 3,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-5-image-to-video",
+      "min_price_rub": 47.14,
+      "count_variants_priced": 4,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "wan/2-5-text-to-video",
+      "min_price_rub": 47.14,
+      "count_variants_priced": 4,
+      "count_variants_missing": 0
+    },
+    {
+      "model_id": "z-image",
+      "min_price_rub": 0.63,
+      "count_variants_priced": 1,
+      "count_variants_missing": 0
+    }
+  ],
+  "free_skus": []
+}

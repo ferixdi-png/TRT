@@ -1,0 +1,80 @@
+# TRT Price Snapshot
+
+| Model | Min price (RUB) | Priced SKUs | Missing variants |
+| --- | ---: | ---: | ---: |
+| bytedance/seedream | 2.75 | 1 | 0 |
+| bytedance/seedream-v4-edit | 3.93 | 1 | 0 |
+| bytedance/seedream-v4-text-to-image | 3.93 | 1 | 0 |
+| bytedance/v1-pro-fast-image-to-video | 12.57 | 4 | 0 |
+| elevenlabs/audio-isolation | — | 0 | 0 |
+| elevenlabs/sound-effect | — | 0 | 0 |
+| elevenlabs/speech-to-text | — | 0 | 0 |
+| elevenlabs/text-to-speech | — | 0 | 0 |
+| flux-2/flex-image-to-image | 11.0 | 2 | 0 |
+| flux-2/flex-text-to-image | 11.0 | 2 | 0 |
+| flux-2/pro-image-to-image | 3.93 | 2 | 0 |
+| flux-2/pro-text-to-image | 3.93 | 2 | 0 |
+| flux/kontext | — | 0 | 0 |
+| google/imagen4 | 6.29 | 1 | 0 |
+| google/imagen4-fast | 3.14 | 1 | 0 |
+| google/imagen4-ultra | 9.43 | 1 | 0 |
+| google/nano-banana | 3.14 | 1 | 0 |
+| google/nano-banana-edit | 3.14 | 1 | 0 |
+| google/nanobanana-gemini-2.5-flash | — | 0 | 0 |
+| google/veo-3 | — | 0 | 0 |
+| google/veo-3.1 | — | 0 | 0 |
+| grok/imagine | — | 0 | 0 |
+| hailuo/02-image-to-video-pro | 44.78 | 1 | 0 |
+| hailuo/02-image-to-video-standard | 9.43 | 3 | 0 |
+| hailuo/02-text-to-video-pro | 44.78 | 1 | 0 |
+| hailuo/02-text-to-video-standard | 23.57 | 2 | 0 |
+| hailuo/2.3 | — | 0 | 0 |
+| ideogram/character | 9.43 | 3 | 0 |
+| ideogram/character-edit | 9.43 | 3 | 0 |
+| ideogram/character-remix | 9.43 | 3 | 0 |
+| ideogram/v3-edit | 2.75 | 3 | 0 |
+| ideogram/v3-reframe | 2.75 | 3 | 0 |
+| ideogram/v3-remix | 2.75 | 3 | 0 |
+| ideogram/v3-text-to-image | 2.75 | 3 | 0 |
+| infinitalk/from-audio | — | 0 | 0 |
+| kling-2.6/image-to-video | 43.21 | 3 | 0 |
+| kling-2.6/text-to-video | 43.21 | 2 | 0 |
+| kling/ai-avatar-v1-pro | 12.57 | 1 | 0 |
+| kling/v1-avatar-standard | 6.29 | 1 | 0 |
+| kling/v2-1-master-image-to-video | 125.71 | 2 | 0 |
+| kling/v2-1-master-text-to-video | 125.71 | 2 | 0 |
+| kling/v2-1-pro | 39.29 | 2 | 0 |
+| kling/v2-1-standard | 19.64 | 2 | 0 |
+| kling/v2-5-turbo | — | 0 | 0 |
+| kling/v2-5-turbo-image-to-video-pro | 33.0 | 2 | 0 |
+| kling/v2-5-turbo-text-to-video-pro | 33.0 | 2 | 0 |
+| midjourney/api | — | 0 | 0 |
+| nano-banana-pro | 14.14 | 3 | 0 |
+| openai/4o-image | 4.71 | 1 | 0 |
+| qwen/image-edit | — | 0 | 0 |
+| qwen/image-to-image | 3.14 | 1 | 0 |
+| qwen/text-to-image | 3.14 | 1 | 0 |
+| recraft/crisp-upscale | 0.39 | 1 | 0 |
+| recraft/remove-background | 0.79 | 1 | 0 |
+| runway/gen-4 | — | 0 | 0 |
+| seedream/4.5-edit | 5.11 | 2 | 0 |
+| seedream/4.5-text-to-image | 5.11 | 2 | 0 |
+| sora-2-pro-image-to-video | 117.85 | 4 | 0 |
+| sora-2-pro-storyboard | — | 0 | 0 |
+| sora-2-text-to-video | 15.71 | 2 | 0 |
+| sora-watermark-remover | 7.86 | 1 | 0 |
+| suno/v5 | — | 0 | 0 |
+| topaz/image-upscale | 7.86 | 4 | 0 |
+| topaz/video-upscale | 9.43 | 3 | 0 |
+| wan/2-2-a14b-image-to-video-turbo | — | 0 | 0 |
+| wan/2-2-a14b-speech-to-video-turbo | — | 0 | 0 |
+| wan/2-2-a14b-text-to-video-turbo | — | 0 | 0 |
+| wan/2-2-animate-move | 4.71 | 3 | 0 |
+| wan/2-2-animate-replace | 4.71 | 3 | 0 |
+| wan/2-5-image-to-video | 47.14 | 4 | 0 |
+| wan/2-5-text-to-video | 47.14 | 4 | 0 |
+| z-image | 0.63 | 1 | 0 |
+
+## Free SKUs
+
+- ✅ None

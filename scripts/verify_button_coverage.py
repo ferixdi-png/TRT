@@ -22,6 +22,8 @@ IGNORED_CALLBACKS = {
 DYNAMIC_CALLBACK_PREFIXES = {
     "modelk:",
     "reset_wizard",
+    "sku:",
+    "sk:",
 }
 
 CALLBACK_PATTERNS = [
