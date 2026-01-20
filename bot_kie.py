@@ -12458,34 +12458,73 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if enum_values:
             default_value = param_info.get('default')
-            keyboard, price_variants_text, display_values = build_enum_keyboard_with_prices(
-                param_name=param_name,
-                enum_values=enum_values,
-                is_optional=is_optional,
-                default_value=default_value,
-                user_lang=user_lang,
-                model_id=model_id,
-                current_params=params,
+            price_depends, param_price_map = _get_param_price_variants(
+                model_id,
+                param_name,
+                session.get("params", {}),
             )
-            if not display_values:
-                blocked_text = (
-                    "⛔️ <b>Нет цены для доступных вариантов</b>"
-                    if user_lang == "ru"
-                    else "⛔️ <b>No price for available variants</b>"
-                )
-                blocked_keyboard = InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu"),
-                    ]
-                ])
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=blocked_text,
-                    reply_markup=blocked_keyboard,
-                    parse_mode="HTML",
-                )
-                return INPUTTING_PARAMS
+            display_values = list(enum_values)
+            if price_depends:
+                display_values = [value for value in enum_values if str(value) in param_price_map]
+                if not display_values:
+                    blocked_text = (
+                        "⛔️ <b>Нет цены для доступных вариантов</b>"
+                        if user_lang == "ru"
+                        else "⛔️ <b>No price for available variants</b>"
+                    )
+                    blocked_keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu"),
+                        ]
+                    ])
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=blocked_text,
+                        reply_markup=blocked_keyboard,
+                        parse_mode="HTML",
+                    )
+                    return INPUTTING_PARAMS
+
+            price_variants_text = ""
+            if price_depends:
+                price_rows = _format_param_price_rows([str(value) for value in display_values], param_price_map)
+                price_variants_text = "\n".join(price_rows)
+
+            keyboard = []
+            if price_depends:
+                from app.pricing.price_resolver import format_price_rub
+            for i in range(0, len(display_values), 2):
+                first_value = display_values[i]
+                first_label = str(first_value)
+                if price_depends:
+                    price_value = param_price_map.get(str(first_value))
+                    if price_value is not None:
+                        first_label = f"{first_label} — {format_price_rub(price_value)}₽"
+                row = [
+                    InlineKeyboardButton(first_label, callback_data=f"set_param:{param_name}:{first_value}")
+                ]
+                if i + 1 < len(display_values):
+                    second_value = display_values[i + 1]
+                    second_label = str(second_value)
+                    if price_depends:
+                        price_value = param_price_map.get(str(second_value))
+                        if price_value is not None:
+                            second_label = f"{second_label} — {format_price_rub(price_value)}₽"
+                    row.append(InlineKeyboardButton(second_label, callback_data=f"set_param:{param_name}:{second_value}"))
+                keyboard.append(row)
+
+            if is_optional:
+                if default_value is not None and default_value in display_values:
+                    default_text = (
+                        f"⏭️ Использовать по умолчанию ({default_value})"
+                        if user_lang == "ru"
+                        else f"⏭️ Use default ({default_value})"
+                    )
+                    keyboard.append([InlineKeyboardButton(default_text, callback_data=f"set_param:{param_name}:{default_value}")])
+                elif default_value is None:
+                    skip_text = "⏭️ Пропустить (auto)" if user_lang == "ru" else "⏭️ Skip (auto)"
+                    keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
 
             keyboard.append([
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
@@ -12495,7 +12534,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
 
             param_desc = param_info.get('description', '')
             default_info = ""
-            if default_value and default_value in enum_values:
+            if default_value and default_value in display_values:
                 default_info = (
                     f"\n\n💡 По умолчанию: <b>{default_value}</b>"
                     if user_lang == 'ru'
@@ -16153,14 +16192,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         "source": consume_result.get("source"),
                     },
                 )
+                try:
+                    free_counter_line = await get_free_counter_line(
+                        user_id,
+                        user_lang=user_lang,
+                        correlation_id=correlation_id,
+                        action_path="confirm_generate.post_consume",
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to refresh free counter after consume: %s", exc)
                 if consume_result.get("status") == "ok":
                     try:
-                        free_counter_line = await get_free_counter_line(
-                            user_id,
-                            user_lang=user_lang,
-                            correlation_id=correlation_id,
-                            action_path="confirm_generate.post_consume",
-                        )
                         snapshot = await get_free_counter_snapshot(user_id)
                         log_structured_event(
                             correlation_id=correlation_id,
@@ -16179,7 +16221,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             },
                         )
                     except Exception as exc:
-                        logger.warning("Failed to refresh free counter after consume: %s", exc)
+                        logger.warning("Failed to refresh free counter snapshot: %s", exc)
 
         if job_result.urls:
             save_generation_to_history(
