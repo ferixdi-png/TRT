@@ -135,6 +135,8 @@ class SessionStore:
 
 _SESSION_STORE = SessionStore(_DEFAULT_SESSION_DATA)
 
+_SESSION_CACHE_KEY = "_session_cache"
+
 
 def get_session_store(context: Any | None = None, application: Any | None = None) -> SessionStore:
     """Return SessionStore from deps if available, otherwise fallback to module store."""
@@ -146,3 +148,67 @@ def get_session_store(context: Any | None = None, application: Any | None = None
     if isinstance(store, dict):
         return SessionStore(store)
     return _SESSION_STORE
+
+
+def get_session_cached(
+    context: Any | None,
+    store: SessionStore,
+    user_id: int,
+    update_id: int | None,
+    default: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch session once per update and cache in context.user_data."""
+    if context is None or getattr(context, "user_data", None) is None or update_id is None:
+        return store.get(user_id, default)
+    cache = context.user_data.get(_SESSION_CACHE_KEY)
+    if cache and cache.get("update_id") == update_id and cache.get("user_id") == user_id:
+        return cache.get("session", default)
+    sentinel = object()
+    session = store.get(user_id, sentinel)
+    from_store = session is not sentinel
+    if not from_store:
+        session = default
+    context.user_data[_SESSION_CACHE_KEY] = {
+        "update_id": update_id,
+        "user_id": user_id,
+        "session": session,
+        "store_gets": 1,
+        "from_store": from_store,
+    }
+    return session
+
+
+def ensure_session_cached(
+    context: Any | None,
+    store: SessionStore,
+    user_id: int,
+    update_id: int | None,
+) -> Dict[str, Any]:
+    """Ensure session exists, reusing per-update cache."""
+    if context is None or getattr(context, "user_data", None) is None or update_id is None:
+        return store.ensure(user_id)
+    cache = context.user_data.get(_SESSION_CACHE_KEY)
+    if cache and cache.get("update_id") == update_id and cache.get("user_id") == user_id:
+        session = cache.get("session")
+        if isinstance(session, dict) and cache.get("from_store", False):
+            return session
+    session = store.ensure(user_id)
+    store_gets = int(cache.get("store_gets", 0) if cache else 0) + 1
+    context.user_data[_SESSION_CACHE_KEY] = {
+        "update_id": update_id,
+        "user_id": user_id,
+        "session": session,
+        "store_gets": store_gets,
+        "from_store": True,
+    }
+    return session
+
+
+def get_session_get_count(context: Any | None, update_id: int | None) -> int:
+    """Return number of store gets for the cached update."""
+    if context is None or getattr(context, "user_data", None) is None or update_id is None:
+        return 0
+    cache = context.user_data.get(_SESSION_CACHE_KEY)
+    if not cache or cache.get("update_id") != update_id:
+        return 0
+    return int(cache.get("store_gets", 0))
