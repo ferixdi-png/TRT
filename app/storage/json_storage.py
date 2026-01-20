@@ -203,16 +203,11 @@ class JsonStorage(BaseStorage):
     
     async def get_user_free_generations_remaining(self, user_id: int) -> int:
         """Получить оставшиеся бесплатные генерации"""
-        from app.config import get_settings
-        settings = get_settings()
-        free_per_day = 5  # NOTE: можно вынести в settings при необходимости
-        
+        from app.pricing.free_policy import get_free_daily_limit
+
+        free_per_day = get_free_daily_limit()
         used = await self.get_user_free_generations_today(user_id)
-        data = await self._load_json(self.free_generations_file)
-        user_key = str(user_id)
-        bonus = data.get(user_key, {}).get('bonus', 0)
-        total_available = free_per_day + bonus
-        return max(0, total_available - used)
+        return max(0, free_per_day - used)
     
     async def increment_free_generations(self, user_id: int) -> None:
         """Увеличить счетчик бесплатных генераций"""
