@@ -8772,7 +8772,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'/payments - Просмотр платежей\n'
                     f'/block_user - Заблокировать пользователя\n'
                     f'/unblock_user - Разблокировать пользователя\n'
-                    f'/user_balance - Баланс пользователя\n\n'
+                    f'/user_balance - Баланс пользователя\n'
+                    f'/config_check - Проверка конфигурации\n\n'
                     f'💬 <b>Настройки поддержки:</b>\n\n'
                     f'💬 Telegram: {support_telegram if support_telegram != "Не указано" else "Не указано"}\n\n'
                     f'💡 Для изменения настроек поддержки отредактируйте файл .env'
@@ -8793,7 +8794,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'/payments - View Payments\n'
                     f'/block_user - Block User\n'
                     f'/unblock_user - Unblock User\n'
-                    f'/user_balance - User Balance\n\n'
+                    f'/user_balance - User Balance\n'
+                    f'/config_check - Config Check\n\n'
                     f'💬 <b>Support Settings:</b>\n\n'
                     f'💬 Telegram: {support_telegram if support_telegram != "Not specified" else "Not specified"}\n\n'
                     f'💡 To change support settings, edit the .env file'
@@ -8807,6 +8809,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 settings_text += f'1 USD = {current_rate:.2f} RUB\n\n'
                 keyboard = [
                     [InlineKeyboardButton("💱 Установить курс валюты", callback_data="admin_set_currency_rate")],
+                    [InlineKeyboardButton("🧩 Проверка конфигурации", callback_data="admin_config_check")],
                     [InlineKeyboardButton("📢 Рассылка", callback_data="admin_broadcast")],
                     [InlineKeyboardButton("🎁 Промокоды", callback_data="admin_promocodes")],
                     [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
@@ -8816,6 +8819,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 settings_text += f'1 USD = {current_rate:.2f} RUB\n\n'
                 keyboard = [
                     [InlineKeyboardButton("💱 Set Exchange Rate", callback_data="admin_set_currency_rate")],
+                    [InlineKeyboardButton("🧩 Config Check", callback_data="admin_config_check")],
                     [InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
                     [InlineKeyboardButton("🎁 Promocodes", callback_data="admin_promocodes")],
                     [InlineKeyboardButton("◀️ Back", callback_data="admin_back_to_admin")]
@@ -8825,6 +8829,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 settings_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
+            )
+            return ConversationHandler.END
+
+        if data == "admin_config_check":
+            if user_id != ADMIN_ID:
+                await query.answer("Эта функция доступна только администратору.")
+                return ConversationHandler.END
+
+            from app.config_env import build_config_self_check_report
+
+            report = build_config_self_check_report()
+            user_lang = get_user_language(user_id)
+            back_label = "◀️ Назад" if user_lang == "ru" else "◀️ Back"
+            keyboard = [[InlineKeyboardButton(back_label, callback_data="admin_settings")]]
+            await query.edit_message_text(
+                report,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="HTML",
             )
             return ConversationHandler.END
         
@@ -18416,10 +18438,13 @@ async def main():
     logger.info(f"📁 Working directory: {os.getcwd()}")
     logger.info(f"🆔 Process ID: {os.getpid()}")
     logger.info(f"🌍 Platform: {platform.system()} {platform.release()}")
+
+    from app.config import get_settings
+    settings = get_settings(validate=True)
     
     # Проверка критичных переменных окружения
-    bot_token_set = bool(BOT_TOKEN)
-    kie_api_key_set = bool(os.getenv('KIE_API_KEY'))
+    bot_token_set = bool(settings.telegram_bot_token)
+    kie_api_key_set = bool(settings.kie_api_key)
     logger.info(f"🔑 BOT_TOKEN: {'✅ Set' if bot_token_set else '❌ NOT SET'}")
     logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key_set else '❌ NOT SET'}")
     logger.info("🗄️ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
@@ -19256,6 +19281,17 @@ async def main():
         )
         
         await update.message.reply_text(report, parse_mode='HTML')
+
+    async def config_check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Partner config check command (admin only)."""
+        user_id = update.effective_user.id
+        if user_id != ADMIN_ID:
+            await update.message.reply_text("❌ Эта команда доступна только администратору.")
+            return
+        from app.config_env import build_config_self_check_report
+
+        report = build_config_self_check_report()
+        await update.message.reply_text(report, parse_mode="HTML")
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
@@ -19264,6 +19300,7 @@ async def main():
     application.add_handler(CommandHandler("ask", ask))
     application.add_handler(CommandHandler("add", add_knowledge))
     application.add_handler(CommandHandler("selftest", selftest_command))
+    application.add_handler(CommandHandler("config_check", config_check_command))
     application.add_handler(CommandHandler("payments", admin_payments))
     application.add_handler(CommandHandler("block_user", admin_block_user))
     application.add_handler(CommandHandler("unblock_user", admin_unblock_user))

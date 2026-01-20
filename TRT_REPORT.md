@@ -1614,3 +1614,17 @@ tests/test_409_conflict_fix.py ........
 
 **Проверки/тесты:**
 - `pytest -q tests/test_main_menu.py tests/test_welcome_text.py tests/test_delivery_charging_policy.py tests/test_storage_runtime_no_git_commits.py`
+
+## 2026-02-20: Runtime storage branch guard + idempotent history events
+**Почему GitHub показывает recent pushes:**
+- Runtime-данные (балансы, лимиты, счётчики, истории) пишутся в GitHub storage через Contents API, и раньше не было жесткой гарантии, что запись всегда идёт в отдельную storage-ветку. При совпадении `GITHUB_BRANCH` и storage-ветки любые runtime-изменения попадали в `main`, создавая лишние коммиты и триггеря автодеплой.
+
+**Что изменено:**
+- Добавлен явный guard: storage-ветка берётся из `STORAGE_BRANCH` (fallback `STORAGE_GITHUB_BRANCH`, default `storage`) и валидируется, что она отличается от `GITHUB_BRANCH` при работе в одном репозитории.
+- GitHubStorage теперь отказывается стартовать, если storage-ветка совпадает с code-веткой, чтобы исключить записи в `main`.
+- Добавлен слой history-событий с дедупликацией `event_id`, чтобы повторные апдейты/ретраи не дублировали историю.
+- Runtime JSON обновления идут через optimistic merge, а история пишется идемпотентно, сохраняя совместимость со старым `generations_history.json`.
+
+**Гарантии корректности историй/счётчиков:**
+- Запись history-событий теперь идемпотентна по `event_id`, а при конфликте по sha используется повторный read-merge-write.
+- Конфликты при параллельных обновлениях приводят к повтору с backoff, и итоговые значения баланса/счётчиков сохраняются корректно.
