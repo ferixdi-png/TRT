@@ -35,8 +35,9 @@ class GitHubConflictError(RuntimeError):
 
 @dataclass(frozen=True)
 class GitHubConfig:
-    repo: str
-    branch: str
+    storage_repo: str
+    storage_branch: str
+    code_repo: str
     code_branch: str
     token: str
     committer_name: str
@@ -76,19 +77,21 @@ class GitHubStorage(BaseStorage):
         self.jobs_file = "generation_jobs.json"
 
         logger.info(
-            "[STORAGE] mode=github instance=%s prefix=%s branch=%s parallel=%s retries=%s timeout=%ss",
+            "[STORAGE] mode=github instance=%s prefix=%s repo=%s branch=%s parallel=%s retries=%s timeout=%ss",
             self.config.bot_instance_id,
             self.config.storage_prefix,
-            self.config.branch,
+            self.config.storage_repo,
+            self.config.storage_branch,
             self.config.max_parallel,
             self.config.max_retries,
             self.config.timeout_seconds,
         )
 
     def _load_config(self) -> GitHubConfig:
-        repo = os.getenv("GITHUB_REPO", "").strip()
+        code_repo = os.getenv("GITHUB_REPO", "").strip()
         code_branch = os.getenv("GITHUB_BRANCH", "main").strip()
-        branch = os.getenv("STORAGE_GITHUB_BRANCH", code_branch).strip()
+        storage_branch = os.getenv("STORAGE_GITHUB_BRANCH", "storage").strip()
+        storage_repo = os.getenv("STORAGE_GITHUB_REPO", code_repo).strip()
         token = os.getenv("GITHUB_TOKEN", "").strip()
         committer_name = os.getenv("GITHUB_COMMITTER_NAME", "TRT Bot").strip()
         committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "bot@example.com").strip()
@@ -100,7 +103,7 @@ class GitHubStorage(BaseStorage):
         backoff_base = float(os.getenv("GITHUB_BACKOFF_BASE", "0.5"))
 
         missing = []
-        if not repo:
+        if not code_repo:
             missing.append("GITHUB_REPO")
         if not token:
             missing.append("GITHUB_TOKEN")
@@ -114,8 +117,9 @@ class GitHubStorage(BaseStorage):
             )
 
         return GitHubConfig(
-            repo=repo,
-            branch=branch,
+            storage_repo=storage_repo,
+            storage_branch=storage_branch,
+            code_repo=code_repo,
             code_branch=code_branch,
             token=token,
             committer_name=committer_name,
@@ -164,9 +168,11 @@ class GitHubStorage(BaseStorage):
         async with self._storage_branch_lock:
             if self._storage_branch_checked:
                 return
-            storage_branch = self.config.branch
+            storage_branch = self.config.storage_branch
+            storage_repo = self.config.storage_repo
             code_branch = self.config.code_branch
-            if storage_branch == code_branch:
+            code_repo = self.config.code_repo
+            if storage_branch == code_branch and storage_repo == code_repo:
                 self._storage_branch_checked = True
                 return
             ref_url = self._git_url(f"ref/heads/{storage_branch}")
@@ -180,12 +186,15 @@ class GitHubStorage(BaseStorage):
             if response.status == 200:
                 self._storage_branch_checked = True
                 return
-            base_ref_url = self._git_url(f"ref/heads/{code_branch}")
+            base_branch = code_branch
+            if storage_repo != code_repo:
+                base_branch = await self._get_default_branch() or code_branch
+            base_ref_url = self._git_url(f"ref/heads/{base_branch}")
             base_response = await self._request_with_retry(
                 "GET",
                 base_ref_url,
                 op="branch_base",
-                path=code_branch,
+                path=base_branch,
                 ok_statuses=(200,),
             )
             base_payload = self._parse_json(base_response.text)
@@ -193,7 +202,7 @@ class GitHubStorage(BaseStorage):
             if not base_sha:
                 logger.error(
                     "[GITHUB] op=branch_base path=%s ok=false error=no_sha",
-                    code_branch,
+                    base_branch,
                 )
                 return
             create_url = self._git_url("refs")
@@ -233,10 +242,24 @@ class GitHubStorage(BaseStorage):
         return f"{self.config.storage_prefix}/{self.config.bot_instance_id}/{safe_name}"
 
     def _contents_url(self, path: str) -> str:
-        return f"https://api.github.com/repos/{self.config.repo}/contents/{path}"
+        return f"https://api.github.com/repos/{self.config.storage_repo}/contents/{path}"
 
     def _git_url(self, path: str) -> str:
-        return f"https://api.github.com/repos/{self.config.repo}/git/{path.lstrip('/')}"
+        return f"https://api.github.com/repos/{self.config.storage_repo}/git/{path.lstrip('/')}"
+
+    def _repo_url(self) -> str:
+        return f"https://api.github.com/repos/{self.config.storage_repo}"
+
+    async def _get_default_branch(self) -> Optional[str]:
+        response = await self._request_with_retry(
+            "GET",
+            self._repo_url(),
+            op="repo_info",
+            path=self.config.storage_repo,
+            ok_statuses=(200,),
+        )
+        payload = self._parse_json(response.text)
+        return payload.get("default_branch")
 
     async def _request_with_retry(
         self,
@@ -327,7 +350,9 @@ class GitHubStorage(BaseStorage):
         url = self._contents_url(path)
         payload_json = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
         logger.info(
-            "[GITHUB] write_attempt path=%s size_bytes=%s",
+            "[GITHUB] write_attempt repo=%s branch=%s path=%s size_bytes=%s",
+            self.config.storage_repo,
+            self.config.storage_branch,
             path,
             len(payload_json.encode("utf-8")),
         )
@@ -340,7 +365,7 @@ class GitHubStorage(BaseStorage):
         payload = {
             "message": f"storage update {path}",
             "content": content,
-            "branch": self.config.branch,
+            "branch": self.config.storage_branch,
             "committer": {
                 "name": self.config.committer_name,
                 "email": self.config.committer_email,
@@ -457,7 +482,7 @@ class GitHubStorage(BaseStorage):
             op="read",
             path=path,
             ok_statuses=(200, 404),
-            params={"ref": self.config.branch},
+            params={"ref": self.config.storage_branch},
         )
         if response.status == 404:
             return {}, None, 404
@@ -527,7 +552,7 @@ class GitHubStorage(BaseStorage):
                 "User-Agent": "TRT-GitHubStorage",
             }
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-                async with session.get(url, params={"ref": self.config.branch}) as response:
+                async with session.get(url, params={"ref": self.config.storage_branch}) as response:
                     if response.status not in (200, 404):
                         payload = await response.text()
                         raise RuntimeError(f"GitHub test_connection failed {response.status}: {payload}")
