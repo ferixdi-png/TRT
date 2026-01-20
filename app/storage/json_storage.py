@@ -8,7 +8,7 @@ import json
 import asyncio
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime
 import uuid
 import aiofiles
@@ -367,6 +367,8 @@ class JsonStorage(BaseStorage):
         operation_id: Optional[str] = None
     ) -> str:
         """Добавить генерацию в историю"""
+        from app.services.history_service import append_event
+
         gen_id = operation_id or str(uuid.uuid4())
         data = await self._load_json(self.generations_history_file)
         user_key = str(user_id)
@@ -389,6 +391,18 @@ class JsonStorage(BaseStorage):
         data[user_key] = data[user_key][-100:]
         
         await self._save_json(self.generations_history_file, data)
+        await append_event(
+            self,
+            user_id=user_id,
+            kind="generation",
+            payload={
+                "model_id": model_id,
+                "model_name": model_name,
+                "price": price,
+                "result_urls": result_urls,
+            },
+            event_id=gen_id,
+        )
         return gen_id
     
     async def get_user_generations_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
@@ -534,6 +548,17 @@ class JsonStorage(BaseStorage):
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         target = self.data_dir / filename
         await self._save_json(target, data)
+
+    async def update_json_file(
+        self,
+        filename: str,
+        update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        target = self.data_dir / filename
+        data = await self._load_json(target)
+        updated = update_fn(dict(data))
+        await self._save_json(target, updated)
+        return updated
     
     # ==================== UTILITY ====================
     
