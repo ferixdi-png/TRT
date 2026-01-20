@@ -6,15 +6,15 @@
       "model_id": "z-image",
       "model_name": "Qwen Z-Image Text to Image",
       "params": {
-        "aspect_ratio": "9:16",
-        "prompt": "котик"
+        "aspect_ratio": "16:9",
+        "prompt": "сова"
       },
       "price": 0.0,
       "result_urls": [
-        "https://tempfile.aiquickdraw.com/f/a0e18f4f-6bcb-4484-a786-482336f63268_0.png"
+        "https://tempfile.aiquickdraw.com/f/a0e19e5c-ea01-40ae-9fd4-cb181ed805f7_0.png"
       ],
-      "task_id": "8c90b185a0eabda9dd75298382890c5e",
-      "timestamp": 1768906338
+      "task_id": "2876dfd04982eb09dad997fa8f22086f",
+      "timestamp": 1768908864
     }
   ]
 }
