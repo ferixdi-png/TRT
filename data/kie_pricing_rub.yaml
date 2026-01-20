@@ -1,0 +1,887 @@
+version: "1.0"
+currency: "RUB"
+source: "KIE PRICING (RUB) — provided list"
+notes: "Prices are final RUB values from the provided pricing list; no inference beyond explicit params."
+models:
+  - id: z-image
+    skus:
+      - unit: image
+        price_rub: 0.63
+        params: {}
+        notes: text-to-image
+  - id: nano-banana-pro
+    skus:
+      - unit: image
+        price_rub: 14.14
+        params:
+          resolution: "1K"
+        notes: 1/2K
+      - unit: image
+        price_rub: 14.14
+        params:
+          resolution: "2K"
+        notes: 1/2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          resolution: "4K"
+        notes: 4K
+  - id: seedream/4.5-text-to-image
+    skus:
+      - unit: image
+        price_rub: 5.11
+        params:
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          quality: high
+        notes: High
+  - id: seedream/4.5-edit
+    skus:
+      - unit: image
+        price_rub: 5.11
+        params:
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          quality: high
+        notes: High
+  - id: sora-2-pro-image-to-video
+    skus:
+      - unit: video
+        price_rub: 117.85
+        params:
+          size: standard
+          n_frames: "10"
+        notes: Pro Standard 10s
+      - unit: video
+        price_rub: 212.14
+        params:
+          size: standard
+          n_frames: "15"
+        notes: Pro Standard 15s
+      - unit: video
+        price_rub: 259.28
+        params:
+          size: high
+          n_frames: "10"
+        notes: Pro High 10s
+      - unit: video
+        price_rub: 494.99
+        params:
+          size: high
+          n_frames: "15"
+        notes: Pro High 15s
+  - id: sora-watermark-remover
+    skus:
+      - unit: removal
+        price_rub: 7.86
+        params: {}
+        notes: per removal
+  - id: sora-2-text-to-video
+    skus:
+      - unit: video
+        price_rub: 15.71
+        params:
+          n_frames: "10"
+        notes: Standard 10s
+      - unit: video
+        price_rub: 19.64
+        params:
+          n_frames: "15"
+        notes: Standard 15s
+  - id: kling-2.6/text-to-video
+    skus:
+      - unit: video
+        price_rub: 86.43
+        params:
+          sound: false
+          duration: "10"
+        notes: text-to-video WITHOUT audio 10s
+      - unit: video
+        price_rub: 43.21
+        params:
+          sound: false
+          duration: "5"
+        notes: text-to-video WITHOUT audio 5s
+    unmapped:
+      - unit: video
+        price_rub: 172.85
+        notes: text-to-video WITH audio (duration not specified)
+      - unit: video
+        price_rub: 86.43
+        notes: text-to-video WITH audio (second slot in dump, ambiguous)
+  - id: kling-2.6/image-to-video
+    skus:
+      - unit: video
+        price_rub: 86.43
+        params:
+          sound: false
+          duration: "10"
+        notes: image-to-video WITHOUT audio 10s
+      - unit: video
+        price_rub: 43.21
+        params:
+          sound: false
+          duration: "5"
+        notes: image-to-video WITHOUT audio 5s
+      - unit: video
+        price_rub: 86.43
+        params:
+          sound: true
+          duration: "5"
+        notes: image-to-video WITH audio 5s
+    unmapped:
+      - unit: video
+        price_rub: 172.85
+        notes: image-to-video WITH audio (duration not specified)
+  - id: flux-2/flex-text-to-image
+    skus:
+      - unit: image
+        price_rub: 11.0
+        params:
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 18.86
+        params:
+          resolution: "2K"
+        notes: 2K
+  - id: flux-2/flex-image-to-image
+    skus:
+      - unit: image
+        price_rub: 11.0
+        params:
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 18.86
+        params:
+          resolution: "2K"
+        notes: 2K
+  - id: flux-2/pro-text-to-image
+    skus:
+      - unit: image
+        price_rub: 3.93
+        params:
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 5.5
+        params:
+          resolution: "2K"
+        notes: 2K
+  - id: flux-2/pro-image-to-image
+    skus:
+      - unit: image
+        price_rub: 3.93
+        params:
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 5.5
+        params:
+          resolution: "2K"
+        notes: 2K
+  - id: topaz/image-upscale
+    skus:
+      - unit: image
+        price_rub: 7.86
+        params:
+          upscale_factor: "1"
+        notes: 2K
+      - unit: image
+        price_rub: 15.71
+        params:
+          upscale_factor: "2"
+        notes: 4K
+      - unit: image
+        price_rub: 15.71
+        params:
+          upscale_factor: "4"
+        notes: 4K
+      - unit: image
+        price_rub: 31.43
+        params:
+          upscale_factor: "8"
+        notes: 8K
+  - id: kling/v2-5-turbo-text-to-video-pro
+    skus:
+      - unit: video
+        price_rub: 66.0
+        params:
+          duration: "10"
+        notes: Turbo Pro 10s
+      - unit: video
+        price_rub: 33.0
+        params:
+          duration: "5"
+        notes: Turbo Pro 5s
+  - id: kling/v2-5-turbo-image-to-video-pro
+    skus:
+      - unit: video
+        price_rub: 66.0
+        params:
+          duration: "10"
+        notes: Turbo Pro 10s
+      - unit: video
+        price_rub: 33.0
+        params:
+          duration: "5"
+        notes: Turbo Pro 5s
+  - id: wan/2-5-text-to-video
+    skus:
+      - unit: video
+        price_rub: 47.14
+        params:
+          duration: "5"
+          resolution: 720p
+        notes: default 5s 720p
+      - unit: video
+        price_rub: 78.57
+        params:
+          duration: "5"
+          resolution: 1080p
+        notes: default 5s 1080p
+      - unit: video
+        price_rub: 94.28
+        params:
+          duration: "10"
+          resolution: 720p
+        notes: default 10s 720p
+      - unit: video
+        price_rub: 157.14
+        params:
+          duration: "10"
+          resolution: 1080p
+        notes: default 10s 1080p
+  - id: wan/2-5-image-to-video
+    skus:
+      - unit: video
+        price_rub: 47.14
+        params:
+          duration: "5"
+          resolution: 720p
+        notes: default 5s 720p
+      - unit: video
+        price_rub: 78.57
+        params:
+          duration: "5"
+          resolution: 1080p
+        notes: default 5s 1080p
+      - unit: video
+        price_rub: 94.28
+        params:
+          duration: "10"
+          resolution: 720p
+        notes: default 10s 720p
+      - unit: video
+        price_rub: 157.14
+        params:
+          duration: "10"
+          resolution: 1080p
+        notes: default 10s 1080p
+  - id: wan/2-2-animate-move
+    skus:
+      - unit: generation
+        price_rub: 4.71
+        params:
+          resolution: 480p
+        notes: Move 1s 480p
+      - unit: generation
+        price_rub: 7.46
+        params:
+          resolution: 580p
+        notes: Move 1s 580p
+      - unit: generation
+        price_rub: 9.82
+        params:
+          resolution: 720p
+        notes: Move 1s 720p
+  - id: wan/2-2-animate-replace
+    skus:
+      - unit: generation
+        price_rub: 4.71
+        params:
+          resolution: 480p
+        notes: Replace 1s 480p
+      - unit: generation
+        price_rub: 7.46
+        params:
+          resolution: 580p
+        notes: Replace 1s 580p
+      - unit: generation
+        price_rub: 9.82
+        params:
+          resolution: 720p
+        notes: Replace 1s 720p
+  - id: hailuo/02-text-to-video-standard
+    skus:
+      - unit: video
+        price_rub: 23.57
+        params:
+          duration: "6"
+        notes: Standard 6s 768p
+      - unit: video
+        price_rub: 39.29
+        params:
+          duration: "10"
+        notes: Standard 10s 768p
+  - id: hailuo/02-text-to-video-pro
+    skus:
+      - unit: video
+        price_rub: 44.78
+        params: {}
+        notes: Pro 6s 1080p
+  - id: hailuo/02-image-to-video-standard
+    skus:
+      - unit: video
+        price_rub: 9.43
+        params:
+          duration: "6"
+          resolution: 512P
+        notes: Standard 6s 512p
+      - unit: video
+        price_rub: 15.71
+        params:
+          duration: "10"
+          resolution: 512P
+        notes: Standard 10s 512p
+      - unit: video
+        price_rub: 39.29
+        params:
+          duration: "10"
+          resolution: 768P
+        notes: Standard 10s 768p
+  - id: hailuo/02-image-to-video-pro
+    skus:
+      - unit: video
+        price_rub: 44.78
+        params: {}
+        notes: Pro 6s 1080p
+  - id: topaz/video-upscale
+    skus:
+      - unit: second
+        price_rub: 9.43
+        params:
+          upscale_factor: "1"
+        notes: 1x
+      - unit: second
+        price_rub: 9.43
+        params:
+          upscale_factor: "2"
+        notes: 2x
+      - unit: second
+        price_rub: 9.43
+        params:
+          upscale_factor: "4"
+        notes: 4x
+  - id: kling/v1-avatar-standard
+    skus:
+      - unit: second
+        price_rub: 6.29
+        params: {}
+        notes: Standard up to 15s 720p
+  - id: kling/ai-avatar-v1-pro
+    skus:
+      - unit: second
+        price_rub: 12.57
+        params: {}
+        notes: Pro up to 15s 1080p
+  - id: bytedance/seedream-v4-text-to-image
+    skus:
+      - unit: image
+        price_rub: 3.93
+        params: {}
+        notes: text-to-image
+  - id: bytedance/seedream-v4-edit
+    skus:
+      - unit: image
+        price_rub: 3.93
+        params: {}
+        notes: image-to-image
+  - id: recraft/remove-background
+    skus:
+      - unit: image
+        price_rub: 0.79
+        params: {}
+        notes: Remove Background
+  - id: recraft/crisp-upscale
+    skus:
+      - unit: image
+        price_rub: 0.39
+        params: {}
+        notes: Crisp Upscale
+  - id: ideogram/v3-reframe
+    skus:
+      - unit: image
+        price_rub: 2.75
+        params:
+          rendering_speed: TURBO
+        notes: Turbo
+      - unit: image
+        price_rub: 5.5
+        params:
+          rendering_speed: BALANCED
+        notes: Balanced
+      - unit: image
+        price_rub: 7.86
+        params:
+          rendering_speed: QUALITY
+        notes: Quality
+  - id: bytedance/seedream
+    skus:
+      - unit: image
+        price_rub: 2.75
+        params: {}
+        notes: text-to-image
+  - id: qwen/text-to-image
+    skus:
+      - unit: image
+        price_rub: 3.14
+        params: {}
+        notes: text-to-image
+  - id: qwen/image-to-image
+    skus:
+      - unit: image
+        price_rub: 3.14
+        params: {}
+        notes: image-to-image
+  - id: ideogram/character
+    skus:
+      - unit: image
+        price_rub: 9.43
+        params:
+          rendering_speed: TURBO
+        notes: TURBO
+      - unit: image
+        price_rub: 14.14
+        params:
+          rendering_speed: BALANCED
+        notes: BALANCED
+      - unit: image
+        price_rub: 18.86
+        params:
+          rendering_speed: QUALITY
+        notes: QUALITY
+  - id: ideogram/character-remix
+    skus:
+      - unit: image
+        price_rub: 9.43
+        params:
+          rendering_speed: TURBO
+        notes: TURBO
+      - unit: image
+        price_rub: 14.14
+        params:
+          rendering_speed: BALANCED
+        notes: BALANCED
+      - unit: image
+        price_rub: 18.86
+        params:
+          rendering_speed: QUALITY
+        notes: QUALITY
+  - id: ideogram/character-edit
+    skus:
+      - unit: image
+        price_rub: 9.43
+        params:
+          rendering_speed: TURBO
+        notes: TURBO
+      - unit: image
+        price_rub: 14.14
+        params:
+          rendering_speed: BALANCED
+        notes: BALANCED
+      - unit: image
+        price_rub: 18.86
+        params:
+          rendering_speed: QUALITY
+        notes: QUALITY
+  - id: kling/v2-1-master-image-to-video
+    skus:
+      - unit: video
+        price_rub: 125.71
+        params:
+          duration: "5"
+        notes: Master 5s
+      - unit: video
+        price_rub: 251.42
+        params:
+          duration: "10"
+        notes: Master 10s
+  - id: kling/v2-1-standard
+    skus:
+      - unit: video
+        price_rub: 19.64
+        params:
+          duration: "5"
+        notes: Standard 5s
+      - unit: video
+        price_rub: 39.29
+        params:
+          duration: "10"
+        notes: Standard 10s
+  - id: kling/v2-1-pro
+    skus:
+      - unit: video
+        price_rub: 39.29
+        params:
+          duration: "5"
+        notes: Pro 5s
+      - unit: video
+        price_rub: 78.57
+        params:
+          duration: "10"
+        notes: Pro 10s
+  - id: kling/v2-1-master-text-to-video
+    skus:
+      - unit: video
+        price_rub: 125.71
+        params:
+          duration: "5"
+        notes: Master 5s
+      - unit: video
+        price_rub: 251.42
+        params:
+          duration: "10"
+        notes: Master 10s
+  - id: ideogram/v3-text-to-image
+    skus:
+      - unit: image
+        price_rub: 2.75
+        params:
+          rendering_speed: TURBO
+        notes: TURBO
+      - unit: image
+        price_rub: 5.5
+        params:
+          rendering_speed: BALANCED
+        notes: BALANCED
+      - unit: image
+        price_rub: 7.86
+        params:
+          rendering_speed: QUALITY
+        notes: QUALITY
+  - id: ideogram/v3-edit
+    skus:
+      - unit: image
+        price_rub: 2.75
+        params:
+          rendering_speed: TURBO
+        notes: TURBO
+      - unit: image
+        price_rub: 5.5
+        params:
+          rendering_speed: BALANCED
+        notes: BALANCED
+      - unit: image
+        price_rub: 7.86
+        params:
+          rendering_speed: QUALITY
+        notes: QUALITY
+  - id: ideogram/v3-remix
+    skus:
+      - unit: image
+        price_rub: 2.75
+        params:
+          rendering_speed: TURBO
+        notes: TURBO
+      - unit: image
+        price_rub: 5.5
+        params:
+          rendering_speed: BALANCED
+        notes: BALANCED
+      - unit: image
+        price_rub: 7.86
+        params:
+          rendering_speed: QUALITY
+        notes: QUALITY
+  - id: google/imagen4-fast
+    skus:
+      - unit: request
+        price_rub: 3.14
+        params: {}
+        notes: text-to-image Fast
+  - id: google/imagen4
+    skus:
+      - unit: request
+        price_rub: 6.29
+        params: {}
+        notes: text-to-image default
+  - id: google/imagen4-ultra
+    skus:
+      - unit: image
+        price_rub: 9.43
+        params: {}
+        notes: text-to-image Ultra
+  - id: google/nano-banana
+    skus:
+      - unit: image
+        price_rub: 3.14
+        params: {}
+        notes: text-to-image
+  - id: google/nano-banana-edit
+    skus:
+      - unit: image
+        price_rub: 3.14
+        params: {}
+        notes: image-to-image edit
+  - id: openai/4o-image
+    skus:
+      - unit: image
+        price_rub: 4.71
+        params: {}
+        notes: text-to-image
+  - id: bytedance/v1-pro-fast-image-to-video
+    skus:
+      - unit: video
+        price_rub: 12.57
+        params:
+          duration: "5"
+          resolution: 720p
+        notes: Fast 5s 720p
+      - unit: video
+        price_rub: 28.29
+        params:
+          duration: "10"
+          resolution: 720p
+        notes: Fast 10s 720p
+      - unit: video
+        price_rub: 28.29
+        params:
+          duration: "5"
+          resolution: 1080p
+        notes: Fast 5s 1080p
+      - unit: video
+        price_rub: 56.57
+        params:
+          duration: "10"
+          resolution: 1080p
+        notes: Fast 10s 1080p
+  - id: wan/2-2-a14b-speech-to-video-turbo
+    unmapped:
+      - unit: second
+        price_rub: 9.43
+        notes: 480p per second (pricing list)
+      - unit: second
+        price_rub: 14.14
+        notes: 580p per second (pricing list)
+      - unit: second
+        price_rub: 18.86
+        notes: 720p per second (pricing list)
+  - id: qwen/image-edit
+    unmapped:
+      - unit: megapixel
+        price_rub: 4.71
+        notes: image-to-image (per megapixel)
+  - id: flux/kontext
+    unmapped:
+      - unit: image
+        price_rub: 3.93
+        notes: Pro
+      - unit: image
+        price_rub: 7.86
+        notes: Max
+  - id: elevenlabs/audio-isolation
+    unmapped:
+      - unit: second
+        price_rub: 0.16
+        notes: Audio Isolation (per second)
+  - id: elevenlabs/sound-effect
+    unmapped:
+      - unit: second
+        price_rub: 0.19
+        notes: Sound Effect V2 (per second)
+  - id: elevenlabs/speech-to-text
+    unmapped:
+      - unit: minute
+        price_rub: 2.75
+        notes: Speech to Text (per minute)
+  - id: elevenlabs/text-to-speech
+    unmapped:
+      - unit: 1000_chars
+        price_rub: 4.71
+        notes: Text to Speech turbo 2.5
+      - unit: 1000_chars
+        price_rub: 9.43
+        notes: Text to Speech multilingual v2
+  - id: grok/imagine
+    unmapped:
+      - unit: image
+        price_rub: 3.14
+        notes: image-to-image (per 2 images)
+      - unit: image
+        price_rub: 3.14
+        notes: text-to-image (per 6 images)
+      - unit: upscale
+        price_rub: 7.86
+        notes: upscale 360p→720p
+      - unit: video
+        price_rub: 15.71
+        notes: image-to-video 6s
+      - unit: video
+        price_rub: 15.71
+        notes: text-to-video 6s
+  - id: google/veo-3.1
+    unmapped:
+      - unit: video
+        price_rub: 47.14
+        notes: reference-to-video Fast
+      - unit: video
+        price_rub: 47.14
+        notes: text-to-video Fast
+      - unit: video
+        price_rub: 47.14
+        notes: image-to-video Fast
+      - unit: video
+        price_rub: 196.43
+        notes: text-to-video Quality
+      - unit: video
+        price_rub: 196.43
+        notes: image-to-video Quality
+  - id: google/veo-3
+    unmapped:
+      - unit: video
+        price_rub: 47.14
+        notes: reference-to-video Fast
+  - id: sora-2-pro-storyboard
+    unmapped:
+      - unit: video
+        price_rub: 117.85
+        notes: storyboard Pro 10s
+      - unit: video
+        price_rub: 212.14
+        notes: storyboard Pro 15–25s
+  - id: kling/v2-5-turbo
+    unmapped:
+      - unit: video
+        price_rub: 66.0
+        notes: text-to-video Turbo Pro 10s
+      - unit: video
+        price_rub: 33.0
+        notes: text-to-video Turbo Pro 5s
+  - id: hailuo/2.3
+    unmapped:
+      - unit: video
+        price_rub: 70.71
+        notes: image-to-video Pro 10s 768p
+      - unit: video
+        price_rub: 62.86
+        notes: image-to-video Pro 6s 1080p
+      - unit: video
+        price_rub: 35.36
+        notes: image-to-video Pro 6s 768p
+      - unit: video
+        price_rub: 23.57
+        notes: image-to-video Standard 6s 768p
+      - unit: video
+        price_rub: 39.29
+        notes: image-to-video Standard 10s 768p
+      - unit: video
+        price_rub: 39.29
+        notes: image-to-video Standard 6s 1080p
+  - id: infinitalk/from-audio
+    unmapped:
+      - unit: second
+        price_rub: 2.36
+        notes: up to 15s 480p
+      - unit: second
+        price_rub: 9.43
+        notes: up to 15s 720p
+  - id: google/nanobanana-gemini-2.5-flash
+    unmapped:
+      - unit: 1m_tokens
+        price_rub: 14.14
+        notes: Gemini 2.5 flash Input
+      - unit: 1m_tokens
+        price_rub: 117.85
+        notes: Gemini 2.5 flash Output
+  - id: runway/gen-4
+    unmapped:
+      - unit: video
+        price_rub: 86.43
+        notes: Runway Aleph
+      - unit: video
+        price_rub: 9.43
+        notes: text-to-video 5s 720p
+      - unit: video
+        price_rub: 23.57
+        notes: text-to-video 10s 720p
+      - unit: video
+        price_rub: 23.57
+        notes: text-to-video 5s 1080p
+      - unit: video
+        price_rub: 9.43
+        notes: image-to-video 5s 720p
+      - unit: video
+        price_rub: 23.57
+        notes: image-to-video 10s 720p
+      - unit: video
+        price_rub: 23.57
+        notes: image-to-video 5s 1080p
+  - id: suno/v5
+    unmapped:
+      - unit: request
+        price_rub: 3.93
+        notes: Replace Music Section
+      - unit: request
+        price_rub: 39.29
+        notes: Multi-Stem Separation
+      - unit: request
+        price_rub: 7.86
+        notes: Vocal Separation
+      - unit: request
+        price_rub: 0.31
+        notes: convert-to-wav-format
+      - unit: request
+        price_rub: 0.31
+        notes: Generate Lyrics
+      - unit: request
+        price_rub: 9.43
+        notes: upload-and-cover-audio
+      - unit: request
+        price_rub: 1.57
+        notes: create-music-video
+      - unit: request
+        price_rub: 9.43
+        notes: upload-and-extend-audio
+      - unit: request
+        price_rub: 9.43
+        notes: add-instrumental
+      - unit: request
+        price_rub: 9.43
+        notes: Generate Music
+      - unit: request
+        price_rub: 9.43
+        notes: Extend Music
+      - unit: request
+        price_rub: 9.43
+        notes: add-vocals
+  - id: midjourney/api
+    unmapped:
+      - unit: request
+        price_rub: 6.29
+        notes: text-to-image fast
+      - unit: request
+        price_rub: 12.57
+        notes: text-to-image turbo
+      - unit: request
+        price_rub: 2.36
+        notes: text-to-image relaxed
+      - unit: request
+        price_rub: 6.29
+        notes: image-to-image fast
+      - unit: request
+        price_rub: 12.57
+        notes: image-to-image turbo
+      - unit: request
+        price_rub: 2.36
+        notes: image-to-image relaxed
+      - unit: request
+        price_rub: 47.14
+        notes: image-to-video
