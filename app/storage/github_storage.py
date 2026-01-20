@@ -59,14 +59,21 @@ class GitHubStorage(BaseStorage):
         self.config = self._load_config()
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
         self._implicit_dirs_logged = False
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._session_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._sessions: Dict[int, aiohttp.ClientSession] = {}
+        self._session_loops: Dict[int, asyncio.AbstractEventLoop] = {}
+        self._sessions_lock = threading.Lock()
         self._stub_enabled = os.getenv("GITHUB_STORAGE_STUB", "0") in ("1", "true", "yes")
         self._stub_store: Dict[str, Tuple[Dict[str, Any], Optional[str]]] = {}
         self._storage_branch_checked = False
         self._storage_branch_lock = asyncio.Lock()
         self._legacy_prefix = self.config.legacy_storage_prefix
         self._legacy_warning_logged = False
+        self._read_cache: Dict[str, "GitHubStorage._ReadCacheEntry"] = {}
+        self._read_cache_ttl = float(os.getenv("GITHUB_READ_CACHE_TTL", "3"))
+        self._read_inflight: Dict[int, Dict[str, asyncio.Future]] = {}
+        self._read_inflight_lock = threading.Lock()
+        self._write_locks_by_loop: Dict[int, Dict[str, asyncio.Lock]] = {}
+        self._write_locks_lock = threading.Lock()
 
         self.balances_file = "user_balances.json"
         self.languages_file = "user_languages.json"
@@ -148,27 +155,151 @@ class GitHubStorage(BaseStorage):
         headers: Dict[str, str]
         text: str
 
+    @dataclass(frozen=True)
+    class _ReadCacheEntry:
+        data: Dict[str, Any]
+        sha: Optional[str]
+        fetched_at: float
+
+    def _loop_id(self, loop: asyncio.AbstractEventLoop) -> int:
+        return id(loop)
+
     async def _close_session(self, reason: str = "close") -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
-            logger.info("[GITHUB] session_closed=true reason=%s", reason)
-        self._session = None
-        self._session_loop = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is None:
+            with self._sessions_lock:
+                self._sessions.clear()
+                self._session_loops.clear()
+            logger.info("[GITHUB] session_detached=true reason=%s", reason)
+            return
+
+        loop_id = self._loop_id(loop)
+        session = None
+        with self._sessions_lock:
+            session = self._sessions.pop(loop_id, None)
+            self._session_loops.pop(loop_id, None)
+        if session and not session.closed:
+            await session.close()
+            logger.info("[GITHUB] session_closed=true reason=%s loop_id=%s", reason, loop_id)
+
+    async def _close_all_sessions(self, reason: str = "close") -> None:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        with self._sessions_lock:
+            sessions = list(self._sessions.items())
+            loops = dict(self._session_loops)
+            self._sessions.clear()
+            self._session_loops.clear()
+
+        for loop_id, session in sessions:
+            loop = loops.get(loop_id)
+            if session.closed:
+                continue
+            if current_loop and loop is current_loop:
+                await session.close()
+                logger.info("[GITHUB] session_closed=true reason=%s loop_id=%s", reason, loop_id)
+                continue
+            if loop and loop.is_running() and not loop.is_closed():
+                self._schedule_session_close(loop, session, reason)
+                logger.info(
+                    "[GITHUB] session_close_scheduled=true reason=%s loop_id=%s",
+                    reason,
+                    loop_id,
+                )
+                continue
+            logger.info("[GITHUB] session_detached=true reason=%s loop_id=%s", reason, loop_id)
+
+    def _schedule_session_close(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        session: aiohttp.ClientSession,
+        reason: str,
+    ) -> None:
+        def _closer() -> None:
+            async def _close() -> None:
+                if not session.closed:
+                    await session.close()
+                    logger.info("[GITHUB] session_closed=true reason=%s loop_id=%s", reason, id(loop))
+
+            asyncio.create_task(_close())
+
+        try:
+            loop.call_soon_threadsafe(_closer)
+        except RuntimeError:
+            logger.info("[GITHUB] session_detached=true reason=%s loop_id=%s", reason, id(loop))
 
     async def _get_session(self) -> aiohttp.ClientSession:
         loop = asyncio.get_running_loop()
-        if self._session and self._session_loop is not loop:
-            await self._close_session(reason="loop_mismatch")
-        if not self._session or self._session.closed:
+        loop_id = self._loop_id(loop)
+        session = None
+        with self._sessions_lock:
+            session = self._sessions.get(loop_id)
+            if session and session.closed:
+                self._sessions.pop(loop_id, None)
+                self._session_loops.pop(loop_id, None)
+                session = None
+        if session is None:
             timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
             headers = {
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"token {self.config.token}",
                 "User-Agent": "TRT-GitHubStorage",
             }
-            self._session = aiohttp.ClientSession(timeout=timeout, headers=headers)
-            self._session_loop = loop
-        return self._session
+            session = aiohttp.ClientSession(timeout=timeout, headers=headers)
+            with self._sessions_lock:
+                self._sessions[loop_id] = session
+                self._session_loops[loop_id] = loop
+            logger.info("GITHUB_SESSION_CREATED loop_id=%s", loop_id)
+        return session
+
+    async def _reset_session_for_loop(self, reason: str) -> None:
+        loop = asyncio.get_running_loop()
+        loop_id = self._loop_id(loop)
+        session = None
+        with self._sessions_lock:
+            session = self._sessions.pop(loop_id, None)
+            self._session_loops.pop(loop_id, None)
+        if session and not session.closed:
+            await session.close()
+        logger.warning("GITHUB_SESSION_RESET reason=%s loop_id=%s", reason, loop_id)
+
+    def _get_inflight_map(self, loop_id: int) -> Dict[str, asyncio.Future]:
+        with self._read_inflight_lock:
+            return self._read_inflight.setdefault(loop_id, {})
+
+    def _get_write_lock(self, filename: str) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        loop_id = self._loop_id(loop)
+        with self._write_locks_lock:
+            loop_locks = self._write_locks_by_loop.setdefault(loop_id, {})
+            lock = loop_locks.get(filename)
+            if lock is None:
+                lock = asyncio.Lock()
+                loop_locks[filename] = lock
+            return lock
+
+    def _get_read_cache(self, filename: str) -> Optional["GitHubStorage._ReadCacheEntry"]:
+        entry = self._read_cache.get(filename)
+        if not entry:
+            return None
+        age = time.monotonic() - entry.fetched_at
+        if age <= self._read_cache_ttl:
+            return entry
+        return None
+
+    def _set_read_cache(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> None:
+        self._read_cache[filename] = self._ReadCacheEntry(
+            data=data,
+            sha=sha,
+            fetched_at=time.monotonic(),
+        )
 
     async def _ensure_storage_branch_exists(self) -> None:
         if self._stub_enabled:
@@ -290,7 +421,14 @@ class GitHubStorage(BaseStorage):
         last_response: Optional[GitHubStorage._ResponsePayload] = None
         for attempt in range(1, self.config.max_retries + 1):
             start_ts = time.monotonic()
-            response = await self._request_raw(method, url, **kwargs)
+            try:
+                response = await self._request_raw(method, url, **kwargs)
+            except RuntimeError as exc:
+                if self._should_reset_session(exc):
+                    await self._reset_session_for_loop(reason=str(exc))
+                    await self._backoff(attempt)
+                    continue
+                raise
             last_response = response
             status = response.status
             ok = status in ok_statuses
@@ -316,6 +454,15 @@ class GitHubStorage(BaseStorage):
         if last_response is None:
             raise RuntimeError("GitHub request failed without response")
         return last_response
+
+    def _should_reset_session(self, exc: RuntimeError) -> bool:
+        message = str(exc).lower()
+        return (
+            "different loop" in message
+            or "attached to a different loop" in message
+            or "session is closed" in message
+            or "event loop is closed" in message
+        )
 
     def _should_retry(self, status: int, headers: aiohttp.typedefs.LooseHeaders) -> bool:
         retryable = status in {429, 500, 502, 503, 504}
@@ -351,14 +498,61 @@ class GitHubStorage(BaseStorage):
         if not force_refresh:
             cached = cache.get(filename)
             if cached is not None:
+                logger.info(
+                    "STORAGE_READ_OK path=%s source=request_cache",
+                    self._storage_path(filename),
+                )
                 return cached
+            read_cache = self._get_read_cache(filename)
+            if read_cache is not None:
+                logger.info(
+                    "STORAGE_READ_OK path=%s source=read_cache",
+                    self._storage_path(filename),
+                )
+                cache[filename] = (read_cache.data, read_cache.sha)
+                return read_cache.data, read_cache.sha
 
-        data, sha, status = await self._fetch_json_payload(filename)
-        if status == 404:
-            data, sha = await self._ensure_default_file(filename)
+        loop = asyncio.get_running_loop()
+        loop_id = self._loop_id(loop)
+        inflight = self._get_inflight_map(loop_id)
+        future = inflight.get(filename)
+        if future is not None:
+            logger.info(
+                "STORAGE_SINGLEFLIGHT_HIT path=%s loop_id=%s",
+                self._storage_path(filename),
+                loop_id,
+            )
+            data, sha = await future
+            cache[filename] = (data, sha)
+            return data, sha
 
-        cache[filename] = (data, sha)
-        return data, sha
+        future = loop.create_future()
+        inflight[filename] = future
+        try:
+            data, sha, status = await self._fetch_json_payload(filename)
+            if status == 404:
+                data, sha = await self._ensure_default_file(filename)
+
+            cache[filename] = (data, sha)
+            self._set_read_cache(filename, data, sha)
+            future.set_result((data, sha))
+            logger.info(
+                "STORAGE_READ_OK path=%s source=origin status=%s",
+                self._storage_path(filename),
+                status,
+            )
+            return data, sha
+        except Exception as exc:
+            if not future.done():
+                future.set_exception(exc)
+            logger.warning(
+                "STORAGE_READ_FAIL path=%s error_class=%s",
+                self._storage_path(filename),
+                exc.__class__.__name__,
+            )
+            raise
+        finally:
+            inflight.pop(filename, None)
 
     async def _write_json(self, filename: str, data: Dict[str, Any], sha: Optional[str]) -> Optional[str]:
         await self._ensure_storage_branch_exists()
@@ -407,7 +601,9 @@ class GitHubStorage(BaseStorage):
                 response.status,
             )
             payload = self._parse_json(response.text)
-            return payload.get("content", {}).get("sha") or payload.get("sha")
+            new_sha = payload.get("content", {}).get("sha") or payload.get("sha")
+            self._set_read_cache(filename, data, new_sha or sha)
+            return new_sha
         if response.status == 409:
             raise GitHubConflictError(f"GitHub write conflict for {path}")
         logger.error(
@@ -431,35 +627,38 @@ class GitHubStorage(BaseStorage):
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        last_error: Optional[Exception] = None
-        for attempt in range(1, self.config.max_retries + 1):
-            data, sha = await self._read_json(filename, force_refresh=True)
-            updated = update_fn(dict(data))
-            merged = self._merge_json(data, updated)
-            try:
-                new_sha = await self._write_json(filename, merged, sha)
-                self._set_request_cache(filename, merged, new_sha or sha)
-                if attempt > 1:
-                    logger.info(
-                        "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+        lock = self._get_write_lock(filename)
+        async with lock:
+            last_error: Optional[Exception] = None
+            for attempt in range(1, self.config.max_retries + 1):
+                data, sha = await self._read_json(filename, force_refresh=True)
+                updated = update_fn(dict(data))
+                merged = self._merge_json(data, updated)
+                try:
+                    new_sha = await self._write_json(filename, merged, sha)
+                    self._set_request_cache(filename, merged, new_sha or sha)
+                    self._set_read_cache(filename, merged, new_sha or sha)
+                    if attempt > 1:
+                        logger.info(
+                            "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+                            attempt,
+                            self._storage_path(filename),
+                        )
+                    return merged
+                except GitHubConflictError as exc:
+                    last_error = exc
+                    logger.warning(
+                        "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
                         attempt,
                         self._storage_path(filename),
                     )
-                return merged
-            except GitHubConflictError as exc:
-                last_error = exc
-                logger.warning(
-                    "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
-                    attempt,
-                    self._storage_path(filename),
-                )
-                await self._backoff(attempt)
-        logger.error(
-            "[GITHUB] write_conflict resolved=false attempts=%s path=%s",
-            self.config.max_retries,
-            self._storage_path(filename),
-        )
-        raise RuntimeError("Exceeded GitHub write retries") from last_error
+                    await self._backoff(attempt)
+            logger.error(
+                "[GITHUB] write_conflict resolved=false attempts=%s path=%s",
+                self.config.max_retries,
+                self._storage_path(filename),
+            )
+            raise RuntimeError("Exceeded GitHub write retries") from last_error
 
     def _parse_json(self, payload: str) -> Dict[str, Any]:
         if not payload:
@@ -569,6 +768,7 @@ class GitHubStorage(BaseStorage):
             new_sha = await self._write_json(filename, default_data, None)
             logger.info("[GITHUB] default_created=true path=%s", path)
             self._set_request_cache(filename, default_data, new_sha)
+            self._set_read_cache(filename, default_data, new_sha)
             return default_data, new_sha
         except GitHubConflictError:
             logger.info("[GITHUB] default_create_conflict=true path=%s", path)
@@ -594,7 +794,7 @@ class GitHubStorage(BaseStorage):
 
     async def close(self) -> None:
         """Close shared resources (aiohttp session)."""
-        await self._close_session(reason="close")
+        await self._close_all_sessions(reason="close")
 
     def test_connection(self) -> bool:
         """Sync connection test for GitHub storage."""
@@ -1083,28 +1283,31 @@ class GitHubStorage(BaseStorage):
         return default or {}
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
-        last_error: Optional[Exception] = None
-        for attempt in range(1, self.config.max_retries + 1):
-            _, sha = await self._read_json(filename, force_refresh=True)
-            try:
-                new_sha = await self._write_json(filename, data, sha)
-                self._set_request_cache(filename, data, new_sha or sha)
-                if attempt > 1:
-                    logger.info(
-                        "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+        lock = self._get_write_lock(filename)
+        async with lock:
+            last_error: Optional[Exception] = None
+            for attempt in range(1, self.config.max_retries + 1):
+                _, sha = await self._read_json(filename, force_refresh=True)
+                try:
+                    new_sha = await self._write_json(filename, data, sha)
+                    self._set_request_cache(filename, data, new_sha or sha)
+                    self._set_read_cache(filename, data, new_sha or sha)
+                    if attempt > 1:
+                        logger.info(
+                            "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+                            attempt,
+                            self._storage_path(filename),
+                        )
+                    return
+                except GitHubConflictError as exc:
+                    last_error = exc
+                    logger.warning(
+                        "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
                         attempt,
                         self._storage_path(filename),
                     )
-                return
-            except GitHubConflictError as exc:
-                last_error = exc
-                logger.warning(
-                    "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
-                    attempt,
-                    self._storage_path(filename),
-                )
-                await self._backoff(attempt)
-        raise RuntimeError("Exceeded GitHub write retries") from last_error
+                    await self._backoff(attempt)
+            raise RuntimeError("Exceeded GitHub write retries") from last_error
 
     async def update_json_file(
         self,
