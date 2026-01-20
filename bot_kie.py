@@ -17751,7 +17751,11 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CallbackQueryHandler(unknown_callback_handler), group=100)
     application.add_handler(
         MessageHandler(
-            filters.TEXT | filters.PHOTO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
+            (filters.TEXT & ~filters.COMMAND)
+            | filters.PHOTO
+            | filters.AUDIO
+            | filters.VOICE
+            | filters.Document.ALL,
             unhandled_update_fallback,
             block=False,
         ),
@@ -18693,7 +18697,11 @@ async def main():
     )
     application.add_handler(
         MessageHandler(
-            filters.TEXT | filters.PHOTO | filters.AUDIO | filters.VOICE | filters.Document.ALL,
+            (filters.TEXT & ~filters.COMMAND)
+            | filters.PHOTO
+            | filters.AUDIO
+            | filters.VOICE
+            | filters.Document.ALL,
             unhandled_update_fallback,
             block=False,
         ),
