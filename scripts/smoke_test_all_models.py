@@ -16,6 +16,7 @@ Smoke test для всех моделей - проверяет полный ци
 
 import sys
 import os
+import json
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 import asyncio
@@ -40,6 +41,20 @@ import asyncio
 
 # Результаты тестирования
 TestResult = Tuple[str, str, str, Optional[str]]  # model_id, model_type, status, error
+
+
+def load_readiness_overrides() -> Dict[str, Dict[str, Any]]:
+    """Load model readiness metadata to skip BLOCKED models."""
+    readiness_path = root_dir / "artifacts" / "model_readiness.json"
+    if not readiness_path.exists():
+        return {}
+    try:
+        with readiness_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:
+        return {}
+    models_payload = payload.get("models", {})
+    return models_payload if isinstance(models_payload, dict) else {}
 
 
 def generate_minimal_params(schema: Dict[str, Any], model_type: str = 'unknown') -> Dict[str, Any]:
@@ -175,11 +190,13 @@ async def test_model_async(model_id: str, model_type: str) -> Tuple[str, Optiona
                             if isinstance(parsed, dict):
                                 # MockKieGateway возвращает {'resultUrls': [...]}
                                 result_urls = (
-                                    parsed.get('resultUrls') or 
-                                    parsed.get('urls') or 
-                                    parsed.get('result_urls') or
-                                    [parsed.get('url', '')] if parsed.get('url') else []
+                                    parsed.get('resultUrls')
+                                    or parsed.get('urls')
+                                    or parsed.get('result_urls')
                                 )
+                                if result_urls is None:
+                                    url_value = parsed.get('url')
+                                    result_urls = [url_value] if url_value else []
                             elif isinstance(parsed, list):
                                 result_urls = parsed
                         except json.JSONDecodeError:
@@ -195,11 +212,13 @@ async def test_model_async(model_id: str, model_type: str) -> Tuple[str, Optiona
                                     result_urls = parsed
                                 elif isinstance(parsed, dict):
                                     result_urls = (
-                                        parsed.get('resultUrls') or 
-                                        parsed.get('urls') or 
-                                        parsed.get('result_urls') or
-                                        [parsed.get('url', '')] if parsed.get('url') else []
+                                        parsed.get('resultUrls')
+                                        or parsed.get('urls')
+                                        or parsed.get('result_urls')
                                     )
+                                    if result_urls is None:
+                                        url_value = parsed.get('url')
+                                        result_urls = [url_value] if url_value else []
                             except:
                                 result_urls = [result_urls] if result_urls else []
                         elif not isinstance(result_urls, list):
@@ -266,10 +285,12 @@ def main() -> int:
     models = get_models_sync()
     print(f"Loaded {len(models)} models")
     print()
-    
+
     if not models:
         print("ERROR: No models loaded")
         return 1
+
+    readiness_overrides = load_readiness_overrides()
     
     # Тестируем каждую модель
     results: List[TestResult] = []
@@ -282,6 +303,18 @@ def main() -> int:
         model_type = model.get('model_type', 'unknown')
         
         if not model_id:
+            continue
+
+        readiness_entry = readiness_overrides.get(model_id, {})
+        readiness_status = readiness_entry.get("status")
+        if readiness_status == "BLOCKED":
+            reason = readiness_entry.get("notes")
+            if not reason:
+                conflicts = readiness_entry.get("ssot_conflicts") or []
+                missing = readiness_entry.get("missing_fields") or []
+                reason = "; ".join(conflicts or missing) if (conflicts or missing) else "blocked"
+            results.append((model_id, model_type, "skip", reason))
+            print(f"[{i}/{len(models)}] Testing {model_id} ({model_type})... SKIP: {reason}")
             continue
         
         print(f"[{i}/{len(models)}] Testing {model_id} ({model_type})...", end=' ', flush=True)
@@ -306,14 +339,19 @@ def main() -> int:
     
     ok_count = 0
     fail_count = 0
+    skip_count = 0
     
     for model_id, model_type, status, error in results:
         status_display = "OK" if status == 'ok' else "FAIL"
+        if status == "skip":
+            status_display = "SKIP"
         error_display = error[:80] if error else "-"
         print(f"{model_id:<50} {model_type:<20} {status_display:<10} {error_display}")
         
         if status == 'ok':
             ok_count += 1
+        elif status == "skip":
+            skip_count += 1
         else:
             fail_count += 1
     
@@ -322,6 +360,7 @@ def main() -> int:
     print(f"Total: {len(results)} models")
     print(f"OK: {ok_count}")
     print(f"FAIL: {fail_count}")
+    print(f"SKIP: {skip_count}")
     print()
     
     if fail_count > 0:

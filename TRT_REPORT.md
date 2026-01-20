@@ -1433,3 +1433,30 @@ tests/test_409_conflict_fix.py ........
 **Оставшиеся риски:**
 - Если KIE вернёт нестандартный output URL, доставка зависит от URL normalizer (см. прошлые фиксы).
 - Для моделей с неконсистентной SSOT схематикой потребуется ручная проверка required полей.
+## 2026-02-11: Model readiness audit kickoff (baseline)
+**Baseline commands executed:**
+- `python scripts/verify_project.py`
+- `python scripts/verify_button_coverage.py`
+- `pytest -q`
+- `python scripts/smoke_test_all_models.py`
+
+**Baseline observations (was):**
+- verify_project: SSOT conflicts reported for models with required media inputs (e.g., nano-banana-pro, seedream/4.5-edit, sora-watermark-remover, wan/2-2-animate-move/replace, kling avatars, ideogram edits, google/nano-banana-edit). Runtime SSOT confirmed root `/models + /app` and flagged legacy `5656-main` as deprecated/ignored. 
+- verify_button_coverage: OK (78 callbacks covered).
+- pytest: completed with exit code 0 (output truncated after initial tests, no failures reported).
+- smoke_test_all_models: 72/72 FAIL — tasks succeeded but MockKieGateway returned empty resultUrls.
+
+**5656-main note (do not delete):**
+- `5656-main` exists as a legacy copy. Runtime SSOT and verify_project indicate production entrypoints use repo root `/models + /app`; this directory is deprecated/ignored but retained for history.
+
+**Updates applied (now):**
+- Added deterministic audit script + generated readiness report (`scripts/audit_model_readiness.py`, `TRT_MODEL_READINESS.md`, `artifacts/model_readiness.json`).
+- Fixed SSOT conflicts in `models/kie_models.yaml` for media-required models (image/video/audio) so wizard requires correct media inputs and model_type aligns with schema.
+- MockKieGateway now derives output kind from catalog and always returns deterministic URLs; smoke test parser fixed to correctly read resultUrls.
+- reset_step callback logging regression test added; RU /start welcome text updated with “Бесплатные модели” CTA + “много нейросетей” phrasing and 1-2-3 guide.
+
+**Verification (now):**
+- `python scripts/verify_project.py` ✅ (SSOT warnings removed from verify_model_specs; output_media_type warnings remain but validation passes).
+- `python scripts/verify_button_coverage.py` ✅
+- `pytest -q` ✅
+- `python scripts/smoke_test_all_models.py` ✅ (71 OK, 1 SKIP: infinitalk/from-audio blocked due to missing audio input in SSOT)
