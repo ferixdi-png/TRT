@@ -17443,10 +17443,10 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CallbackQueryHandler(user_action_audit_callback, pattern=".*"), group=-100)
     application.add_handler(MessageHandler(filters.ALL, user_action_audit_message), group=-100)
     application.add_handler(TypeHandler(Update, inbound_rate_limit_guard), group=-99)
-    application.add_handler(TypeHandler(Update, inbound_rate_limit_guard), group=-99)
     # Create conversation handler for generation
     generation_handler = ConversationHandler(
         entry_points=[
+            CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
