@@ -783,11 +783,19 @@ def _collect_missing_required_media(session: Dict[str, Any]) -> List[str]:
     properties = session.get("properties", {})
     params = session.get("params", {})
     required = set(session.get("required", []))
+    model_type = session.get("model_type") or session.get("model_mode") or session.get("gen_type") or ""
     missing: List[str] = []
     for param_name, param_info in properties.items():
-        if not _get_media_kind(param_name):
+        media_kind = _get_media_kind(param_name)
+        if not media_kind:
             continue
         is_required = param_info.get("required", False) or param_name in required
+        if (
+            not is_required
+            and _is_primary_media_input_param(param_name)
+            and _should_force_media_required(model_type, media_kind)
+        ):
+            is_required = True
         if not is_required:
             continue
         value = params.get(param_name)
@@ -14804,29 +14812,44 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_lang = get_user_language(user_id) if user_id else "ru"
         missing_param = missing_media[0]
         param_label = _humanize_param_name(missing_param, user_lang)
+        media_kind = _get_media_kind(missing_param) or "media"
+        media_label_ru = {
+            "image": "изображение",
+            "video": "видео",
+            "audio": "аудио",
+            "document": "файл",
+            "media": "медиа",
+        }.get(media_kind, "медиа")
+        media_label_en = {
+            "image": "image",
+            "video": "video",
+            "audio": "audio",
+            "document": "file",
+            "media": "media",
+        }.get(media_kind, "media")
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
             chat_id=chat_id,
             update_id=update.update_id,
-            action="STATE_INVALID_MISSING_MEDIA",
+            action="GEN_BLOCKED_MISSING_REQUIRED_INPUTS",
             action_path="confirm_generate",
             model_id=model_id,
             gen_type=session.get("gen_type"),
             stage="UI_VALIDATE",
-            outcome="missing_media",
-            error_code="STATE_INVALID_MISSING_MEDIA",
+            outcome="blocked",
+            error_code="GEN_BLOCKED_MISSING_REQUIRED_INPUTS",
             fix_hint="Запросите загрузку обязательного медиа-входа.",
-            param={"missing_media": missing_media},
+            missing_fields=missing_media,
         )
         await send_or_edit_message(
             (
-                f"📎 <b>Нужен обязательный медиа-ввод</b>\n\n"
+                f"📎 <b>Нужно загрузить {media_label_ru}</b>\n\n"
                 f"Пожалуйста, загрузите: <b>{param_label}</b>.\n"
                 "После загрузки сможете подтвердить генерацию."
                 if user_lang == "ru"
                 else (
-                    f"📎 <b>Missing required media input</b>\n\n"
+                    f"📎 <b>Please upload the required {media_label_en}</b>\n\n"
                     f"Please upload: <b>{param_label}</b>.\n"
                     "After upload you can confirm generation."
                 )

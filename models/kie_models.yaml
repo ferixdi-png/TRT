@@ -1748,12 +1748,21 @@ models:
         required: true
     model_mode: text_to_image
   infinitalk/from-audio:
-    model_type: audio_to_audio
+    model_type: lip_sync
     input:
+      image_input:
+        type: array
+        item_type: string
+        required: true
+      audio_input:
+        type: array
+        item_type: string
+        required: true
       prompt:
         type: string
         required: true
-    model_mode: audio_to_audio
+        max: 5000
+    model_mode: lip_sync
   elevenlabs/audio-isolation:
     model_type: audio_to_audio
     input:
