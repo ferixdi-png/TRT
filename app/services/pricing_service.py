@@ -3,7 +3,7 @@
 """
 
 import logging
-from decimal import Decimal, ROUND_CEILING
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict
 from app.config import Settings
 from app.kie_catalog.catalog import get_model, ModelSpec
@@ -24,9 +24,9 @@ def get_usd_to_rub(settings: Settings) -> float:
     return getattr(settings, 'usd_to_rub', 77.83)
 
 
-def _ceil_decimal(value: Decimal, places: int) -> Decimal:
+def _quantize_decimal(value: Decimal, places: int) -> Decimal:
     quant = Decimal("1").scaleb(-places)
-    return value.quantize(quant, rounding=ROUND_CEILING)
+    return value.quantize(quant, rounding=ROUND_HALF_UP)
 
 
 def user_price_rub(
@@ -47,7 +47,7 @@ def user_price_rub(
         price_multiplier: Множитель цены (по умолчанию 2.0)
     
     Returns:
-        Цена в рублях (округление вверх до целого рубля)
+        Цена в рублях (округление до копеек, ROUND_HALF_UP)
     """
     effective_multiplier = 1.0 if is_admin else price_multiplier
     price = (
@@ -55,8 +55,8 @@ def user_price_rub(
         * Decimal(str(usd_to_rub))
         * Decimal(str(effective_multiplier))
     )
-    price_ceiled = _ceil_decimal(price, 0)
-    return int(price_ceiled)
+    price_quantized = _quantize_decimal(price, 2)
+    return float(price_quantized)
 
 
 def price_for_model_rub(

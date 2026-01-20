@@ -3581,7 +3581,7 @@ async def run(settings, application):
                 )
                 try:
                     lock_attempted = True
-                    lock_acquired = await acquire_singleton_lock()
+                    lock_acquired = await acquire_singleton_lock(require_lock=True)
                     logger.info("[LOCK] LOCK_MODE=%s", get_lock_mode())
                     if not lock_acquired:
                         logger.warning(
@@ -3601,7 +3601,7 @@ async def run(settings, application):
     else:
         try:
             lock_attempted = True
-            lock_acquired = await acquire_singleton_lock()
+            lock_acquired = await acquire_singleton_lock(require_lock=settings.bot_mode == "webhook")
             logger.info("[LOCK] LOCK_MODE=%s", get_lock_mode())
             if not lock_acquired:
                 logger.warning("[LOCK] Singleton lock not acquired - continuing in passive mode (database may be unavailable)")
