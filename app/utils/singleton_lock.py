@@ -99,6 +99,10 @@ def get_lock_admin_notice(lang: str = "ru") -> str:
         if lang == "en":
             return "ℹ️ Lock disabled (LOCK_DISABLED_NO_DB)."
         return "ℹ️ Блокировка отключена (LOCK_DISABLED_NO_DB)."
+    if reason == "file_lock_fallback":
+        if lang == "en":
+            return "⚠️ Lock fallback active (file lock only)."
+        return "⚠️ Включён резервный file-lock (только локальный уровень)."
     if lang == "en":
         return f"ℹ️ Lock status: {reason}."
     return f"ℹ️ Статус блокировки: {reason}."
@@ -176,7 +180,7 @@ def _release_file_lock() -> None:
         _file_lock_path = None
 
 
-async def acquire_singleton_lock(dsn=None) -> bool:
+async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> bool:
     """
     Async function to acquire singleton lock.
     Creates SingletonLock instance and acquires lock.
@@ -192,30 +196,23 @@ async def acquire_singleton_lock(dsn=None) -> bool:
     if not dsn:
         global _no_db_warned
         storage_mode = os.getenv("STORAGE_MODE", "github").lower()
-        if storage_mode == "github" or _locks_disabled():
+        if _locks_disabled():
+            _set_lock_state("disabled", True, reason="lock_disabled_by_env")
+            logger.info("[LOCK] singleton_disabled=true reason=disabled_by_env")
+            return True
+        if require_lock:
             if not _no_db_warned:
                 _no_db_warned = True
                 logger.warning(
-                    "[LOCK] error_code=LOCK_DISABLED_NO_DB mode=webhook storage_mode=%s",
+                    "[LOCK] LOCK_MODE=file_fallback reason=database_url_missing storage_mode=%s",
                     storage_mode,
                 )
-            _set_lock_state("none", True, reason="LOCK_DISABLED_NO_DB")
-            try:
-                from app.observability.structured_logs import log_structured_event
-
-                log_structured_event(
-                    correlation_id=None,
-                    action="SINGLETON_LOCK",
-                    action_path="singleton_lock.acquire_singleton_lock",
-                    stage="STARTUP",
-                    waiting_for="LOCK",
-                    outcome="skipped",
-                    error_code="LOCK_DISABLED_NO_DB",
-                    fix_hint="Set DATABASE_URL or enable DB storage if singleton lock is required.",
-                )
-            except Exception:
-                pass
-            return True
+            acquired = _acquire_file_lock()
+            if acquired:
+                _set_lock_state("file", True, reason="file_lock_fallback")
+                return True
+            _set_lock_state("file", False, reason="file_lock_failed")
+            return False
         logger.warning("[LOCK] LOCK_MODE=none reason=database_url_missing storage_mode=%s", storage_mode)
         _set_lock_state("none", False, reason="database_url_missing")
         return False

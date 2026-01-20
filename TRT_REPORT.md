@@ -1,15 +1,34 @@
-## 2026-02-10: FERIXDI AI welcome текст + счетчик бесплатных
-**Было → стало (кратко):**
-- **Было:** приветствие для RU лежало в переводах и не учитывало параметры бесплатного лимита/таймера. 
-- **Стало:** единый генератор `build_welcome_text_ru(...)` с подстановками `remaining/limit_per_hour/next_refill_in/next_refill_at_local` и опциональным балансом, плюс компактный режим, когда отдельный счетчик уже показан. 
+## 2026-02-10: P0 pricing clarity + gen_type SSOT + session cache + webhook lock fallback
+**Краткое состояние (по логам / наблюдениям):**
+- SSOT loaded 72 models, webhook OK.
+- LOCK disabled.
+- SESSION_GET storm on gen_type_menu.
+- gen_type mismatch risk (image-to-video selected but model_select logs show text_to_image).
+- Price not shown/resolved per parameter selection (missing “PRICE_*” observability).
 
-**Где теперь текст:**
-- `app/ux/texts_ru.py` → `build_welcome_text_ru(...)`
+**Причина (root cause):**
+- Цена пересчитывалась не единообразно и округлялась до целого рубля; отсутствовал единый резолвер и логи PRICE_*.
+- gen_type стирался при навигации и заменялся model_spec.model_mode, что порождало рассинхрон.
+- В button_callback делались многократные session.get и отсутствовал per-update cache.
+- В webhook режиме без DATABASE_URL lock переводился в no-lock, без fallback.
 
-**Проверка (команды):**
-- `python scripts/verify_project.py`
-- `pytest -q`
-- `python scripts/verify_button_coverage.py`
+**Было → стало (ключевые изменения):**
+- **Единый price engine:** расчёт через `app/pricing/price_resolver.py` с округлением до 0.01 (ROUND_HALF_UP); сохранение `session["price_quote"]` и logs `PRICE_RESOLVED/PRICE_SHOWN/PRICE_MISSING_RULE`.
+- **Цена в каждом prompt:** сообщения ввода параметров и подтверждения теперь всегда содержат `Текущая цена: … ₽` с 2 знаками.
+- **gen_type SSOT:** gen_type фиксируется при выборе типа и используется downstream; добавлен guard `GEN_TYPE_UNSUPPORTED`.
+- **Session cache:** per-update cache + метрика `SESSION_GET_COUNT` для callback-обработчиков.
+- **Webhook lock:** при отсутствии DB в webhook включается file-lock fallback, а skip-path становится явным.
+
+**Затронутые файлы:**
+- `bot_kie.py`, `app/pricing/price_resolver.py`, `app/services/pricing_service.py`
+- `app/helpers/models_menu.py`, `app/generations/telegram_sender.py`
+- `app/session_store.py`, `app/utils/singleton_lock.py`, `main_render.py`
+- `tests/test_pricing_rounding.py`, `tests/test_price_consistency.py`, `tests/test_price_resolver.py`
+- `tests/test_price_prompt_flow.py`, `tests/test_session_cache.py`, `tests/test_singleton_lock_fallback.py`
+- `tests/test_mode_selection_flow.py`
+
+**Проверка (команды / ожидаемое):**
+- `pytest -q` (обновлены тесты pricing/lock/session cache + prompt flow).
 
 ## 2026-02-09: No-silence SSOT + Render handler registration
 **Причина (root cause):**

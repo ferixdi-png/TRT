@@ -11,6 +11,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.kie_catalog import load_catalog, get_model, get_free_tools_model_ids, ModelSpec
 from app.services.pricing_service import price_for_model_rub
+from app.pricing.price_resolver import format_price_rub
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -231,17 +232,18 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
                 price_rub = price_for_model_rub(model.id, 0, settings)
                 if price_rub is None:
                     price_rub = 0
+                price_display = format_price_rub(price_rub)
                 
                 # Получаем эмодзи для типа модели
                 type_emoji = _get_type_emoji(model.type)
                 
                 # Формируем текст кнопки с эмодзи и ценой
-                button_text = f"{type_emoji} {model.title_ru} • ₽{int(price_rub)}"
+                button_text = f"{type_emoji} {model.title_ru} • ₽{price_display}"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
-                    max_len = 60 - len(f" • ₽{price_rub}".encode('utf-8')) - 2  # -2 для эмодзи и пробела
-                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • ₽{int(price_rub)}"
+                    max_len = 60 - len(f" • ₽{price_display}".encode('utf-8')) - 2  # -2 для эмодзи и пробела
+                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • ₽{price_display}"
                 
                 callback_data = _create_callback_data(model.id)
                 
@@ -306,6 +308,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     price_rub = price_for_model_rub(model.id, mode_index, settings)
     if price_rub is None:
         price_rub = 0
+    price_display = format_price_rub(price_rub)
     
     # Формируем текст карточки
     type_emoji = _get_type_emoji(model.type)
@@ -325,7 +328,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     if "video_url" in required_fields or "video_urls" in required_fields:
         examples.append("video_url=https://example.com/video.mp4")
     example_text = "; ".join(examples) if examples else ("—" if user_lang == "ru" else "—")
-    price_label = f"₽{int(price_rub)}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
+    price_label = f"₽{price_display}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
     
     mode_label = _resolve_mode_label(model, mode_index, user_lang)
     if user_lang == 'ru':

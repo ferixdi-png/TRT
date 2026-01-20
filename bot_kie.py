@@ -461,7 +461,12 @@ from app.services.free_tools_service import (
 from kie_models import (
     get_generation_types, get_models_by_generation_type, get_generation_type_info
 )
-from app.session_store import get_session_store
+from app.session_store import (
+    get_session_store,
+    get_session_cached,
+    ensure_session_cached,
+    get_session_get_count,
+)
 
 
 def ensure_source_of_truth():
@@ -1255,21 +1260,23 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
         Цена в рублях
     """
     try:
-        # Используем новый pricing_service из каталога
-        from app.services.pricing_service import price_for_model_rub, get_model_price_info
+        from app.pricing.price_resolver import resolve_price_quote
         from app.config import get_settings
-        
+
         settings = get_settings()
         mode_index = _resolve_mode_index(model_id, params, user_id)
-        
-        # Получаем цену из каталога
-        price_rub = price_for_model_rub(model_id, mode_index, settings, is_admin=is_admin)
-        
-        if price_rub is None:
+        quote = resolve_price_quote(
+            model_id=model_id,
+            mode_index=mode_index,
+            gen_type=None,
+            selected_params=params or {},
+            settings=settings,
+            is_admin=is_admin,
+        )
+        if quote is None:
             logger.warning(f"Price not found for model {model_id}, using fallback")
             return 1.0
-        
-        return float(price_rub)
+        return float(quote.price_rub)
     except ImportError as e:
         logger.warning(f"app.services.pricing_service not available: {e}, using fallback pricing")
         return 1.0
@@ -1302,15 +1309,14 @@ WAITING_CURRENCY_RATE = 7
 
 
 def format_rub_amount(value: float) -> str:
-    """Format RUB amount as integer with rounding up."""
-    import math
+    """Format RUB amount with 2 decimals (ROUND_HALF_UP)."""
+    from app.pricing.price_resolver import format_price_rub
 
-    rub_int = int(math.ceil(value))
-    return f"{rub_int} ₽"
+    return f"{format_price_rub(value)} ₽"
 
 
 def format_price_rub(price: float, is_admin: bool = False) -> str:
-    """Format price in rubles with appropriate text (integer RUB)."""
+    """Format price in rubles with appropriate text (2 decimals)."""
     price_str = format_rub_amount(price)
     if is_admin:
         return f"💰 <b>Безлимит</b> (цена: {price_str})"
@@ -1323,15 +1329,164 @@ def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = Fa
     return format_price_rub(price, is_admin)
 
 
+def _normalize_gen_type(gen_type: Optional[str]) -> Optional[str]:
+    if not gen_type:
+        return None
+    return gen_type.replace("_", "-")
+
+
+def _resolve_session_gen_type(session: dict | None, model_spec: Any | None = None) -> Optional[str]:
+    if session and session.get("gen_type"):
+        return _normalize_gen_type(session.get("gen_type"))
+    if model_spec is not None:
+        return _normalize_gen_type(getattr(model_spec, "model_mode", None) or getattr(model_spec, "model_type", None))
+    return None
+
+
+def _model_supports_gen_type(model_spec: Any, gen_type: Optional[str]) -> bool:
+    if not gen_type or not model_spec:
+        return True
+    expected = _normalize_gen_type(gen_type)
+    supported = {
+        _normalize_gen_type(getattr(model_spec, "model_mode", None)),
+        _normalize_gen_type(getattr(model_spec, "model_type", None)),
+    }
+    return expected in supported
+
+
+def _update_price_quote(
+    session: dict,
+    *,
+    model_id: str,
+    mode_index: int,
+    gen_type: Optional[str],
+    params: dict,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    action_path: str,
+    user_id: Optional[int] = None,
+    chat_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> Optional[dict]:
+    from app.pricing.price_resolver import resolve_price_quote
+    from app.config import get_settings
+
+    quote = resolve_price_quote(
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=gen_type,
+        selected_params=params or {},
+        settings=get_settings(),
+        is_admin=is_admin,
+    )
+    if quote is None:
+        session["price_quote"] = None
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="PRICE_MISSING_RULE",
+            action_path=action_path,
+            model_id=model_id,
+            gen_type=gen_type,
+            stage="PRICE_RESOLVE",
+            outcome="missing",
+            error_code="PRICE_MISSING_RULE",
+            param={
+                "mode_index": mode_index,
+                "params": params or {},
+            },
+        )
+        return None
+    session["price_quote"] = {
+        "price_rub": f"{quote.price_rub:.2f}",
+        "currency": quote.currency,
+        "breakdown": quote.breakdown,
+    }
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="PRICE_RESOLVED",
+        action_path=action_path,
+        model_id=model_id,
+        gen_type=gen_type,
+        stage="PRICE_RESOLVE",
+        outcome="resolved",
+        param={
+            "price_rub": f"{quote.price_rub:.2f}",
+            "mode_index": mode_index,
+            "params": params or {},
+        },
+    )
+    return session["price_quote"]
+
+
+def _build_current_price_line(
+    session: dict,
+    *,
+    user_lang: str,
+    model_id: str,
+    mode_index: int,
+    gen_type: Optional[str],
+    params: dict,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    action_path: str,
+    user_id: Optional[int] = None,
+    chat_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> str:
+    quote = session.get("price_quote")
+    if quote is None:
+        quote = _update_price_quote(
+            session,
+            model_id=model_id,
+            mode_index=mode_index,
+            gen_type=gen_type,
+            params=params,
+            correlation_id=correlation_id,
+            update_id=update_id,
+            action_path=action_path,
+            user_id=user_id,
+            chat_id=chat_id,
+            is_admin=is_admin,
+        )
+    if not quote:
+        price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
+    else:
+        price_text = f"Текущая цена: {quote['price_rub']} ₽" if user_lang == "ru" else f"Current price: {quote['price_rub']} ₽"
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="PRICE_SHOWN",
+        action_path=action_path,
+        model_id=model_id,
+        gen_type=gen_type,
+        stage="PRICE_DISPLAY",
+        outcome="shown",
+        param={
+            "mode_index": mode_index,
+            "params": params or {},
+            "price_text": price_text,
+        },
+    )
+    return price_text
+
+
 def _build_price_preview_text(user_lang: str, price: float, balance: float) -> str:
     after_balance = balance - price
     price_str = format_rub_amount(price)
     balance_str = format_rub_amount(balance)
     after_str = format_rub_amount(max(after_balance, 0))
     rounding_note = (
-        "💡 <i>Цена в ₽ округляется вверх до целого рубля.</i>"
+        "💡 <i>Цена округляется до копеек (0.01 ₽).</i>"
         if user_lang == "ru"
-        else "💡 <i>Prices in ₽ are rounded up to the next whole ruble.</i>"
+        else "💡 <i>Prices are rounded to 0.01 ₽.</i>"
     )
     if user_lang == "ru":
         return (
@@ -1355,9 +1510,9 @@ def _build_insufficient_funds_text(user_lang: str, price: float, balance: float)
     balance_str = format_rub_amount(balance)
     needed_str = format_rub_amount(max(price - balance, 0))
     rounding_note = (
-        "💡 <i>Цена в ₽ округляется вверх до целого рубля.</i>"
+        "💡 <i>Цена округляется до копеек (0.01 ₽).</i>"
         if user_lang == "ru"
-        else "💡 <i>Prices in ₽ are rounded up to the next whole ruble.</i>"
+        else "💡 <i>Prices are rounded to 0.01 ₽.</i>"
     )
     if user_lang == "ru":
         return (
@@ -1844,7 +1999,6 @@ def reset_session_on_navigation(user_id: int, *, reason: str) -> None:
         "params",
         "properties",
         "required",
-        "gen_type",
         "payment_method",
         "topup_amount",
         "stars_amount",
@@ -4441,7 +4595,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_path=build_action_path(data),
             outcome="received",
         )
-        session = session_store.get(user_id, {}) if user_id is not None else {}
+        session = get_session_cached(context, session_store, user_id, update_id, default={}) if user_id is not None else {}
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -4458,6 +4612,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             outcome="received",
             error_code="UX_CLICK_OK",
             fix_hint="Обработано нажатие кнопки.",
+        )
+        session_get_count = get_session_get_count(context, update_id)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="SESSION_GET_COUNT",
+            action_path=build_action_path(data),
+            stage="SESSION_CACHE",
+            outcome="count",
+            param={"count": session_get_count},
         )
         logger.debug(f"🔥🔥🔥 BUTTON_CALLBACK ENTRY: user_id={user_id}, data={data}, query_id={query.id if query else 'None'}, message_id={query.message.message_id if query and query.message else 'None'}")
     except Exception as e:
@@ -4532,7 +4698,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 🔥🔥🔥 SUPER-DETAILED CONTEXT LOGGING
         try:
-            session = session_store.get(user_id) if user_id else None
+            session = get_session_cached(context, session_store, user_id, update_id, default=None) if user_id else None
             session_keys = list(session.keys()) if session else []
             session_model_id = session.get('model_id') if session else None
             session_waiting_for = session.get('waiting_for') if session else None
@@ -4789,7 +4955,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
-            session = session_store.ensure(user_id)
+            session = ensure_session_cached(context, session_store, user_id, update_id)
             
             current_mode = session.get('admin_user_mode', False)
             session['admin_user_mode'] = not current_mode
@@ -4855,7 +5021,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             else:
                 # Switching back to admin mode - send new message with full admin panel
-                session = session_store.ensure(user_id)
+                session = ensure_session_cached(context, session_store, user_id, update_id)
                 session['admin_user_mode'] = False
                 user_lang = get_user_language(user_id)
                 await query.answer(t('msg_returning_to_admin', lang=user_lang))
@@ -4941,7 +5107,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
-            session = session_store.ensure(user_id)
+            session = ensure_session_cached(context, session_store, user_id, update_id)
             session['admin_user_mode'] = False
             await query.answer("Возврат в админ-панель")
             user = update.effective_user
@@ -5024,7 +5190,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"Restoring generation data for user {user_id}, model: {saved_data.get('model_id')}")
             
             # Restore session with model info, but clear params to start fresh
-            session = session_store.ensure(user_id)
+            session = ensure_session_cached(context, session_store, user_id, update_id)
             
             model_id = saved_data['model_id']
             model_info = saved_data['model_info']
@@ -5304,6 +5470,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Отправьте аудио-файл (MP3, WAV, OGG, M4A, FLAC, AAC, WMA, MPEG).\n"
                         f"Максимальный размер: 200 MB"
                     )
+                price_line = _build_current_price_line(
+                    session,
+                    user_lang=user_lang,
+                    model_id=model_id,
+                    mode_index=_resolve_mode_index(model_id, session.get("params", {}), user_id),
+                    gen_type=session.get("gen_type"),
+                    params=session.get("params", {}),
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    action_path=f"param_prompt:{audio_param_name}",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    is_admin=get_is_admin(user_id),
+                )
+                audio_text += f"\n\n{price_line}"
                 free_counter_line = await _resolve_free_counter_line(
                     user_id,
                     user_lang,
@@ -5340,6 +5521,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Отправьте фото, которое будет использовано как первый кадр видео.\n\n"
                     f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>"
                 )
+                price_line = _build_current_price_line(
+                    session,
+                    user_lang=user_lang,
+                    model_id=model_id,
+                    mode_index=_resolve_mode_index(model_id, session.get("params", {}), user_id),
+                    gen_type=session.get("gen_type"),
+                    params=session.get("params", {}),
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    action_path=f"param_prompt:{image_param_name}",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    is_admin=get_is_admin(user_id),
+                )
+                image_text += f"\n\n{price_line}"
                 free_counter_line = await _resolve_free_counter_line(
                     user_id,
                     user_lang,
@@ -5407,6 +5603,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
                             f"Опишите изображение, которое хотите сгенерировать:"
                         )
+                price_line = _build_current_price_line(
+                    session,
+                    user_lang=user_lang,
+                    model_id=model_id,
+                    mode_index=_resolve_mode_index(model_id, session.get("params", {}), user_id),
+                    gen_type=session.get("gen_type"),
+                    params=session.get("params", {}),
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    action_path="param_prompt:prompt",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    is_admin=get_is_admin(user_id),
+                )
+                prompt_text += f"\n\n{price_line}"
                 
                 # Add keyboard with "Главное меню" and "Отмена" buttons
                 free_counter_line = await _resolve_free_counter_line(
@@ -5483,7 +5694,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Retry generation with same parameters
             await query.answer("Повторяю попытку...")
             
-            session = session_store.get(user_id)
+            session = get_session_cached(context, session_store, user_id, update_id, default=None)
             if not session:
                 await query.edit_message_text("❌ Сессия не найдена. Начните заново.")
                 return ConversationHandler.END
@@ -5539,6 +5750,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 return ConversationHandler.END
             gen_type = parts[1]
+            session = ensure_session_cached(context, session_store, user_id, update_id)
+            session["gen_type"] = gen_type
             gen_info = get_generation_type_info(gen_type)
             models = get_models_by_generation_type(gen_type)
             
@@ -6759,7 +6972,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if user_lang == "ru"
                     else f"✅ {param_label}: default applied"
                 )
-                await query.edit_message_text(skip_text)
+                mode_index = _resolve_mode_index(session.get("model_id", ""), session.get("params", {}), user_id)
+                price_line = _build_current_price_line(
+                    session,
+                    user_lang=user_lang,
+                    model_id=session.get("model_id", ""),
+                    mode_index=mode_index,
+                    gen_type=session.get("gen_type"),
+                    params=session.get("params", {}),
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    action_path="button_callback.set_param",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    is_admin=get_is_admin(user_id),
+                )
+                await query.edit_message_text(f"{skip_text}\n{price_line}")
                 log_structured_event(
                     correlation_id=correlation_id,
                     user_id=user_id,
@@ -6842,7 +7070,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             missing = [p for p in required if p not in params]
 
             if missing:
-                await query.edit_message_text(f"✅ {param_name} установлен: {param_value}")
+                mode_index = _resolve_mode_index(model_id, session.get("params", {}), user_id)
+                price_line = _build_current_price_line(
+                    session,
+                    user_lang=user_lang,
+                    model_id=model_id,
+                    mode_index=mode_index,
+                    gen_type=session.get("gen_type"),
+                    params=session.get("params", {}),
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    action_path="button_callback.set_param",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    is_admin=get_is_admin(user_id),
+                )
+                await query.edit_message_text(f"✅ {param_name} установлен: {param_value}\n{price_line}")
                 # Move to next parameter
                 try:
                     next_param_result = await start_next_parameter(update, context, user_id)
@@ -6862,76 +7105,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"❌ model_id not found in session for user_id={user_id}")
                 await query.edit_message_text("❌ Ошибка: модель не найдена в сессии.")
                 return ConversationHandler.END
-
-            model_name = session.get('model_info', {}).get('name', 'Unknown')
-            params_text = "\n".join([f"  • {k}: {v}" for k, v in params.items()])
-
-            user_lang = get_user_language(user_id)
-            keyboard = [
-                [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
-                [InlineKeyboardButton(_get_settings_label(user_lang), callback_data="show_parameters")],
-                [
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ],
-                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-            ]
-
-            # Calculate price for confirmation message
-            is_admin_user = get_is_admin(user_id)
-            is_free = await is_free_generation_available(user_id, model_id)
-            price = calculate_price_rub(model_id, params, is_admin_user)
-            if is_free:
-                price = 0.0
-            price_str = format_rub_amount(price)
-
-            # Prepare price info
-            if is_free:
-                remaining = await get_user_free_generations_remaining(user_id)
-                price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
-            else:
-                price_info = f"💰 <b>Стоимость:</b> {price_str}"
-
-            # Format improved confirmation message with price
-            if user_lang == 'ru':
-                confirm_msg = (
-                    f"📋 <b>Подтверждение генерации</b>\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"🤖 <b>Модель:</b> {model_name}\n\n"
-                    f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"{price_info}\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💡 <b>Что будет дальше:</b>\n"
-                    f"• Генерация начнется после подтверждения\n"
-                    f"• Результат придет автоматически\n"
-                    f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-                    f"🚀 <b>Готовы начать?</b>"
-                )
-            else:
-                price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour" if is_free else f"💰 <b>Cost:</b> {price_str}"
-                confirm_msg = (
-                    f"📋 <b>Generation Confirmation</b>\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"🤖 <b>Model:</b> {model_name}\n\n"
-                    f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"{price_info_en}\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"💡 <b>What's next:</b>\n"
-                    f"• Generation will start after confirmation\n"
-                    f"• Result will come automatically\n"
-                    f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                    f"🚀 <b>Ready to start?</b>"
-                )
-
-            logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
-            await query.edit_message_text(
-                confirm_msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
-            )
-            return CONFIRMING_GENERATION
+            return await send_confirmation_message(update, context, user_id, source="set_param_complete")
         
         # Handle back to previous step
         if data == "back_to_previous_step":
@@ -10191,6 +10365,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return ConversationHandler.END
 
+            session_snapshot = get_session_cached(context, session_store, user_id, update_id, default={}) if user_id is not None else {}
+            session_gen_type = _resolve_session_gen_type(session_snapshot, model_spec)
+            if session_gen_type and not _model_supports_gen_type(model_spec, session_gen_type):
+                user_lang = get_user_language(user_id)
+                error_text = (
+                    "❌ <b>Модель не поддерживает выбранный тип генерации</b>\n\n"
+                    "Пожалуйста, выберите другой тип генерации."
+                    if user_lang == "ru"
+                    else "❌ <b>This model doesn't support the selected generation type</b>\n\nPlease pick another generation type."
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    action="GEN_TYPE_UNSUPPORTED",
+                    action_path="select_model",
+                    model_id=model_id,
+                    gen_type=session_gen_type,
+                    stage="MODEL_SELECT",
+                    outcome="blocked",
+                    error_code="GEN_TYPE_UNSUPPORTED",
+                    param={"model_mode": model_spec.model_mode, "model_type": model_spec.model_type},
+                )
+                keyboard = [
+                    [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="show_models")],
+                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")],
+                ]
+                await query.edit_message_text(
+                    error_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode="HTML",
+                )
+                return ConversationHandler.END
+
             mode_index = user_sessions.get(user_id, {}).get("mode_index")
             if model_spec.modes and len(model_spec.modes) > 1 and mode_index is None:
                 user_lang = get_user_language(user_id)
@@ -10416,10 +10625,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             
             # Store selected model
-            session = session_store.ensure(user_id)
+            session = ensure_session_cached(context, session_store, user_id, update_id)
             logger.debug(f"🔥🔥🔥 SELECT_MODEL: Created new session for user_id={user_id}")
             session['model_id'] = model_id
             session['model_info'] = model_info
+            session['gen_type'] = session_gen_type or _resolve_session_gen_type(None, model_spec)
             logger.debug(f"🔥🔥🔥 SELECT_MODEL: Stored model in session: model_id={model_id}, user_id={user_id}, session_keys={list(session.keys())}")
 
             log_structured_event(
@@ -10430,7 +10640,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action="MODEL_SELECT",
                 action_path=build_action_path(data),
                 model_id=model_id,
-                gen_type=model_spec.model_mode or model_spec.model_type,
+                gen_type=session.get("gen_type"),
                 stage="MODEL_SELECT",
                 outcome="selected",
             )
@@ -10442,7 +10652,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action="MODEL_SELECTED",
                 action_path=build_action_path(data),
                 model_id=model_id,
-                gen_type=model_spec.model_mode or model_spec.model_type,
+                gen_type=session.get("gen_type"),
                 stage="MODEL_SELECT",
                 outcome="selected",
             )
@@ -10468,6 +10678,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session['optional_media_params'] = []
             session['image_ref_prompt'] = False
             session['skipped_params'] = set()
+            mode_index = _resolve_mode_index(model_id, session.get("params"), user_id)
+            _update_price_quote(
+                session,
+                model_id=model_id,
+                mode_index=mode_index,
+                gen_type=session.get("gen_type"),
+                params=session.get("params", {}),
+                correlation_id=correlation_id,
+                update_id=update_id,
+                action_path="select_model",
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+                is_admin=is_admin_check,
+            )
             model_info.setdefault("input_params", input_params)
             if model_spec.model_type in {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}:
                 if "image_input" in input_params or "image_urls" in input_params:
@@ -10502,7 +10726,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     action="MEDIA_REQUIRED_OVERRIDE",
                     action_path="select_model",
                     model_id=model_id,
-                    gen_type=model_spec.model_mode or model_spec.model_type,
+                    gen_type=session.get("gen_type"),
                     stage="MODEL_SELECT",
                     outcome="forced",
                     param={"forced_media": forced_media_required},
@@ -10884,6 +11108,22 @@ async def prompt_for_specific_param(
         correlation_id,
         action_path=f"param_prompt:{param_name}",
     )
+    model_id = session.get("model_id", "")
+    mode_index = _resolve_mode_index(model_id, session.get("params", {}), user_id)
+    price_line = _build_current_price_line(
+        session,
+        user_lang=user_lang,
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=session.get("gen_type"),
+        params=session.get("params", {}),
+        correlation_id=correlation_id,
+        update_id=update.update_id,
+        action_path=f"param_prompt:{param_name}",
+        user_id=user_id,
+        chat_id=chat_id,
+        is_admin=get_is_admin(user_id),
+    )
 
     logger.info(
         "🧭 PARAM_PROMPT: action_path=%s model_id=%s param=%s waiting_for=%s current_param=%s outcome=prompt",
@@ -10933,6 +11173,7 @@ async def prompt_for_specific_param(
         if example_hint:
             prompt_text += f"🧪 {example_hint}\n"
         prompt_text += "📏 Максимальный размер: 10 MB" if user_lang == 'ru' else "📏 Max size: 10 MB"
+        prompt_text += f"\n\n{price_line}"
         prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
         await context.bot.send_message(
             chat_id=chat_id,
@@ -10987,6 +11228,7 @@ async def prompt_for_specific_param(
         prompt_text += (
             "Максимальный размер: 200 MB" if user_lang == 'ru' else "Max size: 200 MB"
         )
+        prompt_text += f"\n\n{price_line}"
         prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
         await context.bot.send_message(
             chat_id=chat_id,
@@ -11035,7 +11277,8 @@ async def prompt_for_specific_param(
             (
                 f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
                 f"{description}\n\n"
-                f"💡 {detail_text}"
+                f"💡 {detail_text}\n\n"
+                f"{price_line}"
             ),
             free_counter_line,
         )
@@ -11089,7 +11332,8 @@ async def prompt_for_specific_param(
             (
                 f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
                 f"{description}\n\n"
-                f"💡 {detail_text}"
+                f"💡 {detail_text}\n\n"
+                f"{price_line}"
             ),
             free_counter_line,
         )
@@ -11136,7 +11380,8 @@ async def prompt_for_specific_param(
         (
             f"📝 <b>{step_prefix}{param_name.replace('_', ' ').title()}</b>\n\n"
             f"{description}\n\n"
-            f"💡 {detail_text}"
+            f"💡 {detail_text}\n\n"
+            f"{price_line}"
         ),
         free_counter_line,
     )
@@ -11178,22 +11423,45 @@ async def send_confirmation_message(
     user_lang = get_user_language(user_id)
     is_admin_user = get_is_admin(user_id)
     is_free = await is_free_generation_available(user_id, model_id)
-    price = calculate_price_rub(model_id, params, is_admin_user)
+    mode_index = _resolve_mode_index(model_id, params, user_id)
+    price_quote = _update_price_quote(
+        session,
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=session.get("gen_type"),
+        params=params,
+        correlation_id=correlation_id,
+        update_id=update.update_id,
+        action_path="confirm_screen",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        is_admin=is_admin_user,
+    )
     if is_free:
-        price = 0.0
-    price_str = format_rub_amount(price)
+        price_display = "0.00"
+    elif price_quote:
+        price_display = price_quote.get("price_rub")
+    else:
+        price_display = None
+    price_line = (
+        f"Текущая цена: {price_display} ₽"
+        if price_display
+        else ("Цена: уточняется" if user_lang == "ru" else "Price: уточняется")
+    )
     if is_free:
         remaining = await get_user_free_generations_remaining(user_id)
         price_info = (
-            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час"
+            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в час\n{price_line}"
             if user_lang == 'ru'
-            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour"
+            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per hour\n{price_line}"
         )
+    elif not price_display:
+        price_info = price_line
     else:
         price_info = (
-            f"💰 <b>Стоимость:</b> {price_str}"
+            f"💰 <b>{price_line}</b>"
             if user_lang == 'ru'
-            else f"💰 <b>Cost:</b> {price_str}"
+            else f"💰 <b>{price_line}</b>"
         )
 
     free_counter_line = ""
@@ -11209,7 +11477,6 @@ async def send_confirmation_message(
 
     settings_label = _get_settings_label(user_lang)
     keyboard = [
-        [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")],
         [InlineKeyboardButton(settings_label, callback_data="show_parameters")],
         [
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
@@ -11217,6 +11484,8 @@ async def send_confirmation_message(
         ],
         [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
     ]
+    if price_str:
+        keyboard.insert(0, [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")])
 
     confirm_msg = _append_free_counter_text(
         (
@@ -11293,6 +11562,21 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
     model_id = session.get('model_id', '')
     user_lang = get_user_language(user_id)
     correlation_id = ensure_correlation_id(update, context)
+    mode_index = _resolve_mode_index(model_id, params, user_id)
+    price_line = _build_current_price_line(
+        session,
+        user_lang=user_lang,
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=session.get("gen_type"),
+        params=params,
+        correlation_id=correlation_id,
+        update_id=update.update_id,
+        action_path="start_next_parameter",
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        is_admin=get_is_admin(user_id),
+    )
 
     logger.info(
         "🧭🧭🧭 START_NEXT_PARAMETER: user_id=%s model_id=%s required=%s params_keys=%s properties_keys=%s session_keys=%s",
@@ -11419,7 +11703,8 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"{param_desc}\n\n"
                 f"💡 {format_hint}\n"
                 f"{example_line}"
-                f"📏 Максимальный размер: 30 MB"
+                f"📏 Максимальный размер: 30 MB\n\n"
+                f"{price_line}"
             )
             prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
             keyboard = [[
@@ -11491,7 +11776,8 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 (
                     f"📝 <b>{step_prefix}Выберите {param_name}:</b>\n\n"
                     f"{param_desc}{default_text}\n\n"
-                    f"💡 {details_text}\n{example_line}"
+                    f"💡 {details_text}\n{example_line}\n"
+                    f"{price_line}"
                 ),
                 free_counter_line,
             )
@@ -11560,7 +11846,8 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 (
                     f"📝 <b>Выберите {param_name}:</b>\n\n"
                     f"{param_desc}{default_info}\n\n"
-                    f"💡 Нажмите одну из кнопок ниже"
+                    f"💡 Нажмите одну из кнопок ниже\n\n"
+                    f"{price_line}"
                 ),
                 free_counter_line,
             )
@@ -11639,7 +11926,8 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"{example_line}\n"
                 f"💡 <b>Что делать:</b>\n"
                 f"• Введите значение в текстовом сообщении\n"
-                f"{action_hint}"
+                f"{action_hint}\n\n"
+                f"{price_line}"
             ),
             free_counter_line,
         )
@@ -11758,7 +12046,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action="INPUT_COLLECT",
         action_path="input_parameters",
         model_id=session.get("model_id") if isinstance(session, dict) else None,
-        gen_type=(session.get("model_spec").model_mode if isinstance(session, dict) and session.get("model_spec") else None),
+        gen_type=session.get("gen_type") if isinstance(session, dict) else None,
         stage="INPUT_COLLECT",
         param={
             "waiting_for": session.get("waiting_for") if isinstance(session, dict) else None,
@@ -14546,7 +14834,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action="STATE_INVALID_MISSING_MEDIA",
             action_path="confirm_generate",
             model_id=model_id,
-            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            gen_type=session.get("gen_type"),
             stage="UI_VALIDATE",
             outcome="missing_media",
             error_code="STATE_INVALID_MISSING_MEDIA",
@@ -14582,7 +14870,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action="KIE_NOT_READY",
             action_path="confirm_generate",
             model_id=model_id,
-            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            gen_type=session.get("gen_type"),
             stage="KIE_SUBMIT",
             outcome="blocked",
             error_code="KIE_NOT_READY",
@@ -14685,62 +14973,69 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     is_free = free_result.get("status") == "ok"
     
     # Calculate price (admins pay admin price, users pay user price)
-    price = calculate_price_rub(model_id, params, is_admin_user)
-    try:
-        from app.services.pricing_service import get_model_price_info
-        from app.config import get_settings
-
-        settings = get_settings()
-        mode_index = _resolve_mode_index(model_id, params, user_id)
-        price_info = get_model_price_info(model_id, mode_index, settings, is_admin=is_admin_user)
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            update_id=update.update_id,
-            action="PRICE_CALC",
-            action_path="confirm_generate",
-            model_id=model_id,
-            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
-            stage="PRICE_CALC",
-            outcome="success",
-            param={
-                "official_usd": price_info.get("official_usd") if price_info else None,
-                "usd_to_rub": price_info.get("usd_to_rub") if price_info else None,
-                "multiplier": price_info.get("price_multiplier") if price_info else None,
-                "price_rub": price,
-                "is_admin": is_admin_user,
-            },
+    mode_index = _resolve_mode_index(model_id, params, user_id)
+    price_quote = _update_price_quote(
+        session,
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=session.get("gen_type"),
+        params=params,
+        correlation_id=correlation_id,
+        update_id=update.update_id,
+        action_path="confirm_generate",
+        user_id=user_id,
+        chat_id=chat_id,
+        is_admin=is_admin_user,
+    )
+    if not price_quote:
+        user_lang = get_user_language(user_id)
+        await send_or_edit_message(
+            "❌ <b>Цена не определена</b>\n\n"
+            "Пожалуйста, выберите другую модель или попробуйте позже."
+            if user_lang == "ru"
+            else "❌ <b>Price is unavailable</b>\n\nPlease select another model or try again later."
         )
-        trace_event(
-            "info",
-            correlation_id,
-            event="PRICE_CALC",
-            stage="PRICE_CALC",
-            update_type="callback",
-            action="CONFIRM_GENERATE",
-            action_path="confirm_generate",
-            user_id=user_id,
-            chat_id=chat_id,
-            model_id=model_id,
-            official_usd=price_info.get("official_usd") if price_info else None,
-            rate=price_info.get("usd_to_rub") if price_info else None,
-            multiplier=price_info.get("price_multiplier") if price_info else None,
-            price_rub=price,
-            is_admin=is_admin_user,
-            pricing_source="catalog",
-            always_fields=[
-                "model_id",
-                "official_usd",
-                "rate",
-                "multiplier",
-                "price_rub",
-                "is_admin",
-                "pricing_source",
-            ],
-        )
-    except Exception as price_exc:
-        logger.debug("Pricing trace skipped: %s", price_exc)
+        return ConversationHandler.END
+    price = float(price_quote.get("price_rub", 0))
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="PRICE_CALC",
+        action_path="confirm_generate",
+        model_id=model_id,
+        gen_type=session.get("gen_type"),
+        stage="PRICE_CALC",
+        outcome="success",
+        param={
+            "price_rub": price_quote.get("price_rub"),
+            "mode_index": mode_index,
+            "breakdown": price_quote.get("breakdown", {}),
+            "is_admin": is_admin_user,
+        },
+    )
+    trace_event(
+        "info",
+        correlation_id,
+        event="PRICE_CALC",
+        stage="PRICE_CALC",
+        update_type="callback",
+        action="CONFIRM_GENERATE",
+        action_path="confirm_generate",
+        user_id=user_id,
+        chat_id=chat_id,
+        model_id=model_id,
+        price_rub=price_quote.get("price_rub"),
+        is_admin=is_admin_user,
+        pricing_source="catalog",
+        always_fields=[
+            "model_id",
+            "price_rub",
+            "is_admin",
+            "pricing_source",
+        ],
+    )
     
     # For free generations, price is 0
     if is_free:
@@ -14761,7 +15056,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     action="BALANCE_GATE",
                     action_path="confirm_generate",
                     model_id=model_id,
-                    gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+                    gen_type=session.get("gen_type"),
                     stage="BALANCE_GATE",
                     outcome="failed",
                     error_code="ERR_BALANCE_LOW",
@@ -14782,7 +15077,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 action="BALANCE_GATE",
                 action_path="confirm_generate",
                 model_id=model_id,
-                gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+                gen_type=session.get("gen_type"),
                 stage="BALANCE_GATE",
                 outcome="passed",
                 param={"price_rub": price, "balance_rub": user_balance},
@@ -14943,7 +15238,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action="GENERATION_STARTED",
             action_path="confirm_generate",
             model_id=model_id,
-            gen_type=model_spec.model_mode,
+            gen_type=session.get("gen_type"),
             stage="GEN_START",
             outcome="start",
         )
@@ -14992,7 +15287,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 job_result.urls,
                 job_result.text or caption,
                 model_id=model_id,
-                gen_type=model_spec.model_mode,
+                gen_type=session.get("gen_type"),
                 correlation_id=correlation_id,
             )
             if is_free:
@@ -15069,7 +15364,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action="KIE_SUBMIT_FAILED",
             action_path="confirm_generate",
             model_id=model_id,
-            gen_type=session.get("model_spec").model_mode if session.get("model_spec") else None,
+            gen_type=session.get("gen_type"),
             stage="KIE_SUBMIT",
             outcome="failed",
             error_code=exc.error_code or "KIE_SUBMIT_FAILED",

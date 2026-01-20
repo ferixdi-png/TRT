@@ -19,6 +19,7 @@ from app.utils.url_normalizer import (
 )
 import aiohttp
 from app.services.free_tools_service import format_free_counter_block, get_free_counter_snapshot
+from app.pricing.price_resolver import format_price_rub
 from app.observability.trace import trace_event, url_summary
 from app.observability.structured_logs import log_structured_event
 
@@ -231,7 +232,7 @@ async def send_job_result(
 
     price_text = ""
     if price_rub is not None:
-        price_display = f"{int(price_rub)}"
+        price_display = format_price_rub(price_rub)
         price_text = f"\n💰 <b>Цена:</b> {price_display} ₽"
 
     elapsed_text = ""
