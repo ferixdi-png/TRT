@@ -14,6 +14,21 @@
       ],
       "task_id": "565bf0561f34a44d3edfcf02bc101311",
       "timestamp": 1768930997
+    },
+    {
+      "id": 2,
+      "is_free": true,
+      "model_id": "bytedance/seedream",
+      "model_name": "Seedream 3.0 Text to Image",
+      "params": {
+        "prompt": "Сделай фото в стиле киберпанк с логотипом ALEX:LAB"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/f/b72bc7fc246060a7b0011b3c964bf359_1768931077_3d7kwc5o.png"
+      ],
+      "task_id": "b72bc7fc246060a7b0011b3c964bf359",
+      "timestamp": 1768931087
     }
   ],
   "452907108": [
