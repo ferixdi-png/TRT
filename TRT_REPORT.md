@@ -1603,3 +1603,14 @@ tests/test_409_conflict_fix.py ........
 2. Выполнить действие, которое меняет баланс/лимиты/бесплатные генерации.
 3. В логах увидеть `write_attempt repo=<storage_repo> branch=storage path=storage/...`.
 4. Убедиться, что в Render нет нового auto-deploy по storage-обновлению.
+
+## 2026-02-15: Welcome menu + post-delivery charging + runtime storage decouple
+**Было → стало:**
+- **Было:** приветственный текст мог не обновляться из-за `editMessage` без fallback и отсутствия видимого признака новой версии; списание баланса/квоты происходило до доставки результата; записи балансов/квот шли через GitHub storage и могли триггерить deploy.
+- **Стало:** обновлённый welcome-текст (RU) с акцентом на бесплатные инструменты/много моделей/параметры/быстрый результат; `MENU_RENDER` логирует `welcome_version` (hash) и всегда делает fallback `sendMessage` при ошибке `edit`; списание и уменьшение free-квоты происходят только после успешной доставки результата; при сбое доставки добавлен retry-кнопка “Повторить доставку”; runtime-данные (балансы/квоты/лимиты) пишутся в локальное JSON-хранилище без Git-коммитов.
+
+**Почему меню “не изменилось”:**
+- `editMessageText` мог не отработать (message not modified/too old), и не было fallback-отправки. Теперь при ошибке редактирования отправляется новое сообщение, а в логах есть `MENU_RENDER` с hash версии.
+
+**Проверки/тесты:**
+- `pytest -q tests/test_main_menu.py tests/test_welcome_text.py tests/test_delivery_charging_policy.py tests/test_storage_runtime_no_git_commits.py`

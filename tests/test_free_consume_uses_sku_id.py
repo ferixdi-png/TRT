@@ -42,7 +42,7 @@ async def test_free_consume_uses_sku_id(monkeypatch):
             )
 
         async def fake_deliver_result(*_args, **_kwargs):
-            return None
+            return True
 
         monkeypatch.setattr(bot_kie, "consume_free_generation", fake_consume)
         monkeypatch.setattr(bot_kie, "check_free_generation_available", fake_check_available)
