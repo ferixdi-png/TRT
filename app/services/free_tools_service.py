@@ -9,7 +9,7 @@ from pricing.engine import load_config
 from app.pricing.ssot_catalog import get_free_sku_ids
 from app.storage import get_storage
 from app.observability.structured_logs import log_structured_event
-from app.services.user_service import get_is_admin
+FREE_TOOLS_DAILY_LIMIT = 5
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,8 @@ def get_free_tools_config() -> FreeToolsConfig:
     config = load_config()
     free_tools = config.get("free_tools", {}) if isinstance(config, dict) else {}
     sku_ids = get_free_sku_ids()
-    base_per_day = int(free_tools.get("base_per_day", free_tools.get("base_per_hour", 5)))
+    _ = free_tools  # config kept for future expansion
+    base_per_day = FREE_TOOLS_DAILY_LIMIT
     referral_bonus = int(free_tools.get("referral_bonus", 10))
     return FreeToolsConfig(
         sku_ids=list(sku_ids),
@@ -119,8 +120,6 @@ async def check_and_consume_free_generation(
     cfg = get_free_tools_config()
     if model_id not in cfg.sku_ids:
         return {"status": "not_free"}
-    if get_is_admin(user_id):
-        return {"status": "not_free"}
 
     storage = get_storage()
     used_count = int(await storage.get_user_free_generations_today(user_id))
@@ -193,8 +192,6 @@ async def check_free_generation_available(
     cfg = get_free_tools_config()
     if model_id not in cfg.sku_ids:
         return {"status": "not_free"}
-    if get_is_admin(user_id):
-        return {"status": "not_free"}
 
     storage = get_storage()
     used_count = int(await storage.get_user_free_generations_today(user_id))
@@ -239,8 +236,6 @@ async def consume_free_generation(
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
     if model_id not in cfg.sku_ids:
-        return {"status": "not_free"}
-    if get_is_admin(user_id):
         return {"status": "not_free"}
 
     storage = get_storage()
