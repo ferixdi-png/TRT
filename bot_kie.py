@@ -15,7 +15,7 @@ import uuid
 import hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 
 from app.observability.structured_logs import (
     build_action_path,
@@ -665,10 +665,35 @@ def get_model_by_id_from_registry(model_id: str) -> Optional[Dict[str, Any]]:
             return model
     return None
 
+
+_VISIBLE_MODEL_IDS_CACHE: Optional[Set[str]] = None
+
+
+def _get_visible_model_ids() -> Set[str]:
+    global _VISIBLE_MODEL_IDS_CACHE
+    if _VISIBLE_MODEL_IDS_CACHE is None:
+        from app.ux.model_visibility import is_model_visible
+
+        _VISIBLE_MODEL_IDS_CACHE = {
+            model_id
+            for model in get_models_sync()
+            if (model_id := model.get("id")) and is_model_visible(model_id)
+        }
+    return _VISIBLE_MODEL_IDS_CACHE
+
+
+def filter_visible_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    visible_ids = _get_visible_model_ids()
+    return [model for model in models if model.get("id") in visible_ids]
+
+
+def get_visible_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]:
+    return filter_visible_models(get_models_by_generation_type(gen_type))
+
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
     models = get_models_sync()
-    return [m for m in models if m.get('category') == category]
+    return filter_visible_models([m for m in models if m.get('category') == category])
 
 def get_categories_from_registry() -> List[str]:
     """Получает список категорий из реестра"""
@@ -6043,7 +6068,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=query.message.chat_id if query.message else None,
             )
             gen_info = get_generation_type_info(gen_type)
-            models = get_models_by_generation_type(gen_type)
+            models = get_visible_models_by_generation_type(gen_type)
             
             if not models:
                 user_lang = get_user_language(user_id)
@@ -6543,6 +6568,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Show generation types instead of all models with marketing text
             generation_types = get_generation_types()
+            visible_models_by_type = {
+                gen_type: len(get_visible_models_by_generation_type(gen_type))
+                for gen_type in generation_types
+            }
+            visible_generation_types = [
+                gen_type for gen_type, count in visible_models_by_type.items() if count > 0
+            ]
             remaining_free = await get_user_free_generations_remaining(user_id)
             user_lang = get_user_language(user_id)
             free_counter_line = ""
@@ -6572,9 +6604,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"💡 Пригласи друга → получи +{REFERRAL_BONUS_GENERATIONS} генераций\n\n"
                 )
             
+            visible_models_count = len(_get_visible_model_ids())
             models_text += (
-                f"📦 <b>Доступно:</b> {len(generation_types)} типов генерации\n"
-                f"🤖 <b>Моделей:</b> {len(get_models_sync())} топовых нейросетей"
+                f"📦 <b>Доступно:</b> {len(visible_generation_types)} типов генерации\n"
+                f"🤖 <b>Моделей:</b> {visible_models_count} топовых нейросетей"
             )
             models_text = _append_free_counter_text(models_text, free_counter_line)
             
@@ -6609,7 +6642,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             for gen_type in generation_types:
                 gen_info = get_generation_type_info(gen_type)
-                models_count = len(get_models_by_generation_type(gen_type))
+                models_count = visible_models_by_type.get(gen_type, 0)
                 
                 # Skip if no models in this type
                 if models_count == 0:
@@ -6649,7 +6682,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Add text-to-image button after free generation (if it exists and has models)
             if text_to_image_type:
                 gen_info = get_generation_type_info(text_to_image_type)
-                models_count = len(get_models_by_generation_type(text_to_image_type))
+                models_count = visible_models_by_type.get(text_to_image_type, 0)
                 if models_count > 0:
                     gen_type_key = f'gen_type_{text_to_image_type.replace("-", "_")}'
                     gen_type_name = t(gen_type_key, lang=user_lang, default=gen_info.get('name', text_to_image_type))
@@ -6677,11 +6710,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([])  # Empty row for spacing
             if user_lang == 'ru':
                 keyboard.append([
-                    InlineKeyboardButton(f"📋 Показать все {len(get_models_sync())} моделей", callback_data="show_all_models_list")
+                    InlineKeyboardButton(f"📋 Показать все {visible_models_count} моделей", callback_data="show_all_models_list")
                 ])
             else:
                 keyboard.append([
-                    InlineKeyboardButton(f"📋 Show all {len(get_models_sync())} models", callback_data="show_all_models_list")
+                    InlineKeyboardButton(f"📋 Show all {visible_models_count} models", callback_data="show_all_models_list")
                 ])
             
             user_lang = get_user_language(user_id)
