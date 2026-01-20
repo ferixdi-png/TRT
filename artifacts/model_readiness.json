@@ -1,2710 +1,1021 @@
-{
-  "generated_at": "2026-01-20T04:53:59.084994+00:00",
-  "models": {
-    "bytedance/seedream": {
-      "model_id": "bytedance/seedream",
-      "status": "READY",
-      "status_symbol": "✅",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "enable_safety_checker",
-        "guidance_scale",
-        "image_size"
-      ],
-      "required_media_expected": [],
-      "mode_count": 3,
-      "has_ru_mode_titles": true,
-      "has_ru_model_card": true,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "bytedance/seedream-v4-edit": {
-      "model_id": "bytedance/seedream-v4-edit",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "image_resolution",
-        "image_size",
-        "max_images"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-edit].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-edit].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-edit].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-edit].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-edit].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "bytedance/seedream-v4-text-to-image": {
-      "model_id": "bytedance/seedream-v4-text-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "image_resolution",
-        "image_size",
-        "max_images"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-text-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-text-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-text-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-text-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/seedream-v4-text-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "bytedance/v1-pro-fast-image-to-video": {
-      "model_id": "bytedance/v1-pro-fast-image-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "duration",
-        "resolution"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=bytedance/v1-pro-fast-image-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "elevenlabs/audio-isolation": {
-      "model_id": "elevenlabs/audio-isolation",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "audio-to-audio",
-      "model_mode": "audio_to_audio",
-      "model_type": "audio_to_audio",
-      "schema_key": "audio_isolation",
-      "required_inputs": [
-        "audio_url"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "audio"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/audio-isolation].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/audio-isolation].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/audio-isolation].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/audio-isolation].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/audio-isolation].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "elevenlabs/sound-effect": {
-      "model_id": "elevenlabs/sound-effect",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "sfx",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/sound-effect].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/sound-effect].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/sound-effect].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/sound-effect].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/sound-effect].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "elevenlabs/speech-to-text": {
-      "model_id": "elevenlabs/speech-to-text",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "speech-to-text",
-      "model_mode": "speech_to_text",
-      "model_type": "speech_to_text",
-      "schema_key": "stt",
-      "required_inputs": [
-        "audio_url"
-      ],
-      "optional_inputs": [
-        "diarize",
-        "language_code",
-        "tag_audio_events"
-      ],
-      "required_media_expected": [
-        "audio"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/speech-to-text].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/speech-to-text].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/speech-to-text].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/speech-to-text].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/speech-to-text].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "elevenlabs/text-to-speech": {
-      "model_id": "elevenlabs/text-to-speech",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-speech",
-      "model_mode": "text_to_speech",
-      "model_type": "text_to_speech",
-      "schema_key": "tts",
-      "required_inputs": [
-        "text"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=elevenlabs/text-to-speech].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "flux-2/flex-image-to-image": {
-      "model_id": "flux-2/flex-image-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "image_input",
-        "prompt",
-        "resolution"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-image-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "flux-2/flex-text-to-image": {
-      "model_id": "flux-2/flex-text-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "prompt",
-        "resolution"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/flex-text-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "flux-2/pro-image-to-image": {
-      "model_id": "flux-2/pro-image-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "image_input",
-        "prompt",
-        "resolution"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-image-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "flux-2/pro-text-to-image": {
-      "model_id": "flux-2/pro-text-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "prompt",
-        "resolution"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux-2/pro-text-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "flux/kontext": {
-      "model_id": "flux/kontext",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=flux/kontext].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/imagen4": {
-      "model_id": "google/imagen4",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "negative_prompt",
-        "num_images",
-        "seed"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/imagen4-fast": {
-      "model_id": "google/imagen4-fast",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "negative_prompt",
-        "num_images",
-        "seed"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-fast].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-fast].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-fast].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-fast].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-fast].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/imagen4-ultra": {
-      "model_id": "google/imagen4-ultra",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "negative_prompt",
-        "seed"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-ultra].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-ultra].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-ultra].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-ultra].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/imagen4-ultra].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/nano-banana": {
-      "model_id": "google/nano-banana",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "image_size",
-        "output_format"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/nano-banana-edit": {
-      "model_id": "google/nano-banana-edit",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_urls",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "image_size",
-        "output_format"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana-edit].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana-edit].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana-edit].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana-edit].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nano-banana-edit].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/nanobanana-gemini-2.5-flash": {
-      "model_id": "google/nanobanana-gemini-2.5-flash",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nanobanana-gemini-2.5-flash].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nanobanana-gemini-2.5-flash].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nanobanana-gemini-2.5-flash].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nanobanana-gemini-2.5-flash].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/nanobanana-gemini-2.5-flash].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/veo-3": {
-      "model_id": "google/veo-3",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 5,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "google/veo-3.1": {
-      "model_id": "google/veo-3.1",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 5,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=google/veo-3.1].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "grok/imagine": {
-      "model_id": "grok/imagine",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=grok/imagine].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "hailuo/02-image-to-video-pro": {
-      "model_id": "hailuo/02-image-to-video-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "end_image_url",
-        "prompt_optimizer"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "hailuo/02-image-to-video-standard": {
-      "model_id": "hailuo/02-image-to-video-standard",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "duration",
-        "end_image_url",
-        "prompt_optimizer",
-        "resolution"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-image-to-video-standard].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "hailuo/02-text-to-video-pro": {
-      "model_id": "hailuo/02-text-to-video-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "prompt_optimizer"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "hailuo/02-text-to-video-standard": {
-      "model_id": "hailuo/02-text-to-video-standard",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "duration",
-        "prompt_optimizer"
-      ],
-      "required_media_expected": [],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/02-text-to-video-standard].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "hailuo/2.3": {
-      "model_id": "hailuo/2.3",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 6,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[5].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].modes[5].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=hailuo/2.3].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/character": {
-      "model_id": "ideogram/character",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt",
-        "reference_image_input"
-      ],
-      "optional_inputs": [
-        "expand_prompt",
-        "image_size",
-        "negative_prompt",
-        "num_images",
-        "rendering_speed",
-        "style"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/character-edit": {
-      "model_id": "ideogram/character-edit",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "mask_input",
-        "prompt",
-        "reference_image_input"
-      ],
-      "optional_inputs": [
-        "expand_prompt",
-        "num_images",
-        "rendering_speed",
-        "style"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-edit].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/character-remix": {
-      "model_id": "ideogram/character-remix",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "prompt",
-        "reference_image_input"
-      ],
-      "optional_inputs": [
-        "expand_prompt",
-        "image_size",
-        "negative_prompt",
-        "num_images",
-        "rendering_speed",
-        "strength",
-        "style"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/character-remix].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/v3-edit": {
-      "model_id": "ideogram/v3-edit",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "mask_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "expand_prompt",
-        "num_images",
-        "rendering_speed",
-        "seed"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-edit].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/v3-reframe": {
-      "model_id": "ideogram/v3-reframe",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "outpaint",
-      "model_mode": "outpaint",
-      "model_type": "outpaint",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "image_size"
-      ],
-      "optional_inputs": [
-        "num_images",
-        "rendering_speed",
-        "style"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-reframe].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/v3-remix": {
-      "model_id": "ideogram/v3-remix",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "expand_prompt",
-        "image_size",
-        "negative_prompt",
-        "num_images",
-        "rendering_speed",
-        "seed",
-        "strength",
-        "style"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-remix].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "ideogram/v3-text-to-image": {
-      "model_id": "ideogram/v3-text-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "expand_prompt",
-        "image_size",
-        "negative_prompt",
-        "num_images",
-        "rendering_speed",
-        "seed",
-        "style"
-      ],
-      "required_media_expected": [],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=ideogram/v3-text-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "infinitalk/from-audio": {
-      "model_id": "infinitalk/from-audio",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "lip-sync",
-      "model_mode": "lip_sync",
-      "model_type": "lip_sync",
-      "schema_key": "lip_sync",
-      "required_inputs": [
-        "audio_input",
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "audio",
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=infinitalk/from-audio].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling-2.6/image-to-video": {
-      "model_id": "kling-2.6/image-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "duration",
-        "image_input",
-        "prompt",
-        "sound"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/image-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling-2.6/text-to-video": {
-      "model_id": "kling-2.6/text-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "aspect_ratio",
-        "duration",
-        "prompt",
-        "sound"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling-2.6/text-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/ai-avatar-v1-pro": {
-      "model_id": "kling/ai-avatar-v1-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "lip-sync",
-      "model_mode": "lip_sync",
-      "model_type": "lip_sync",
-      "schema_key": "lip_sync",
-      "required_inputs": [
-        "audio_input",
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "audio",
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/ai-avatar-v1-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/ai-avatar-v1-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/ai-avatar-v1-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/ai-avatar-v1-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/ai-avatar-v1-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v1-avatar-standard": {
-      "model_id": "kling/v1-avatar-standard",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "lip-sync",
-      "model_mode": "lip_sync",
-      "model_type": "lip_sync",
-      "schema_key": "lip_sync",
-      "required_inputs": [
-        "audio_input",
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "audio",
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v1-avatar-standard].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v1-avatar-standard].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v1-avatar-standard].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v1-avatar-standard].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v1-avatar-standard].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-1-master-image-to-video": {
-      "model_id": "kling/v2-1-master-image-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "cfg_scale",
-        "duration",
-        "negative_prompt"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-image-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-1-master-text-to-video": {
-      "model_id": "kling/v2-1-master-text-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "cfg_scale",
-        "duration",
-        "negative_prompt"
-      ],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-master-text-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-1-pro": {
-      "model_id": "kling/v2-1-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "cfg_scale",
-        "duration",
-        "negative_prompt",
-        "tail_image_url"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-1-standard": {
-      "model_id": "kling/v2-1-standard",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "cfg_scale",
-        "duration",
-        "negative_prompt"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-1-standard].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-5-turbo": {
-      "model_id": "kling/v2-5-turbo",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-5-turbo-image-to-video-pro": {
-      "model_id": "kling/v2-5-turbo-image-to-video-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "cfg_scale",
-        "duration",
-        "negative_prompt"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-image-to-video-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "kling/v2-5-turbo-text-to-video-pro": {
-      "model_id": "kling/v2-5-turbo-text-to-video-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "cfg_scale",
-        "duration",
-        "negative_prompt"
-      ],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=kling/v2-5-turbo-text-to-video-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "midjourney/api": {
-      "model_id": "midjourney/api",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 7,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[5].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[5].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[6].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].modes[6].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=midjourney/api].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "nano-banana-pro": {
-      "model_id": "nano-banana-pro",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "output_format",
-        "resolution"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=nano-banana-pro].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "openai/4o-image": {
-      "model_id": "openai/4o-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=openai/4o-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=openai/4o-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=openai/4o-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=openai/4o-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=openai/4o-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "qwen/image-edit": {
-      "model_id": "qwen/image-edit",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "acceleration",
-        "enable_safety_checker",
-        "guidance_scale",
-        "image_size",
-        "negative_prompt",
-        "num_images",
-        "num_inference_steps",
-        "output_format"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-edit].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-edit].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-edit].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-edit].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-edit].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "qwen/image-to-image": {
-      "model_id": "qwen/image-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-image",
-      "model_mode": "image_to_image",
-      "model_type": "image_to_image",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "acceleration",
-        "enable_safety_checker",
-        "guidance_scale",
-        "negative_prompt",
-        "num_inference_steps",
-        "output_format",
-        "strength"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/image-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "qwen/text-to-image": {
-      "model_id": "qwen/text-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "acceleration",
-        "enable_safety_checker",
-        "guidance_scale",
-        "image_size",
-        "negative_prompt",
-        "num_inference_steps",
-        "output_format"
-      ],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/text-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/text-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/text-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/text-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=qwen/text-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "recraft/crisp-upscale": {
-      "model_id": "recraft/crisp-upscale",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "upscale",
-      "model_mode": "upscale",
-      "model_type": "upscale",
-      "schema_key": "upscale",
-      "required_inputs": [
-        "image_input"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/crisp-upscale].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/crisp-upscale].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/crisp-upscale].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/crisp-upscale].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/crisp-upscale].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "recraft/remove-background": {
-      "model_id": "recraft/remove-background",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "bg_remove",
-      "required_inputs": [
-        "image_input"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/remove-background].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/remove-background].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/remove-background].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/remove-background].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=recraft/remove-background].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "runway/gen-4": {
-      "model_id": "runway/gen-4",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 6,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[5].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].modes[5].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=runway/gen-4].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "seedream/4.5-edit": {
-      "model_id": "seedream/4.5-edit",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-edit",
-      "model_mode": "image_edit",
-      "model_type": "image_edit",
-      "schema_key": "i2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "image_urls",
-        "prompt",
-        "quality"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-edit].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "seedream/4.5-text-to-image": {
-      "model_id": "seedream/4.5-text-to-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "prompt",
-        "quality"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=seedream/4.5-text-to-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "sora-2-pro-image-to-video": {
-      "model_id": "sora-2-pro-image-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_urls",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "n_frames",
-        "remove_watermark",
-        "size"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 6,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[5].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].modes[5].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-image-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "sora-2-pro-storyboard": {
-      "model_id": "sora-2-pro-storyboard",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-pro-storyboard].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "sora-2-text-to-video": {
-      "model_id": "sora-2-text-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "aspect_ratio",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "n_frames",
-        "remove_watermark"
-      ],
-      "required_media_expected": [],
-      "mode_count": 2,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-2-text-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "sora-watermark-remover": {
-      "model_id": "sora-watermark-remover",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "video-editing",
-      "model_mode": "video_editing",
-      "model_type": "video_editing",
-      "schema_key": "watermark_remove",
-      "required_inputs": [
-        "video_url"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "video"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-watermark-remover].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-watermark-remover].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-watermark-remover].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-watermark-remover].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=sora-watermark-remover].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "suno/v5": {
-      "model_id": "suno/v5",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "music",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 9,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[4].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[4].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[5].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[5].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[6].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[6].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[7].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[7].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[8].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].modes[8].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=suno/v5].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "topaz/image-upscale": {
-      "model_id": "topaz/image-upscale",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "upscale",
-      "model_mode": "upscale",
-      "model_type": "upscale",
-      "schema_key": "upscale",
-      "required_inputs": [
-        "image_input",
-        "upscale_factor"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/image-upscale].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "topaz/video-upscale": {
-      "model_id": "topaz/video-upscale",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "video-upscale",
-      "model_mode": "video_upscale",
-      "model_type": "video_upscale",
-      "schema_key": "upscale",
-      "required_inputs": [
-        "video_input"
-      ],
-      "optional_inputs": [
-        "upscale_factor"
-      ],
-      "required_media_expected": [
-        "video"
-      ],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/video-upscale].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/video-upscale].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/video-upscale].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/video-upscale].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=topaz/video-upscale].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-2-a14b-image-to-video-turbo": {
-      "model_id": "wan/2-2-a14b-image-to-video-turbo",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "acceleration",
-        "aspect_ratio",
-        "enable_prompt_expansion",
-        "resolution",
-        "seed"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-image-to-video-turbo].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-2-a14b-speech-to-video-turbo": {
-      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "speech-to-video",
-      "model_mode": "speech_to_video",
-      "model_type": "speech_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "audio_input",
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "enable_safety_checker",
-        "frames_per_second",
-        "guidance_scale",
-        "negative_prompt",
-        "num_frames",
-        "num_inference_steps",
-        "resolution",
-        "shift"
-      ],
-      "required_media_expected": [
-        "audio",
-        "image"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-speech-to-video-turbo].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-2-a14b-text-to-video-turbo": {
-      "model_id": "wan/2-2-a14b-text-to-video-turbo",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "acceleration",
-        "aspect_ratio",
-        "enable_prompt_expansion",
-        "resolution",
-        "seed"
-      ],
-      "required_media_expected": [],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-a14b-text-to-video-turbo].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-2-animate-move": {
-      "model_id": "wan/2-2-animate-move",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "image_input",
-        "video_input"
-      ],
-      "optional_inputs": [
-        "resolution"
-      ],
-      "required_media_expected": [
-        "image",
-        "video"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-move].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-2-animate-replace": {
-      "model_id": "wan/2-2-animate-replace",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "image_input",
-        "video_input"
-      ],
-      "optional_inputs": [
-        "resolution"
-      ],
-      "required_media_expected": [
-        "image",
-        "video"
-      ],
-      "mode_count": 3,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-2-animate-replace].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-5-image-to-video": {
-      "model_id": "wan/2-5-image-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "image-to-video",
-      "model_mode": "image_to_video",
-      "model_type": "image_to_video",
-      "schema_key": "i2v",
-      "required_inputs": [
-        "image_input",
-        "prompt"
-      ],
-      "optional_inputs": [
-        "duration",
-        "enable_prompt_expansion",
-        "negative_prompt",
-        "resolution"
-      ],
-      "required_media_expected": [
-        "image"
-      ],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-image-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "wan/2-5-text-to-video": {
-      "model_id": "wan/2-5-text-to-video",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-video",
-      "model_mode": "text_to_video",
-      "model_type": "text_to_video",
-      "schema_key": "t2v",
-      "required_inputs": [
-        "prompt"
-      ],
-      "optional_inputs": [
-        "aspect_ratio",
-        "duration",
-        "enable_prompt_expansion",
-        "negative_prompt",
-        "resolution"
-      ],
-      "required_media_expected": [],
-      "mode_count": 4,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[1].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[1].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[2].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[2].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[3].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].modes[3].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=wan/2-5-text-to-video].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    },
-    "z-image": {
-      "model_id": "z-image",
-      "status": "PARTIAL",
-      "status_symbol": "⚠️",
-      "gen_type": "text-to-image",
-      "model_mode": "text_to_image",
-      "model_type": "text_to_image",
-      "schema_key": "t2i",
-      "required_inputs": [
-        "aspect_ratio",
-        "prompt"
-      ],
-      "optional_inputs": [],
-      "required_media_expected": [],
-      "mode_count": 1,
-      "has_ru_mode_titles": false,
-      "has_ru_model_card": false,
-      "has_price_mapping": true,
-      "can_build_api_request": true,
-      "can_deliver_output": true,
-      "ssot_conflicts": [],
-      "missing_fields": [
-        "app/kie_catalog/models_pricing.yaml:models[id=z-image].description_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=z-image].modes[0].short_hint_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=z-image].modes[0].title_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=z-image].output_type_ru",
-        "app/kie_catalog/models_pricing.yaml:models[id=z-image].required_inputs_ru"
-      ],
-      "blocked_reason": [],
-      "notes": ""
-    }
+[
+  {
+    "model_id": "bytedance/seedream",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "enable_safety_checker",
+      "guidance_scale",
+      "image_size"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "bytedance/seedream-v4-edit",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "image_resolution",
+      "image_size",
+      "max_images"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "bytedance/seedream-v4-text-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "image_resolution",
+      "image_size",
+      "max_images"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "duration",
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "elevenlabs/audio-isolation",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "audio_url"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "elevenlabs/sound-effect",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "elevenlabs/speech-to-text",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "audio_url"
+    ],
+    "api_optional_fields": [
+      "diarize",
+      "language_code",
+      "tag_audio_events"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "elevenlabs/text-to-speech",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "text"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "flux-2/flex-image-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "image_input",
+      "prompt",
+      "resolution"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "flux-2/flex-text-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "prompt",
+      "resolution"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "flux-2/pro-image-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "image_input",
+      "prompt",
+      "resolution"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "flux-2/pro-text-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "prompt",
+      "resolution"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "flux/kontext",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/imagen4",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "negative_prompt",
+      "num_images",
+      "seed"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/imagen4-fast",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "negative_prompt",
+      "num_images",
+      "seed"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/imagen4-ultra",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "negative_prompt",
+      "seed"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/nano-banana",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "image_size",
+      "output_format"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/nano-banana-edit",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_urls",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "image_size",
+      "output_format"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/nanobanana-gemini-2.5-flash",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/veo-3",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "google/veo-3.1",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "grok/imagine",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "hailuo/02-image-to-video-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "end_image_url",
+      "prompt_optimizer"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "hailuo/02-image-to-video-standard",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "duration",
+      "end_image_url",
+      "prompt_optimizer",
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "hailuo/02-text-to-video-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "prompt_optimizer"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "hailuo/02-text-to-video-standard",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "duration",
+      "prompt_optimizer"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "hailuo/2.3",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/character",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt",
+      "reference_image_input"
+    ],
+    "api_optional_fields": [
+      "expand_prompt",
+      "image_size",
+      "negative_prompt",
+      "num_images",
+      "rendering_speed",
+      "style"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/character-edit",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "mask_input",
+      "prompt",
+      "reference_image_input"
+    ],
+    "api_optional_fields": [
+      "expand_prompt",
+      "num_images",
+      "rendering_speed",
+      "style"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/character-remix",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt",
+      "reference_image_input"
+    ],
+    "api_optional_fields": [
+      "expand_prompt",
+      "image_size",
+      "negative_prompt",
+      "num_images",
+      "rendering_speed",
+      "strength",
+      "style"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/v3-edit",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "mask_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "expand_prompt",
+      "num_images",
+      "rendering_speed",
+      "seed"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/v3-reframe",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "image_size"
+    ],
+    "api_optional_fields": [
+      "num_images",
+      "rendering_speed",
+      "style"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/v3-remix",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "expand_prompt",
+      "image_size",
+      "negative_prompt",
+      "num_images",
+      "rendering_speed",
+      "seed",
+      "strength",
+      "style"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "ideogram/v3-text-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "expand_prompt",
+      "image_size",
+      "negative_prompt",
+      "num_images",
+      "rendering_speed",
+      "seed",
+      "style"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "infinitalk/from-audio",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "audio_input",
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling-2.6/image-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "duration",
+      "image_input",
+      "prompt",
+      "sound"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling-2.6/text-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "duration",
+      "prompt",
+      "sound"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/ai-avatar-v1-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "audio_input",
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v1-avatar-standard",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "audio_input",
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-1-master-image-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "cfg_scale",
+      "duration",
+      "negative_prompt"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-1-master-text-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "cfg_scale",
+      "duration",
+      "negative_prompt"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-1-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "cfg_scale",
+      "duration",
+      "negative_prompt",
+      "tail_image_url"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-1-standard",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "cfg_scale",
+      "duration",
+      "negative_prompt"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-5-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-5-turbo-image-to-video-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "cfg_scale",
+      "duration",
+      "negative_prompt"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "kling/v2-5-turbo-text-to-video-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "cfg_scale",
+      "duration",
+      "negative_prompt"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "midjourney/api",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "nano-banana-pro",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "output_format",
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "openai/4o-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "qwen/image-edit",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "acceleration",
+      "enable_safety_checker",
+      "guidance_scale",
+      "image_size",
+      "negative_prompt",
+      "num_images",
+      "num_inference_steps",
+      "output_format"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "qwen/image-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "acceleration",
+      "enable_safety_checker",
+      "guidance_scale",
+      "negative_prompt",
+      "num_inference_steps",
+      "output_format",
+      "strength"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "qwen/text-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "acceleration",
+      "enable_safety_checker",
+      "guidance_scale",
+      "image_size",
+      "negative_prompt",
+      "num_inference_steps",
+      "output_format"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "recraft/crisp-upscale",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "recraft/remove-background",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "runway/gen-4",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "seedream/4.5-edit",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "image_urls",
+      "prompt",
+      "quality"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "seedream/4.5-text-to-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "prompt",
+      "quality"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "sora-2-pro-image-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_urls",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "n_frames",
+      "remove_watermark",
+      "size"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "sora-2-pro-storyboard",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "sora-2-text-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "n_frames",
+      "remove_watermark"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "sora-watermark-remover",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "video_url"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "suno/v5",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "topaz/image-upscale",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "upscale_factor"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
+  },
+  {
+    "model_id": "topaz/video-upscale",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "video_input"
+    ],
+    "api_optional_fields": [
+      "upscale_factor"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-2-a14b-image-to-video-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "acceleration",
+      "aspect_ratio",
+      "enable_prompt_expansion",
+      "resolution",
+      "seed"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "audio_input",
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "enable_safety_checker",
+      "frames_per_second",
+      "guidance_scale",
+      "negative_prompt",
+      "num_frames",
+      "num_inference_steps",
+      "resolution",
+      "shift"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-2-a14b-text-to-video-turbo",
+    "status": "BLOCKED_NO_PRICE",
+    "issues": [
+      "Нет ценовых SKU в прайс-SSOT."
+    ],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "acceleration",
+      "aspect_ratio",
+      "enable_prompt_expansion",
+      "resolution",
+      "seed"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-2-animate-move",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "video_input"
+    ],
+    "api_optional_fields": [
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-2-animate-replace",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "video_input"
+    ],
+    "api_optional_fields": [
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-5-image-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "image_input",
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "duration",
+      "enable_prompt_expansion",
+      "negative_prompt",
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "wan/2-5-text-to-video",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "prompt"
+    ],
+    "api_optional_fields": [
+      "aspect_ratio",
+      "duration",
+      "enable_prompt_expansion",
+      "negative_prompt",
+      "resolution"
+    ],
+    "defaults": {}
+  },
+  {
+    "model_id": "z-image",
+    "status": "READY_VISIBLE",
+    "issues": [],
+    "api_required_fields": [
+      "aspect_ratio",
+      "prompt"
+    ],
+    "api_optional_fields": [],
+    "defaults": {}
   }
-}
+]

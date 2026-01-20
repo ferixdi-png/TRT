@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 
 from app.config import Settings, get_settings
-from app.pricing.ssot_catalog import resolve_sku_for_params
+from app.pricing.price_ssot import resolve_sku_for_params
 
 
 PRICE_QUANT = Decimal("0.01")
@@ -61,7 +61,7 @@ def resolve_price_quote(
         "mode_index": mode_index,
         "gen_type": gen_type,
         "params": dict(selected_params or {}),
-        "sku_id": sku.sku_id,
+        "sku_id": sku.sku_key,
         "unit": sku.unit,
     }
-    return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_id)
+    return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_key)
