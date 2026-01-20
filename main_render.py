@@ -1434,7 +1434,15 @@ def build_dynamic_webhook_handler():
                 "[WEBHOOK] handler_ready=false reason=handler_not_bound bot_ready=%s",
                 str(_bot_ready).lower(),
             )
-            return web.Response(status=503)
+            return web.json_response(
+                {
+                    "status": "starting",
+                    "handler_ready": False,
+                    "bot_ready": _bot_ready,
+                },
+                status=503,
+                headers={"Retry-After": "1"},
+            )
         return await _dynamic_webhook_handler(request)
 
     return dynamic_webhook_handler
