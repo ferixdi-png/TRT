@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+import concurrent.futures
 import sys
 import os
 import re
@@ -458,7 +459,6 @@ def log_env_summary():
         "ENV": os.getenv("ENV", "not set"),
         "BOT_MODE": os.getenv("BOT_MODE", "not set"),
         "STORAGE_MODE": os.getenv("STORAGE_MODE", "not set"),
-        "DATABASE_URL": "[SET]" if os.getenv("DATABASE_URL") else "[NOT SET]",
         "TELEGRAM_BOT_TOKEN": "[SET]" if os.getenv("TELEGRAM_BOT_TOKEN") else "[NOT SET]",
         "KIE_API_KEY": "[SET]" if os.getenv("KIE_API_KEY") else "[NOT SET]",
         "KIE_API_URL": os.getenv("KIE_API_URL", "not set"),
@@ -493,10 +493,6 @@ def validate_required_env():
     if allow_real and not test_mode and not kie_stub:
         if not os.getenv("KIE_API_KEY"):
             errors.append("KIE_API_KEY is required for real generation (set ALLOW_REAL_GENERATION=0 or TEST_MODE=1 to disable)")
-    
-    # DATABASE_URL - опционален, но предупреждаем если нет
-    if not os.getenv("DATABASE_URL"):
-        warnings.append("DATABASE_URL not set - will use JSON storage fallback")
     
     # Проверяем наличие критических файлов (warning, не error - может быть опциональным)
     models_yaml = Path(__file__).parent / "models" / "kie_models.yaml"
@@ -1092,7 +1088,7 @@ except ImportError:
 
 # Импортируем конфигурацию из app.config (централизованная конфигурация из ENV)
 try:
-    from app.config import BOT_TOKEN, DATABASE_URL as CONFIG_DATABASE_URL, BOT_MODE, WEBHOOK_URL
+    from app.config import BOT_TOKEN, BOT_MODE, WEBHOOK_URL
     from app.utils.mask import mask as mask_secret
     from app.singleton_lock import get_singleton_lock
     from app.bot_mode import get_bot_mode, ensure_polling_mode, ensure_webhook_mode, handle_conflict_gracefully
@@ -1101,7 +1097,6 @@ except ImportError:
     import warnings
     warnings.warn("app.config not found, using os.getenv directly. This is deprecated.")
     BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-    CONFIG_DATABASE_URL = os.getenv('DATABASE_URL')
     BOT_MODE = os.getenv('BOT_MODE', 'polling')
     WEBHOOK_URL = os.getenv('WEBHOOK_URL')
     
@@ -1222,26 +1217,10 @@ except ImportError as e:
     # Это нормально, если модуль bot_kie_services не настроен
     logger.debug(f"ℹ️ Новые сервисы не доступны, используется стандартная реализация (это нормально): {e}")
 
-# Импорт модуля БД для сохранения баланса и истории
-# Storage is now handled by app.storage.factory - no need for DATABASE_AVAILABLE flag
-# Old database.py functions are deprecated in favor of storage layer
-try:
-    from database import (
-        log_kie_operation,  # Still used for logging
-        create_operation,  # Still used for operation logging
-        get_user_operations,  # Still used for operations history
-    )
-    logger.info("[OK] Database module loaded (legacy functions for logging)")
-except ImportError:
-    logger.info("ℹ️ Database module not available (logging functions will be skipped)")
-    log_kie_operation = None
-    create_operation = None
-    get_user_operations = None
-except Exception as e:
-    logger.warning(f"⚠️ Error loading database module: {e}")
-    log_kie_operation = None
-    create_operation = None
-    get_user_operations = None
+# Database module is disabled in github-only storage mode.
+log_kie_operation = None
+create_operation = None
+get_user_operations = None
 
 # Initialize knowledge storage and KIE client (will be initialized in main() to avoid blocking import)
 storage = None
@@ -2004,6 +1983,26 @@ def load_json_file(filename: str, default: dict = None) -> dict:
     # Load from file with lock to prevent race conditions
     with lock:
         try:
+            try:
+                from app.storage.factory import get_storage
+
+                storage = get_storage()
+                storage_filename = os.path.basename(filename)
+                data = _run_storage_coro_sync(
+                    storage.read_json_file(storage_filename, default),
+                    label=f"read:{storage_filename}",
+                )
+                if cache_key != filename:
+                    _data_cache[cache_key] = data.copy()
+                    _data_cache['cache_timestamps'][cache_key] = current_time
+                return data
+            except Exception as storage_error:
+                logger.warning(
+                    "Storage read failed for %s, falling back to local cache: %s",
+                    filename,
+                    storage_error,
+                )
+
             if os.path.exists(filename):
                 with open(filename, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -2069,6 +2068,23 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
             # For non-critical files, batch every 2 seconds max
             if time_since_last_save < 2.0:
                 return  # Skip write, will be saved later or by batch save
+
+        try:
+            from app.storage.factory import get_storage
+
+            storage = get_storage()
+            storage_filename = os.path.basename(filename)
+            _run_storage_coro_sync(
+                storage.write_json_file(storage_filename, data),
+                label=f"write:{storage_filename}",
+            )
+        except Exception as storage_error:
+            logger.error(
+                "Storage write failed for %s, falling back to local cache: %s",
+                filename,
+                storage_error,
+                exc_info=True,
+            )
         
         # Ensure directory exists (for subdirectories like knowledge_store)
         dir_path = os.path.dirname(filename)
@@ -2405,6 +2421,22 @@ def _guard_sync_wrapper_in_event_loop(wrapper_name: str) -> None:
         raise RuntimeError(f"{wrapper_name} called inside running event loop")
 
 
+_storage_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+
+def _run_storage_coro_sync(coro, *, label: str = "storage_call"):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    future = _storage_executor.submit(lambda: asyncio.run(coro))
+    try:
+        return future.result()
+    except Exception as exc:
+        logger.error("SYNC_STORAGE_CALL_FAILED label=%s error=%s", label, exc, exc_info=True)
+        raise
+
+
 def get_user_balance(user_id: int) -> float:
     """Get user balance in rubles (synchronous wrapper for storage)."""
     import asyncio
@@ -2461,7 +2493,7 @@ def subtract_user_balance(user_id: int, amount: float) -> bool:
         return False
 
 
-# ==================== Async wrappers for database operations ====================
+# ==================== Async wrappers for storage operations ====================
 # These use storage layer (async) - no blocking operations
 
 async def get_user_balance_async(user_id: int) -> float:
@@ -2884,53 +2916,10 @@ def save_generation_to_history(
     is_free: bool = False,
     correlation_id: Optional[str] = None,
 ):
-    """Save generation to user history (save to DB or JSON fallback)."""
+    """Save generation to user history (GitHub JSON storage)."""
     import time
     
-    # Log operation (if create_operation is available)
-    if create_operation:
-        try:
-            from decimal import Decimal
-            # Get first result URL (if available)
-            result_url = result_urls[0] if result_urls else None
-            # Get prompt from params (truncate to 1000 chars)
-            prompt = params.get('prompt', '')
-            if prompt and len(prompt) > 1000:
-                prompt = prompt[:1000]
-            
-            # Create operation in DB
-            operation_id = create_operation(
-                user_id=user_id,
-                operation_type='generation',
-                amount=Decimal(f'-{price}') if price > 0 else Decimal('0'),
-                model=model_id,
-                result_url=result_url,
-                prompt=prompt if prompt else None
-            )
-            
-            if operation_id:
-                logger.info(f"✅ Saved generation to DB: user_id={user_id}, model_id={model_id}, operation_id={operation_id}")
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    action="PERSIST",
-                    action_path="save_generation_to_history",
-                    model_id=model_id,
-                    task_id=task_id,
-                    stage="PERSIST",
-                    outcome="success",
-                    param={"storage": "db", "operation_id": operation_id},
-                )
-                # Return operation_id as generation_id for compatibility
-                return operation_id
-            else:
-                logger.warning(f"⚠️ Failed to save generation to DB, using JSON fallback")
-        except Exception as e:
-            logger.error(f"Ошибка сохранения генерации в БД: {e}, используем JSON fallback", exc_info=True)
-            # Fallback to JSON
-            pass
-    
-    # Fallback to JSON (original method)
+    # GitHub JSON storage method
     try:
         # Ensure history file exists
         if not os.path.exists(GENERATIONS_HISTORY_FILE):
@@ -2987,7 +2976,7 @@ def save_generation_to_history(
             task_id=task_id,
             stage="PERSIST",
             outcome="success",
-            param={"storage": "json", "generation_id": generation_entry.get("id")},
+            param={"storage": "github_json", "generation_id": generation_entry.get("id")},
         )
         
         # Verify file was saved and data is correct (with retry)
@@ -17156,22 +17145,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     # Add balance to user
     await add_user_balance_async(user_id, amount_rubles)
     
-    # Save payment operation to database (if create_operation is available)
-    if create_operation:
-        try:
-            from decimal import Decimal
-            create_operation(
-                user_id=user_id,
-                operation_type='payment',
-                amount=Decimal(str(amount_rubles)),
-                model=None,
-                result_url=None,
-                prompt=None
-            )
-            logger.info(f"✅ Payment operation saved to DB: user_id={user_id}, amount={amount_rubles}")
-        except Exception as e:
-            logger.error(f"Ошибка сохранения операции платежа в БД: {e}")
-    
     # Clear payment session
     if user_id in user_sessions:
         del user_sessions[user_id]
@@ -17273,10 +17246,15 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
 def initialize_data_files():
     """Initialize all data files if they don't exist."""
-    # Log data directory location
-    logger.info(f"📁 Data directory: {DATA_DIR} (from DATA_DIR env var or default)")
-    logger.info(f"📁 Data directory exists: {os.path.exists(DATA_DIR)}")
-    logger.info(f"📁 Data directory writable: {os.access(DATA_DIR if DATA_DIR != '.' else '.', os.W_OK)}")
+    # Log GitHub storage status
+    try:
+        from app.storage.factory import get_storage
+
+        storage_instance = get_storage()
+        storage_ok = storage_instance.test_connection()
+        logger.info(f"📁 GitHub storage status: {'ok' if storage_ok else 'degraded'}")
+    except Exception as e:
+        logger.error(f"📁 GitHub storage status: error ({e})")
     
     data_files = [
         BALANCES_FILE,
@@ -17783,11 +17761,9 @@ async def main():
     # Проверка критичных переменных окружения
     bot_token_set = bool(BOT_TOKEN)
     kie_api_key_set = bool(os.getenv('KIE_API_KEY'))
-    database_url_set = bool(os.getenv('DATABASE_URL'))
-    
     logger.info(f"🔑 BOT_TOKEN: {'✅ Set' if bot_token_set else '❌ NOT SET'}")
     logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key_set else '❌ NOT SET'}")
-    logger.info(f"🗄️ DATABASE_URL: {'✅ Set' if database_url_set else '⚠️ Not set (using JSON storage)'}")
+    logger.info("🗄️ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
     
     if not bot_token_set:
         logger.error("❌❌❌ CRITICAL: TELEGRAM_BOT_TOKEN is not set!")
@@ -17812,22 +17788,20 @@ async def main():
     
     logger.info("✅ Single instance lock verified - proceeding with bot initialization")
     
-    # CRITICAL: Ensure data directory exists and is writable before anything else
-    logger.info("🔒 Ensuring data persistence...")
-    if not os.path.exists(DATA_DIR):
-        try:
-            os.makedirs(DATA_DIR, exist_ok=True)
-            logger.info(f"✅ Created data directory: {DATA_DIR}")
-        except Exception as e:
-            logger.error(f"❌ CRITICAL: Failed to create data directory {DATA_DIR}: {e}")
-            logger.error("❌ Data will NOT persist between deploys!")
-    
-    # Verify write access
-    if not os.access(DATA_DIR if DATA_DIR != '.' else '.', os.W_OK):
-        logger.error(f"❌ CRITICAL: Data directory {DATA_DIR} is NOT writable!")
-        logger.error("❌ Data will NOT persist between deploys!")
-    else:
-        logger.info(f"✅ Data directory {DATA_DIR} is writable")
+    # CRITICAL: Ensure GitHub storage is reachable before anything else
+    logger.info("🔒 Ensuring GitHub storage persistence...")
+    try:
+        from app.storage.factory import get_storage
+
+        storage_instance = get_storage()
+        storage_ok = storage_instance.test_connection()
+        if storage_ok:
+            logger.info("✅ GitHub storage read/write ok")
+        else:
+            logger.warning("⚠️ GitHub storage test did not pass")
+    except Exception as e:
+        logger.error(f"❌ CRITICAL: GitHub storage health check failed: {e}")
+        logger.error("❌ Persistence may be unavailable!")
     
     # Storage initialization is handled by app.storage.factory (already initialized above)
     
@@ -17852,7 +17826,7 @@ async def main():
             all_critical_ok = False
     
     if all_critical_ok:
-        logger.info("✅ All critical data files verified and ready (JSON storage)")
+        logger.info("✅ All critical data files verified and ready (GitHub storage)")
     else:
         logger.warning("⚠️ Some critical files need attention, but bot will continue")
     
@@ -17904,11 +17878,7 @@ async def main():
     if not settings.telegram_bot_token:
         logger.error("No TELEGRAM_BOT_TOKEN found in environment variables!")
         return
-    if not settings.database_url:
-        logger.warning(
-            "⚠️ DATABASE_URL not set - database features disabled, "
-            "balance defaults to 0 when no records exist."
-        )
+    logger.info("✅ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
     
     ensure_source_of_truth()
 
@@ -18620,7 +18590,7 @@ async def main():
             f"  DRY_RUN: {'✅' if config['DRY_RUN'] else '❌'}\n"
             f"  ALLOW_REAL_GENERATION: {'✅' if config['ALLOW_REAL_GENERATION'] else '❌'}\n\n"
             f"🔧 <b>Gateway:</b> {gateway_type}\n\n"
-            f"🗄️ <b>База данных:</b> {db_status}\n\n"
+            f"🗄️ <b>GitHub storage:</b> {db_status}\n\n"
             f"🔘 <b>Callback data:</b> {callback_count} найдено\n\n"
             f"⚠️ <b>Важно:</b> В TEST_MODE/DRY_RUN баланс НЕ списывается"
         )

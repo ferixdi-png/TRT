@@ -20,5 +20,5 @@ ERROR_CATALOG = {
     "INTERNAL_EXCEPTION": "Проверьте stacktrace и логи.",
     "ERR_TG_START_HANDLER": "Проверьте обработчик /start и доступность меню.",
     "ERR_GEN_UNKNOWN": "Проверьте stacktrace и логи генерации.",
-    "CONFIG_DB_REQUIRED": "В режиме webhook требуется DATABASE_URL. Установите переменную или переключитесь на polling.",
+    "CONFIG_DB_REQUIRED": "В режиме webhook используется GitHub JSON storage. Проверьте доступ к GitHub storage.",
 }

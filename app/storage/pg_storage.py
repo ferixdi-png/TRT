@@ -1,189 +1,45 @@
 """
-PostgreSQL storage implementation with async connection testing.
+PostgreSQL storage (disabled).
+Retained for legacy imports only.
 """
-import asyncio
+from __future__ import annotations
+
 import logging
 from typing import Optional
-import os
-from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-
-def _safe_dsn_parts(dsn: str) -> tuple[str, str]:
-    try:
-        parsed = urlparse(dsn)
-        host = parsed.hostname or "unknown"
-        port = str(parsed.port or "unknown")
-        return host, port
-    except Exception:
-        return "unknown", "unknown"
-
-try:
-    import asyncpg
-    HAS_ASYNCPG = True
-except ImportError:
-    HAS_ASYNCPG = False
-    try:
-        import psycopg
-        from psycopg.rows import dict_row
-        HAS_PSYCOPG = True
-    except ImportError:
-        HAS_PSYCOPG = False
+DB_DISABLED_MESSAGE = "DB_DISABLED: github-only mode"
 
 
-async def async_check_pg(dsn: str, timeout: float = 5.0) -> bool:
-    """
-    Async check PostgreSQL connection.
-    Does NOT use asyncio.run() or run_until_complete() - safe for nested event loops.
-    
-    Args:
-        dsn: PostgreSQL connection string
-        timeout: Connection timeout in seconds
-        
-    Returns:
-        True if connection successful, False otherwise
-    """
-    if not dsn:
-        return False
-        
-    try:
-        if HAS_ASYNCPG:
-            conn = await asyncio.wait_for(
-                asyncpg.connect(dsn),
-                timeout=timeout
-            )
-            await conn.close()
-            return True
-        elif HAS_PSYCOPG:
-            conn = await asyncio.wait_for(
-                psycopg.AsyncConnection.connect(dsn),
-                timeout=timeout
-            )
-            await conn.close()
-            return True
-        else:
-            logger.error("No async PostgreSQL driver available (asyncpg or psycopg)")
-            return False
-    except asyncio.TimeoutError:
-        host, port = _safe_dsn_parts(dsn)
-        logger.warning(f"PostgreSQL connection test timed out after {timeout}s")
-        logger.warning(
-            f"[STORAGE] postgres_unavailable=true error_class=TimeoutError host={host} port={port} fallback=json"
-        )
-        return False
-    except Exception as e:
-        host, port = _safe_dsn_parts(dsn)
-        logger.warning(f"PostgreSQL connection test failed: {e}")
-        logger.warning(
-            f"[STORAGE] postgres_unavailable=true error_class={e.__class__.__name__} "
-            f"host={host} port={port} fallback=json"
-        )
-        return False
+def async_check_pg(*_args, **_kwargs) -> bool:
+    logger.info("%s action=async_check_pg", DB_DISABLED_MESSAGE)
+    return False
 
 
-def sync_check_pg(dsn: str, timeout: float = 5.0) -> bool:
-    """
-    Synchronous check PostgreSQL connection (for CLI tools only).
-    Uses asyncio.run() - should NOT be called from async context.
-    
-    Args:
-        dsn: PostgreSQL connection string
-        timeout: Connection timeout in seconds
-        
-    Returns:
-        True if connection successful, False otherwise
-    """
-    if not dsn:
-        return False
-        
-    try:
-        return asyncio.run(async_check_pg(dsn, timeout))
-    except RuntimeError as e:
-        if "asyncio.run() cannot be called from a running event loop" in str(e):
-            logger.error("sync_check_pg() called from async context. Use async_check_pg() instead.")
-            raise
-        host, port = _safe_dsn_parts(dsn)
-        logger.warning(f"PostgreSQL connection test failed: {e}")
-        logger.warning(
-            f"[STORAGE] postgres_unavailable=true error_class={e.__class__.__name__} "
-            f"host={host} port={port} fallback=json"
-        )
-        return False
-    except Exception as e:
-        host, port = _safe_dsn_parts(dsn)
-        logger.warning(f"PostgreSQL connection test failed: {e}")
-        logger.warning(
-            f"[STORAGE] postgres_unavailable=true error_class={e.__class__.__name__} "
-            f"host={host} port={port} fallback=json"
-        )
-        return False
+def sync_check_pg(*_args, **_kwargs) -> bool:
+    logger.info("%s action=sync_check_pg", DB_DISABLED_MESSAGE)
+    return False
 
 
 class PGStorage:
-    """PostgreSQL storage backend."""
-    
+    """Disabled PostgreSQL storage backend."""
+
     def __init__(self, dsn: Optional[str] = None):
-        self.dsn = dsn or os.getenv("DATABASE_URL")
-        self._pool = None
-        self._connection = None
-        
+        self.dsn = dsn
+
     async def initialize(self) -> bool:
-        """Initialize PostgreSQL connection pool."""
-        if not self.dsn:
-            logger.warning("DATABASE_URL not set, skipping PostgreSQL initialization")
-            return False
-            
-        # Use async_check_pg instead of sync check
-        if not await async_check_pg(self.dsn):
-            host, port = _safe_dsn_parts(self.dsn)
-            logger.error("PostgreSQL connection test failed")
-            logger.warning(
-                f"[STORAGE] passive_mode=true storage=json_fallback host={host} port={port} "
-                "reason=connection_test_failed"
-            )
-            return False
-            
-        try:
-            if HAS_ASYNCPG:
-                self._pool = await asyncpg.create_pool(self.dsn)
-                logger.info("PostgreSQL connection pool created")
-                return True
-            elif HAS_PSYCOPG:
-                self._connection = await psycopg.AsyncConnection.connect(self.dsn)
-                logger.info("PostgreSQL connection created")
-                return True
-            else:
-                logger.error("No async PostgreSQL driver available")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to initialize PostgreSQL: {e}")
-            return False
-    
-    async def close(self):
-        """Close PostgreSQL connections."""
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
-        if self._connection:
-            await self._connection.close()
-            self._connection = None
-    
+        logger.info("%s action=initialize", DB_DISABLED_MESSAGE)
+        return False
+
+    async def close(self) -> None:
+        logger.info("%s action=close", DB_DISABLED_MESSAGE)
+
     def test_connection(self) -> bool:
-        """
-        Synchronous test of PostgreSQL connection.
-        Used by factory to check if PostgreSQL is available.
-        
-        Returns:
-            True if connection successful, False otherwise
-        """
-        if not self.dsn:
-            return False
-        return sync_check_pg(self.dsn)
+        logger.info("%s action=test_connection", DB_DISABLED_MESSAGE)
+        return False
 
 
-# Compatibility alias
 PostgresStorage = PGStorage
 
-# Explicit export for importlib compatibility
-__all__ = ['PGStorage', 'PostgresStorage', 'async_check_pg', 'sync_check_pg']
+__all__ = ["PGStorage", "PostgresStorage", "async_check_pg", "sync_check_pg"]

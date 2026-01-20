@@ -1543,3 +1543,27 @@ tests/test_409_conflict_fix.py ........
 
 **Verification (now):**
 - `python scripts/pricing_audit.py`
+
+## 2026-02-13: GitHub-only storage enforced (DB disabled)
+**Было → стало:**
+- **Было:** runtime допускал БД и JSON fallback; возможны логи про DATABASE_URL и DB ошибки.
+- **Стало:** режим хранения фиксирован на GitHub JSON (`STORAGE_MODE=GITHUB_JSON`), DB-код отключен и инертен, логи не содержат упоминаний DATABASE_URL.
+
+**Decision:** NO DB. GitHub JSON is source of truth for balances + free limits + history.
+
+**GitHub JSON paths (SSOT):**
+- `storage/<BOT_INSTANCE_ID>/user_balances.json`
+- `storage/<BOT_INSTANCE_ID>/user_languages.json`
+- `storage/<BOT_INSTANCE_ID>/gift_claimed.json`
+- `storage/<BOT_INSTANCE_ID>/daily_free_generations.json`
+- `storage/<BOT_INSTANCE_ID>/hourly_free_usage.json`
+- `storage/<BOT_INSTANCE_ID>/referral_free_bank.json`
+- `storage/<BOT_INSTANCE_ID>/admin_limits.json`
+- `storage/<BOT_INSTANCE_ID>/generations_history.json`
+- `storage/<BOT_INSTANCE_ID>/payments.json`
+- `storage/<BOT_INSTANCE_ID>/referrals.json`
+- `storage/<BOT_INSTANCE_ID>/generation_jobs.json`
+
+**Verification (now):**
+- `python scripts/verify_no_db.py`
+- `pytest -q`
