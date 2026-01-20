@@ -1583,3 +1583,23 @@ tests/test_409_conflict_fix.py ........
 
 **Verification (now):**
 - `pytest -q tests/test_free_consume_uses_sku_id.py tests/test_free_allowlist_policy.py tests/test_price_ssot_variants_filter.py tests/test_free_counter_refresh.py tests/test_free_counter_view.py tests/test_free_tools_limit.py`
+## 2026-02-14: Storage writes isolated from code branch to stop Render auto-deploy loops
+**Причина деплоев:**
+- Runtime storage writes шли через GitHub Contents API в тот же репозиторий и ветку, что и деплойный код: `GITHUB_REPO` + ветка `STORAGE_GITHUB_BRANCH`, которая ранее по умолчанию наследовалась от `GITHUB_BRANCH` (обычно `main`). Это создавало коммиты `storage/partner-01/*.json` в `main`, и Render запускал auto-deploy по каждому обновлению storage. 
+
+**Что поменялось (ключевое):**
+- Добавлены переменные окружения `STORAGE_GITHUB_BRANCH` (default: `storage`) и `STORAGE_GITHUB_REPO` (default: текущий `GITHUB_REPO`) для разведения storage от кода. 
+- Все READ/WRITE для storage теперь всегда идут в `STORAGE_GITHUB_REPO` + `STORAGE_GITHUB_BRANCH`, и больше не используют `main` автоматически. 
+- Добавлена авто-инициализация storage-ветки: если ветки нет, создаём её от code-ветки (в том же repo) или от default-ветки storage repo (если репозиторий отдельный). 
+- Добавлен лог `write_attempt` с repo/branch/path для каждой записи storage. 
+- Добавлен unit-тест, который проверяет, что записи balances/free_generations/admin_limits идут в `STORAGE_GITHUB_BRANCH`. 
+
+**ENV для Render (обязательно):**
+- `STORAGE_GITHUB_BRANCH=storage`
+- (опционально) `STORAGE_GITHUB_REPO=<owner>/<repo>` если storage нужно вынести в отдельный репозиторий
+
+**Как проверить на Render:**
+1. Убедиться, что Render деплоит из ветки `main` (как сейчас), и storage-ветка не участвует в деплое.
+2. Выполнить действие, которое меняет баланс/лимиты/бесплатные генерации.
+3. В логах увидеть `write_attempt repo=<storage_repo> branch=storage path=storage/...`.
+4. Убедиться, что в Render нет нового auto-deploy по storage-обновлению.
