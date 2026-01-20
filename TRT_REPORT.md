@@ -1628,3 +1628,49 @@ tests/test_409_conflict_fix.py ........
 **Гарантии корректности историй/счётчиков:**
 - Запись history-событий теперь идемпотентна по `event_id`, а при конфликте по sha используется повторный read-merge-write.
 - Конфликты при параллельных обновлениях приводят к повтору с backoff, и итоговые значения баланса/счётчиков сохраняются корректно.
+## 2026-01-20: GitHub storage loop-mismatch hardening + single-flight storage
+**Цель:** убрать `RuntimeError ... attached to a different loop` в `app/storage/github_storage.py`, стабилизировать read/write под webhook и защитить fallback/кэш.
+
+### 1) Root-cause (event loop / session ownership)
+**Было → стало:** ClientSession жил в единственном поле и закрывался на чужом loop при смене webhook/runtime loop. → Добавлен per-loop cache с раздельными сессиями; старые сессии не трогаются из другого loop.  
+**Мини‑проверка:** `tests/test_github_storage_loop.py` фиксирует отсутствие закрытия на mismatch.
+
+### 2) Per-loop session cache
+**Было → стало:** один shared session на весь процесс → map `loop_id -> ClientSession`, lazy init, `GITHUB_SESSION_CREATED`.  
+**Мини‑проверка:** storage создаёт новую сессию на каждый loop, без меж-лупового close.
+
+### 3) Safe close on loop mismatch
+**Было → стало:** `await session.close()` вызывался в чужом loop → close выполняется только в родном loop; чужой loop получает detach/schedule без await.  
+**Мини‑проверка:** `close()` закрывает все сессии корректно, без RuntimeError.
+
+### 4) Safe request wrapper / session reset
+**Было → стало:** `RuntimeError different loop` ломал запрос → ловим `different loop`/`Session is closed`, сбрасываем session для текущего loop, логируем `GITHUB_SESSION_RESET`, retry с backoff.  
+**Мини‑проверка:** `tests/test_storage_resilience.py::test_github_storage_resets_on_loop_error`.
+
+### 5) HybridStorage fallback
+**Было → стало:** при падении GitHub чтения могли вернуться пустые данные → отдаём last-known-good cache, TTL + version, лог `STORAGE_FALLBACK_USED`.  
+**Мини‑проверка:** `tests/test_storage_resilience.py::test_hybrid_storage_fallback_returns_last_known_good`.
+
+### 6) Read-through cache + coalescing
+**Было → стало:** горячие повторные read (например referrals.json) → краткосрочный TTL cache + single-flight для одновременных read, лог `STORAGE_SINGLEFLIGHT_HIT`.  
+**Мини‑проверка:** `tests/test_storage_resilience.py::test_github_storage_singleflight_reads` (20 concurrent → 1 fetch).
+
+### 7) Single-flight writes per file
+**Было → стало:** параллельные write/update могли конфликтовать → per-file lock на loop, одна запись одновременно.  
+**Мини‑проверка:** write/update теперь сериализуются по storage_path (логика в GitHubStorage).
+
+### 8) Shutdown/startup
+**Было → стало:** shutdown закрывал единственную сессию вне loop → close закрывает все per-loop сессии в правильных loop, startup по-прежнему lazy.  
+**Мини‑проверка:** `GitHubStorage.close()` не вызывает RuntimeError.
+
+### 9) Тесты (без сети)
+**Было → стало:** не было покрытий loop mismatch/fallback/single-flight → добавлены три теста в `tests/test_storage_resilience.py`.  
+**Мини‑проверка:** `pytest tests/test_storage_resilience.py`.
+
+### 10) Observability / отчетность
+**Было → стало:** не хватало структурных логов → добавлены `STORAGE_READ_OK/FAIL`, `GITHUB_SESSION_CREATED`, `GITHUB_SESSION_RESET`, `STORAGE_SINGLEFLIGHT_HIT`, `STORAGE_FALLBACK_USED`.  
+**Мини‑проверка:** проверить логи в Render при read/write.
+
+**Root cause:** GitHubStorage закрывал aiohttp session на чужом event loop (webhook/ptb), что приводило к `attached to a different loop`.  
+**Решение:** per-loop sessions + safe close + reset/retry + single-flight read/write.  
+**Как проверить:** `pytest tests/test_github_storage_loop.py tests/test_storage_resilience.py`.
