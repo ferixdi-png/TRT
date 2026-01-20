@@ -1567,3 +1567,19 @@ tests/test_409_conflict_fix.py ........
 **Verification (now):**
 - `python scripts/verify_no_db.py`
 - `pytest -q`
+
+## 2026-02-14: Storage branch + free quota + pricing UX fixes
+**Было → стало:**
+- **Было:** storage JSON записи коммитились в основной ветке → Render ловил redeploy storm; free quota считалась по model_id; счетчик/баланс могли показывать устаревшие значения; enum-параметры с ценами показывали только общую цену без цен на кнопках.
+- **Стало:** storage JSON коммитится только в отдельную ветку `storage` (configurable); free quota строго 5/день на allowlist SKU из SSOT; счетчики и баланс пересчитываются после записи; enum-варианты показывают цены в кнопках и в подсказке.
+
+**Decision:** NO DB. GitHub JSON only (балансы, лимиты, история).
+
+**Render ENV (new):**
+- `STORAGE_GITHUB_BRANCH=storage`
+
+**Почему остановлен redeploy storm:**
+- Storage writes теперь идут в ветку `storage`, а ветка `main` используется только для кода (Render деплоит только при code commits).
+
+**Verification (now):**
+- `pytest -q tests/test_free_consume_uses_sku_id.py tests/test_free_allowlist_policy.py tests/test_price_ssot_variants_filter.py tests/test_free_counter_refresh.py tests/test_free_counter_view.py tests/test_free_tools_limit.py`

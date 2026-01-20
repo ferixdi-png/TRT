@@ -4,27 +4,27 @@ import pytest
 
 import bot_kie
 from app.generations.universal_engine import JobResult
+from app.pricing.ssot_catalog import get_free_sku_ids
 from tests.ptb_harness import PTBHarness
 
 
 @pytest.mark.asyncio
-async def test_confirm_generation_recomputes_free_counter_line(monkeypatch):
+async def test_free_consume_uses_sku_id(monkeypatch):
     harness = PTBHarness()
     await harness.setup()
-    user_id = 8888
+    user_id = 9911
     try:
-        counter_calls = {"count": 0}
-
-        async def fake_free_counter_line(*_args, **_kwargs):
-            counter_calls["count"] += 1
-            return "after" if counter_calls["count"] > 1 else "before"
+        free_sku_ids = get_free_sku_ids()
+        assert free_sku_ids
+        free_sku_id = free_sku_ids[0]
+        captured = {}
 
         async def fake_consume(user_id, sku_id, correlation_id=None, source=None):
+            captured["sku_id"] = sku_id
             return {
                 "status": "ok",
-                "source": "daily",
-                "used_today": 2,
-                "remaining": 3,
+                "used_today": 1,
+                "remaining": 4,
                 "limit_per_day": 5,
             }
 
@@ -44,7 +44,6 @@ async def test_confirm_generation_recomputes_free_counter_line(monkeypatch):
         async def fake_deliver_result(*_args, **_kwargs):
             return None
 
-        monkeypatch.setattr(bot_kie, "get_free_counter_line", fake_free_counter_line)
         monkeypatch.setattr(bot_kie, "consume_free_generation", fake_consume)
         monkeypatch.setattr(bot_kie, "check_free_generation_available", fake_check_available)
         monkeypatch.setattr(bot_kie, "_update_price_quote", lambda *_args, **_kwargs: {"price_rub": "1.0"})
@@ -65,7 +64,7 @@ async def test_confirm_generation_recomputes_free_counter_line(monkeypatch):
             "params": {},
             "properties": {},
             "required": [],
-            "sku_id": "test-sku",
+            "sku_id": free_sku_id,
         }
 
         update = harness.create_mock_update_callback("confirm_generate", user_id=user_id)
@@ -73,9 +72,7 @@ async def test_confirm_generation_recomputes_free_counter_line(monkeypatch):
 
         await bot_kie.confirm_generation(update, context)
 
-        message = harness.outbox.get_last_edited_message() or harness.outbox.get_last_message()
-        assert message is not None
-        assert "after" in message["text"]
+        assert captured["sku_id"] == free_sku_id
     finally:
         bot_kie.user_sessions.pop(user_id, None)
         await harness.teardown()
