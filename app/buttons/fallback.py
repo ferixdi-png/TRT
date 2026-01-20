@@ -49,37 +49,36 @@ async def fallback_callback_handler(
             # Пробуем получить язык из перевода
             try:
                 from translations import t
-                message = t('button_outdated', lang=user_lang) or "Кнопка устарела, обновил меню"
-            except:
-                message = "Кнопка устарела, обновил меню" if user_lang == 'ru' else "Button outdated, menu updated"
-            
+
+                message = t("button_outdated", lang=user_lang) or "Кнопка устарела, обновил меню"
+            except Exception:
+                message = "Кнопка устарела, обновил меню" if user_lang == "ru" else "Button outdated, menu updated"
+
             await query.answer(message, show_alert=False)
-            
-            # Восстанавливаем главное меню
+
+            # Восстанавливаем главное меню через единый маршрут
             try:
-                from helpers import build_main_menu_keyboard
-                from telegram import InlineKeyboardMarkup
-                
-                keyboard = await build_main_menu_keyboard(user_id, user_lang, is_new=False)
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                # Редактируем сообщение с новым меню
-                await query.message.edit_text("Главное меню", reply_markup=reply_markup)
-                logger.info(f"✅ Меню восстановлено для user_id={user_id}")
-                
+                from bot_kie import ensure_main_menu
+
+                await ensure_main_menu(
+                    update,
+                    context,
+                    source="unknown_callback_fallback",
+                    prefer_edit=True,
+                )
+                logger.info("✅ Меню восстановлено через ensure_main_menu для user_id=%s", user_id)
             except Exception as restore_error:
-                logger.error(f"❌ Не удалось восстановить меню: {restore_error}", exc_info=True)
+                logger.error("❌ Не удалось восстановить меню: %s", restore_error, exc_info=True)
                 # Пробуем просто отправить /start
                 try:
                     await query.message.reply_text(
-                        "Обновите меню командой /start" if user_lang == 'ru' else "Update menu with /start"
+                        "Обновите меню командой /start" if user_lang == "ru" else "Update menu with /start"
                     )
-                except:
+                except Exception:
                     pass
-                    
-    except Exception as e:
-        logger.error(f"❌ Ошибка в fallback handler: {e}", exc_info=True)
 
+    except Exception as e:
+        logger.error("❌ Ошибка в fallback handler: %s", e, exc_info=True)
 
 
 
