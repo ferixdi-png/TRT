@@ -1,4 +1,21 @@
 {
+  "371614492": [
+    {
+      "id": 1,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "Сделай красивое фото с логотипом ALEX:LAB"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768930993753_h7i12x.png"
+      ],
+      "task_id": "565bf0561f34a44d3edfcf02bc101311",
+      "timestamp": 1768930997
+    }
+  ],
   "452907108": [
     {
       "id": 1,
