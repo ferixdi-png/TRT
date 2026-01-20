@@ -71,6 +71,8 @@ KNOWN_CALLBACK_PREFIXES = (
     "admin_test_ocr",
     "admin_user_mode",
     "admin_back_to_admin",
+    "admin_user_info:",
+    "admin_topup_user:",
     "topup_amount:",
     "pay_sbp:",
     "pay_card:",
@@ -1945,7 +1947,8 @@ _file_locks = {
     'payments': threading.Lock(),
     'broadcasts': threading.Lock(),
     'admin_limits': threading.Lock(),
-    'blocked_users': threading.Lock()
+    'blocked_users': threading.Lock(),
+    'user_registry': threading.Lock()
 }
 
 # In-memory cache for frequently accessed data (optimized for 1000+ users)
@@ -1954,6 +1957,7 @@ _data_cache = {
     'free_generations': {},
     'languages': {},
     'gifts': {},
+    'user_registry': {},
     'cache_timestamps': {}
 }
 
@@ -1993,6 +1997,7 @@ CURRENCY_RATE_FILE = get_data_file_path("currency_rate.json")  # File to store U
 REFERRALS_FILE = get_data_file_path("referrals.json")  # File to store referral data
 BROADCASTS_FILE = get_data_file_path("broadcasts.json")  # File to store broadcast statistics
 GENERATIONS_HISTORY_FILE = get_data_file_path("generations_history.json")  # File to store user generation history
+USER_REGISTRY_FILE = get_data_file_path("user_registry.json")
 
 # Free tools settings
 FREE_TOOLS_CONFIG = get_free_tools_config()
@@ -2042,7 +2047,8 @@ def get_cache_key(filename: str) -> str:
         PAYMENTS_FILE: 'payments',
         BROADCASTS_FILE: 'broadcasts',
         ADMIN_LIMITS_FILE: 'admin_limits',
-        BLOCKED_USERS_FILE: 'blocked_users'
+        BLOCKED_USERS_FILE: 'blocked_users',
+        USER_REGISTRY_FILE: 'user_registry'
     }
     return cache_map.get(filename, filename)
 
@@ -2232,6 +2238,90 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
                 logger.info(f"✅ Retry successful for {filename}")
             except Exception as retry_error:
                 logger.error(f"❌ Retry failed for {filename}: {retry_error}", exc_info=True)
+
+
+def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
+    """Store basic user identity for admin lookup."""
+    if user is None:
+        return
+    try:
+        user_id = user.id
+        username = user.username or ""
+        first_name = user.first_name or ""
+        last_name = user.last_name or ""
+        data = load_json_file(USER_REGISTRY_FILE, {})
+        user_key = str(user_id)
+        existing = data.get(user_key, {})
+        if (
+            existing.get("username") == username
+            and existing.get("first_name") == first_name
+            and existing.get("last_name") == last_name
+        ):
+            return
+        data[user_key] = {
+            **existing,
+            "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "updated_at": datetime.now().isoformat(),
+        }
+        save_json_file(USER_REGISTRY_FILE, data, use_cache=True)
+    except Exception as e:
+        logger.error(f"❌ Failed to update user registry: {e}", exc_info=True)
+
+
+def get_user_registry_entry(user_id: int) -> dict:
+    """Get stored user identity if available."""
+    data = load_json_file(USER_REGISTRY_FILE, {})
+    return data.get(str(user_id), {})
+
+
+async def build_admin_user_overview(target_user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """Build admin overview text and keyboard for a user."""
+    registry_entry = get_user_registry_entry(target_user_id)
+    username = registry_entry.get("username") or ""
+    first_name = registry_entry.get("first_name") or ""
+    last_name = registry_entry.get("last_name") or ""
+    full_name = " ".join([name for name in [first_name, last_name] if name]).strip() or "—"
+    username_text = f"@{username}" if username else "—"
+
+    balance = await get_user_balance_async(target_user_id)
+    balance_str = format_rub_amount(balance)
+    user_payments = get_user_payments(target_user_id)
+    total_paid = sum(p.get("amount", 0) for p in user_payments)
+    total_paid_str = format_rub_amount(total_paid)
+
+    lines = [
+        f"👤 <b>Пользователь:</b> {target_user_id}",
+        f"🧾 <b>Ник:</b> {username_text}",
+        f"📛 <b>Имя:</b> {full_name}",
+        f"💰 <b>Баланс:</b> {balance_str}",
+        f"💵 <b>Пополнено всего:</b> {total_paid_str}",
+        f"📝 <b>Платежей:</b> {len(user_payments)}",
+    ]
+
+    if user_payments:
+        lines.append("\n<b>Последние пополнения:</b>")
+        for payment in user_payments[:5]:
+            amount_str = format_rub_amount(payment.get("amount", 0))
+            timestamp = payment.get("timestamp")
+            if timestamp:
+                dt = datetime.fromtimestamp(timestamp)
+                date_str = dt.strftime("%d.%m.%Y %H:%M")
+            else:
+                date_str = "Неизвестно"
+            lines.append(f"• {amount_str} | {date_str}")
+
+    text = "\n".join(lines)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("➕ Начислить баланс", callback_data=f"admin_topup_user:{target_user_id}")],
+            [InlineKeyboardButton("🔄 Обновить", callback_data=f"admin_user_info:{target_user_id}")],
+            [InlineKeyboardButton("🏠 В меню", callback_data="back_to_menu")],
+        ]
+    )
+    return text, keyboard
 
 
 async def get_http_client() -> aiohttp.ClientSession:
@@ -3800,6 +3890,7 @@ def get_support_contact() -> str:
     
     support_telegram = os.getenv('SUPPORT_TELEGRAM', '').strip()
     support_text = os.getenv('SUPPORT_TEXT', '').strip()
+    fallback_telegram = "@ferixdiii"
     
     # Enhanced debug logging for troubleshooting
     logger.debug(f"Loading support contact - SUPPORT_TELEGRAM: {'SET' if support_telegram else 'NOT SET'}, SUPPORT_TEXT: {'SET' if support_text else 'NOT SET'}")
@@ -3815,6 +3906,7 @@ def get_support_contact() -> str:
         telegram_username = support_telegram.replace('@', '')
         contact += f"💬 <b>Telegram:</b> @{telegram_username}\n"
     else:
+        support_telegram = fallback_telegram
         logger.warning("Support contact not found in environment variables!")
         logger.warning("Make sure these environment variables are set in Render dashboard:")
         logger.warning("  - SUPPORT_TELEGRAM")
@@ -3824,6 +3916,7 @@ def get_support_contact() -> str:
         logger.debug(f"All SUPPORT_* environment variables: {support_env_vars}")
         contact += "⚠️ <b>Контактная информация не настроена.</b>\n\n"
         contact += "Администратору необходимо указать SUPPORT_TELEGRAM в файле .env или в настройках Render (Environment Variables).\n\n"
+        contact += f"Контакт администратора: {support_telegram}\n"
         contact += "Обратитесь к администратору."
     
     return contact
@@ -4997,6 +5090,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
     user_id = update.effective_user.id if update.effective_user else None
     chat_id = update.effective_chat.id if update.effective_chat else None
+    upsert_user_registry_entry(update.effective_user)
     correlation_id = ensure_correlation_id(update, context)
     log_structured_event(
         correlation_id=correlation_id,
@@ -5351,6 +5445,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         user_id = query.from_user.id if query and query.from_user else None
         data = query.data if query else None
+        if query and query.from_user:
+            upsert_user_registry_entry(query.from_user)
         correlation_id = ensure_correlation_id(update, context)
         chat_id = query.message.chat_id if query and query.message else None
         message_id = query.message.message_id if query and query.message else None
@@ -8392,7 +8488,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'• ~{video_count} видео (базовая модель)\n'
                     f'• Или комбинацию разных моделей!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>ВЫБЕРИ СПОСОБ ОПЛАТЫ:</b>'
+                    f'💳 <b>ОПЛАТА ТОЛЬКО ПО СБП:</b>'
                 )
             else:
                 payment_text = (
@@ -8404,7 +8500,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'• ~{video_count} videos (basic model)\n'
                     f'• Or a combination of different models!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>CHOOSE PAYMENT METHOD:</b>'
+                    f'💳 <b>PAYMENT ONLY VIA SBP:</b>'
                 )
             
             # Store amount in session
@@ -8413,30 +8509,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'waiting_for': 'payment_method'
             }
             
-            # For English users - only Telegram Stars, no SBP
-            if user_lang == 'en':
-                keyboard = [
-                    [InlineKeyboardButton("⭐ Telegram Stars", callback_data=f"pay_stars:{amount}")],
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            keyboard = [
+                [InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")],
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                ],
+                [
+                    InlineKeyboardButton(t('btn_support', lang=user_lang), callback_data="support_contact"),
+                    InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")
                 ]
-            else:
-                # For Russian users - both options
-                keyboard = [
-                    [
-                        InlineKeyboardButton("⭐ Telegram Stars", callback_data=f"pay_stars:{amount}"),
-                        InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")
-                    ],
-                    [InlineKeyboardButton("💳 Карта", callback_data=f"pay_card:{amount}")],
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
+            ]
             
             await query.edit_message_text(
                 payment_text,
@@ -8447,84 +8530,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Handle payment method selection
         if data.startswith("pay_stars:"):
-            # User chose Telegram Stars payment
-            parts = data.split(":", 1)
-            if len(parts) < 2:
-                await query.answer("Ошибка: неверный формат суммы", show_alert=True)
-                return ConversationHandler.END
-            try:
-                amount = float(parts[1])
-            except (ValueError, TypeError):
-                await query.answer("Ошибка: неверная сумма", show_alert=True)
-                return ConversationHandler.END
-            user_lang = get_user_language(user_id)
-            
-            # Convert rubles to stars using exchange rate 1.6
-            # 1 ruble = 1.6 stars
-            # Telegram Stars are integers, so we round to nearest integer
-            stars_amount = int(round(amount * 1.6))
-            
-            if stars_amount < 1:
-                stars_amount = 1  # Minimum 1 star
-            
-            try:
-                # Create invoice for Telegram Stars
-                # Note: Invoice prices are in XTR (XTR is the currency for Telegram Stars)
-                # 1 XTR = 1 Star
-                from telegram import LabeledPrice
-                
-                amount_display = format_rub_amount(amount)
-                invoice_text_ru = f"Пополнение баланса на {amount_display}"
-                invoice_text_en = f"Balance top-up for {amount_display}"
-                invoice_text = invoice_text_ru if user_lang == 'ru' else invoice_text_en
-                
-                # Store payment info in session
-                user_sessions[user_id] = {
-                    'topup_amount': amount,
-                    'payment_method': 'stars',
-                    'stars_amount': stars_amount,
-                    'invoice_payload': f"topup_{user_id}_{int(time.time())}"
-                }
-                
-                # Send invoice directly (Telegram Stars payment)
-                # Note: provider_token is not needed for Telegram Stars (use empty string or None)
-                await context.bot.send_invoice(
-                    chat_id=query.message.chat_id,
-                    title=invoice_text,
-                    description=invoice_text,
-                    payload=f"topup_{user_id}_{int(time.time())}",
-                    provider_token="",  # Empty for Telegram Stars
-                    currency="XTR",  # XTR is the currency code for Telegram Stars
-                    prices=[LabeledPrice(invoice_text, stars_amount)],
-                )
-                
-                invoice = None  # Will be sent as message
-                
-                # Invoice is sent directly, just answer the query
-                await query.answer()
-                if user_lang == 'ru':
-                    await query.edit_message_text(
-                        f'⭐ <b>ОПЛАТА ЧЕРЕЗ TELEGRAM STARS</b> ⭐\n\n'
-                        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                        f'💰 <b>Сумма:</b> {amount_display} ({stars_amount} ⭐)\n\n'
-                        f'💡 <b>Счет отправлен выше. Оплатите через Telegram Stars.</b>'
-                    )
-                else:
-                    await query.edit_message_text(
-                        f'⭐ <b>PAYMENT VIA TELEGRAM STARS</b> ⭐\n\n'
-                        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                        f'💰 <b>Amount:</b> {amount_display} ({stars_amount} ⭐)\n\n'
-                        f'💡 <b>Invoice sent above. Pay via Telegram Stars.</b>'
-                    )
-                    
-            except Exception as e:
-                logger.error(f"Error creating Stars invoice: {e}", exc_info=True)
-                user_lang = get_user_language(user_id)
-                if user_lang == 'ru':
-                    await query.answer("Ошибка при создании счета. Попробуйте позже.", show_alert=True)
-                else:
-                    await query.answer("Error creating invoice. Please try later.", show_alert=True)
-            
+            await query.answer("Сейчас доступна только оплата по СБП.", show_alert=True)
             return SELECTING_AMOUNT
         
         if data.startswith("pay_sbp:"):
@@ -8544,56 +8550,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("Сначала выберите сумму пополнения.", show_alert=True)
                 return ConversationHandler.END
 
-            if user_lang == "en":
-                await query.answer("For English users, only Telegram Stars payment is available.", show_alert=True)
-                return SELECTING_AMOUNT
             amount = session.get("topup_amount", amount)
-            
-            # English users can only pay via Telegram Stars
-            if user_lang == 'en':
-                # Redirect to Stars payment
-                await query.answer("For English users, only Telegram Stars payment is available.", show_alert=True)
-                # Trigger Stars payment instead
-                # Convert rubles to stars using exchange rate 1.6
-                # 1 ruble = 1.6 stars
-                stars_amount = int(round(amount * 1.6))
-                if stars_amount < 1:
-                    stars_amount = 1
-                
-                try:
-                    from telegram import LabeledPrice
-                    amount_display = format_rub_amount(amount)
-                    invoice_text = f"Balance top-up for {amount_display}"
-                    
-                    user_sessions[user_id] = {
-                        'topup_amount': amount,
-                        'payment_method': 'stars',
-                        'stars_amount': stars_amount,
-                        'invoice_payload': f"topup_{user_id}_{int(time.time())}"
-                    }
-                    
-                    await context.bot.send_invoice(
-                        chat_id=query.message.chat_id,
-                        title=invoice_text,
-                        description=invoice_text,
-                        payload=f"topup_{user_id}_{int(time.time())}",
-                        provider_token="",
-                        currency="XTR",
-                        prices=[LabeledPrice(invoice_text, stars_amount)],
-                    )
-                    
-                    await query.edit_message_text(
-                        f'⭐ <b>PAYMENT VIA TELEGRAM STARS</b> ⭐\n\n'
-                        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                        f'💰 <b>Amount:</b> {amount_display} ({stars_amount} ⭐)\n\n'
-                        f'💡 <b>Invoice sent above. Pay via Telegram Stars.</b>'
-                    )
-                except Exception as e:
-                    logger.error(f"Error creating Stars invoice: {e}", exc_info=True)
-                    await query.answer("Error creating invoice. Please try later.", show_alert=True)
-                
-                return SELECTING_AMOUNT
-            
             user_sessions[user_id] = {
                 'topup_amount': amount,
                 'waiting_for': 'payment_screenshot',
@@ -8606,7 +8563,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                     InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                 ],
-                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+                [
+                    InlineKeyboardButton(t('btn_support', lang=user_lang), callback_data="support_contact"),
+                    InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")
+                ]
             ]
 
             sbp_text = build_manual_payment_instructions(
@@ -8624,51 +8584,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return WAITING_PAYMENT_SCREENSHOT
 
         if data.startswith("pay_card:"):
-            # User chose card payment
-            parts = data.split(":", 1)
-            if len(parts) < 2:
-                await query.answer("Ошибка: неверный формат суммы", show_alert=True)
-                return ConversationHandler.END
-            try:
-                amount = float(parts[1])
-            except (ValueError, TypeError):
-                await query.answer("Ошибка: неверная сумма", show_alert=True)
-                return ConversationHandler.END
-
-            user_lang = get_user_language(user_id)
-            session = user_sessions.get(user_id, {})
-            if session.get("waiting_for") != "payment_method" or session.get("topup_amount") is None:
-                await query.answer("Сначала выберите сумму пополнения.", show_alert=True)
-                return ConversationHandler.END
-
-            amount = session.get("topup_amount", amount)
-            user_sessions[user_id] = {
-                'topup_amount': amount,
-                'waiting_for': 'payment_screenshot',
-                'payment_method': 'card'
-            }
-
-            payment_details = get_payment_details()
-            keyboard = [
-                [
-                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                ],
-                [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-            ]
-
-            card_text = build_manual_payment_instructions(
-                amount=amount,
-                user_lang=user_lang,
-                payment_details=payment_details,
-                method_label="Карта" if user_lang == "ru" else "Card",
-            )
-            await query.edit_message_text(
-                card_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
-            )
-            return WAITING_PAYMENT_SCREENSHOT
+            await query.answer("Сейчас доступна только оплата по СБП.", show_alert=True)
+            return SELECTING_AMOUNT
         
         if data == "topup_custom":
             # User wants to enter custom amount
@@ -8694,6 +8611,45 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Admin functions (only for admin)
         if user_id == ADMIN_ID:
+            if data.startswith("admin_user_info:"):
+                await query.answer()
+                parts = data.split(":", 1)
+                if len(parts) < 2:
+                    await query.answer("Ошибка: неверный формат пользователя", show_alert=True)
+                    return ConversationHandler.END
+                try:
+                    target_user_id = int(parts[1])
+                except ValueError:
+                    await query.answer("Ошибка: неверный user_id", show_alert=True)
+                    return ConversationHandler.END
+                text, keyboard = await build_admin_user_overview(target_user_id)
+                await query.edit_message_text(text, reply_markup=keyboard, parse_mode='HTML')
+                return ConversationHandler.END
+
+            if data.startswith("admin_topup_user:"):
+                await query.answer()
+                parts = data.split(":", 1)
+                if len(parts) < 2:
+                    await query.answer("Ошибка: неверный формат пользователя", show_alert=True)
+                    return ConversationHandler.END
+                try:
+                    target_user_id = int(parts[1])
+                except ValueError:
+                    await query.answer("Ошибка: неверный user_id", show_alert=True)
+                    return ConversationHandler.END
+                user_sessions[user_id] = {
+                    "waiting_for": "admin_manual_topup_amount",
+                    "admin_target_user_id": target_user_id,
+                }
+                await query.edit_message_text(
+                    f"➕ <b>Начисление баланса</b>\n\n"
+                    f"👤 Пользователь: <code>{target_user_id}</code>\n"
+                    f"💬 Отправьте сумму для начисления (например: 150)\n\n"
+                    f"Отмена: /cancel",
+                    parse_mode='HTML'
+                )
+                return ConversationHandler.END
+
             if data == "admin_stats":
                 # Answer callback immediately
                 try:
@@ -9074,6 +9030,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'/balance - Проверка баланса\n'
                     f'/search - Поиск в базе знаний\n'
                     f'/add - Добавление знаний\n'
+                    f'/admin - Пользователи и ручные пополнения\n'
                     f'/payments - Просмотр платежей\n'
                     f'/block_user - Заблокировать пользователя\n'
                     f'/unblock_user - Разблокировать пользователя\n'
@@ -9096,6 +9053,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'/balance - Check Balance\n'
                     f'/search - Search Knowledge Base\n'
                     f'/add - Add Knowledge\n'
+                    f'/admin - User overview and manual top-ups\n'
                     f'/payments - View Payments\n'
                     f'/block_user - Block User\n'
                     f'/unblock_user - Unblock User\n'
@@ -9891,6 +9849,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             '👑 <b>Административные:</b>\n'
                             '/search - Поиск в базе знаний\n'
                             '/add - Добавление знаний\n'
+                            '/admin - Пользователи и ручные пополнения\n'
                             '/payments - Просмотр платежей\n'
                             '/block_user - Заблокировать пользователя\n'
                             '/unblock_user - Разблокировать пользователя\n'
@@ -9901,6 +9860,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             '👑 <b>Administrative:</b>\n'
                             '/search - Search knowledge base\n'
                             '/add - Add knowledge\n'
+                            '/admin - User overview and manual top-ups\n'
                             '/payments - View payments\n'
                             '/block_user - Block user\n'
                             '/unblock_user - Unblock user\n'
@@ -13405,6 +13365,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import time
     start_time = time.time()
     user_id = update.effective_user.id
+    upsert_user_registry_entry(update.effective_user)
     
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
@@ -14103,7 +14064,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await update.message.reply_text(
                             f"❌ <b>Скриншот не прошел проверку</b>\n\n"
                             f"{analysis.get('message', '')}\n\n"
-                            f"😔 <b>Извините!</b> Если наша система не распознала вашу оплату, напишите администратору - он постарается оперативно начислить баланс.\n\n"
+                            f"😔 <b>Извините!</b> Если наша система не распознала вашу оплату, напишите администратору @ferixdiii - он постарается оперативно начислить баланс.\n\n"
                             f"{support_info}",
                             parse_mode='HTML'
                         )
@@ -14204,6 +14165,58 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Или нажмите /cancel для отмены."
             )
             return WAITING_PAYMENT_SCREENSHOT
+
+    # Handle admin user lookup
+    if user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_user_lookup':
+        if user_id != ADMIN_ID:
+            await update.message.reply_text("❌ Эта функция доступна только администратору.")
+            user_sessions.pop(user_id, None)
+            return ConversationHandler.END
+        if not update.message or not update.message.text:
+            await update.message.reply_text("❌ Отправьте user_id текстом.")
+            return ConversationHandler.END
+        try:
+            target_user_id = int(update.message.text.strip())
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат user_id. Используйте число.")
+            return ConversationHandler.END
+        user_sessions.pop(user_id, None)
+        text, keyboard = await build_admin_user_overview(target_user_id)
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='HTML')
+        return ConversationHandler.END
+
+    # Handle admin manual topup
+    if user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_manual_topup_amount':
+        if user_id != ADMIN_ID:
+            await update.message.reply_text("❌ Эта функция доступна только администратору.")
+            user_sessions.pop(user_id, None)
+            return ConversationHandler.END
+        if not update.message or not update.message.text:
+            await update.message.reply_text("❌ Отправьте сумму текстом.")
+            return ConversationHandler.END
+        session = user_sessions[user_id]
+        target_user_id = session.get("admin_target_user_id")
+        if target_user_id is None:
+            await update.message.reply_text("❌ Не найден пользователь для начисления.")
+            user_sessions.pop(user_id, None)
+            return ConversationHandler.END
+        try:
+            amount = float(update.message.text.strip().replace(",", "."))
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат суммы. Используйте число.")
+            return ConversationHandler.END
+        if amount <= 0:
+            await update.message.reply_text("❌ Сумма должна быть больше 0.")
+            return ConversationHandler.END
+        await add_payment_async(int(target_user_id), amount, screenshot_file_id=None)
+        user_sessions.pop(user_id, None)
+        text, keyboard = await build_admin_user_overview(int(target_user_id))
+        await update.message.reply_text(
+            f"✅ Баланс начислен.\n\n{text}",
+            reply_markup=keyboard,
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
     
     # Handle custom topup amount input
     if user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'topup_amount_input':
@@ -14241,7 +14254,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'• ~{video_count} видео (базовая модель)\n'
                     f'• Или комбинацию разных моделей!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>ВЫБЕРИ СПОСОБ ОПЛАТЫ:</b>'
+                    f'💳 <b>ОПЛАТА ТОЛЬКО ПО СБП:</b>'
                 )
             else:
                 payment_text = (
@@ -14253,7 +14266,7 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'• ~{video_count} videos (basic model)\n'
                     f'• Or a combination of different models!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>CHOOSE PAYMENT METHOD:</b>'
+                    f'💳 <b>PAYMENT ONLY VIA SBP:</b>'
                 )
             
             # Store amount in session
@@ -14262,29 +14275,17 @@ async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'waiting_for': 'payment_method'
             }
             
-            # For English users - only Telegram Stars, no SBP
-            if user_lang == 'en':
-                keyboard = [
-                    [InlineKeyboardButton("⭐ Telegram Stars", callback_data=f"pay_stars:{amount}")],
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
+            keyboard = [
+                [InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")],
+                [
+                    InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                    InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+                ],
+                [
+                    InlineKeyboardButton(t('btn_support', lang=user_lang), callback_data="support_contact"),
+                    InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")
                 ]
-            else:
-                # For Russian users - both options
-                keyboard = [
-                    [
-                        InlineKeyboardButton("⭐ Telegram Stars", callback_data=f"pay_stars:{amount}"),
-                        InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")
-                    ],
-                    [
-                        InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                        InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
-                    ],
-                    [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
-                ]
+            ]
             
             await update.message.reply_text(
                 payment_text,
@@ -19254,6 +19255,8 @@ async def main():
             ]
         },
         fallbacks=[
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_info:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_topup_user:'),
             CallbackQueryHandler(cancel, pattern='^cancel$'),
             CommandHandler('cancel', cancel)
         ]
@@ -19281,6 +19284,30 @@ async def main():
     
     # Add handlers
     # Admin commands
+    async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Admin user lookup and manual top-up."""
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("❌ Эта команда доступна только администратору.")
+            return
+        upsert_user_registry_entry(update.effective_user)
+        if not context.args or len(context.args) == 0:
+            user_sessions[update.effective_user.id] = {"waiting_for": "admin_user_lookup"}
+            await update.message.reply_text(
+                "👤 <b>Админ-поиск пользователя</b>\n\n"
+                "Отправьте user_id пользователя, чтобы увидеть его баланс и пополнения.\n"
+                "Пример: <code>123456789</code>\n\n"
+                "Отмена: /cancel",
+                parse_mode='HTML'
+            )
+            return
+        try:
+            target_user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат user_id. Используйте число.")
+            return
+        text, keyboard = await build_admin_user_overview(target_user_id)
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='HTML')
+
     async def show_admin_payments(update_or_query, context: ContextTypes.DEFAULT_TYPE, is_callback: bool = False):
         """Show all payments (admin only). Can be called from command or callback."""
         # Determine if it's a callback query or message
@@ -19609,6 +19636,7 @@ async def main():
     application.add_handler(CommandHandler("add", add_knowledge))
     application.add_handler(CommandHandler("selftest", selftest_command))
     application.add_handler(CommandHandler("config_check", config_check_command))
+    application.add_handler(CommandHandler("admin", admin_command))
     application.add_handler(CommandHandler("payments", admin_payments))
     application.add_handler(CommandHandler("block_user", admin_block_user))
     application.add_handler(CommandHandler("unblock_user", admin_unblock_user))
@@ -19642,6 +19670,8 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_start$'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_step'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^tutorial_complete$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_info:'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^admin_topup_user:'))
     
     # CRITICAL: Add universal fallback handler for ALL other callbacks
     # This ensures NO button is left unhandled - catches everything not matched above

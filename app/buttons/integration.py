@@ -54,6 +54,7 @@ def _register_all_callbacks(registry: ButtonRegistry):
         "gen_type:", "category:", "set_param:",
         "select_model:", "retry_generate:", "gen_view:", "gen_repeat:",
         "admin_gen_nav:", "admin_gen_view:", "payment_screenshot_nav:",
+        "admin_user_info:", "admin_topup_user:",
         "topup_amount:", "pay_stars:", "pay_sbp:", "set_language:"
     ]
     
@@ -120,7 +121,6 @@ async def route_callback_with_fallback(
         # Используем fallback напрямую
         await fallback_callback_handler(callback_data, update, context, user_id, user_lang)
         return False
-
 
 
 
