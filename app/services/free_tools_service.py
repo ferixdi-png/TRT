@@ -1,8 +1,8 @@
-"""Free tools service for fixed free models and hourly limits."""
+"""Free tools service for fixed free models and daily limits."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, time as time_of_day
 from typing import Dict, List, Optional
 
 from pricing.engine import load_config
@@ -15,7 +15,7 @@ from app.services.user_service import get_is_admin
 @dataclass(frozen=True)
 class FreeToolsConfig:
     sku_ids: List[str]
-    base_per_hour: int
+    base_per_day: int
     referral_bonus: int
 
 
@@ -23,11 +23,11 @@ def get_free_tools_config() -> FreeToolsConfig:
     config = load_config()
     free_tools = config.get("free_tools", {}) if isinstance(config, dict) else {}
     sku_ids = get_free_sku_ids()
-    base_per_hour = int(free_tools.get("base_per_hour", 5))
+    base_per_day = int(free_tools.get("base_per_day", free_tools.get("base_per_hour", 5)))
     referral_bonus = int(free_tools.get("referral_bonus", 10))
     return FreeToolsConfig(
         sku_ids=list(sku_ids),
-        base_per_hour=base_per_hour,
+        base_per_day=base_per_day,
         referral_bonus=referral_bonus,
     )
 
@@ -36,34 +36,21 @@ def get_free_tools_model_ids() -> List[str]:
     return get_free_tools_config().sku_ids
 
 
-def _parse_iso(dt_str: Optional[str]) -> Optional[datetime]:
-    if not dt_str:
-        return None
-    try:
-        value = datetime.fromisoformat(dt_str)
-    except ValueError:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
-
-
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now()
+
+
+def _start_of_next_day(current_time: datetime) -> datetime:
+    next_day = current_time.date() + timedelta(days=1)
+    return datetime.combine(next_day, time_of_day.min)
 
 
 async def get_free_generation_status(user_id: int) -> Dict[str, int]:
     storage = get_storage()
     cfg = get_free_tools_config()
-    usage = await storage.get_hourly_free_usage(user_id)
-    window_start = _parse_iso(usage.get("window_start_iso"))
-    used_count = int(usage.get("used_count", 0))
-    now = _now()
-    if not window_start or now - window_start >= timedelta(hours=1):
-        used_count = 0
-        window_start = now
+    used_count = int(await storage.get_user_free_generations_today(user_id))
     referral_remaining = await storage.get_referral_free_bank(user_id)
-    base_remaining = max(0, cfg.base_per_hour - used_count)
+    base_remaining = max(0, cfg.base_per_day - used_count)
     total_remaining = base_remaining + max(0, referral_remaining)
     return {
         "base_remaining": base_remaining,
@@ -75,45 +62,51 @@ async def get_free_generation_status(user_id: int) -> Dict[str, int]:
 async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None) -> Dict[str, int]:
     cfg = get_free_tools_config()
     storage = get_storage()
-    usage = await storage.get_hourly_free_usage(user_id)
-    window_start = _parse_iso(usage.get("window_start_iso"))
-    used_count = int(usage.get("used_count", 0))
     current_time = now or _now()
-    if not window_start or current_time - window_start >= timedelta(hours=1):
-        window_start = current_time
-        used_count = 0
-    limit_per_hour = int(cfg.base_per_hour)
-    remaining = max(0, limit_per_hour - used_count)
-    next_refill_in = max(0, int((window_start + timedelta(hours=1) - current_time).total_seconds()))
+    used_count = int(await storage.get_user_free_generations_today(user_id))
+    limit_per_day = int(cfg.base_per_day)
+    remaining = max(0, limit_per_day - used_count)
+    next_refill_at = _start_of_next_day(current_time)
+    next_refill_in = max(0, int((next_refill_at - current_time).total_seconds()))
     return {
-        "limit_per_hour": limit_per_hour,
-        "used_in_current_window": used_count,
+        "limit_per_day": limit_per_day,
+        "used_today": used_count,
         "remaining": remaining,
         "next_refill_in": next_refill_in,
-        "window_start_iso": window_start.isoformat(),
     }
 
 
 def format_free_counter_block(
     remaining: int,
-    limit_per_hour: int,
+    limit_per_day: int,
     next_refill_in: int,
     *,
     user_lang: str,
     now: Optional[datetime] = None,
 ) -> str:
-    minutes = max(0, int(next_refill_in / 60))
     local_now = now or datetime.now()
     refill_at = local_now + timedelta(seconds=next_refill_in)
     time_str = refill_at.strftime("%H:%M")
     if user_lang == "en":
+        if remaining <= 0:
+            return (
+                f"🎁 Free remaining today: 0 of {limit_per_day}\n"
+                f"⏳ Free limit resets tomorrow at {time_str} local.\n"
+                "💳 Top up to keep using the tools."
+            )
         return (
-            f"🎁 Free remaining: {remaining} of {limit_per_hour}\n"
-            f"⏳ Next free in: {minutes} min (at {time_str} local)"
+            f"🎁 Free remaining today: {remaining} of {limit_per_day}\n"
+            f"⏳ Free limit resets tomorrow at {time_str} local."
+        )
+    if remaining <= 0:
+        return (
+            f"🎁 Бесплатных осталось сегодня: 0 из {limit_per_day}\n"
+            f"⏳ Бесплатный лимит обновится завтра в {time_str} по локальному времени.\n"
+            "💳 Пополните счет, чтобы продолжить пользоваться инструментами."
         )
     return (
-        f"🎁 Бесплатных осталось: {remaining} из {limit_per_hour}\n"
-        f"⏳ Следующая бесплатная через: {minutes} мин (в {time_str} по локальному времени)"
+        f"🎁 Бесплатных осталось сегодня: {remaining} из {limit_per_day}\n"
+        f"⏳ Бесплатный лимит обновится завтра в {time_str} по локальному времени."
     )
 
 
@@ -130,23 +123,11 @@ async def check_and_consume_free_generation(
         return {"status": "not_free"}
 
     storage = get_storage()
-    usage = await storage.get_hourly_free_usage(user_id)
-    window_start = _parse_iso(usage.get("window_start_iso"))
-    used_count = int(usage.get("used_count", 0))
-    now = _now()
-
-    if not window_start or now - window_start >= timedelta(hours=1):
-        window_start = now
-        used_count = 0
-
-    base_remaining = cfg.base_per_hour - used_count
+    used_count = int(await storage.get_user_free_generations_today(user_id))
+    base_remaining = cfg.base_per_day - used_count
     if base_remaining > 0:
+        await storage.increment_free_generations(user_id)
         used_count += 1
-        await storage.set_hourly_free_usage(
-            user_id,
-            window_start.isoformat(),
-            used_count,
-        )
         referral_remaining = await storage.get_referral_free_bank(user_id)
         log_structured_event(
             correlation_id=correlation_id,
@@ -157,15 +138,15 @@ async def check_and_consume_free_generation(
             outcome="consumed",
             param={
             "sku_id": model_id,
-                "source": "hourly",
-                "base_remaining": max(0, cfg.base_per_hour - used_count),
+                "source": "daily",
+                "base_remaining": max(0, cfg.base_per_day - used_count),
                 "referral_remaining": max(0, referral_remaining),
             },
         )
         return {
             "status": "ok",
-            "source": "hourly",
-            "base_remaining": max(0, cfg.base_per_hour - used_count),
+            "source": "daily",
+            "base_remaining": max(0, cfg.base_per_day - used_count),
             "referral_remaining": max(0, referral_remaining),
         }
 
@@ -193,7 +174,8 @@ async def check_and_consume_free_generation(
             "referral_remaining": max(0, referral_remaining - 1),
         }
 
-    reset_in = max(1, int(((window_start + timedelta(hours=1)) - now).total_seconds() / 60))
+    now = _now()
+    reset_in = max(1, int((_start_of_next_day(now) - now).total_seconds() / 60))
     return {
         "status": "deny",
         "reset_in_minutes": reset_in,
@@ -215,16 +197,8 @@ async def check_free_generation_available(
         return {"status": "not_free"}
 
     storage = get_storage()
-    usage = await storage.get_hourly_free_usage(user_id)
-    window_start = _parse_iso(usage.get("window_start_iso"))
-    used_count = int(usage.get("used_count", 0))
-    now = _now()
-
-    if not window_start or now - window_start >= timedelta(hours=1):
-        window_start = now
-        used_count = 0
-
-    base_remaining = cfg.base_per_hour - used_count
+    used_count = int(await storage.get_user_free_generations_today(user_id))
+    base_remaining = cfg.base_per_day - used_count
     referral_remaining = await storage.get_referral_free_bank(user_id)
     if base_remaining > 0 or referral_remaining > 0:
         log_structured_event(
@@ -246,7 +220,8 @@ async def check_free_generation_available(
             "referral_remaining": max(0, referral_remaining),
         }
 
-    reset_in = max(1, int(((window_start + timedelta(hours=1)) - now).total_seconds() / 60))
+    now = _now()
+    reset_in = max(1, int((_start_of_next_day(now) - now).total_seconds() / 60))
     return {
         "status": "deny",
         "reset_in_minutes": reset_in,
@@ -269,23 +244,11 @@ async def consume_free_generation(
         return {"status": "not_free"}
 
     storage = get_storage()
-    usage = await storage.get_hourly_free_usage(user_id)
-    window_start = _parse_iso(usage.get("window_start_iso"))
-    used_count = int(usage.get("used_count", 0))
-    now = _now()
-
-    if not window_start or now - window_start >= timedelta(hours=1):
-        window_start = now
-        used_count = 0
-
-    base_remaining = cfg.base_per_hour - used_count
+    used_count = int(await storage.get_user_free_generations_today(user_id))
+    base_remaining = cfg.base_per_day - used_count
     if base_remaining > 0:
+        await storage.increment_free_generations(user_id)
         used_count += 1
-        await storage.set_hourly_free_usage(
-            user_id,
-            window_start.isoformat(),
-            used_count,
-        )
         referral_remaining = await storage.get_referral_free_bank(user_id)
         log_structured_event(
             correlation_id=correlation_id,
@@ -297,15 +260,15 @@ async def consume_free_generation(
             param={
                 "sku_id": model_id,
                 "source": source,
-                "bucket": "hourly",
-                "base_remaining": max(0, cfg.base_per_hour - used_count),
+                "bucket": "daily",
+                "base_remaining": max(0, cfg.base_per_day - used_count),
                 "referral_remaining": max(0, referral_remaining),
             },
         )
         return {
             "status": "ok",
-            "source": "hourly",
-            "base_remaining": max(0, cfg.base_per_hour - used_count),
+            "source": "daily",
+            "base_remaining": max(0, cfg.base_per_day - used_count),
             "referral_remaining": max(0, referral_remaining),
         }
 
@@ -334,7 +297,8 @@ async def consume_free_generation(
             "referral_remaining": max(0, referral_remaining - 1),
         }
 
-    reset_in = max(1, int(((window_start + timedelta(hours=1)) - now).total_seconds() / 60))
+    now = _now()
+    reset_in = max(1, int((_start_of_next_day(now) - now).total_seconds() / 60))
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
