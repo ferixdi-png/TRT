@@ -31,5 +31,23 @@
       "task_id": "94fefa63f11c49097bb5b782af02f5a7",
       "timestamp": 1768913138
     }
+  ],
+  "8365353562": [
+    {
+      "id": 1,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "image_size": "2:3",
+        "prompt": "Девушка"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768914353554_l5biop.png"
+      ],
+      "task_id": "2bd324db8dcab0df053ab895efee32b4",
+      "timestamp": 1768914366
+    }
   ]
 }
