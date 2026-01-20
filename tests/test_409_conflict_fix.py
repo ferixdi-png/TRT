@@ -171,11 +171,15 @@ def test_render_webhook_fallback_starts_health_server():
             "WEBHOOK_BASE_URL": "",
             "PORT": str(port),
             "TELEGRAM_BOT_TOKEN": "test-token",
-            "DATABASE_URL": "postgresql://test-user:test-pass@localhost:5432/test-db",
             "DISABLE_DB_LOCKS": "1",
             "DATA_DIR": temp_dir,
             "RENDER": "true",
             "TEST_MODE": "1",
+            "STORAGE_MODE": "github_json",
+            "GITHUB_REPO": "owner/repo",
+            "GITHUB_TOKEN": "test-token",
+            "BOT_INSTANCE_ID": "test-instance",
+            "GITHUB_STORAGE_STUB": "1",
         })
         process = subprocess.Popen(
             [sys.executable, "-u", "main_render.py"],

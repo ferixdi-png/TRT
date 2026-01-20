@@ -21,8 +21,6 @@ typing-extensions>=4.5.0
 # pytesseract>=0.3.10  # Optional - импортируется лениво
 
 # PostgreSQL database
-psycopg2-binary>=2.9.0  # Для синхронных операций
-asyncpg>=0.29.0  # Для async операций (рекомендуется для Telegram ботов)
 
 # Testing (опционально, для локальной разработки)
 pytest>=7.4.0
