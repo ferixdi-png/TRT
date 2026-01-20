@@ -1,5 +1,37 @@
 {
+  "452907108": [
+    {
+      "id": 1,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "Кинематографический кадр мужчины, который смотрит в окно в темной комнате с тусклым освещением, выполненной в оттенках бирюзы. На нем белая рубашка с расстегнутым верхом. Крупный план, во рту зажженная сигарета, голова немного откинулась назад, делает затяг, меланхолия и депрессия читается на фото"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768917869692_h39pdx.png"
+      ],
+      "task_id": "a6dee92ca9d28d57197b3b1c4b3e0a58",
+      "timestamp": 1768917872
+    }
+  ],
   "6913446846": [
+    {
+      "id": 7,
+      "is_free": true,
+      "model_id": "ideogram/v3-text-to-image",
+      "model_name": "Ideogram V3 Text to Image",
+      "params": {
+        "prompt": "кот"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/r/18488957f386e3721dc63c9b13b21c53_1768917287_icxt5mgw.png"
+      ],
+      "task_id": "18488957f386e3721dc63c9b13b21c53",
+      "timestamp": 1768917291
+    },
     {
       "id": 6,
       "is_free": true,
@@ -90,21 +122,6 @@
       ],
       "task_id": "2876dfd04982eb09dad997fa8f22086f",
       "timestamp": 1768908864
-    },
-    {
-      "id": 7,
-      "is_free": true,
-      "model_id": "ideogram/v3-text-to-image",
-      "model_name": "Ideogram V3 Text to Image",
-      "params": {
-        "prompt": "кот"
-      },
-      "price": 0.0,
-      "result_urls": [
-        "https://tempfile.aiquickdraw.com/r/18488957f386e3721dc63c9b13b21c53_1768917287_icxt5mgw.png"
-      ],
-      "task_id": "18488957f386e3721dc63c9b13b21c53",
-      "timestamp": 1768917291
     }
   ],
   "8365353562": [
