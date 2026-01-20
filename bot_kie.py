@@ -18769,18 +18769,6 @@ async def main():
     
     logger.info("=" * 60)
     
-    # ==================== SINGLE INSTANCE LOCK ====================
-    # Lock уже получен в начале файла через app.locking.single_instance
-    # Проверяем, что lock действительно удерживается
-    from app.locking.single_instance import is_lock_held
-    if not is_lock_held():
-        logger.error("❌❌❌ CRITICAL: Single instance lock is not held!")
-        logger.error("   This should not happen - lock should be acquired at module level")
-        logger.error("   Exiting to prevent 409 Conflict...")
-        sys.exit(1)
-    
-    logger.info("✅ Single instance lock verified - proceeding with bot initialization")
-    
     # CRITICAL: Ensure GitHub storage is reachable before anything else
     logger.info("🔒 Ensuring GitHub storage persistence...")
     try:
@@ -18801,6 +18789,17 @@ async def main():
     # Initialize all data files first (for JSON fallback)
     logger.info("🔧 Initializing data files...")
     initialize_data_files()
+
+    # ==================== SINGLE INSTANCE LOCK ====================
+    # Lock is acquired during initialize_data_files; verify it is held.
+    from app.locking.single_instance import is_lock_held
+    if not is_lock_held():
+        logger.error("❌❌❌ CRITICAL: Single instance lock is not held!")
+        logger.error("   Lock acquisition should have happened during initialization")
+        logger.error("   Exiting to prevent 409 Conflict...")
+        sys.exit(1)
+    
+    logger.info("✅ Single instance lock verified - proceeding with bot initialization")
     
     # Final verification of critical files (for JSON fallback)
     logger.info("🔒 Verifying critical data files...")
