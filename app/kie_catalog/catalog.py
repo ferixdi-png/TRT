@@ -363,73 +363,18 @@ def get_free_model_ids() -> List[str]:
 
 
 def get_free_tools_model_ids(*, log_selection: bool = True) -> List[str]:
-    """Return the 5 cheapest non-audio models based on catalog + registry defaults."""
-    from app.config import get_settings
-    from app.models.registry import get_models_sync
-    from app.services.pricing_service import user_price_rub
+    """Return 5 cheapest SKU IDs from pricing SSOT (including at least one text-to-video SKU)."""
+    from app.pricing.ssot_catalog import get_free_sku_ids
     from app.observability.structured_logs import log_structured_event
 
-    settings = get_settings()
-    registry_models = {m.get("id"): m for m in get_models_sync() if isinstance(m, dict)}
-    catalog = load_catalog()
-
-    audio_types = {"tts", "stt", "sfx", "audio_isolation", "music", "lip_sync"}
-    candidates = []
-
-    for model in catalog:
-        registry_data = registry_models.get(model.id, {})
-        model_id_lower = model.id.lower()
-        model_mode = (model.model_mode or model.model_type or "").lower()
-        registry_category = (registry_data.get("category") or "").lower()
-
-        is_audio = (
-            model.type in audio_types
-            or "audio" in model_id_lower
-            or "audio" in model_mode
-            or "speech" in model_mode
-            or registry_category == "аудио"
-        )
-        if is_audio:
-            continue
-
-        if not model.modes:
-            log_structured_event(
-                action="FREE_TOOLS_SELECT",
-                action_path="kie_catalog.get_free_tools_model_ids",
-                model_id=model.id,
-                stage="FREE_TOOLS",
-                outcome="excluded",
-                error_code="FREE_TOOLS_NO_DEFAULT",
-                fix_hint="Добавьте режимы (modes) в pricing catalog для модели.",
-            )
-            continue
-
-        default_mode = model.modes[0]
-        if default_mode.official_usd <= 0:
-            log_structured_event(
-                action="FREE_TOOLS_SELECT",
-                action_path="kie_catalog.get_free_tools_model_ids",
-                model_id=model.id,
-                stage="FREE_TOOLS",
-                outcome="excluded",
-                error_code="FREE_TOOLS_NO_DEFAULT",
-                fix_hint="Укажите official_usd для режима по умолчанию.",
-            )
-            continue
-
-        price_rub = user_price_rub(default_mode.official_usd, settings.usd_to_rub, settings.price_multiplier)
-        candidates.append((price_rub, model.id))
-
-    candidates.sort(key=lambda item: (item[0], item[1]))
-    selected = [model_id for _, model_id in candidates[:5]]
-
+    selected = get_free_sku_ids()
     if log_selection:
         log_structured_event(
             action="FREE_TOOLS_SELECT",
             action_path="kie_catalog.get_free_tools_model_ids",
             stage="FREE_TOOLS",
             outcome="selected",
-            param={"selected_count": len(selected), "model_ids": selected},
+            param={"selected_count": len(selected), "sku_ids": selected},
         )
     return selected
 

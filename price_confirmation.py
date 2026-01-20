@@ -42,13 +42,12 @@ async def show_price_confirmation(
         Сообщение бота или None
     """
     try:
-        from pricing_transparency import format_price_breakdown, calculate_detailed_price
         from bonus_system import get_user_bonuses
         
-        # Рассчитываем детализированную цену
-        # Получаем базовую цену модели (нужно будет интегрировать с KIE API)
-        base_price_usd = 0.1  # Пример, нужно получать из API
-        price_info = calculate_detailed_price(model_id, params, base_price_usd)
+        price_info = {
+            "total_price": price,
+            "currency": "RUB",
+        }
         
         # Применяем скидку, если есть
         final_price = price
@@ -96,7 +95,7 @@ async def show_price_confirmation(
             if params_text:
                 message_text += f"⚙️ <b>Параметры:</b>\n{params_text}\n"
             
-            message_text += "\n" + format_price_breakdown(price_info, lang)
+            message_text += f"\n💰 <b>Стоимость:</b> <b>{final_price:.2f}</b> ₽\n"
             
             if is_free:
                 message_text += "\n🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ</b> (используется бесплатный лимит)\n"
@@ -150,7 +149,7 @@ async def show_price_confirmation(
             if params_text:
                 message_text += f"⚙️ <b>Parameters:</b>\n{params_text}\n"
             
-            message_text += "\n" + format_price_breakdown(price_info, lang)
+            message_text += f"\n💰 <b>Price:</b> <b>{final_price:.2f}</b> ₽\n"
             
             if is_free:
                 message_text += "\n🎁 <b>FREE GENERATION</b> (using free limit)\n"
@@ -214,9 +213,8 @@ def update_price_on_parameter_change(
     updated_params[changed_param] = new_value
     
     # Пересчитываем цену
-    from pricing_transparency import calculate_detailed_price
-    base_price_usd = 0.1  # Пример, нужно получать из API
-    price_info = calculate_detailed_price(model_id, updated_params, base_price_usd)
-    
-    return price_info
-
+    return {
+        "total_price": None,
+        "currency": "RUB",
+        "params": updated_params,
+    }

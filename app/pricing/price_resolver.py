@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 
 from app.config import Settings, get_settings
-from app.kie_catalog import get_model
+from app.pricing.ssot_catalog import resolve_sku_for_params
 
 
 PRICE_QUANT = Decimal("0.01")
@@ -20,6 +20,7 @@ class PriceQuote:
     price_rub: Decimal
     currency: str
     breakdown: Dict[str, Any]
+    sku_id: str
 
 
 def _to_decimal(value: Any) -> Decimal:
@@ -50,27 +51,17 @@ def resolve_price_quote(
     Returns None when price rules are missing.
     """
     settings = settings or get_settings()
-    model_spec = get_model(model_id)
-    if not model_spec or not model_spec.modes:
+    sku = resolve_sku_for_params(model_id, selected_params or {})
+    if not sku:
         return None
 
-    if mode_index < 0 or mode_index >= len(model_spec.modes):
-        return None
-
-    mode = model_spec.modes[mode_index]
-    base_usd = _to_decimal(mode.official_usd)
-    usd_to_rub = _to_decimal(getattr(settings, "usd_to_rub", 77.83))
-    multiplier = _to_decimal(1.0 if is_admin else getattr(settings, "price_multiplier", 2.0))
-
-    price_rub = _quantize_price(base_usd * usd_to_rub * multiplier)
-
+    price_rub = _quantize_price(_to_decimal(sku.price_rub))
     breakdown = {
         "model_id": model_id,
         "mode_index": mode_index,
         "gen_type": gen_type,
         "params": dict(selected_params or {}),
-        "base_usd": str(base_usd),
-        "usd_to_rub": str(usd_to_rub),
-        "multiplier": str(multiplier),
+        "sku_id": sku.sku_id,
+        "unit": sku.unit,
     }
-    return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown)
+    return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_id)

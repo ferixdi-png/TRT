@@ -9,10 +9,9 @@ from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.kie_catalog import load_catalog, get_model, get_free_tools_model_ids, ModelSpec
-from app.services.pricing_service import price_for_model_rub
+from app.kie_catalog import load_catalog, get_model, ModelSpec
 from app.pricing.price_resolver import format_price_rub
-from app.config import get_settings
+from app.pricing.ssot_catalog import get_min_price_rub
 
 logger = logging.getLogger(__name__)
 
@@ -168,12 +167,9 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
     catalog = load_catalog()
     settings = get_settings()
     
-    free_tool_ids = set(get_free_tools_model_ids())
     # Группируем по типам
     models_by_type: Dict[str, List[ModelSpec]] = defaultdict(list)
     for model in catalog:
-        if model.id in free_tool_ids:
-            continue
         models_by_type[model.type].append(model)
     
     keyboard = []
@@ -229,21 +225,19 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
             # Кнопки моделей (по 1 в ряд, так как могут быть длинными)
             for model in sorted(brand_models, key=lambda m: m.title_ru):
                 # Получаем цену для первого режима
-                price_rub = price_for_model_rub(model.id, 0, settings)
-                if price_rub is None:
-                    price_rub = 0
-                price_display = format_price_rub(price_rub)
+                price_rub = get_min_price_rub(model.id)
+                price_display = format_price_rub(price_rub) if price_rub is not None else "—"
                 
                 # Получаем эмодзи для типа модели
                 type_emoji = _get_type_emoji(model.type)
                 
                 # Формируем текст кнопки с эмодзи и ценой
-                button_text = f"{type_emoji} {model.title_ru} • ₽{price_display}"
+                button_text = f"{type_emoji} {model.title_ru} • от {price_display} ₽"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
-                    max_len = 60 - len(f" • ₽{price_display}".encode('utf-8')) - 2  # -2 для эмодзи и пробела
-                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • ₽{price_display}"
+                    max_len = 60 - len(f" • от {price_display} ₽".encode('utf-8')) - 2  # -2 для эмодзи и пробела
+                    button_text = f"{type_emoji} {model.title_ru[:max_len]}... • от {price_display} ₽"
                 
                 callback_data = _create_callback_data(model.id)
                 
@@ -299,16 +293,11 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     Returns:
         Tuple (текст карточки, клавиатура)
     """
-    settings = get_settings()
-    
     if mode_index < 0 or mode_index >= len(model.modes):
         mode_index = 0
     
-    mode = model.modes[mode_index]
-    price_rub = price_for_model_rub(model.id, mode_index, settings)
-    if price_rub is None:
-        price_rub = 0
-    price_display = format_price_rub(price_rub)
+    price_rub = get_min_price_rub(model.id)
+    price_display = format_price_rub(price_rub) if price_rub is not None else "—"
     
     # Формируем текст карточки
     type_emoji = _get_type_emoji(model.type)
@@ -328,9 +317,7 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     if "video_url" in required_fields or "video_urls" in required_fields:
         examples.append("video_url=https://example.com/video.mp4")
     example_text = "; ".join(examples) if examples else ("—" if user_lang == "ru" else "—")
-    price_label = f"₽{price_display}" if price_rub else ("Бесплатно" if user_lang == "ru" else "Free")
-    
-    mode_label = _resolve_mode_label(model, mode_index, user_lang)
+    price_label = f"от {price_display} ₽" if price_rub is not None else ("цена уточняется" if user_lang == "ru" else "pricing pending")
     if user_lang == 'ru':
         type_name = _get_type_name_ru(model.type)
         
@@ -343,24 +330,16 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"╚═══════════════════════════════════════════╝\n"
         )
         
-        card_text += (
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚙️ <b>Режим:</b> <code>{mode_label}</code>\n"
-        )
         if model.description_ru:
-            card_text += f"📝 <b>Описание:</b> {model.description_ru}\n"
+            card_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📝 <b>Описание:</b> {model.description_ru}\n"
         
         card_text += (
             f"\n╔═══════════════════════════════════════════╗\n"
             f"║  💰 ЦЕНА: <b>{price_label}</b> 💰              ║\n"
             f"╚═══════════════════════════════════════════╝\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💵 Официально: <code>${mode.official_usd:.4f}</code>\n"
-            f"🎫 Кредиты: <code>{mode.credits}</code>\n"
-            f"📦 Единица: <code>{mode.unit}</code>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🧩 <b>Что нужно:</b> {', '.join(model.required_inputs_ru) if model.required_inputs_ru else required_text}\n"
-            f"📤 <b>Результат:</b> {model.output_type_ru or '—'}\n"
+            f"📥 <b>Вход:</b> {', '.join(model.required_inputs_ru) if model.required_inputs_ru else required_text}\n"
+            f"📤 <b>Выход:</b> {model.output_type_ru or '—'}\n"
             f"📌 <b>Пример:</b> {example_text}\n"
         )
         
@@ -379,15 +358,14 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             f"📋 <b>Generation Type:</b> {model.type}\n"
         )
         
-        card_text += f"⚙️ <b>Mode:</b> <code>{mode_label}</code>\n"
+        if model.description_ru:
+            card_text += f"📝 <b>Description:</b> {model.description_ru}\n"
         
         card_text += (
             f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"💰 <b>PRICE:</b> <b>{price_label}</b>\n"
-            f"💵 Official: ${mode.official_usd:.4f}\n"
-            f"🎫 Credits: {mode.credits}\n"
-            f"📦 Unit: {mode.unit}\n"
-            f"🧩 <b>Required:</b> {required_text}\n"
+            f"📥 <b>Input:</b> {required_text}\n"
+            f"📤 <b>Output:</b> {model.output_type_ru or '—'}\n"
             f"📌 <b>Example:</b> {example_text}\n"
         )
         
