@@ -5,10 +5,13 @@ Storage factory - выбор storage (GitHub with test fallback).
 
 import logging
 import os
+import asyncio
 from typing import Optional
 
 from app.storage.base import BaseStorage
 from app.storage.github_storage import GitHubStorage
+from app.storage.json_storage import JsonStorage
+from app.storage.hybrid_storage import HybridStorage
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +73,66 @@ def create_storage(
         _storage_mode_logged = True
 
     try:
-        _storage_instance = GitHubStorage()
+        github_storage = GitHubStorage()
     except ValueError:
         if test_mode or dry_run:
             logger.error("[STORAGE] github_init_failed mode=github_json env_missing=true")
         raise
+
+    runtime_mode = os.getenv("RUNTIME_STORAGE_MODE", "auto").lower()
+    runtime_dir = data_dir or os.getenv("RUNTIME_STORAGE_DIR", "/tmp/trt-runtime")
+    runtime_files = {
+        "user_balances.json",
+        "daily_free_generations.json",
+        "admin_limits.json",
+        "hourly_free_usage.json",
+        "referral_free_bank.json",
+    }
+
+    if runtime_mode in {"off", "disabled", "github"}:
+        _storage_instance = github_storage
+        return _storage_instance
+
+    if runtime_mode in {"postgres", "pg", "auto"} and os.getenv("DATABASE_URL"):
+        logger.warning(
+            "[STORAGE] runtime_db_unavailable=true using=json_runtime reason=missing_db_driver",
+        )
+
+    runtime_storage = JsonStorage(runtime_dir)
+
+    marker_path = os.path.join(runtime_dir, ".runtime_migrated")
+    def _run_coro(coro_factory):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro_factory())
+        logger.warning("[STORAGE] runtime_migration_skipped=true reason=event_loop_running")
+        return None
+
+    if not os.path.exists(marker_path):
+        for filename in runtime_files:
+            try:
+                payload = _run_coro(lambda: github_storage.read_json_file(filename, default={})) or {}
+            except RuntimeError:
+                payload = {}
+            if payload:
+                try:
+                    _run_coro(lambda: runtime_storage.write_json_file(filename, payload))
+                except RuntimeError:
+                    pass
+        try:
+            os.makedirs(runtime_dir, exist_ok=True)
+            with open(marker_path, "w", encoding="utf-8") as marker_file:
+                marker_file.write("ok")
+        except Exception as exc:
+            logger.warning("[STORAGE] runtime_migration_marker_failed error=%s", exc)
+
+    _storage_instance = HybridStorage(github_storage, runtime_storage, runtime_files=runtime_files)
+    logger.info(
+        "[STORAGE] runtime_override=true mode=hybrid runtime_dir=%s runtime_files=%s",
+        runtime_dir,
+        ",".join(sorted(runtime_files)),
+    )
     return _storage_instance
 
 

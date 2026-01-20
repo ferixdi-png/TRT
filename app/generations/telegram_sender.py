@@ -111,7 +111,7 @@ async def deliver_result(
     kie_client: Optional[object] = None,
     params: Optional[Dict[str, Any]] = None,
     model_label: Optional[str] = None,
-) -> None:
+) -> bool:
     """Deliver generation result to Telegram with unified delivery."""
     media_type = (media_type or "").lower()
     label = model_label or model_id or "model"
@@ -143,7 +143,7 @@ async def deliver_result(
                 f"ID: {correlation_id or 'corr-na-na'}"
             ),
         )
-        return
+        return False
 
     log_structured_event(
         correlation_id=correlation_id,
@@ -182,7 +182,7 @@ async def deliver_result(
                 f"ID: {correlation_id or 'corr-na-na'}"
             ),
         )
-        return
+        return False
 
     if media_type == "text":
         try:
@@ -232,7 +232,7 @@ async def deliver_result(
                 fix_hint=str(exc),
             )
             raise
-        return
+        return True
 
     async with aiohttp.ClientSession() as session:
         tg_method, payload = await resolve_and_prepare_telegram_payload(
@@ -308,7 +308,8 @@ async def deliver_result(
                 error_code="TG_DELIVER_FALLBACK_URL",
                 fix_hint="Sent URL fallback after upload failure.",
             )
-            return
+            return True
+    return True
 
 
 async def send_job_result(
