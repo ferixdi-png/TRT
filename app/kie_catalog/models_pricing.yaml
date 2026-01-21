@@ -220,20 +220,20 @@ models:
     official_usd: 0.02
 - id: nano-banana-pro
   title_ru: Nano Banana Pro
-  type: t2i
+  type: i2i
   modes:
   - unit: image
-    credits: 18.0
-    official_usd: 0.09
-    notes: 1.0s-1K
+    credits: 14.14
+    official_usd: 0.18
+    notes: 1/2K
   - unit: image
-    credits: 18.0
-    official_usd: 0.09
-    notes: 1.0s-2K
+    credits: 14.14
+    official_usd: 0.18
+    notes: 1/2K
   - unit: image
-    credits: 24.0
-    official_usd: 0.12
-    notes: 1.0s-4K
+    credits: 18.86
+    official_usd: 0.24
+    notes: 4K
 - id: google/veo-3
   title_ru: Google Veo 3 Text to Video
   type: t2v
