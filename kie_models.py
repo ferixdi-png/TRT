@@ -18,116 +18,6 @@ KIE_MODELS = [
                 "description": "Текстовое описание изображения, которое вы хотите сгенерировать (макс. 1000 символов)",
                 "required": True,
                 "max_length": 1000
-            },
-            "aspect_ratio": {
-                "type": "string",
-                "description": "Соотношение сторон для сгенерированного изображения",
-                "required": True,
-                "default": "1:1",
-                "enum": ["1:1", "4:3", "3:4", "16:9", "9:16"]
-            }
-        }
-    },
-    {
-        "id": "nano-banana-pro",
-        "name": "Nano Banana Pro",
-        "description": "Google DeepMind модель с улучшенным качеством 2K/4K, интеллектуальным масштабированием, улучшенным рендерингом текста и согласованностью персонажей.",
-        "category": "Фото",
-        "emoji": "🍌",
-        "pricing": "18 кредитов (1K/2K) или 24 кредита (4K)",
-        "input_params": {
-            "image_input": {
-                "type": "array",
-                "description": "Входные изображения для трансформации или использования как референс (до 8 изображений, обязательно)",
-                "required": True,
-                "item_type": "string"
-            },
-            "prompt": {
-                "type": "string",
-                "description": "Текстовое описание изображения (макс. 10000 символов)",
-                "required": True,
-                "max_length": 10000
-            },
-            "aspect_ratio": {
-                "type": "string",
-                "description": "Соотношение сторон изображения",
-                "required": False,
-                "default": "1:1",
-                "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"]
-            },
-            "resolution": {
-                "type": "string",
-                "description": "Разрешение изображения (1K/2K = 18 кредитов, 4K = 24 кредита)",
-                "required": False,
-                "default": "1K",
-                "enum": ["1K", "2K", "4K"]
-            },
-            "output_format": {
-                "type": "string",
-                "description": "Формат выходного изображения",
-                "required": False,
-                "default": "png",
-                "enum": ["png", "jpg"]
-            }
-        }
-    },
-    {
-        "id": "seedream/4.5-text-to-image",
-        "name": "Seedream 4.5 Text-to-Image",
-        "description": "Bytedance модель для генерации 4K изображений, точного редактирования и согласованного вывода нескольких изображений. Генерация из текста.",
-        "category": "Фото",
-        "emoji": "🎨",
-        "pricing": "6.5 кредитов за изображение",
-        "input_params": {
-            "prompt": {
-                "type": "string",
-                "description": "Текстовое описание изображения, которое вы хотите сгенерировать (макс. 3000 символов)",
-                "required": True,
-                "max_length": 3000
-            },
-            "aspect_ratio": {
-                "type": "string",
-                "description": "Соотношение сторон изображения",
-                "required": True,
-                "default": "1:1",
-                "enum": ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"]
-            },
-            "quality": {
-                "type": "string",
-                "description": "Качество изображения (Basic = 2K, High = 4K)",
-                "required": True,
-                "default": "basic",
-                "enum": ["basic", "high"]
-            }
-        }
-    },
-    {
-        "id": "seedream/4.5-edit",
-        "name": "Seedream 4.5 Edit",
-        "description": "Bytedance модель для генерации 4K изображений, точного редактирования и согласованного вывода нескольких изображений. Редактирование изображений.",
-        "category": "Фото",
-        "emoji": "✏️",
-        "pricing": "6.5 кредитов за изображение",
-        "input_params": {
-            "prompt": {
-                "type": "string",
-                "description": "Текстовое описание изменений, которые вы хотите внести (макс. 3000 символов)",
-                "required": True,
-                "max_length": 3000
-            },
-            "image_urls": {
-                "type": "array",
-                "description": "Изображение для редактирования (URL после загрузки)",
-                "required": True,
-                "item_type": "string"
-            },
-            "aspect_ratio": {
-                "type": "string",
-                "description": "Соотношение сторон изображения",
-                "required": True,
-                "default": "1:1",
-                "enum": ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"]
-            },
             "quality": {
                 "type": "string",
                 "description": "Качество изображения (Basic = 2K, High = 4K)",
@@ -2750,12 +2640,12 @@ GENERATION_TYPES = {
     "text-to-video": {
         "name": "🎬 Текст в видео",
         "description": "Создавайте видео из текстового описания",
-        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "wan/2-2-a14b-text-to-video-turbo", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
     },
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "wan/2-2-a14b-image-to-video-turbo", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
     },
     "video-editing": {
         "name": "✂️ Редактирование видео",

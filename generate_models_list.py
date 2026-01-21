@@ -106,15 +106,6 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
             base_credits = 18 * default_duration
         else:  # 480p
             base_credits = 12 * default_duration
-    elif model_id in ["wan/2-2-a14b-text-to-video-turbo", "wan/2-2-a14b-image-to-video-turbo"]:
-        resolution = params.get("resolution", "720p")
-        default_duration = 5
-        if resolution == "720p":
-            base_credits = 16 * default_duration
-        elif resolution == "580p":
-            base_credits = 12 * default_duration
-        else:  # 480p
-            base_credits = 8 * default_duration
     elif model_id == "bytedance/seedream":
         base_credits = 3.5
     elif model_id == "qwen/text-to-image":
@@ -252,7 +243,7 @@ def get_default_params(model_id: str) -> dict:
         params["num_images"] = "1"
     elif model_id == "infinitalk/from-audio":
         params["resolution"] = "480p"
-    elif model_id in ["wan/2-2-a14b-speech-to-video-turbo", "wan/2-2-a14b-text-to-video-turbo", "wan/2-2-a14b-image-to-video-turbo"]:
+    elif model_id == "wan/2-2-a14b-speech-to-video-turbo":
         params["resolution"] = "720p"
     elif model_id in ["bytedance/seedream-v4-text-to-image", "bytedance/seedream-v4-edit"]:
         params["max_images"] = 1
