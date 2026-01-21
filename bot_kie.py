@@ -1995,25 +1995,62 @@ def _update_price_quote(
                 expected_sku,
                 PRICING_SSOT_PATH,
             )
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            update_id=update_id,
-            action="PRICE_MISSING_RULE",
-            action_path=action_path,
-            model_id=model_id,
-            gen_type=gen_type,
-            stage="PRICE_RESOLVE",
-            outcome="missing",
-            error_code="PRICE_MISSING_RULE",
-            fix_hint="pricing ssot missing SKU mapping; check params and catalog.",
-            param={
-                "mode_index": mode_index,
-                "params": params or {},
-            },
-        )
-        return None
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="PRICE_MISSING_RULE",
+                action_path=action_path,
+                model_id=model_id,
+                gen_type=gen_type,
+                stage="PRICE_RESOLVE",
+                outcome="missing",
+                error_code="PRICE_MISSING_RULE",
+                fix_hint="pricing ssot missing SKU mapping; check params and catalog.",
+                param={
+                    "mode_index": mode_index,
+                    "params": params or {},
+                },
+            )
+            return None
+        
+        # FALLBACK: Если экзактный SKU не найден, используем минимальную цену из доступных SKUs
+        if not quote:
+            min_sku = min(skus, key=lambda sku: float(sku.price_rub))
+            session["price_quote"] = {
+                "price_rub": f"{min_sku.price_rub:.2f}",
+                "currency": "RUB",
+                "breakdown": {
+                    "model_id": model_id,
+                    "mode_index": mode_index,
+                    "gen_type": gen_type,
+                    "params": dict(params or {}),
+                    "sku_id": min_sku.sku_key,
+                    "unit": min_sku.unit,
+                    "fallback_min_price": True,
+                },
+            }
+            session["sku_id"] = min_sku.sku_key
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="PRICE_RESOLVED",
+                action_path=action_path,
+                model_id=model_id,
+                gen_type=gen_type,
+                stage="PRICE_RESOLVE",
+                outcome="resolved_fallback",
+                param={
+                    "price_rub": f"{min_sku.price_rub:.2f}",
+                    "mode_index": mode_index,
+                    "params": params or {},
+                    "fallback_min_price": True,
+                },
+            )
+            return session["price_quote"]
     session["price_quote"] = {
         "price_rub": f"{quote.price_rub:.2f}",
         "currency": quote.currency,
@@ -19199,6 +19236,16 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
+    
+    # Admin command handlers
+    application.add_handler(CommandHandler("admin", admin_command))
+    application.add_handler(CommandHandler("payments", admin_payments))
+    application.add_handler(CommandHandler("selftest", selftest_command))
+    application.add_handler(CommandHandler("config_check", config_check_command))
+    application.add_handler(CommandHandler("block_user", admin_block_user))
+    application.add_handler(CommandHandler("unblock_user", admin_unblock_user))
+    application.add_handler(CommandHandler("user_balance", admin_user_balance))
+    application.add_handler(CommandHandler("add_admin", admin_add_admin))
     
     # Базовые callback handlers
     application.add_handler(CallbackQueryHandler(button_callback, block=True))
