@@ -403,7 +403,6 @@ async def send_job_result(
             param={"free_counter_line": free_counter_line},
         )
 
-    buttons.append([InlineKeyboardButton("🕒 Проверить статус", callback_data="check_status")])
     log_structured_event(
         correlation_id=correlation_id,
         action="TG_SEND_ATTEMPT",

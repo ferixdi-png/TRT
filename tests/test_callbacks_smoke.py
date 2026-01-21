@@ -31,6 +31,7 @@ def get_all_known_callbacks():
     known_patterns = [
         'show_models',
         'show_all_models_list',
+        'other_models',
         'category:',
         'all_models',
         'gen_type:',
