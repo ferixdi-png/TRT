@@ -226,23 +226,16 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
             
             # Кнопки моделей (по 1 в ряд, так как могут быть длинными)
             for model in sorted(brand_models, key=lambda m: m.title_ru):
-                # Получаем цену для первого режима
-                price_rub = get_min_price(model.id)
-                price_display = format_price_rub(price_rub) if price_rub is not None else "—"
-                free_option = model_has_free_sku(model.id)
-                
                 # Получаем эмодзи для типа модели
                 type_emoji = _get_type_emoji(model.type)
                 
-                # Формируем текст кнопки с эмодзи и ценой
-                free_label = " • Free option" if free_option else ""
-                button_text = f"{type_emoji} {model.title_ru} • от {price_display} ₽{free_label}"
+                # Формируем текст кнопки с эмодзи (без цены)
+                button_text = f"{type_emoji} {model.title_ru}"
                 
                 # Ограничение Telegram: ~64 символа для текста кнопки
                 if len(button_text.encode('utf-8')) > 60:
-                    suffix = f" • от {price_display} ₽{free_label}"
-                    max_len = 60 - len(suffix.encode('utf-8')) - 2  # -2 для эмодзи и пробела
-                    button_text = f"{type_emoji} {model.title_ru[:max_len]}...{suffix}"
+                    max_len = 58  # запас для многобайтовых символов
+                    button_text = f"{type_emoji} {model.title_ru[:max_len]}..."
                 
                 callback_data = _create_callback_data(model.id)
                 
