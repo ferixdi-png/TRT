@@ -7412,8 +7412,12 @@ async def _button_callback_impl(
                 update_id=update_id,
                 chat_id=query.message.chat_id if query.message else None,
             )
+            
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_info", user_id, gen_type)
             gen_info = get_generation_type_info(gen_type)
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_models", user_id, gen_type)
             models = get_visible_models_by_generation_type(gen_type)
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=got_models count=%s", user_id, gen_type, len(models) if models else 0)
             
             if not models:
                 user_lang = get_user_language(user_id)
@@ -7434,10 +7438,14 @@ async def _button_callback_impl(
                 return ConversationHandler.END
             
             # Get admin status for price calculations
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_admin", user_id, gen_type)
             is_admin = get_is_admin(user_id)
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=after_get_admin is_admin=%s", user_id, gen_type, is_admin)
             
             # Show generation type info and models with marketing text
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_free_remaining", user_id, gen_type)
             remaining_free = await get_user_free_generations_remaining(user_id)
+            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=got_free_remaining remaining=%s", user_id, gen_type, remaining_free)
             user_lang = get_user_language(user_id)
             free_counter_line = ""
             try:
