@@ -728,8 +728,15 @@ models:
   type: watermark_remove
   modes:
   - unit: removal
-    credits: 10.0
-    official_usd: 0.05
+    credits: 15.7
+    official_usd: 0.0786
+- id: sora-2-watermark-remover
+  title_ru: OpenAI Sora 2 Watermark Remover
+  type: watermark_remove
+  modes:
+  - unit: removal
+    credits: 15.7
+    official_usd: 0.0786
 - id: openai/4o-image
   title_ru: OpenAI 4o Image Text to Image
   type: t2i
