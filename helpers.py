@@ -99,14 +99,26 @@ async def build_main_menu_keyboard(
     Строит главное меню клавиатуры.
     Убрано дублирование - используется в start().
     """
+    if user_lang == "ru":
+        return [
+            [InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
+            [InlineKeyboardButton("📝➡️🖼️ Из текста в фото", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton("🖼️➡️🖼️ Из фото в фото", callback_data="gen_type:image-to-image")],
+            [InlineKeyboardButton("📝➡️🎬 Из текста в видео", callback_data="gen_type:text-to-video")],
+            [InlineKeyboardButton("🖼️➡️🎬 Из фото в видео", callback_data="gen_type:image-to-video")],
+            [InlineKeyboardButton("🧩 Другие модели", callback_data="show_all_models_list")],
+            [InlineKeyboardButton("💳 Баланс", callback_data="check_balance")],
+            [InlineKeyboardButton("🤝 Партнерка", callback_data="referral_info")],
+        ]
     return [
-        [InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
-        [InlineKeyboardButton("📝➡️🖼️ Из текста в фото", callback_data="gen_type:text-to-image")],
-        [InlineKeyboardButton("🖼️➡️🖼️ Из фото в фото", callback_data="gen_type:image-to-image")],
-        [InlineKeyboardButton("📝➡️🎬 Из текста в видео", callback_data="gen_type:text-to-video")],
-        [InlineKeyboardButton("🖼️➡️🎬 Из фото в видео", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("💳 Баланс", callback_data="check_balance")],
-        [InlineKeyboardButton("🤝 Партнерка", callback_data="referral_info")],
+        [InlineKeyboardButton("🆓 FREE MODELS", callback_data="free_tools")],
+        [InlineKeyboardButton("📝➡️🖼️ Text to Image", callback_data="gen_type:text-to-image")],
+        [InlineKeyboardButton("🖼️➡️🖼️ Image to Image", callback_data="gen_type:image-to-image")],
+        [InlineKeyboardButton("📝➡️🎬 Text to Video", callback_data="gen_type:text-to-video")],
+        [InlineKeyboardButton("🖼️➡️🎬 Image to Video", callback_data="gen_type:image-to-video")],
+        [InlineKeyboardButton("🧩 Other models", callback_data="show_all_models_list")],
+        [InlineKeyboardButton("💳 Balance", callback_data="check_balance")],
+        [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
     ]
 
 
@@ -241,7 +253,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
         if user_lang == 'en':
             free_info = ""
             if remaining_free > 0:
-                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per day (free tools)"
+                free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per day (free models)"
             
             balance_message = (
                 f"╔═══════════════════════════════════╗\n"
@@ -263,7 +275,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             )
             
             if remaining_free > 0:
-                balance_message += f"✅ Free tools generations ({remaining_free} available)\n"
+                balance_message += f"✅ Free models generations ({remaining_free} available)\n"
             
             balance_message += (
                 f"✅ Invite a friend and get bonuses\n\n"
@@ -275,7 +287,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             # Russian version
             free_info = ""
             if remaining_free > 0:
-                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день (пул free tools)"
+                free_info = f"\n\n🎁 <b>Бесплатные генерации:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день (пул free models)"
             
             balance_message = (
                 f"╔═══════════════════════════════════════════╗\n"
@@ -306,7 +318,7 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             )
             
             if remaining_free > 0:
-                balance_message += f"✅ Бесплатные генерации free tools ({remaining_free} доступно)\n"
+                balance_message += f"✅ Бесплатные генерации free models ({remaining_free} доступно)\n"
             
             balance_message += (
                 f"✅ Пригласить друга и получить бонусы\n"

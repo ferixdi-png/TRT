@@ -309,6 +309,14 @@ models:
     credits: 7.7
     official_usd: 0.0386
     notes: per 6 images
+- id: grok-imagine/text-to-video
+  title_ru: Grok Imagine Text to Video
+  type: t2v
+  modes:
+  - unit: video
+    credits: 20.0
+    official_usd: 0.1
+    notes: 6.0s
 - id: hailuo/02-image-to-video-standard
   title_ru: Hailuo 02 Image to Video
   type: i2v
