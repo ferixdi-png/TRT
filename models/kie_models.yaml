@@ -26,11 +26,12 @@ models:
       image_input:
         type: array
         item_type: string
-        required: true
+        required: false
+        max_items: 8
       prompt:
         type: string
         required: true
-        max: 10000
+        max: 20000
       aspect_ratio:
         type: enum
         required: false
@@ -150,6 +151,14 @@ models:
         required: false
     model_mode: image_to_video
   sora-watermark-remover:
+    model_type: video_editing
+    input:
+      video_url:
+        type: string
+        required: true
+        max: 500
+    model_mode: video_editing
+  sora-2-watermark-remover:
     model_type: video_editing
     input:
       video_url:
@@ -1698,6 +1707,43 @@ models:
         type: string
         required: true
     model_mode: text_to_image
+  grok-imagine/text-to-image:
+    model_type: text_to_image
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 5000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - '2:3'
+        - '3:2'
+        - '1:1'
+    model_mode: text_to_image
+  grok-imagine/text-to-video:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 5000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - '2:3'
+        - '3:2'
+        - '1:1'
+      mode:
+        type: enum
+        required: false
+        values:
+        - fun
+        - normal
+        - spicy
+    model_mode: text_to_video
   openai/4o-image:
     model_type: text_to_image
     input:
