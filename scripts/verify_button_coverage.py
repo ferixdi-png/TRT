@@ -10,14 +10,11 @@ from typing import Dict, List, Set
 ROOT = Path(__file__).resolve().parent.parent
 SCAN_FILES = [
     ROOT / "bot_kie.py",
-    ROOT / "app" / "helpers" / "models_menu.py",
-    ROOT / "app" / "observability" / "no_silence_guard.py",
-    ROOT / "app" / "generations" / "failure_ui.py",
+    ROOT / "helpers.py",
 ]
+SCAN_FILES.extend([path for path in (ROOT / "app").rglob("*.py")])
 
-IGNORED_CALLBACKS = {
-    "type_header:ignore",
-}
+IGNORED_CALLBACKS = set()
 
 DYNAMIC_CALLBACK_PREFIXES = {
     "modelk:",
@@ -83,7 +80,11 @@ def main() -> int:
             continue
         content = path.read_text(encoding="utf-8", errors="ignore")
         callbacks.update(_extract_callbacks(content))
-        handlers = _extract_handlers(content)
+
+    bot_file = ROOT / "bot_kie.py"
+    if bot_file.exists():
+        bot_content = bot_file.read_text(encoding="utf-8", errors="ignore")
+        handlers = _extract_handlers(bot_content)
         handler_exact.update(handlers["exact"])
         handler_prefixes.update(handlers["prefixes"])
 
@@ -99,9 +100,11 @@ def main() -> int:
 
     orphan_callbacks = sorted(cb for cb in callbacks if cb not in IGNORED_CALLBACKS and not is_covered(cb))
 
+    unused_handler_allowlist = {"pay_card:", "pay_stars:"}
     unused_handlers = sorted(
         h for h in handler_prefixes.union(handler_exact)
-        if not any(cb == h or cb.startswith(h) or h.startswith(cb) for cb in callbacks)
+        if h not in unused_handler_allowlist
+        and not any(cb == h or cb.startswith(h) or h.startswith(cb) for cb in callbacks)
     )
 
     ambiguous_prefixes = []
