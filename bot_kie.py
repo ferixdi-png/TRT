@@ -31,7 +31,7 @@ from app.observability.trace import (
     trace_event,
 )
 from app.observability.error_catalog import ERROR_CATALOG
-from app.middleware.rate_limit import PerUserRateLimiter, TTLCache
+from app.middleware.rate_limit import PerKeyRateLimiter, PerUserRateLimiter, TTLCache
 from app.session_store import get_session_store, get_session_cached
 # Enable logging FIRST (before any other imports that might log)
 logging.basicConfig(
@@ -131,13 +131,23 @@ MESSAGE_RATE_LIMIT_PER_SEC = float(os.getenv("TG_RATE_LIMIT_PER_SEC", "1.5"))
 MESSAGE_RATE_LIMIT_BURST = float(os.getenv("TG_RATE_LIMIT_BURST", "5"))
 CALLBACK_RATE_LIMIT_PER_SEC = float(os.getenv("TG_CALLBACK_RATE_LIMIT_PER_SEC", "2.0"))
 CALLBACK_RATE_LIMIT_BURST = float(os.getenv("TG_CALLBACK_RATE_LIMIT_BURST", "6"))
+CALLBACK_DATA_RATE_LIMIT_PER_SEC = float(os.getenv("TG_CALLBACK_DATA_RATE_LIMIT_PER_SEC", "1.0"))
+CALLBACK_DATA_RATE_LIMIT_BURST = float(os.getenv("TG_CALLBACK_DATA_RATE_LIMIT_BURST", "2"))
 UPDATE_DEDUP_TTL_SECONDS = float(os.getenv("TG_UPDATE_DEDUP_TTL_SECONDS", "60"))
 CALLBACK_DEDUP_TTL_SECONDS = float(os.getenv("TG_CALLBACK_DEDUP_TTL_SECONDS", "30"))
+CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "8"))
+CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "2.0"))
+STORAGE_IO_TIMEOUT_SECONDS = float(os.getenv("STORAGE_IO_TIMEOUT_SECONDS", "2.5"))
 
 _message_rate_limiter = PerUserRateLimiter(MESSAGE_RATE_LIMIT_PER_SEC, MESSAGE_RATE_LIMIT_BURST)
 _callback_rate_limiter = PerUserRateLimiter(CALLBACK_RATE_LIMIT_PER_SEC, CALLBACK_RATE_LIMIT_BURST)
+_callback_data_rate_limiter = PerKeyRateLimiter(CALLBACK_DATA_RATE_LIMIT_PER_SEC, CALLBACK_DATA_RATE_LIMIT_BURST)
 _update_deduper = TTLCache(UPDATE_DEDUP_TTL_SECONDS)
 _callback_deduper = TTLCache(CALLBACK_DEDUP_TTL_SECONDS)
+_callback_semaphore = asyncio.Semaphore(CALLBACK_CONCURRENCY_LIMIT) if CALLBACK_CONCURRENCY_LIMIT > 0 else None
+KIE_CREDITS_CACHE_TTL_SECONDS = float(os.getenv("KIE_CREDITS_CACHE_TTL_SECONDS", "120"))
+KIE_CREDITS_TIMEOUT_SECONDS = float(os.getenv("KIE_CREDITS_TIMEOUT_SECONDS", "2.0"))
+_kie_credits_cache: Dict[str, Any] = {"timestamp": 0.0, "value": None}
 
 
 def is_known_callback_data(callback_data: Optional[str]) -> bool:
@@ -239,6 +249,47 @@ def _log_structured_warning(**fields: Any) -> None:
         "fix_hint": fields.get("fix_hint"),
     }
     logger.warning("STRUCTURED_LOG %s", json.dumps(payload, ensure_ascii=False, default=str))
+
+
+async def get_kie_credits_cached(*, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch KIE credits with TTL cache and strict timeout."""
+    now = time.monotonic()
+    cached_ts = _kie_credits_cache.get("timestamp", 0.0)
+    cached_value = _kie_credits_cache.get("value")
+    if cached_value and now - cached_ts < KIE_CREDITS_CACHE_TTL_SECONDS:
+        return cached_value
+    if kie is None:
+        return {
+            "ok": False,
+            "credits": None,
+            "status": 0,
+            "error": "kie_not_initialized",
+            "correlation_id": correlation_id,
+        }
+    get_credits = getattr(kie, "get_credits", None)
+    if not callable(get_credits):
+        return {
+            "ok": False,
+            "credits": None,
+            "status": 0,
+            "error": "missing_get_credits",
+            "correlation_id": correlation_id,
+        }
+    try:
+        result = await asyncio.wait_for(get_credits(), timeout=KIE_CREDITS_TIMEOUT_SECONDS)
+    except Exception as exc:
+        corr_id = correlation_id or uuid.uuid4().hex
+        logger.warning("KIE credits request failed corr_id=%s error=%s", corr_id, exc)
+        result = {
+            "ok": False,
+            "credits": None,
+            "status": 0,
+            "error": "timeout",
+            "correlation_id": corr_id,
+        }
+    _kie_credits_cache["timestamp"] = now
+    _kie_credits_cache["value"] = result
+    return result
 
 
 def _log_handler_latency(handler: str, start_ts: float, update: Update) -> None:
@@ -462,6 +513,52 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
                     track_outgoing_action(update_id, action_type="answerCallbackQuery")
             except Exception:
                 pass
+            raise ApplicationHandlerStop
+
+    if update.callback_query and update.callback_query.data and user_id is not None:
+        callback_key = (user_id, update.callback_query.data)
+        allowed, retry_after = _callback_data_rate_limiter.check(callback_key)
+        if not allowed:
+            wait_seconds = max(1, int(math.ceil(retry_after)))
+            user_lang = get_user_language(user_id) if user_id else "ru"
+            text = (
+                f"⏳ <b>Слишком часто</b>\n\n"
+                f"Попробуйте снова через {wait_seconds} сек."
+                if user_lang == "ru"
+                else f"⏳ <b>Too many taps</b>\n\nTry again in {wait_seconds}s."
+            )
+            reply_markup = build_back_to_menu_keyboard(user_lang)
+            try:
+                await update.callback_query.answer()
+                if update_id is not None:
+                    track_outgoing_action(update_id, action_type="answerCallbackQuery")
+            except Exception:
+                pass
+            if chat_id:
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup,
+                    )
+                    if update_id is not None:
+                        track_outgoing_action(update_id, action_type="send_message")
+                except Exception:
+                    logger.warning("Failed to send callback throttle response to user %s", user_id, exc_info=True)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="TG_RATE_LIMIT",
+                action_path="rate_limit_guard:callback_data",
+                outcome="throttled",
+                param={
+                    "retry_after": wait_seconds,
+                    "callback_data": update.callback_query.data,
+                },
+            )
             raise ApplicationHandlerStop
 
     limiter = _callback_rate_limiter if update.callback_query else _message_rate_limiter
@@ -2750,7 +2847,14 @@ def _run_storage_coro_sync(coro, *, label: str = "storage_call"):
         return asyncio.run(coro)
     future = _storage_executor.submit(lambda: asyncio.run(coro))
     try:
-        return future.result()
+        return future.result(timeout=STORAGE_IO_TIMEOUT_SECONDS)
+    except concurrent.futures.TimeoutError as exc:
+        logger.error(
+            "SYNC_STORAGE_CALL_TIMEOUT label=%s timeout=%.2fs",
+            label,
+            STORAGE_IO_TIMEOUT_SECONDS,
+        )
+        raise TimeoutError(f"{label} timed out after {STORAGE_IO_TIMEOUT_SECONDS}s") from exc
     except Exception as exc:
         logger.error("SYNC_STORAGE_CALL_FAILED label=%s error=%s", label, exc, exc_info=True)
         raise
@@ -3961,9 +4065,10 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
     stats = get_extended_admin_stats()
 
     kie_balance_info = ""
+    correlation_id = get_correlation_id() or uuid.uuid4().hex
     if kie is not None:
         try:
-            balance_result = await kie.get_credits()
+            balance_result = await get_kie_credits_cached(correlation_id=correlation_id)
             if balance_result.get('ok'):
                 balance = balance_result.get('credits', 0)
                 balance_rub = balance * CREDIT_TO_USD * get_usd_to_rub_rate()
@@ -3974,10 +4079,16 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
                 if status == 404:
                     kie_balance_info = "💰 <b>Баланс KIE API:</b> Баланс KIE недоступен (endpoint 404)\n\n"
                 else:
-                    kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
+                    kie_balance_info = "💰 <b>Баланс KIE API:</b> временно недоступно\n\n"
+                logger.warning(
+                    "KIE balance unavailable corr_id=%s status=%s error=%s",
+                    balance_result.get("correlation_id", correlation_id),
+                    status,
+                    balance_result.get("error"),
+                )
         except Exception as e:
-            logger.error(f"Error getting KIE balance: {e}")
-            kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
+            logger.error("Error getting KIE balance corr_id=%s error=%s", correlation_id, e)
+            kie_balance_info = "💰 <b>Баланс KIE API:</b> временно недоступно\n\n"
     else:
         kie_balance_info = "💰 <b>Баланс KIE API:</b> Клиент не инициализирован\n\n"
 
@@ -5519,8 +5630,53 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Latency wrapper for button callbacks."""
     start_ts = time.monotonic()
+    query = update.callback_query
+    update_id = getattr(update, "update_id", None)
+    callback_answered = False
     try:
-        return await _button_callback_impl(update, context)
+        if query:
+            try:
+                await query.answer()
+                callback_answered = True
+                if update_id is not None:
+                    track_outgoing_action(update_id, action_type="answerCallbackQuery")
+            except Exception as answer_error:
+                logger.warning("Could not answer callback query quickly: %s", answer_error)
+
+        acquired = False
+        if _callback_semaphore:
+            try:
+                await asyncio.wait_for(
+                    _callback_semaphore.acquire(),
+                    timeout=CALLBACK_CONCURRENCY_TIMEOUT_SECONDS,
+                )
+                acquired = True
+            except asyncio.TimeoutError:
+                user_id = update.effective_user.id if update.effective_user else None
+                user_lang = get_user_language(user_id) if user_id else "ru"
+                busy_text = (
+                    "⏳ <b>Сервер занят</b>\n\nПопробуйте снова через пару секунд."
+                    if user_lang == "ru"
+                    else "⏳ <b>Server busy</b>\n\nPlease try again in a few seconds."
+                )
+                reply_markup = build_back_to_menu_keyboard(user_lang)
+                if query and query.message:
+                    try:
+                        await query.message.reply_text(
+                            busy_text,
+                            parse_mode="HTML",
+                            reply_markup=reply_markup,
+                        )
+                        if update_id is not None:
+                            track_outgoing_action(update_id, action_type="send_message")
+                    except Exception:
+                        logger.warning("Failed to send busy response to user", exc_info=True)
+                return ConversationHandler.END
+        try:
+            return await _button_callback_impl(update, context, callback_answered=callback_answered)
+        finally:
+            if acquired and _callback_semaphore:
+                _callback_semaphore.release()
     finally:
         _log_handler_latency("button_callback", start_ts, update)
 
@@ -5701,7 +5857,12 @@ async def show_payment_screenshot(query, payment: dict, current_index: int, tota
             pass
 
 
-async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def _button_callback_impl(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    callback_answered: bool = False,
+):
     """Handle button callbacks. CRITICAL: Always calls query.answer() to prevent button hanging."""
     import time
     start_time = time.time()
@@ -5813,18 +5974,20 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
         
         # ALWAYS answer callback immediately to prevent button hanging
         # This is critical - if we don't answer, button will hang
-        try:
-            await query.answer()
-            # NO-SILENCE GUARD: Track outgoing action
-            track_outgoing_action(update_id, action_type="answerCallbackQuery")
-        except Exception as answer_error:
-            logger.warning(f"Could not answer callback query: {answer_error}")
+        if not callback_answered:
             try:
-                if context and query and query.id:
-                    await context.bot.answer_callback_query(query.id)
-            except Exception:
-                pass
-            # Continue anyway - better to process than to fail completely
+                await query.answer()
+                callback_answered = True
+                # NO-SILENCE GUARD: Track outgoing action
+                track_outgoing_action(update_id, action_type="answerCallbackQuery")
+            except Exception as answer_error:
+                logger.warning(f"Could not answer callback query: {answer_error}")
+                try:
+                    if context and query and query.id:
+                        await context.bot.answer_callback_query(query.id)
+                except Exception:
+                    pass
+                # Continue anyway - better to process than to fail completely
         
         if _should_dedupe_update(
             update,
