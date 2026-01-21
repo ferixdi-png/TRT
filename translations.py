@@ -113,17 +113,17 @@ TRANSLATIONS = {
             '💡 <b>КАК ЭТО РАБОТАЕТ:</b>\n\n'
             '1️⃣ Пригласи друга по вашей ссылке\n'
             '2️⃣ Он зарегистрируется через бота\n'
-            '3️⃣ Вы получите <b>+{bonus} бесплатных генераций в Z-Image</b>!'
+            '3️⃣ Вы получите <b>+{bonus} бесплатных генераций в free tools</b>!'
         ),
         'msg_referral_stats': (
             '📊 <b>ВАША СТАТИСТИКА:</b>\n\n'
             '• Приглашено друзей: <b>{count}</b>\n'
             '• Получено бонусов: <b>{bonus_total}</b> генераций\n'
-            '• Доступно бесплатно: <b>{remaining}</b> генераций в Z-Image'
+            '• Доступно бесплатно: <b>{remaining}</b> генераций в free tools'
         ),
         'msg_referral_important': (
             '⚠️ <b>ВАЖНО:</b>\n\n'
-            '• Бесплатные генерации доступны только для модели <b>Z-Image</b>\n'
+            '• Бесплатные генерации доступны для всех моделей free tools\n'
             '• Бонусы начисляются автоматически после регистрации друга\n'
             '• Чем больше друзей пригласите, тем больше бесплатных генераций получите!'
         ),
@@ -161,7 +161,7 @@ TRANSLATIONS = {
         'gen_type_desc_audio_to_audio': 'Обработка и улучшение аудио',
         'msg_gen_type_title': '🎨 <b>{name}</b>',
         'msg_gen_type_description': '📝 <b>Описание:</b>\n{description}',
-        'msg_gen_type_free': '🎁 <b>БЕСПЛАТНО:</b> {remaining} генераций Z-Image доступно!',
+        'msg_gen_type_free': '🎁 <b>БЕСПЛАТНО:</b> {remaining} генераций free tools доступно!',
         'msg_gen_type_models_available': '🤖 <b>Доступные нейросети ({count}):</b>',
         'msg_gen_type_select_model': '💡 <b>Выберите модель ниже</b>',
         'msg_gen_type_no_models': '❌ Модели для этого типа генерации не найдены.',
@@ -284,7 +284,7 @@ TRANSLATIONS = {
         'btn_confirm_generate_text': '✅ Генерировать',
         'btn_copy_link': '📋 Скопировать ссылку',
         'btn_all_models_text': '📋 Все модели',
-        'btn_z_image_free': '🖼️ Z-Image (бесплатно)',
+        'btn_z_image_free': '🆓 Бесплатные модели',
         'btn_next_step': '▶️ Далее',
         'btn_complete': '▶️ Завершить',
         'btn_custom_amount': '💰 Своя сумма',
@@ -386,17 +386,17 @@ TRANSLATIONS = {
             '💡 <b>HOW IT WORKS:</b>\n\n'
             '1️⃣ Invite a friend using your link\n'
             '2️⃣ They register through the bot\n'
-            '3️⃣ You get <b>+{bonus} free Z-Image generations</b>!'
+            '3️⃣ You get <b>+{bonus} free tools generations</b>!'
         ),
         'msg_referral_stats': (
             '📊 <b>YOUR STATISTICS:</b>\n\n'
             '• Friends invited: <b>{count}</b>\n'
             '• Bonuses received: <b>{bonus_total}</b> generations\n'
-            '• Available free: <b>{remaining}</b> Z-Image generations'
+            '• Available free: <b>{remaining}</b> free tools generations'
         ),
         'msg_referral_important': (
             '⚠️ <b>IMPORTANT:</b>\n\n'
-            '• Free generations are only available for <b>Z-Image</b> model\n'
+            '• Free generations are available for all free tools models\n'
             '• Bonuses are added automatically after friend registration\n'
             '• The more friends you invite, the more free generations you get!'
         ),
@@ -434,7 +434,7 @@ TRANSLATIONS = {
         'gen_type_desc_audio_to_audio': 'Process and enhance audio',
         'msg_gen_type_title': '🎨 <b>{name}</b>',
         'msg_gen_type_description': '📝 <b>Description:</b>\n{description}',
-        'msg_gen_type_free': '🎁 <b>FREE:</b> {remaining} Z-Image generations available!',
+        'msg_gen_type_free': '🎁 <b>FREE:</b> {remaining} free tools generations available!',
         'msg_gen_type_models_available': '🤖 <b>Available AI models ({count}):</b>',
         'msg_gen_type_select_model': '💡 <b>Select a model below</b>',
         'msg_gen_type_no_models': '❌ No models found for this generation type.',
@@ -557,7 +557,7 @@ TRANSLATIONS = {
         'btn_confirm_generate_text': '✅ Generate',
         'btn_copy_link': '📋 Copy Link',
         'btn_all_models_text': '📋 All Models',
-        'btn_z_image_free': '🖼️ Z-Image (free)',
+        'btn_z_image_free': '🆓 Free models',
         'btn_next_step': '▶️ Next',
         'btn_complete': '▶️ Complete',
         'btn_custom_amount': '💰 Custom Amount',
@@ -575,5 +575,3 @@ def t(key: str, lang: str = 'ru', **kwargs) -> str:
         return text.format(**kwargs)
     except KeyError:
         return text
-
-

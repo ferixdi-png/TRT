@@ -6112,7 +6112,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 remaining_free = await get_user_free_generations_remaining(user_id)
                 free_info = ""
                 if remaining_free > 0:
-                    free_info = f"\n🎁 <b>Бесплатно:</b> {remaining_free} генераций free tools\n"
+                    free_info = f"\n🎁 <b>Бесплатно:</b> {remaining_free} генераций бесплатных моделей\n"
                 
                 welcome_text = (
                     f'✨ <b>ПРЕМИУМ AI MARKETPLACE</b> ✨\n\n'
@@ -6445,7 +6445,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Используйте бесплатные генерации free tools ({remaining_free} доступно)\n"
+                        insufficient_msg += f"• Используйте бесплатные генерации бесплатных моделей ({remaining_free} доступно)\n"
                     
                     insufficient_msg += (
                         f"• Пригласите друга и получите бонусы\n\n"
@@ -6464,7 +6464,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Use free tools generations ({remaining_free} available)\n"
+                        insufficient_msg += f"• Use free models generations ({remaining_free} available)\n"
                     
                     insufficient_msg += (
                         f"• Invite a friend and get bonuses\n\n"
@@ -7450,7 +7450,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if remaining_free > 0:
                 models_text += (
-                    f"🎁 <b>БЕСПЛАТНО:</b> {remaining_free} генераций free tools доступно!\n"
+                    f"🎁 <b>БЕСПЛАТНО:</b> {remaining_free} генераций бесплатных моделей доступно!\n"
                     f"💡 Пригласи друга → получи +{REFERRAL_BONUS_GENERATIONS} генераций\n\n"
                 )
             
@@ -9622,7 +9622,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f'🎬 <b>Видео</b>\n'
                     f'• Sora 2 - реалистичные видео\n'
                     f'• Grok Imagine - мультимодальная модель\n\n'
-                    f'💡 <b>Совет:</b> Начните с free tools - это бесплатно!'
+                    f'💡 <b>Совет:</b> Начните с бесплатных моделей - это бесплатно!'
                 )
                 
                 keyboard = [
@@ -9675,7 +9675,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     '━━━━━━━━━━━━━━━━━━━━\n\n'
                     '📝 <b>Простой процесс:</b>\n\n'
                     '1️⃣ Нажмите "📋 Все модели"\n'
-                    '2️⃣ Выберите модель из free tools\n'
+                    '2️⃣ Выберите модель из бесплатных моделей\n'
                     '3️⃣ Введите описание (промпт)\n'
                     '   Пример: "Красивый закат над океаном"\n'
                     '4️⃣ Выберите параметры (размер, стиль и т.д.)\n'
@@ -9736,7 +9736,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     '━━━━━━━━━━━━━━━━━━━━\n\n'
                     '💰 <b>Как это работает:</b>\n\n'
                     '🎁 <b>Бесплатно:</b>\n'
-                    f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} генераций free tools в день\n'
+                    f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} бесплатных генераций в день\n'
                     f'• Пригласите друга - получите +{REFERRAL_BONUS_GENERATIONS} генераций!\n\n'
                     '💳 <b>Пополнение баланса:</b>\n'
                     '• Минимальная сумма: 50 ₽\n'
@@ -9801,7 +9801,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 '• Как пополнить баланс\n\n'
                 '🚀 <b>Готовы начать?</b>\n\n'
                 '💡 <b>Рекомендация:</b>\n'
-                'Начните с бесплатной генерации в free tools!\n'
+                    'Начните с бесплатной генерации в бесплатных моделях!\n'
                 'Просто выберите модель и опишите, что хотите создать.'
             )
             
@@ -11566,7 +11566,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
             is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
             
-            # Check for free generations for z-image
+            # Check for free generations for free models
             sku_id = session.get("sku_id", "")
             is_free_available = await is_free_generation_available(user_id, sku_id)
             from app.pricing.free_policy import is_sku_free_daily
@@ -11595,7 +11595,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if is_admin:
                 available_count = "Безлимит"
             elif is_free_available:
-                # For z-image with free generations, show free count
+                # For free models with free generations, show free count
                 available_count = f"🎁 {remaining_free} бесплатно в день"
             elif price_value is not None and user_balance >= price_value:
                 available_count = int(user_balance / price_value)
@@ -11715,7 +11715,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Используйте бесплатные генерации free tools ({remaining_free} доступно)\n"
+                        insufficient_msg += f"• Используйте бесплатные генерации бесплатных моделей ({remaining_free} доступно)\n"
                     
                     insufficient_msg += (
                         f"• Пригласите друга и получите бонусы\n\n"
@@ -11734,7 +11734,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     
                     if remaining_free > 0:
-                        insufficient_msg += f"• Use free tools generations ({remaining_free} available)\n"
+                        insufficient_msg += f"• Use free models generations ({remaining_free} available)\n"
                     
                     insufficient_msg += (
                         f"• Invite a friend and get bonuses\n\n"
