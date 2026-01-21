@@ -106,7 +106,7 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🖼️➡️🖼️ Из фото в фото", callback_data="gen_type:image-to-image")],
             [InlineKeyboardButton("📝➡️🎬 Из текста в видео", callback_data="gen_type:text-to-video")],
             [InlineKeyboardButton("🖼️➡️🎬 Из фото в видео", callback_data="gen_type:image-to-video")],
-            [InlineKeyboardButton("🧩 Другие модели", callback_data="show_all_models_list")],
+            [InlineKeyboardButton("🧩 Другие модели", callback_data="other_models")],
             [InlineKeyboardButton("💳 Баланс", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнерка", callback_data="referral_info")],
         ]
@@ -116,7 +116,7 @@ async def build_main_menu_keyboard(
         [InlineKeyboardButton("🖼️➡️🖼️ Image to Image", callback_data="gen_type:image-to-image")],
         [InlineKeyboardButton("📝➡️🎬 Text to Video", callback_data="gen_type:text-to-video")],
         [InlineKeyboardButton("🖼️➡️🎬 Image to Video", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("🧩 Other models", callback_data="show_all_models_list")],
+        [InlineKeyboardButton("🧩 Other models", callback_data="other_models")],
         [InlineKeyboardButton("💳 Balance", callback_data="check_balance")],
         [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
     ]

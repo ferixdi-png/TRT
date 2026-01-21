@@ -125,6 +125,13 @@ def _get_type_name_ru(model_type: str) -> str:
     return name_map.get(model_type, model_type)
 
 
+def get_type_label(model_type: str, user_lang: str) -> str:
+    """Возвращает подпись типа модели для UI."""
+    emoji = _get_type_emoji(model_type)
+    type_name = _get_type_name_ru(model_type) if user_lang == "ru" else model_type
+    return f"{emoji} {type_name}"
+
+
 def _create_callback_data(model_id: str) -> str:
     """
     Создаёт callback_data для модели.
@@ -225,20 +232,13 @@ def build_models_menu_by_type(
         if not models:
             continue
         
-        # Заголовок типа (неактивная кнопка для визуального разделения)
+        # Заголовок типа (кликабельный для фильтрации)
         emoji = _get_type_emoji(model_type)
         type_name = _get_type_name_ru(model_type) if user_lang == 'ru' else model_type
-        # Используем callback_data который не обрабатывается (для визуального разделения)
         keyboard.append([
             InlineKeyboardButton(
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                callback_data="type_header:ignore"  # Неактивная кнопка
-            )
-        ])
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{emoji} <b>{type_name}</b> ({len(models)})",
-                callback_data="type_header:ignore"  # Неактивная кнопка
+                f"{emoji} {type_name} ({len(models)})",
+                callback_data=f"type_header:{model_type}"
             )
         ])
         
@@ -291,6 +291,64 @@ def build_models_menu_by_type(
         keyboard.append([InlineKeyboardButton("🔙 Back to menu", callback_data="back_to_menu")])
     
     return InlineKeyboardMarkup(keyboard)
+
+
+def build_models_menu_for_type(
+    user_lang: str,
+    model_type: str,
+) -> Tuple[InlineKeyboardMarkup, int]:
+    """Строит меню моделей только для указанного типа."""
+    catalog = load_catalog()
+    filtered_models: List[ModelSpec] = []
+    for model in catalog:
+        if not is_model_visible(model.id):
+            continue
+        effective_type = model.type
+        if model.id in OTHER_MODELS_FORCE or effective_type not in {
+            "t2i",
+            "i2i",
+            "t2v",
+            "i2v",
+            "v2v",
+            "tts",
+            "stt",
+            "sfx",
+            "audio_isolation",
+            "upscale",
+            "bg_remove",
+            "watermark_remove",
+            "music",
+            "lip_sync",
+            OTHER_MODELS_TYPE,
+        }:
+            effective_type = OTHER_MODELS_TYPE
+        if effective_type != model_type:
+            continue
+        filtered_models.append(model)
+
+    keyboard: List[List[InlineKeyboardButton]] = []
+    for model in sorted(filtered_models, key=lambda m: m.title_ru):
+        type_emoji = _get_type_emoji(model.type)
+        button_text = f"{type_emoji} {model.title_ru}"
+        if len(button_text.encode("utf-8")) > 60:
+            max_len = 58
+            button_text = f"{type_emoji} {model.title_ru[:max_len]}..."
+        keyboard.append([
+            InlineKeyboardButton(
+                button_text,
+                callback_data=_create_callback_data(model.id),
+            )
+        ])
+
+    keyboard.append([])
+    if user_lang == "ru":
+        keyboard.append([InlineKeyboardButton("🔙 Все модели", callback_data="show_all_models_list")])
+        keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
+    else:
+        keyboard.append([InlineKeyboardButton("🔙 All models", callback_data="show_all_models_list")])
+        keyboard.append([InlineKeyboardButton("🏠 Main menu", callback_data="back_to_menu")])
+
+    return InlineKeyboardMarkup(keyboard), len(filtered_models)
 
 
 def _default_mode_label(index: int, user_lang: str) -> str:

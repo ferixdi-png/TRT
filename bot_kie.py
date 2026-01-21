@@ -58,6 +58,8 @@ KNOWN_CALLBACK_PREFIXES = (
     "start:",
     "example:",
     "info:",
+    "type_header:",
+    "m:",
     "admin_gen_nav:",
     "admin_gen_view:",
     "admin_search:",
@@ -88,6 +90,7 @@ KNOWN_CALLBACK_PREFIXES = (
 KNOWN_CALLBACK_EXACT = {
     "show_models",
     "show_all_models_list",
+    "other_models",
     "all_models",
     "free_tools",
     "check_balance",
@@ -5856,9 +5859,88 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
         if context and getattr(context, "user_data", None) is not None:
             context.user_data["last_callback_handled_update_id"] = update_id
 
-        if data == "type_header:ignore":
-            logger.debug("Ignored non-actionable menu header button press.")
-            return ConversationHandler.END
+        if data.startswith("type_header:"):
+            model_type = data.split(":", 1)[1] if ":" in data else ""
+            user_lang = get_user_language(user_id) if user_id else "ru"
+            from app.helpers.models_menu import build_models_menu_for_type, get_type_label
+
+            keyboard_markup, models_count = build_models_menu_for_type(user_lang, model_type)
+            type_label = get_type_label(model_type, user_lang)
+            if user_lang == "ru":
+                header_text = (
+                    f"📂 <b>Раздел:</b> {type_label}\n\n"
+                    f"Доступно моделей: <b>{models_count}</b>\n\n"
+                    "Выберите модель ниже."
+                )
+            else:
+                header_text = (
+                    f"📂 <b>Section:</b> {type_label}\n\n"
+                    f"Available models: <b>{models_count}</b>\n\n"
+                    "Select a model below."
+                )
+            try:
+                await query.edit_message_text(
+                    header_text,
+                    reply_markup=keyboard_markup,
+                    parse_mode="HTML",
+                )
+            except Exception as exc:
+                logger.warning("Failed to render type filter menu: %s", exc)
+                try:
+                    await query.message.reply_text(
+                        header_text,
+                        reply_markup=keyboard_markup,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    await query.answer("⚠️ Не удалось открыть раздел", show_alert=True)
+            return SELECTING_MODEL
+
+        if data == "other_models":
+            try:
+                await query.answer()
+            except Exception as exc:
+                logger.warning("Error answering callback for other_models: %s", exc)
+            user_lang = get_user_language(user_id) if user_id else "ru"
+            reset_session_context(
+                user_id,
+                reason="other_models",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
+            set_session_context(
+                user_id,
+                to_context=UI_CONTEXT_MODEL_MENU,
+                reason="other_models",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
+            try:
+                from app.helpers.models_menu_handlers import handle_model_callback
+                await handle_model_callback(
+                    query,
+                    user_id,
+                    user_lang,
+                    "model:sora-watermark-remover",
+                )
+                return SELECTING_MODEL
+            except Exception as exc:
+                logger.error("Error in other_models handler: %s", exc, exc_info=True)
+                fallback_text = (
+                    "❌ Не удалось открыть модель. Попробуйте позже."
+                    if user_lang == "ru"
+                    else "❌ Unable to open model. Please try again later."
+                )
+                try:
+                    await query.answer(fallback_text, show_alert=True)
+                except Exception:
+                    pass
+                await show_main_menu(update, context, source="other_models_error")
+                return ConversationHandler.END
 
         if data == "reset_step":
             session_store.clear(user_id)
@@ -7595,11 +7677,11 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
             # Add "Other models" shortcut
             if user_lang == 'ru':
                 keyboard.append([
-                    InlineKeyboardButton("🧩 Другие модели", callback_data="show_all_models_list")
+                    InlineKeyboardButton("🧩 Другие модели", callback_data="other_models")
                 ])
             else:
                 keyboard.append([
-                    InlineKeyboardButton("🧩 Other models", callback_data="show_all_models_list")
+                    InlineKeyboardButton("🧩 Other models", callback_data="other_models")
                 ])
 
             # Add button to show all models directly (without grouping by type)
@@ -10777,6 +10859,35 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
             return ConversationHandler.END
         
         # Handle model card display (model:<model_id>)
+        if data.startswith("m:"):
+            short_id = data.split(":", 1)[1] if ":" in data else ""
+            if not short_id:
+                user_lang = get_user_language(user_id) if user_id else "ru"
+                await query.answer(
+                    t('error_model_not_found', lang=user_lang, default="❌ Модель не найдена"),
+                    show_alert=True,
+                )
+                return ConversationHandler.END
+            models = get_models_sync()
+            matches = [m for m in models if m.get("id", "").startswith(short_id)]
+            if len(matches) == 1:
+                data = f"model:{matches[0].get('id')}"
+            else:
+                user_lang = get_user_language(user_id) if user_id else "ru"
+                error_msg = (
+                    "❌ Не удалось определить модель. Вернитесь в меню и выберите снова."
+                    if user_lang == "ru"
+                    else "❌ Could not resolve model. Return to the menu and select again."
+                )
+                await query.edit_message_text(
+                    error_msg,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]]
+                    ),
+                    parse_mode="HTML",
+                )
+                return ConversationHandler.END
+
         if data.startswith("model:") or data.startswith("modelk:"):
             try:
                 await query.answer()
@@ -18560,6 +18671,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(confirm_generation, pattern='^confirm_generate$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^other_models$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
@@ -18616,6 +18728,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^other_models$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^category:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
@@ -19795,6 +19908,7 @@ async def main():
     # NOTE: These handlers must be registered BEFORE generation_handler to catch callbacks first
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^show_models$'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^show_all_models_list$'))
+    application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^other_models$'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^retry_delivery:'))
     application.add_handler(CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'))
