@@ -19362,16 +19362,6 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
     
-    # Admin command handlers
-    application.add_handler(CommandHandler("admin", admin_command))
-    application.add_handler(CommandHandler("payments", admin_payments))
-    application.add_handler(CommandHandler("selftest", selftest_command))
-    application.add_handler(CommandHandler("config_check", config_check_command))
-    application.add_handler(CommandHandler("block_user", admin_block_user))
-    application.add_handler(CommandHandler("unblock_user", admin_unblock_user))
-    application.add_handler(CommandHandler("user_balance", admin_user_balance))
-    application.add_handler(CommandHandler("add_admin", admin_add_admin))
-    
     # Базовые callback handlers
     application.add_handler(CallbackQueryHandler(button_callback, block=True))
     
