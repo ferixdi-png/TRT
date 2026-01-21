@@ -485,14 +485,22 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     # Формируем клавиатуру
     keyboard = []
     
+    # Для watermark_remove моделей не нужна кнопка "Инфо"
+    show_info_button = model.type not in ['watermark_remove']
+    
     if user_lang == 'ru':
         keyboard.append([
             InlineKeyboardButton("🚀 Сгенерировать", callback_data=f"select_model:{model.id}")
         ])
-        keyboard.append([
-            InlineKeyboardButton("📸 Пример", callback_data=f"example:{model.id}"),
-            InlineKeyboardButton("ℹ️ Инфо", callback_data=f"info:{model.id}")
-        ])
+        if show_info_button:
+            keyboard.append([
+                InlineKeyboardButton("📸 Пример", callback_data=f"example:{model.id}"),
+                InlineKeyboardButton("ℹ️ Инфо", callback_data=f"info:{model.id}")
+            ])
+        else:
+            keyboard.append([
+                InlineKeyboardButton("📸 Пример", callback_data=f"example:{model.id}")
+            ])
         keyboard.append([
             InlineKeyboardButton("🔙 Назад к моделям", callback_data="show_models")
         ])
@@ -500,10 +508,15 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
         keyboard.append([
             InlineKeyboardButton("🚀 Generate", callback_data=f"select_model:{model.id}")
         ])
-        keyboard.append([
-            InlineKeyboardButton("📸 Example", callback_data=f"example:{model.id}"),
-            InlineKeyboardButton("ℹ️ Info", callback_data=f"info:{model.id}")
-        ])
+        if show_info_button:
+            keyboard.append([
+                InlineKeyboardButton("📸 Example", callback_data=f"example:{model.id}"),
+                InlineKeyboardButton("ℹ️ Info", callback_data=f"info:{model.id}")
+            ])
+        else:
+            keyboard.append([
+                InlineKeyboardButton("📸 Example", callback_data=f"example:{model.id}")
+            ])
         keyboard.append([
             InlineKeyboardButton("🔙 Back to models", callback_data="show_models")
         ])
