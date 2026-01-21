@@ -490,8 +490,8 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
             try:
                 await update.callback_query.answer()
                 track_outgoing_action(update_id, action_type="answerCallbackQuery")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("CALLBACK_THROTTLE_ANSWER_FAILED user_id=%s update_id=%s error=%s", user_id, update_id, exc, exc_info=True)
         raise ApplicationHandlerStop
 
     if update.callback_query and update.callback_query.id:
@@ -512,8 +512,8 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
                 await update.callback_query.answer()
                 if update_id is not None:
                     track_outgoing_action(update_id, action_type="answerCallbackQuery")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("CALLBACK_DEDUP_ANSWER_FAILED user_id=%s update_id=%s callback_id=%s error=%s", user_id, update_id, callback_id, exc, exc_info=True)
             raise ApplicationHandlerStop
 
     if update.callback_query and update.callback_query.data and user_id is not None:
@@ -533,8 +533,8 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
                 await update.callback_query.answer()
                 if update_id is not None:
                     track_outgoing_action(update_id, action_type="answerCallbackQuery")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("CALLBACK_RATELIMIT_ANSWER_FAILED user_id=%s update_id=%s error=%s", user_id, update_id, exc, exc_info=True)
             if chat_id:
                 try:
                     await context.bot.send_message(
@@ -582,8 +582,8 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
             await update.callback_query.answer()
             if update_id is not None:
                 track_outgoing_action(update_id, action_type="answerCallbackQuery")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("MESSAGE_RATELIMIT_CALLBACK_ANSWER_FAILED user_id=%s update_id=%s error=%s", user_id, update_id, exc, exc_info=True)
 
     if chat_id:
         try:
@@ -804,7 +804,8 @@ def _patch_message_edit_text() -> None:
 
     try:
         from telegram import Message
-    except Exception:
+    except Exception as exc:
+        logger.error("CRITICAL_IMPORT_FAILED module=telegram.Message error=%s", exc, exc_info=True)
         return
 
     original_edit = Message.edit_text
@@ -1253,7 +1254,8 @@ def _kie_readiness_state() -> tuple[bool, str]:
         from app.kie.kie_client import get_kie_client
 
         client = get_kie_client()
-    except Exception:
+    except Exception as exc:
+        logger.warning("KIE_CLIENT_IMPORT_FAILED error=%s - graceful degradation to None", exc, exc_info=True)
         client = None
     if client is None:
         return False, "client_none"
@@ -1418,7 +1420,8 @@ except ImportError:
             if webhook_info.url:
                 await bot.delete_webhook(drop_pending_updates=True)
             return True
-        except Exception:
+        except Exception as exc:
+            logger.warning("DELETE_WEBHOOK_FAILED error=%s", exc, exc_info=True)
             return False
     
     async def ensure_webhook_mode(bot, webhook_url: str):
@@ -1428,7 +1431,8 @@ except ImportError:
         try:
             await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
             return True
-        except Exception:
+        except Exception as exc:
+            logger.warning("SET_WEBHOOK_FAILED url=%s error=%s", webhook_url, exc, exc_info=True)
             return False
     
     def handle_conflict_gracefully(error, mode: str):
@@ -1979,7 +1983,8 @@ def _update_price_quote(
         session["price_quote"] = None
         try:
             from app.pricing.price_ssot import PRICING_SSOT_PATH, list_model_skus
-        except Exception:
+        except Exception as exc:
+            logger.debug("PRICING_SSOT_IMPORT_FALLBACK error=%s - using defaults", exc)
             PRICING_SSOT_PATH = "data/kie_pricing_rub.yaml"
             list_model_skus = None
         skus = list_model_skus(model_id) if list_model_skus else []
@@ -19304,26 +19309,52 @@ async def main():
     logger.info(f"🆔 Process ID: {os.getpid()}")
     logger.info(f"🌍 Platform: {platform.system()} {platform.release()}")
 
-    from app.config import get_settings
-    settings = get_settings(validate=True)
+    # ==================== PR-2: КРИТИЧЕСКАЯ ENV ВАЛИДАЦИЯ ====================
+    # Проверяем обязательные переменные ПЕРЕД любой инициализацией
+    validation_errors = []
     
-    # Проверка критичных переменных окружения
-    bot_token_set = bool(settings.telegram_bot_token)
-    kie_api_key_set = bool(settings.kie_api_key)
-    logger.info(f"🔑 BOT_TOKEN: {'✅ Set' if bot_token_set else '❌ NOT SET'}")
-    logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key_set else '❌ NOT SET'}")
+    telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    kie_api_key = os.getenv("KIE_API_KEY", "").strip()
+    github_token = os.getenv("GITHUB_TOKEN", "").strip()
+    github_storage_repo = os.getenv("GITHUB_STORAGE_REPO", "").strip()
+    
+    if not telegram_bot_token:
+        validation_errors.append("TELEGRAM_BOT_TOKEN is required")
+    if not github_token:
+        validation_errors.append("GITHUB_TOKEN is required for storage")
+    if not github_storage_repo:
+        validation_errors.append("GITHUB_STORAGE_REPO is required for storage")
+    
+    # Логируем статус всех критичных переменных
+    logger.info(f"🔑 TELEGRAM_BOT_TOKEN: {'✅ Set' if telegram_bot_token else '❌ NOT SET'}")
+    logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key else '⚠️ NOT SET (degraded mode)'}")
+    logger.info(f"🔑 GITHUB_TOKEN: {'✅ Set' if github_token else '❌ NOT SET'}")
+    logger.info(f"📦 GITHUB_STORAGE_REPO: {'✅ Set' if github_storage_repo else '❌ NOT SET'}")
     logger.info("🗄️ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
     
-    if not bot_token_set:
-        logger.error("❌❌❌ CRITICAL: TELEGRAM_BOT_TOKEN is not set!")
-        logger.error("   Bot cannot start without a valid token.")
-        logger.error("   Set TELEGRAM_BOT_TOKEN in Render Dashboard → Environment")
+    # FAIL-FAST: если есть критические ошибки - выходим сразу
+    if validation_errors:
+        logger.error("=" * 60)
+        logger.error("❌❌❌ CRITICAL ENV VALIDATION FAILED")
+        logger.error("=" * 60)
+        for error in validation_errors:
+            logger.error(f"  ❌ {error}")
+        logger.error("=" * 60)
+        logger.error("🔧 Fix these in Render Dashboard → Environment Variables")
+        logger.error("🔧 Then redeploy the service")
+        logger.error("=" * 60)
         sys.exit(1)
     
-    if not kie_api_key_set:
-        logger.warning("⚠️ KIE_API_KEY is not set - KIE AI features will not work")
+    # Предупреждение о необязательных, но рекомендуемых переменных
+    if not kie_api_key:
+        logger.warning("⚠️ KIE_API_KEY not set - KIE AI features will NOT work")
+        logger.warning("   Bot will start but generation features will fail")
     
+    logger.info("✅ ENV validation passed - all critical variables present")
     logger.info("=" * 60)
+
+    from app.config import get_settings
+    settings = get_settings(validate=True)
     
     # CRITICAL: Ensure GitHub storage is reachable before anything else
     logger.info("🔒 Ensuring GitHub storage persistence...")
