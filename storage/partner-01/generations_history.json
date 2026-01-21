@@ -215,6 +215,22 @@
       ],
       "task_id": "31d7c73eae93724d14d1567df4c2eda5",
       "timestamp": 1768979116
+    },
+    {
+      "id": 12,
+      "is_free": true,
+      "model_id": "z-image",
+      "model_name": "Qwen Z-Image Text to Image",
+      "params": {
+        "aspect_ratio": "16:9",
+        "prompt": "котик"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/f/a0e39720-d512-4e30-a85e-3aa90906b3fd_0.png"
+      ],
+      "task_id": "2ed6d695a2f7fa9da714680107c95738",
+      "timestamp": 1768993560
     }
   ],
   "7881587044": [
