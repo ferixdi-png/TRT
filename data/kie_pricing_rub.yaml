@@ -83,6 +83,12 @@ models:
         price_rub: 7.86
         params: {}
         notes: per removal
+  - id: sora-2-watermark-remover
+    skus:
+      - unit: removal
+        price_rub: 7.86
+        params: {}
+        notes: per removal
   - id: sora-2-text-to-video
     skus:
       - unit: video
