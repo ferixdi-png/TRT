@@ -29,6 +29,44 @@ class HybridStorage(BaseStorage):
         self._primary_cache: Dict[str, HybridStorage._CacheEntry] = {}
         self._primary_cache_version = 0
         self._fallback_ttl = float(os.getenv("HYBRID_STORAGE_FALLBACK_TTL", "300"))
+        self._balance_write_through = os.getenv("HYBRID_BALANCE_WRITE_THROUGH", "1") in ("1", "true", "yes")
+        self._runtime_write_through = os.getenv("HYBRID_RUNTIME_WRITE_THROUGH", "1") in ("1", "true", "yes")
+
+    async def _write_balance_primary(self, user_id: int, amount: float) -> None:
+        if not self._balance_write_through:
+            return
+        try:
+            await self._primary.set_user_balance(user_id, amount)
+        except Exception as exc:
+            logger.warning(
+                "[STORAGE] balance_write_through_failed user_id=%s error=%s",
+                user_id,
+                exc,
+            )
+
+    async def _write_runtime_primary(self, filename: str, data: Dict[str, Any]) -> None:
+        if not self._runtime_write_through:
+            return
+        try:
+            await self._primary.write_json_file(filename, data)
+            self._primary_cache_version += 1
+            self._primary_cache[filename] = self._CacheEntry(
+                data=data,
+                updated_at=time.monotonic(),
+                version=self._primary_cache_version,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[STORAGE] runtime_write_through_failed path=%s error=%s",
+                filename,
+                exc,
+            )
+
+    async def _sync_runtime_file(self, filename: str) -> None:
+        if not self._runtime_write_through:
+            return
+        payload = await self._runtime.read_json_file(filename, default={})
+        await self._write_runtime_primary(filename, payload)
 
     @dataclass(frozen=True)
     class _CacheEntry:
@@ -61,12 +99,19 @@ class HybridStorage(BaseStorage):
 
     async def set_user_balance(self, user_id: int, amount: float) -> None:
         await self._runtime.set_user_balance(user_id, amount)
+        await self._write_balance_primary(user_id, amount)
 
     async def add_user_balance(self, user_id: int, amount: float) -> float:
-        return await self._runtime.add_user_balance(user_id, amount)
+        new_balance = await self._runtime.add_user_balance(user_id, amount)
+        await self._write_balance_primary(user_id, new_balance)
+        return new_balance
 
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
-        return await self._runtime.subtract_user_balance(user_id, amount)
+        success = await self._runtime.subtract_user_balance(user_id, amount)
+        if success:
+            new_balance = await self._runtime.get_user_balance(user_id)
+            await self._write_balance_primary(user_id, new_balance)
+        return success
 
     async def get_user_language(self, user_id: int) -> str:
         return await self._primary.get_user_language(user_id)
@@ -88,18 +133,21 @@ class HybridStorage(BaseStorage):
 
     async def increment_free_generations(self, user_id: int) -> None:
         await self._runtime.increment_free_generations(user_id)
+        await self._sync_runtime_file("daily_free_generations.json")
 
     async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
         return await self._runtime.get_hourly_free_usage(user_id)
 
     async def set_hourly_free_usage(self, user_id: int, window_start_iso: str, used_count: int) -> None:
         await self._runtime.set_hourly_free_usage(user_id, window_start_iso, used_count)
+        await self._sync_runtime_file("hourly_free_usage.json")
 
     async def get_referral_free_bank(self, user_id: int) -> int:
         return await self._runtime.get_referral_free_bank(user_id)
 
     async def set_referral_free_bank(self, user_id: int, remaining_count: int) -> None:
         await self._runtime.set_referral_free_bank(user_id, remaining_count)
+        await self._sync_runtime_file("referral_free_bank.json")
 
     async def get_admin_limit(self, user_id: int) -> float:
         return await self._runtime.get_admin_limit(user_id)
@@ -258,6 +306,7 @@ class HybridStorage(BaseStorage):
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         if self._is_runtime_file(filename):
             await self._runtime.write_json_file(filename, data)
+            await self._write_runtime_primary(filename, data)
         else:
             await self._primary.write_json_file(filename, data)
             self._primary_cache_version += 1
@@ -273,7 +322,10 @@ class HybridStorage(BaseStorage):
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
         if self._is_runtime_file(filename):
-            return await self._runtime.update_json_file(filename, update_fn)
+            updated = await self._runtime.update_json_file(filename, update_fn)
+            if updated:
+                await self._write_runtime_primary(filename, updated)
+            return updated
         updated = await self._primary.update_json_file(filename, update_fn)
         if updated:
             self._primary_cache_version += 1

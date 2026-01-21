@@ -1305,6 +1305,17 @@ def build_webhook_handler(application, settings):
                 )
                 status = ack_status
                 return web.Response(status=status)
+            user_id = update.effective_user.id if update.effective_user else None
+            chat_id = update.effective_chat.id if update.effective_chat else None
+            update_type = "callback" if update.callback_query else "message"
+            logger.info(
+                "[WEBHOOK] update_parsed=true update_id=%s update_type=%s user_id=%s chat_id=%s correlation_id=%s",
+                getattr(update, "update_id", None),
+                update_type,
+                user_id,
+                chat_id,
+                correlation_id,
+            )
 
             async def _send_fallback_message() -> None:
                 chat_id = None
