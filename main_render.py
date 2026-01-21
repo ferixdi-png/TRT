@@ -3895,6 +3895,41 @@ async def run(settings, application):
 
 
                 await application.start()
+                
+                # Регистрируем команды в меню Telegram
+                logger.info("[BOT] Setting up bot commands menu...")
+                try:
+                    from telegram import BotCommand, BotCommandScopeAllChatAdministrators
+                    
+                    # Базовые команды для всех пользователей
+                    user_commands = [
+                        BotCommand("start", "Главное меню"),
+                        BotCommand("help", "Помощь"),
+                        BotCommand("balance", "Проверить баланс"),
+                        BotCommand("cancel", "Отменить текущее действие"),
+                    ]
+                    
+                    # Команды для администраторов
+                    admin_commands = user_commands + [
+                        BotCommand("admin", "Панель администратора"),
+                        BotCommand("payments", "Список платежей"),
+                        BotCommand("selftest", "Самодиагностика бота"),
+                    ]
+                    
+                    # Устанавливаем команды для обычных пользователей
+                    await application.bot.set_my_commands(user_commands)
+                    logger.info(f"[BOT] commands_registered=true scope=default count={len(user_commands)}")
+                    
+                    # Устанавливаем команды для администраторов
+                    await application.bot.set_my_commands(
+                        admin_commands, 
+                        scope=BotCommandScopeAllChatAdministrators()
+                    )
+                    logger.info(f"[BOT] commands_registered=true scope=admins count={len(admin_commands)}")
+                except Exception as e:
+                    logger.warning(f"[BOT] commands_registration_failed=true error={e}")
+                    # Не критично - продолжим работу
+                
                 _bot_ready = True
                 logger.info("[RUN] bot_ready=true")
 
