@@ -24,6 +24,7 @@ from app.observability.structured_logs import (
     get_correlation_id,
     log_structured_event,
 )
+from app.observability.no_silence_guard import track_outgoing_action
 from app.observability.trace import (
     ensure_correlation_id,
     prompt_summary,
