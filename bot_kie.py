@@ -1508,6 +1508,101 @@ def format_price_rub(price: float, is_admin: bool = False) -> str:
     return f"💰 <b>{price_str}</b>"
 
 
+def _normalize_sku_param_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _build_expected_sku_key(model_id: str, params: Optional[dict]) -> str:
+    if not params:
+        return f"{model_id}::default"
+    parts = [f"{key}={_normalize_sku_param_value(params[key])}" for key in sorted(params)]
+    return f"{model_id}::" + "|".join(parts)
+
+
+def _format_pricing_context(settings: "Settings", is_admin: bool, user_lang: str) -> str:
+    effective_multiplier = 1.0 if is_admin else settings.price_multiplier
+    if user_lang == "ru":
+        return f"курс {settings.usd_to_rub:.2f}, множитель {effective_multiplier:g}"
+    return f"rate {settings.usd_to_rub:.2f}, multiplier {effective_multiplier:g}"
+
+
+def _build_price_line(
+    price_rub: float,
+    settings: "Settings",
+    is_admin: bool,
+    user_lang: str,
+    *,
+    is_from: bool = False,
+) -> str:
+    from app.pricing.price_resolver import format_price_rub as format_price_value
+
+    prefix = "от " if user_lang == "ru" and is_from else ("from " if user_lang != "ru" and is_from else "")
+    label = "Стоимость" if user_lang == "ru" else "Price"
+    price_display = format_price_value(price_rub)
+    context = _format_pricing_context(settings, is_admin, user_lang)
+    return f"💰 <b>{label}:</b> {prefix}{price_display} ₽ ({context})"
+
+
+def _build_price_unavailable_line(user_lang: str) -> str:
+    if user_lang == "ru":
+        return "💰 <b>Стоимость:</b> цена временно недоступна"
+    return "💰 <b>Price:</b> temporarily unavailable"
+
+
+def _resolve_price_for_display(
+    session: dict,
+    *,
+    model_id: str,
+    mode_index: int,
+    gen_type: Optional[str],
+    params: dict,
+    user_lang: str,
+    is_admin: bool,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    action_path: str,
+    user_id: Optional[int],
+    chat_id: Optional[int],
+) -> tuple[Optional[float], str, Optional[str]]:
+    from app.config import get_settings
+    from app.pricing.price_ssot import list_model_skus
+
+    settings = get_settings()
+    quote = _update_price_quote(
+        session,
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=gen_type,
+        params=params,
+        correlation_id=correlation_id,
+        update_id=update_id,
+        action_path=action_path,
+        user_id=user_id,
+        chat_id=chat_id,
+        is_admin=is_admin,
+    )
+    if quote:
+        price_value = float(quote["price_rub"])
+        return price_value, _build_price_line(price_value, settings, is_admin, user_lang), None
+
+    skus = list_model_skus(model_id)
+    if not skus:
+        return None, _build_price_unavailable_line(user_lang), None
+
+    min_sku = min(skus, key=lambda sku: sku.price_rub)
+    price_value = float(min_sku.price_rub)
+    note = (
+        "ℹ️ Итоговая цена зависит от параметров."
+        if user_lang == "ru"
+        else "ℹ️ Final price depends on parameters."
+    )
+    return price_value, _build_price_line(price_value, settings, is_admin, user_lang, is_from=True), note
+
+
 def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> str:
     """Get formatted price text for a model (from-price for menu cards)."""
     from app.pricing.price_ssot import get_min_price
@@ -1640,6 +1735,19 @@ def _update_price_quote(
             )
             return session["price_quote"]
         session["price_quote"] = None
+        try:
+            from app.pricing.price_ssot import PRICING_SSOT_PATH, list_model_skus
+        except Exception:
+            PRICING_SSOT_PATH = "data/kie_pricing_rub.yaml"
+            list_model_skus = None
+        skus = list_model_skus(model_id) if list_model_skus else []
+        if not skus:
+            expected_sku = _build_expected_sku_key(model_id, params)
+            logger.warning(
+                "Missing pricing for SKU %s in %s",
+                expected_sku,
+                PRICING_SSOT_PATH,
+            )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -6971,49 +7079,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_name = model.get('name', model.get('id', 'Unknown'))
                 model_emoji = model.get('emoji', '🤖')
                 model_id = model.get('id')
-                
-                # Calculate price for display
-                # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
-                is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-                min_price = get_from_price_value(model_id)
-                price_text = get_model_price_text(model_id, None, is_admin_check, user_id)
-                
-                # Extract price number from price_text for compact display
-                import re
-                price_match = re.search(r'(\d+\.?\d*)\s*₽', price_text)
-                if price_match:
-                    price_display = price_match.group(1)
-                    # Check if it's "От" (from) or fixed price
-                    if "От" in price_text or "от" in price_text.lower():
-                        price_display = f"от {price_display} ₽"
-                    else:
-                        price_display = f"{price_display} ₽"
-                elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
-                    price_display = "бесплатно"
-                else:
-                    price_display = format_rub_amount(min_price) if min_price is not None else "—"
-                
-                # Compact button text (Telegram limit: 64 characters for button text)
-                # Make it shorter to fit price and avoid overlap
-                max_name_length = 20  # Shorter to fit price
+
                 button_text = f"{model_emoji} {model_name}"
-                if len(button_text) > max_name_length:
-                    # Truncate model name if too long
-                    button_text = f"{model_emoji} {model_name[:max_name_length-4]}..."
-                
-                button_text_with_price = f"{button_text} • {price_display}"
-                
-                # Final check: Telegram button text limit is 64 characters
-                if len(button_text_with_price) > 64:
-                    # If still too long, truncate more aggressively
-                    max_total = 60  # Leave some margin
-                    available_for_name = max_total - len(f" • {price_display}")
-                    if available_for_name > 0:
-                        button_text = f"{model_emoji} {model_name[:available_for_name-4]}..."
-                        button_text_with_price = f"{button_text} • {price_display}"
-                    else:
-                        # If price is too long, just show model name
-                        button_text_with_price = button_text[:60] + "..."
+                if len(button_text.encode("utf-8")) > 60:
+                    truncated = model_name[:40].rstrip()
+                    button_text = f"{model_emoji} {truncated}..."
                 
                 # Ensure callback_data is not too long (Telegram limit: 64 bytes)
                 callback_data = f"select_model:{model_id}"
@@ -7025,19 +7095,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if i % 2 == 0:
                     # First button in row
                     model_rows.append([InlineKeyboardButton(
-                        button_text_with_price,
+                        button_text,
                         callback_data=callback_data
                     )])
                 else:
                     # Second button in row - add to last row
                     if model_rows:
                         model_rows[-1].append(InlineKeyboardButton(
-                            button_text_with_price,
+                            button_text,
                             callback_data=callback_data
                         ))
                     else:
                         model_rows.append([InlineKeyboardButton(
-                            button_text_with_price,
+                            button_text,
                             callback_data=callback_data
                         )])
             
@@ -7100,69 +7170,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 return ConversationHandler.END
             
-            # Get user balance for showing available generations
-            user_balance = await get_user_balance_async(user_id)
-            is_admin = get_is_admin(user_id)
-            
             keyboard = []
             for model in models:
-                # Calculate price for display
-                # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
-                is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-                min_price = get_from_price_value(model['id'])
-                price_text = get_model_price_text(model['id'], None, is_admin_check, user_id)
-                
-                # Extract price number from price_text for compact display
-                import re
-                price_match = re.search(r'(\d+\.?\d*)\s*₽', price_text)
-                if price_match:
-                    price_display = price_match.group(1)
-                    # Check if it's "От" (from) or fixed price
-                    if "От" in price_text or "от" in price_text.lower():
-                        price_display = f"от {price_display} ₽"
-                    else:
-                        price_display = f"{price_display} ₽"
-                elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
-                    price_display = "бесплатно"
-                else:
-                    price_display = format_rub_amount(min_price) if min_price is not None else "—"
-                
-                # Compact button text with price (Telegram limit: 64 characters)
                 model_name = model.get('name', model.get('id', 'Unknown'))
                 model_emoji = model.get('emoji', '🤖')
                 model_id = model.get('id')
-                
-                # Extract price for display
-                import re
-                price_match = re.search(r'(\d+\.?\d*)\s*₽', price_text)
-                if price_match:
-                    price_display = price_match.group(1)
-                    if "От" in price_text or "от" in price_text.lower():
-                        price_display = f"от {price_display} ₽"
-                    else:
-                        price_display = f"{price_display} ₽"
-                elif "БЕСПЛАТНО" in price_text or "Бесплатно" in price_text:
-                    price_display = "бесплатно"
-                else:
-                    price_display = format_rub_amount(min_price) if min_price is not None else "—"
-                
-                # Compact button text (Telegram limit: 64 characters for button text)
-                max_name_length = 20  # Shorter to fit price
                 button_text = f"{model_emoji} {model_name}"
-                if len(button_text) > max_name_length:
-                    button_text = f"{model_emoji} {model_name[:max_name_length-4]}..."
-                
-                button_text_with_price = f"{button_text} • {price_display}"
-                
-                # Final check: Telegram button text limit is 64 characters
-                if len(button_text_with_price) > 64:
-                    max_total = 60  # Leave some margin
-                    available_for_name = max_total - len(f" • {price_display}")
-                    if available_for_name > 0:
-                        button_text = f"{model_emoji} {model_name[:available_for_name-4]}..."
-                        button_text_with_price = f"{button_text} • {price_display}"
-                    else:
-                        button_text_with_price = button_text[:60] + "..."
+                if len(button_text.encode("utf-8")) > 60:
+                    truncated = model_name[:40].rstrip()
+                    button_text = f"{model_emoji} {truncated}..."
                 
                 # Ensure callback_data is not too long (Telegram limit: 64 bytes)
                 callback_data = f"select_model:{model_id}"
@@ -7171,7 +7187,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     callback_data = f"sel:{model_id[:50]}"
                 
                 keyboard.append([InlineKeyboardButton(
-                    button_text_with_price,
+                    button_text,
                     callback_data=callback_data
                 )])
             user_lang = get_user_language(query.from_user.id)
@@ -11518,8 +11534,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
             is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
-            min_price = get_from_price_value(model_id)
-            price_text = get_model_price_text(model_id, None, is_admin_check, user_id)
             
             # Check for free generations for z-image
             sku_id = session.get("sku_id", "")
@@ -11530,6 +11544,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if is_sku_free_daily(sku_id)
                 else 0
             )
+
+            price_value, price_line, price_note = _resolve_price_for_display(
+                session,
+                model_id=model_id,
+                mode_index=_resolve_mode_index(model_id, session.get("params", {}), user_id),
+                gen_type=session.get("gen_type"),
+                params=session.get("params", {}),
+                user_lang=user_lang,
+                is_admin=is_admin_check,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                action_path="model_select_info",
+                user_id=user_id,
+                chat_id=query.message.chat_id if query.message else None,
+            )
             
             # Calculate how many generations available
             if is_admin:
@@ -11537,8 +11566,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif is_free_available:
                 # For z-image with free generations, show free count
                 available_count = f"🎁 {remaining_free} бесплатно в день"
-            elif min_price and user_balance >= min_price:
-                available_count = int(user_balance / min_price)
+            elif price_value is not None and user_balance >= price_value:
+                available_count = int(user_balance / price_value)
             else:
                 available_count = 0
             
@@ -11568,37 +11597,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as exc:
                 logger.warning("Failed to resolve free counter line: %s", exc)
             
-            # Format price text properly (optimize for mobile display)
-            import re
-            
-            # For hailuo models with multiple resolutions, show formatted version
-            if model_id == "hailuo/02-image-to-video-standard" or model_id == "hailuo/02-image-to-video-pro":
-                # Remove emoji and HTML, but keep the structure
-                price_display_clean = price_text.replace("💰", "").strip()
-                price_display_clean = re.sub(r'<b>(.*?)</b>', r'\1', price_display_clean)
-                # Replace (512P: with (Разрешение 512p: to make it clearer
-                price_display_clean = price_display_clean.replace("512P:", "📺 Разрешение 512p:")
-                price_display_clean = price_display_clean.replace("768P:", "📺 Разрешение 768p:")
-                price_display_clean = price_display_clean.replace(" | ", "\n")
-                price_display_clean = price_display_clean.replace("₽/6с", "₽ (6с)").replace("₽/10с", "₽ (10с)")
-                model_info_text += f"\n{price_display_clean}\n"
-            else:
-                # For other models, use simple format
-                price_display = price_text
-                if price_text.startswith("💰"):
-                    price_display = price_text.replace("💰", "").strip()
-                # Remove HTML tags if present but keep the content
-                price_display = re.sub(r'<b>(.*?)</b>', r'\1', price_display)
-                price_display = price_display.strip()
-                
-                # Shorten price display for mobile
-                if len(price_display) > 50:
-                    # Extract just the number and currency
-                    price_match = re.search(r'(\d+\.?\d*)\s*₽', price_display)
-                    if price_match:
-                        price_display = f"{price_match.group(1)} ₽"
-                
-                model_info_text += f"💰 <b>Цена:</b> {price_display}\n"
+            balance_label = "Баланс" if user_lang == "ru" else "Balance"
+            balance_line = f"💵 <b>{balance_label}:</b> {format_rub_amount(user_balance)}"
+            model_info_text += f"{balance_line}\n{price_line}\n"
+            if price_note:
+                model_info_text += f"{price_note}\n"
             
             # Add hint for new users
             if is_new and sku_id in FREE_TOOL_SKU_IDS:
@@ -11620,21 +11623,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     model_info_text += (
                         f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день\n"
                     )
-                    if min_price and user_balance >= min_price:
-                        paid_count = int(user_balance / min_price)
+                    if price_value is not None and user_balance >= price_value:
+                        paid_count = int(user_balance / price_value)
                         model_info_text += f"💳 <b>Платных:</b> {paid_count} генераций\n"
-                    model_info_text += f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)}\n\n"
+                    model_info_text += "\n"
                 elif available_count > 0:
                     model_info_text += (
                         f"✅ <b>Доступно:</b> {available_count} генераций\n"
-                        f"💵 <b>Баланс:</b> {format_price_rub(user_balance, is_admin)}\n\n"
+                        "\n"
                     )
                 else:
                     # Not enough balance - show warning
                     model_info_text += (
                         f"\n❌ <b>Недостаточно средств</b>\n\n"
-                        f"💵 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
-                        f"💰 <b>Требуется:</b> {format_price_rub(min_price, is_admin) if min_price is not None else 'от — ₽'}\n\n"
+                        f"{balance_line}\n"
+                        f"{price_line}\n\n"
                         f"💡 Пополните баланс для генерации"
                     )
 
@@ -11657,14 +11660,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model_info_text = _append_free_counter_text(model_info_text, free_counter_line)
             
             # Check balance before starting generation (but allow free generations)
-            if not is_admin and not is_free_available and min_price is not None and user_balance < min_price:
+            if not is_admin and not is_free_available and price_value is not None and user_balance < price_value:
                 user_lang = get_user_language(user_id)
                 keyboard = [
                     [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang), callback_data="topup_balance")],
                     [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
                 ]
                 
-                needed = min_price - user_balance
+                needed = price_value - user_balance
                 needed_str = format_rub_amount(needed)
                 remaining_free = await get_user_free_generations_remaining(user_id)
                 
@@ -11672,8 +11675,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     insufficient_msg = (
                         f"❌ <b>Недостаточно средств для генерации</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
-                        f"💵 <b>Требуется минимум:</b> {price_text}\n"
+                        f"{balance_line}\n"
+                        f"{price_line}\n"
                         f"❌ <b>Не хватает:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>Что делать:</b>\n"
@@ -11691,8 +11694,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     insufficient_msg = (
                         f"❌ <b>Insufficient Funds for Generation</b>\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)}\n"
-                        f"💵 <b>Minimum required:</b> {price_text}\n"
+                        f"{balance_line}\n"
+                        f"{price_line}\n"
                         f"❌ <b>Need:</b> {needed_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💡 <b>What to do:</b>\n"

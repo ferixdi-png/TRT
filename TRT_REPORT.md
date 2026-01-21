@@ -1,3 +1,41 @@
+## 2026-01-21: UX списка моделей + прозрачная цена по SKU
+
+### Было → стало
+- **Было:** кнопки выбора моделей в шагах генерации отображали цену в тексте, из-за чего на мобильных устройствах строки обрезались.  
+  **Стало:** в списках выбора модели показываются только названия (без цены), а цена и баланс выводятся на следующем шаге после выбора.  
+- **Было:** цена в карточке модели показывалась через агрегированные тексты и “от … ₽”.  
+  **Стало:** цена рассчитывается по SKU из SSOT, отображается строкой “Стоимость … (курс/множитель)” + отдельная строка баланса, при отсутствии SKU показывается “цена временно недоступна”.
+
+### Изменённые файлы
+- `bot_kie.py`
+- `app/helpers/models_menu.py`
+- `TRT_REPORT.md`
+
+### Как проверял
+- Не запускал автотесты. Требуется ручная проверка сценариев “Фото → Видео”, “Текст → Видео”, а также каталог моделей.
+
+### Missing pricing for SKU
+- wan/2-2-a14b-speech-to-video-turbo::default
+- qwen/image-edit::default
+- wan/2-2-a14b-text-to-video-turbo::default
+- wan/2-2-a14b-image-to-video-turbo::default
+- elevenlabs/speech-to-text::default
+- grok/imagine::default
+- flux/kontext::default
+- google/veo-3::default
+- google/veo-3.1::default
+- sora-2-pro-storyboard::default
+- kling/v2-5-turbo::default
+- hailuo/2.3::default
+- infinitalk/from-audio::default
+- elevenlabs/audio-isolation::default
+- elevenlabs/sound-effect::default
+- elevenlabs/text-to-speech::default
+- google/nanobanana-gemini-2.5-flash::default
+- runway/gen-4::default
+- suno/v5::default
+- midjourney/api::default
+
 ## 2026-02-15: Полный прод-аудит (no-DB, STORAGE_MODE=GITHUB_JSON)
 
 ### Top-10 Critical (P0/P1) — риск → где → сценарий → почему критично → план фикса
