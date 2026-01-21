@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable, Awaitable, Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest as TelegramBadRequest
 from telegram.error import Conflict as TelegramConflict
 from telegram.ext import Application, ContextTypes
 
@@ -49,6 +50,13 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
             error = context.error
             error_type = type(error).__name__
             error_msg = str(error)
+
+            # Benign Telegram UX noise: user pressed the same button and bot attempted a no-op edit.
+            # We explicitly ignore this case to keep logs clean.
+            if isinstance(error, TelegramBadRequest) and "message is not modified" in error_msg.lower():
+                logger.info("[ERROR_HANDLER] Ignoring benign Telegram BadRequest: %s", error_msg[:200])
+                return
+
             correlation_id = ensure_correlation_id(update, context)
             error_code = _map_error_code(error, error_msg)
             fix_hint = ERROR_CATALOG.get(error_code, ERROR_CATALOG["INTERNAL_EXCEPTION"])
