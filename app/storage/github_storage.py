@@ -1184,6 +1184,7 @@ class GitHubStorage(BaseStorage):
                 "payment_method": payment_method,
                 "screenshot_file_id": screenshot_file_id,
                 "status": status,
+                "balance_charged": False,
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }
@@ -1199,18 +1200,21 @@ class GitHubStorage(BaseStorage):
         admin_id: Optional[int] = None,
         notes: Optional[str] = None,
     ) -> None:
-        prior_status = None
         payment_user_id = None
         payment_amount = None
+        credit_balance = False
+        success_statuses = {"approved", "completed"}
 
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
-            nonlocal prior_status, payment_user_id, payment_amount
+            nonlocal payment_user_id, payment_amount, credit_balance
             if payment_id not in data:
                 raise ValueError(f"Payment {payment_id} not found")
             payment = data[payment_id]
-            prior_status = payment.get("status")
             payment_user_id = payment.get("user_id")
             payment_amount = payment.get("amount")
+            if status in success_statuses and not payment.get("balance_charged"):
+                payment["balance_charged"] = True
+                credit_balance = True
             payment["status"] = status
             payment["updated_at"] = datetime.now().isoformat()
             if admin_id is not None:
@@ -1221,7 +1225,7 @@ class GitHubStorage(BaseStorage):
             return data
 
         await self._update_json(self.payments_file, updater)
-        if status == "approved" and prior_status != "approved":
+        if status in success_statuses and credit_balance:
             if payment_user_id is not None and payment_amount is not None:
                 await self.add_user_balance(int(payment_user_id), float(payment_amount))
 

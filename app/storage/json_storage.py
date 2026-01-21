@@ -434,6 +434,7 @@ class JsonStorage(BaseStorage):
             'payment_method': payment_method,
             'screenshot_file_id': screenshot_file_id,
             'status': status,
+            'balance_charged': False,
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat(),
             'admin_id': None,
@@ -457,6 +458,10 @@ class JsonStorage(BaseStorage):
             raise ValueError(f"Payment {payment_id} not found")
         
         payment = data[payment_id]
+        success_statuses = {"approved", "completed"}
+        credit_balance = status in success_statuses and not payment.get('balance_charged')
+        if credit_balance:
+            payment['balance_charged'] = True
         payment['status'] = status
         payment['updated_at'] = datetime.now().isoformat()
         
@@ -466,7 +471,7 @@ class JsonStorage(BaseStorage):
             payment['notes'] = notes
         
         # Если платеж одобрен, добавляем баланс
-        if status == "approved" and payment.get('status') != "approved":
+        if credit_balance:
             await self.add_user_balance(payment['user_id'], payment['amount'])
         
         await self._save_json(self.payments_file, data)
