@@ -154,6 +154,22 @@
       ],
       "task_id": "2876dfd04982eb09dad997fa8f22086f",
       "timestamp": 1768908864
+    },
+    {
+      "id": 8,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "image_size": "9:16",
+        "prompt": "Ultra-realistic commercial product hero image, premium tech advertising style.\nA futuristic minimalist product card in a clean studio environment.\n\nMain object: a sleek AI-powered digital product represented as a glowing semi-transparent interface block, floating in mid-air. The interface looks tangible, glass-like, with micro-details, soft reflections, and subtle depth.\n\nVisual concept: “Text → Image → Reality”. Streams of glowing text fragments smoothly transform into high-resolution visual elements, forming the product in real time.\n\nLighting: cinematic softbox lighting, controlled highlights, deep but clean shadows, premium contrast.\n\nColor palette: black, graphite, silver, neon banana-yellow accents, subtle cyan glow.\n\nBackground: dark gradient studio backdrop with slight volumetric haze, no clutter.\n\nComposition: centered hero shot, perfect symmetry, shallow depth of field, professional product photography look.\n\nDetails: micro-typography textures, futuristic UI elements, soft holographic particles, precision edges, ultra-clean geometry.\n\nStyle keywords: luxury tech, AI startup, Apple-level advertising, Behance featured, Dribbble trend, commercial CGI, photorealistic, 8K detail, global illumination, ray tracing.\n\nCamera: 85mm lens look, f/1.8, razor-sharp focus on product.\n\nMood: confident, innovative, premium, “this is why text-to-image matters”.\n\nNo people. No logos. No watermark. No clutter.\n\n❌ NEGATIVE PROMPT (обязательно)\n\ncartoon, illustration, anime, low quality, flat design, overexposed, noisy, blurry, дешёвая графика, stock photo look, random text, distorted UI, messy background, bad lighting, плохая композиция, watermark, logo, jpeg artifacts"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768977884168_84agqd.png"
+      ],
+      "task_id": "c5f7c304583d6a4bb9b18c093b75511b",
+      "timestamp": 1768977890
     }
   ],
   "7881587044": [
