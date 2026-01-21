@@ -4,6 +4,7 @@
 """
 
 import logging
+from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
@@ -21,7 +22,8 @@ logger = logging.getLogger(__name__)
 async def handle_show_all_models_list(
     query,
     user_id: int,
-    user_lang: str
+    user_lang: str,
+    default_model_id: Optional[str] = None,
 ) -> None:
     """
     Обработчик для callback 'show_all_models_list'.
@@ -66,7 +68,10 @@ async def handle_show_all_models_list(
             )
         
         # Строим клавиатуру из каталога
-        keyboard_markup = build_models_menu_by_type(user_lang)
+        keyboard_markup = build_models_menu_by_type(
+            user_lang,
+            default_model_id=default_model_id,
+        )
         
         await query.edit_message_text(
             models_text,
