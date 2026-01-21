@@ -1706,6 +1706,21 @@ models:
         type: string
         required: true
     model_mode: text_to_image
+  grok-imagine/text-to-image:
+    model_type: text_to_image
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 5000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - '2:3'
+        - '3:2'
+        - '1:1'
+    model_mode: text_to_image
   openai/4o-image:
     model_type: text_to_image
     input:
