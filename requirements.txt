@@ -17,8 +17,8 @@ PyYAML>=6.0
 typing-extensions>=4.5.0
 
 # Image processing (optional, graceful degradation if not available)
-# Pillow>=10.0.0  # Optional - импортируется лениво
-# pytesseract>=0.3.10  # Optional - импортируется лениво
+Pillow>=10.0.0  # Optional - импортируется лениво
+pytesseract>=0.3.10  # Optional - импортируется лениво
 
 # PostgreSQL database
 
