@@ -158,11 +158,19 @@ def _resolve_model_id(callback_data: str) -> Optional[str]:
         for short, model_id in _callback_mapping.items():
             if short.endswith(hash_part):
                 return model_id
-        # Если не нашли, пробуем найти по хешу
+        # Если не нашли, пробуем найти по хешу из обратного маппинга
         for model_id in _reverse_mapping.keys():
             model_hash = hashlib.md5(model_id.encode()).hexdigest()[:12]
             if model_hash == hash_part:
                 return model_id
+        # Fallback: пересчитать хеши по каталогу (на случай разных процессов)
+        try:
+            for model in load_catalog():
+                model_hash = hashlib.md5(model.id.encode()).hexdigest()[:12]
+                if model_hash == hash_part:
+                    return model.id
+        except Exception as exc:
+            logger.warning("Failed to resolve modelk callback via catalog: %s", exc)
     return None
 
 
