@@ -6688,6 +6688,33 @@ async def initialize_and_run():
         await asyncio.Event().wait()
 
     application = await build_application(settings)
+    
+    # ==================== P1 FIX: ПРОГРЕВ КЕША МОДЕЛЕЙ ====================
+    # ПРОБЛЕМА: get_models_sync() при запущенном event loop читает YAML на каждый запрос
+    # РЕШЕНИЕ: прогреваем кеш _model_cache ВНУТРИ event loop при старте
+    logger.info("🔥 Warming up models cache inside event loop...")
+    warmup_start = time.time()
+    
+    try:
+        # Принудительно загружаем модели (это установит _model_cache)
+        from app.models.registry import get_models_sync, _model_cache, _model_source
+        warmup_models = get_models_sync()
+        warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
+        
+        logger.info(
+            f"✅ Models cache warmed up: {len(warmup_models)} models loaded in {warmup_elapsed_ms}ms "
+            f"(source={_model_source})"
+        )
+        logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
+    except Exception as warmup_exc:
+        warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
+        logger.error(
+            f"⚠️ Models cache warmup failed in {warmup_elapsed_ms}ms: {warmup_exc}",
+            exc_info=True
+        )
+        logger.warning("   Bot will continue but may have slower first requests")
+    # ==================== END P1 FIX ====================
+    
     await run(settings, application)
 
 
