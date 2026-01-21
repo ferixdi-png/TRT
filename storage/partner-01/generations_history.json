@@ -200,6 +200,21 @@
       ],
       "task_id": "2d2beac4fe1b0d6c2a06a610a0ced657",
       "timestamp": 1768978658
+    },
+    {
+      "id": 11,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "Ultra-realistic cinematic brand key visual for the name FERIXDI.\n\nCentral character: a realistic adult human character (male, 20–30), strong charisma, confident and intense facial expression, sharp jawline, realistic skin texture with micro-pores, natural imperfections, subtle facial hair or stubble, realistic eyes with depth and emotion.\n\nThe character is NOT posing like a model — looks like caught mid-moment, cinematic presence, powerful posture, calm dominance.\n\nLighting on character: dramatic movie lighting — strong key light from the side/top, deep shadows shaping the face, subtle rim light separating the character from the background, realistic skin subsurface scattering, no beauty filters, no plastic skin.\n\nBrand name integration: the word FERIXDI appears as a massive cinematic title integrated into the environment, not floating randomly.\nLetters are bold, heavy, aggressive, slightly worn, glowing from inside with controlled energy.\nThe logo feels physical — thick, weighty, real, interacting with light and environment.\n\nEnergy & patterns: around the character and the logo — abstract energy patterns, ancient-symbol-like shapes mixed with futuristic AI geometry, subtle glowing lines, power runes, cinematic particles, sparks, light streaks.\n\nPatterns feel intentional and meaningful, not decorative — like power systems, neural networks, or forbidden tech symbols.\n\nBackground: deep cinematic environment with layered depth — smoke, dust, volumetric fog, light beams cutting through darkness, stormy atmosphere, sense of pressure and масштаб.\n\nNo flat background. No empty space. Everything feels alive and moving.\n\nColor palette: dark graphite and black base, dominant banana-yellow energy accents, subtle electric cyan highlights, restrained red/orange heat tones.\nHigh contrast, dramatic but clean, premium movie-grade color grading.\n\nCamera & framing: medium shot or medium-close shot, cinematic lens look (35–50mm), shallow but realistic depth of field, strong subject separation, slight perspective depth.\n\nStyle & mood: realistic, cinematic, dark, powerful, modern myth, AI-era iconography.\nFeels like a paused frame from a high-budget film or AAA game trailer.\n\nOverall realism: absolutely no illustration look, no cartoon, no anime.\nPure photorealism with cinematic post-processing, realistic grain, controlled sharpness, natural motion freeze.\n\n❌ NEGATIVE PROMPT (ОЧЕНЬ ВАЖНО)\n\ncartoon, illustration, anime, comic style, flat design, vector logo, dribbble style, childish, fantasy art, painted look, plastic skin, beauty filter, smooth face, fake lighting, cheap glow, overexposed, low contrast, empty background, random symbols, unreadable text, watermark, logo artifacts, AI text distortion"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768979111532_p9r8c3.png"
+      ],
+      "task_id": "31d7c73eae93724d14d1567df4c2eda5",
+      "timestamp": 1768979116
     }
   ],
   "7881587044": [
