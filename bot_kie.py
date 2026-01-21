@@ -704,13 +704,54 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     ConversationHandler, CallbackQueryHandler, TypeHandler
 )
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
 # ==================== TELEGRAM TEXT LIMITS ====================
 TELEGRAM_TEXT_LIMIT = 4000
 TELEGRAM_CHUNK_LIMIT = 3900
+
+_CALLBACK_ANSWER_PATCHED = False
+
+
+def _patch_callback_query_answer() -> None:
+    global _CALLBACK_ANSWER_PATCHED
+    if _CALLBACK_ANSWER_PATCHED:
+        return
+
+    original_answer = CallbackQuery.answer
+
+    async def safe_answer(self, *args, **kwargs):
+        try:
+            return await original_answer(self, *args, **kwargs)
+        except BadRequest as exc:
+            message = str(exc).lower()
+            if (
+                "query is too old" in message
+                or "response timeout expired" in message
+                or "query id is invalid" in message
+            ):
+                logger.info(
+                    "Ignoring expired callback answer: query_id=%s error=%s",
+                    getattr(self, "id", None),
+                    exc,
+                )
+                return None
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Failed to answer callback query: query_id=%s error=%s",
+                getattr(self, "id", None),
+                exc,
+            )
+            return None
+
+    CallbackQuery.answer = safe_answer
+    _CALLBACK_ANSWER_PATCHED = True
+
+
+_patch_callback_query_answer()
 
 # Убрано: from dotenv import load_dotenv
 # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard)
