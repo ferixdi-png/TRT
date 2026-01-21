@@ -18,6 +18,7 @@ KIE_MODELS = [
                 "description": "Текстовое описание изображения, которое вы хотите сгенерировать (макс. 1000 символов)",
                 "required": True,
                 "max_length": 1000
+            },
             "quality": {
                 "type": "string",
                 "description": "Качество изображения (Basic = 2K, High = 4K)",
