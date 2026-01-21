@@ -185,6 +185,21 @@
       ],
       "task_id": "d4e9fdd85098dd387064bae689edac23",
       "timestamp": 1768978125
+    },
+    {
+      "id": 10,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "FERIXDI ultra-aggressive cinematic action logo, maximum visual pressure.\n\nThe word FERIXDI formed from hyper-realistic energy-infused matter — dense fluffy fibers fused with molten neon plasma and fractured light.\n\nLetters are exploding into existence, as if forced out by internal power: shockwaves, tearing air, violent energy distortion around the logo.\n\nTexture: insane micro-detail — visible individual fibers, heat glow between strands, slight burn on edges, tactile depth, brutal realism.\n\nMotion: frozen moment of impact — particles flying outward, energy arcs snapping, bass-wave ripples deforming space behind the logo.\n\nBackground: deep cinematic chaos — collapsing smoke vortices, electric storms, fractured light beams, volumetric fog layers, sense of violent forward motion.\n\nLighting: extreme cinematic contrast — blinding key light hits the front, razor rim light cuts the silhouette, deep crushed shadows inside the logo mass.\n\nColor: nuclear banana-yellow core + black void + electric cyan sparks + subtle red heat accents.\n\nMood: dominant, dangerous, confident, anti-corporate, artist × tech × power.\n\nStyle: music branding, AI-era icon, trailer-level visuals, cyberpunk realism without fantasy cartoon look.\n\nComposition: logo dominates frame, no empty space, pure pressure, readable in 0.3 seconds even at small size.\n\nOutput: looks like a single frame from a $10M cinematic logo reveal, not design, not illustration — REAL ENERGY CAPTURED.\n\n❌ NEGATIVE PROMPT (ЖЁСТКО)\n\nflat logo, minimal, vector, clean corporate, dribbble style, boring, soft cute plush, childish, toy look, illustration, anime, fake CGI shine, weak contrast, empty background, pastel colors, low energy, safe design, watermark, text artifacts"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768978651769_zank19.png"
+      ],
+      "task_id": "2d2beac4fe1b0d6c2a06a610a0ced657",
+      "timestamp": 1768978658
     }
   ],
   "7881587044": [
