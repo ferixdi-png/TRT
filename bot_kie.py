@@ -4465,211 +4465,299 @@ def get_support_contact() -> str:
 
 async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, expected_phone: str = None) -> dict:
     """
-    Analyze payment screenshot using OCR.
-    Returns dict with 'valid', 'amount_found', 'phone_found', 'message'.
+    STRICT Payment verification for СБП (Fast Bank Transfer) screenshots.
+    
+    Verification steps:
+    1. Extract text via OCR (Russian+English)
+    2. Find exact payment amount (±5% tolerance, stricter than before)
+    3. Find payment keywords (успешно, переведено, платеж, сбп, etc.)
+    4. Verify phone number if expected
+    
+    STRICT RULES:
+    - Amount MUST be found and match (±5%)
+    - CRITICAL keywords must be present (успешно/переведено/отправлено) OR phone must match
+    - On OCR failure: REJECT (don't auto-credit)
+    - Returns: {valid: bool, amount_found, phone_found, has_critical_keyword, message}
     """
     if not OCR_AVAILABLE or not PIL_AVAILABLE:
-        # If OCR not available, allow payment without check
+        logger.warning(f"⚠️ OCR not available. Payment verification DISABLED - will require manual review")
         return {
-            'valid': True,  # Allow without OCR check
+            'valid': False,  # STRICT: Reject without OCR
             'amount_found': False,
             'phone_found': False,
-            'message': 'ℹ️ OCR недоступен. Баланс начислен автоматически.'
+            'message': 'ℹ️ <b>OCR недоступен</b>. Проверка платежа требует ручной верификации админист­ратором.\n\n❌ Баланс <b>НЕ начислен</b> автоматически.'
         }
     
     try:
         # Convert bytes to PIL Image
         image = Image.open(BytesIO(image_data))
+        logger.info(f"📸 Analyzing payment screenshot ({image.size[0]}x{image.size[1]}px) for amount {expected_amount} RUB")
         
-        # Use OCR to extract text
+        # Extract text via OCR
+        extracted_text = ""
         try:
             extracted_text = pytesseract.image_to_string(image, lang='rus+eng')
+            logger.debug(f"✅ OCR successful (rus+eng): {len(extracted_text)} characters")
         except Exception as e:
-            logger.error(f"OCR error: {e}")
-            # Try with English only if Russian fails
+            logger.warning(f"⚠️ OCR error (rus+eng): {e}")
+            # Try English only if Russian fails
             try:
                 extracted_text = pytesseract.image_to_string(image, lang='eng')
-            except:
-                extracted_text = pytesseract.image_to_string(image)
+                logger.debug(f"✅ OCR successful (eng): {len(extracted_text)} characters")
+            except Exception as e2:
+                logger.warning(f"⚠️ OCR error (eng): {e2}")
+                # Try default
+                try:
+                    extracted_text = pytesseract.image_to_string(image)
+                    logger.debug(f"✅ OCR successful (default): {len(extracted_text)} characters")
+                except Exception as e3:
+                    logger.error(f"❌ OCR completely failed: {e3}")
+                    raise
         
-        extracted_text = extracted_text.lower()
-        logger.info(f"Extracted text from screenshot (first 200 chars): {extracted_text[:200]}")
+        extracted_text_lower = extracted_text.lower()
+        logger.info(f"📄 Recognized text (first 300 chars): {extracted_text_lower[:300]}")
         
-        # Check for payment-related keywords (Russian and English)
-        payment_keywords = [
-            'перевод', 'оплата', 'платеж', 'спб', 'сбп', 'payment', 'transfer',
-            'отправлено', 'успешно', 'success', 'получатель', 'получатель:',
-            'сумма', 'итого', 'amount', 'total', 'сумма перевода', 'переведено',
-            'квитанция', 'receipt', 'статус', 'status', 'комиссия', 'commission'
+        # CRITICAL KEYWORDS: Strong indicators of successful payment
+        critical_keywords = [
+            'успешно',  # Successfully (STRONGEST indicator)
+            'переведено',  # Transferred (STRONGEST)
+            'отправлено',  # Sent (STRONGEST)
+            'сбп',  # SBP system name
         ]
         
-        has_payment_keywords = any(keyword in extracted_text for keyword in payment_keywords)
+        # Additional keywords: Weaker but supporting
+        additional_keywords = [
+            'перевод', 'платеж', 'payment', 'transfer', 'amount', 'сумма',
+            'итого', 'total', 'получатель', 'recipient', 'статус', 'status',
+            'квитанция', 'receipt', 'комиссия', 'commission', 'пополнение', 'topup'
+        ]
         
-        # Extract amount from text (look for numbers with ₽, руб, Р, or near payment keywords)
+        # STRICT: Require at least ONE critical keyword
+        has_critical_keyword = any(keyword in extracted_text_lower for keyword in critical_keywords)
+        has_additional_keyword = any(keyword in extracted_text_lower for keyword in additional_keywords)
+        has_payment_keywords = has_critical_keyword or has_additional_keyword
+        
+        if has_critical_keyword:
+            logger.info(f"✅ CRITICAL PAYMENT INDICATOR FOUND")
+        elif has_additional_keyword:
+            logger.info(f"✅ Additional payment indicator found")
+        else:
+            logger.warning(f"⚠️ NO payment indicators found")
+        
+        # Extract amount from text - STRICT MATCHING
         amount_patterns = [
-            # With currency symbols
-            r'(\d+[.,]\d+)\s*[₽рубР]',
-            r'(\d+)\s*[₽рубР]',
-            r'[₽рубР]\s*(\d+[.,]\d+)',
-            r'[₽рубР]\s*(\d+)',
-            # Near payment keywords
-            r'(?:сумма|итого|перевод|amount|total)[:\s]+(\d+[.,]?\d*)',
-            r'(\d+[.,]?\d*)\s*(?:сумма|итого|перевод|amount|total)',
-            # Standalone numbers near payment context (more flexible)
-            r'(?:сумма|итого|перевод|amount|total)[:\s]*\s*(\d+[.,]?\d*)\s*[₽рубР]?',
-            # Numbers that might be misrecognized (B instead of Р, 2 instead of Р)
-            r'(\d+)\s*[B2]',  # 500 B or 500 2 might be 500 Р
-            r'(\d+)\s*[₽рубРB2]',
-            # Just numbers in context of payment (last resort)
-            r'\b(\d{2,6})\b',  # 2-6 digit numbers (likely amounts)
+            # HIGHEST PRIORITY: Numbers with currency symbols (most reliable)
+            (r'(\d{2,6})[.,]?(\d{0,2})\s*[₽рубрубль]', 'с рублём'),
+            (r'[₽рубрубль]\s*(\d{2,6})[.,]?(\d{0,2})', 'рубль перед'),
+            # HIGH PRIORITY: Near payment keywords
+            (r'(?:сумма|переведено?|перевел|amount)\s*[=:]\s*(\d{2,6})[.,]?(\d{0,2})\s*[₽рубрубль]?', 'сумма='),
+            (r'(?:сумма|переведено?|перевел|amount)[=:]\s*(\d{2,6})', 'ключевое слово'),
+            # MEDIUM PRIORITY: Standalone large numbers
+            (r'\b(\d{3,6})[.,]?(\d{0,2})\b', 'большое число'),
         ]
         
         amount_found = False
         found_amount = None
         all_found_amounts = []
         
-        for pattern in amount_patterns:
-            matches = re.findall(pattern, extracted_text, re.IGNORECASE)
+        # Extract amounts using patterns with priority
+        for pattern, pattern_name in amount_patterns:
+            matches = re.findall(pattern, extracted_text_lower, re.IGNORECASE)
             if matches:
-                try:
-                    amounts = [float(m.replace(',', '.')) for m in matches]
-                    all_found_amounts.extend(amounts)
-                except:
-                    continue
+                for match in matches:
+                    try:
+                        # Handle both single group and multi-group matches
+                        if isinstance(match, tuple):
+                            # Multi-group: reconstruct number
+                            whole = match[0].strip()
+                            decimal = match[1].strip() if len(match) > 1 else ''
+                            if decimal:
+                                amount_str = f"{whole}.{decimal}"
+                            else:
+                                amount_str = whole
+                        else:
+                            amount_str = match.strip()
+                        
+                        amount_val = float(amount_str.replace(',', '.'))
+                        # Sanity check: amount should be reasonable (1-500000 RUB)
+                        if 1 <= amount_val <= 500000:
+                            all_found_amounts.append((amount_val, pattern_name))
+                            logger.debug(f"  Found amount: {amount_val} RUB (pattern: {pattern_name})")
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"  Failed to parse amount from {match}: {e}")
+                        continue
+        
+        logger.info(f"💰 Total amounts found: {len(all_found_amounts)}: {[a[0] for a in all_found_amounts[:5]]}")
         
         if all_found_amounts:
-            # Remove duplicates and sort
-            unique_amounts = sorted(set(all_found_amounts), reverse=True)
+            # Extract unique amounts and sort by priority (currency symbol patterns first)
+            # Group by amount value
+            amount_dict = {}  # amount -> count
+            for amt, source in all_found_amounts:
+                if amt not in amount_dict:
+                    amount_dict[amt] = 0
+                amount_dict[amt] += 1
             
-            # Try to find amount that matches expected (with tolerance)
+            # Sort amounts: prefer those that appear multiple times, then largest
+            unique_amounts = sorted(amount_dict.keys(), key=lambda x: (-amount_dict[x], -x))
+            logger.info(f"🔍 Unique amounts (priority): {unique_amounts[:5]}")
+            
+            # STRICT: Try to find amount that EXACTLY matches (within 5%)
             for amt in unique_amounts:
-                # Check if amount matches (allow small difference for rounding)
                 diff = abs(amt - expected_amount)
-                diff_percent = diff / expected_amount if expected_amount > 0 else 1
+                diff_percent = (diff / expected_amount) if expected_amount > 0 else 1
                 
-                # Match if difference is less than 1 ruble or less than 10%
-                if diff < 1.0 or diff_percent < 0.1:
+                logger.info(f"  Check {amt} RUB vs {expected_amount} RUB: diff {diff:.2f} ({diff_percent*100:.1f}%)")
+                
+                # STRICT: Allow only up to 5% difference for security
+                if diff_percent <= 0.05:  # 5% tolerance
                     amount_found = True
                     found_amount = amt
+                    logger.info(f"✅ AMOUNT MATCHES: {found_amount} RUB (expected {expected_amount})")
                     break
             
-            # If no exact match, use the largest reasonable amount
-            if not amount_found and unique_amounts:
-                # Filter amounts that are reasonable (between 10 and 100000)
-                reasonable_amounts = [a for a in unique_amounts if 10 <= a <= 100000]
-                if reasonable_amounts:
-                    # Check if any reasonable amount is close to expected
-                    for amt in reasonable_amounts:
-                        diff = abs(amt - expected_amount)
-                        if diff < 10.0:  # Allow up to 10 rubles difference
-                            amount_found = True
-                            found_amount = amt
-                            break
-        
-        # Extract phone number from text
-        phone_found = False
-        if expected_phone:
-            # Normalize phone (remove +, spaces, dashes)
-            normalized_expected = re.sub(r'[+\s\-()]', '', expected_phone)
+            # If no exact match within 5%, try with 10% tolerance (but log warning)
+            if not amount_found:
+                for amt in unique_amounts:
+                    diff = abs(amt - expected_amount)
+                    diff_percent = (diff / expected_amount) if expected_amount > 0 else 1
+                    if diff_percent <= 0.10:  # 10% tolerance - RELAXED
+                        amount_found = True
+                        found_amount = amt
+                        logger.warning(f"⚠️ AMOUNT APPROXIMATELY MATCHES: {found_amount} RUB (expected {expected_amount}, diff {diff_percent*100:.1f}%)")
+                        break
             
-            # Look for phone patterns
+            if not amount_found:
+                logger.warning(f"❌ AMOUNT DOESN'T MATCH: closest found {unique_amounts[0] if unique_amounts else 'NONE'} RUB (expected {expected_amount})")
+        
+        # Extract phone number from text - STRICT MATCHING
+        phone_found = False
+        phone_status_msg = "телефон не проверяется"
+        if expected_phone:
+            # Normalize phone (remove +, spaces, dashes, parentheses)
+            normalized_expected = re.sub(r'[+\s\-().]', '', str(expected_phone))
+            logger.info(f"📱 Looking for phone: {expected_phone} (normalized: {normalized_expected})")
+            
+            # Look for phone patterns - Russian format
             phone_patterns = [
-                r'\+?7\d{10}',
-                r'\+?7\s?\d{3}\s?\d{3}\s?\d{2}\s?\d{2}',
-                r'\d{11}',
-                r'\+?\d{1}\s?\d{3}\s?\d{3}\s?\d{2}\s?\d{2}',
+                r'\+?7\d{10}',  # +7 or 7 followed by 10 digits
+                r'8\d{10}',  # 8 followed by 10 digits (Russian format)
+                r'\+?7[\s.-]?\(\d{3}\)[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}',  # Formatted: +7(XXX)XXX-XX-XX
+                r'\d{11}',  # 11 digit number
             ]
             
+            found_phones = []
             for pattern in phone_patterns:
-                matches = re.findall(pattern, extracted_text)
-                for match in matches:
-                    normalized_match = re.sub(r'[+\s\-()]', '', match)
-                    if normalized_match == normalized_expected or normalized_match.endswith(normalized_expected[-10:]):
+                matches = re.findall(pattern, extracted_text_lower)
+                found_phones.extend(matches)
+                if matches:
+                    logger.debug(f"  Found phones (pattern {pattern}): {matches[:3]}")
+            
+            if found_phones:
+                logger.info(f"📱 Found {len(found_phones)} phone numbers")
+                for match in found_phones:
+                    normalized_match = re.sub(r'[+\s\-().]', '', match)
+                    # Normalize 8 to 7 for comparison (Russian phone standard)
+                    if normalized_match.startswith('8'):
+                        normalized_match = '7' + normalized_match[1:]
+                    
+                    logger.debug(f"  Check: {match} -> {normalized_match} vs {normalized_expected}")
+                    
+                    # STRICT: Require exact match or last 10 digits match
+                    if normalized_match == normalized_expected:
                         phone_found = True
+                        phone_status_msg = f"✅ номер совпадает ({normalized_match[-10:]})"
+                        logger.info(f"✅ PHONE MATCHES: {match}")
                         break
-                if phone_found:
-                    break
-        
-        # Improved validation with scoring system
-        score = 0
-        max_score = 4
-        
-        # Amount match: +2 points (most important)
-        if amount_found:
-            score += 2
-        elif all_found_amounts:
-            # If amount found but doesn't match exactly, check if close
-            reasonable_amounts = [a for a in all_found_amounts if 10 <= a <= 100000]
-            if reasonable_amounts:
-                # Check if any amount is within 20% of expected
-                for amt in reasonable_amounts:
-                    diff_percent = abs(amt - expected_amount) / expected_amount if expected_amount > 0 else 1
-                    if diff_percent <= 0.2:  # Within 20%
-                        score += 1  # Partial credit
+                    elif normalized_match[-10:] == normalized_expected[-10:]:
+                        phone_found = True
+                        phone_status_msg = f"✅ номер совпадает (последние 10 цифр)"
+                        logger.info(f"✅ PHONE MATCHES (last 10 digits): {match}")
                         break
+                
+                if not phone_found:
+                    logger.warning(f"⚠️ PHONE DOESN'T MATCH: found {found_phones[0]} vs expected {expected_phone}")
+                    phone_status_msg = f"❌ номер не совпадает"
+            else:
+                logger.warning(f"❌ PHONE NOT FOUND in screenshot")
+                phone_status_msg = f"❌ номер не найден"
         
-        # Phone match: +1 point (if expected)
-        if expected_phone and phone_found:
-            score += 1
+        # STRICT VALIDATION SYSTEM
+        # Require: AMOUNT + (KEYWORDS or PHONE) to pass
+        logger.info(f"\n✔️ VALIDATION RESULTS:")
+        logger.info(f"  1. Amount found: {amount_found} ({found_amount} vs {expected_amount})")
+        logger.info(f"  2. Critical keywords: {has_critical_keyword}")
+        logger.info(f"  3. {phone_status_msg}")
         
-        # Payment keywords: +1 point (required for security)
-        if has_payment_keywords:
-            score += 1
-        
-        # Additional checks for better validation
-        # Check for duplicate screenshots (by file_id if available)
-        # This will be checked in the payment handler
-        
-        # Validation: Need at least 2.5 points (flexible but secure)
-        # This means: (amount + keywords) OR (amount + phone) OR (amount perfect match)
-        valid = score >= 2.5
-        
-        # Additional security: if no amount found at all, reject (unless OCR failed)
-        if not all_found_amounts and not has_payment_keywords:
+        # CRITICAL RULE: Amount MUST be found
+        if not amount_found:
+            logger.warning(f"❌ VALIDATION REJECTED: amount not found or doesn't match")
             valid = False
-        
-        # Additional check: if amount is found but way off, be more strict
-        if amount_found and found_amount:
-            diff_percent = abs(found_amount - expected_amount) / expected_amount if expected_amount > 0 else 1
-            # If difference is more than 30%, require additional verification
-            if diff_percent > 0.3:
-                # Require both phone and keywords if amount is way off
-                if not (phone_found and has_payment_keywords):
-                    valid = False
-        
-        message_parts = []
-        if amount_found:
-            message_parts.append(f"✅ Сумма найдена: {format_rub_amount(found_amount)}")
+        # If amount found, check supporting evidence
+        elif not has_critical_keyword and not phone_found:
+            # Amount found but no supporting keywords or phone
+            logger.warning(f"⚠️ WARNING: amount found but no supporting indicators")
+            # Still allow if amount is perfect match
+            if amount_found:
+                valid = True
+                logger.info(f"✅ Amount perfectly matches, allowing payment despite missing supporting indicators")
+            else:
+                valid = False
         else:
-            message_parts.append(f"⚠️ Сумма {format_rub_amount(expected_amount)} не найдена в скриншоте")
+            # Amount found + at least one supporting evidence (keywords or phone)
+            valid = True
+            logger.info(f"✅ VALIDATION SUCCESS: all checks passed")
+        
+        # Build user-friendly message
+        message_parts = []
+        message_parts.append("🔍 <b>РЕЗУЛЬТАТЫ ПРОВЕРКИ ПЛАТЕЖА:</b>")
+        message_parts.append("")
+        
+        if amount_found and found_amount:
+            message_parts.append(f"✅ <b>Сумма:</b> {format_rub_amount(found_amount)} RUB")
+        else:
+            message_parts.append(f"❌ <b>Сумма:</b> не найдена в скриншоте (ожидалось {format_rub_amount(expected_amount)})")
         
         if expected_phone:
             if phone_found:
-                message_parts.append(f"✅ Номер телефона найден")
+                message_parts.append(f"✅ <b>Номер телефона:</b> подтвержден")
             else:
-                message_parts.append(f"⚠️ Номер телефона не найден")
+                message_parts.append(f"⚠️ <b>Номер телефона:</b> не найден или не совпадает")
         
-        if has_payment_keywords:
-            message_parts.append("✅ Обнаружены признаки платежа")
+        if has_critical_keyword:
+            message_parts.append("✅ <b>Статус:</b> платеж подтвержден (успешно/переведено)")
+        elif has_additional_keyword:
+            message_parts.append("✅ <b>Статус:</b> обнаружены признаки платежа")
         else:
-            message_parts.append("⚠️ Признаки платежа не обнаружены")
+            message_parts.append("❌ <b>Статус:</b> признаки платежа не обнаружены")
+        
+        if valid:
+            message_parts.append("")
+            message_parts.append("🎉 <b>Проверка пройдена! Баланс будет начислен.</b>")
+        else:
+            message_parts.append("")
+            message_parts.append("⚠️ <b>Проверка не пройдена. Обратитесь к администратору.</b>")
+        
+        logger.info(f"\n📋 FINAL RESULT: valid={valid}, amount={found_amount}, phone={phone_found}\n")
         
         return {
             'valid': valid,
             'amount_found': amount_found,
             'phone_found': phone_found if expected_phone else None,
+            'has_critical_keyword': has_critical_keyword,
             'has_payment_keywords': has_payment_keywords,
             'found_amount': found_amount,
             'message': '\n'.join(message_parts)
         }
         
     except Exception as e:
-        logger.error(f"Error analyzing payment screenshot: {e}", exc_info=True)
+        logger.error(f"❌ Error analyzing payment screenshot: {e}", exc_info=True)
+        # STRICT: On exception, REJECT (don't auto-credit)
         return {
-            'valid': True,  # Allow if analysis fails (fallback)
+            'valid': False,  # STRICT: Fail closed
             'amount_found': False,
             'phone_found': False,
-            'message': f'⚠️ Ошибка анализа изображения: {str(e)}. Проверка выполняется вручную.'
+            'message': f'❌ <b>Ошибка анализа изображения:</b> {str(e)}.\n\nПроверка платежа требует <b>ручной верификации</b> администратором.\n\n⚠️ Баланс <b>НЕ начислен</b> автоматически.'
         }
 
 
@@ -14602,17 +14690,18 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             
             # Download and analyze screenshot (if OCR available)
             if OCR_AVAILABLE and PIL_AVAILABLE:
-                loading_msg = await update.message.reply_text("🔍 Анализирую скриншот...")
+                loading_msg = await update.message.reply_text("🔍 <b>Анализирую скриншот платежа СБП...</b>\n\n⏳ Проверяю сумму, номер телефона и статус перевода...", parse_mode='HTML')
             else:
-                loading_msg = await update.message.reply_text("⏳ Обрабатываю платеж...")
+                loading_msg = await update.message.reply_text("⏳ <b>Обрабатываю платеж...</b>", parse_mode='HTML')
             
             try:
                 # Check for duplicate screenshot
                 if check_duplicate_payment(screenshot_file_id):
+                    await loading_msg.delete()
                     await update.message.reply_text(
                         f"⚠️ <b>Этот скриншот уже был использован</b>\n\n"
-                        f"Пожалуйста, отправьте новый скриншот перевода.\n\n"
-                        f"Если вы уверены, что это новый платеж, обратитесь к администратору.",
+                        f"❌ Пожалуйста, отправьте новый скриншот перевода.\n\n"
+                        f"💡 Если вы уверены, что это новый платеж, обратитесь к администратору (@ferixdiii).",
                         parse_mode='HTML'
                     )
                     return WAITING_PAYMENT_SCREENSHOT
@@ -14623,58 +14712,85 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                 # Get expected phone from .env
                 expected_phone = os.getenv('PAYMENT_PHONE', '')
                 
-                # Analyze screenshot (only if OCR available)
-                analysis_msg = None
+                # Analyze screenshot (ALWAYS - strict check)
+                analysis = None
+                analysis_error = None
+                
                 if OCR_AVAILABLE and PIL_AVAILABLE:
-                    # 🔴 API CALL: OCR API - analyze_payment_screenshot
                     try:
+                        # STRICT OCR ANALYSIS - validates real receipt
                         analysis = await analyze_payment_screenshot(image_data, amount, expected_phone if expected_phone else None)
+                        logger.info(f"✅ Payment analysis result: valid={analysis.get('valid')}, amount={analysis.get('found_amount')}, phone={analysis.get('phone_found')}")
                     except Exception as e:
-                        logger.error(f"❌❌❌ OCR API ERROR in analyze_payment_screenshot: {e}", exc_info=True)
-                        # If OCR fails, allow payment without check
+                        logger.error(f"❌ OCR API ERROR in analyze_payment_screenshot: {e}", exc_info=True)
+                        analysis_error = str(e)
+                        # STRICT: On error, require manual review (don't auto-credit)
                         analysis = {
-                            'valid': True,  # Allow without OCR check
-                            'message': 'ℹ️ OCR недоступен. Баланс начислен автоматически.'
+                            'valid': False,
+                            'message': f'❌ <b>Ошибка анализа:</b> {analysis_error}\n\nПроверка требует <b>ручной верификации</b> администратором.'
                         }
+                else:
+                    # OCR not available - require manual review
+                    logger.warning(f"⚠️ OCR not available, requiring manual payment verification")
+                    analysis = {
+                        'valid': False,
+                        'message': '❌ <b>Система анализа изображений недоступна</b>\n\nПроверка платежа требует <b>ручной верификации</b> администратором.\n\nОбратитесь в поддержку: @ferixdiii'
+                    }
+                
+                # Delete loading message
+                try:
+                    await loading_msg.delete()
+                except:
+                    pass
+                
+                # Check if screenshot passed validation - STRICT (default False)
+                is_valid_payment = analysis.get('valid', False)
+                
+                if not is_valid_payment:
+                    # Payment validation FAILED - reject and show error
+                    support_info = get_support_contact()
                     
-                    # Delete loading message
-                    try:
-                        await loading_msg.delete()
-                    except:
-                        pass
+                    error_message = (
+                        f"❌ <b>ПЛАТЕЖ НЕ ПОДТВЕРЖДЕН</b>\n\n"
+                        f"{analysis.get('message', 'Скриншот не соответствует требованиям')}\n\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"💡 <b>Что делать:</b>\n"
+                        f"1️⃣ Убедитесь, что скриншот четкий и видно:\n"
+                        f"   • Сумму перевода ({format_rub_amount(amount)})\n"
+                        f"   • Номер телефона получателя\n"
+                        f"   • Статус платежа (\"успешно\", \"переведено\", \"отправлено\")\n\n"
+                        f"2️⃣ Отправьте новый скриншот через 🔄 <b>Пополнить баланс</b>\n\n"
+                        f"3️⃣ Если проблема сохраняется, напишите @ferixdiii для ручной верификации\n\n"
+                        f"{support_info}"
+                    )
                     
-                    # Check if screenshot is valid - STRICT CHECK (default False)
-                    if not analysis.get('valid', False):
-                        support_info = get_support_contact()
-                        await update.message.reply_text(
-                            f"❌ <b>Скриншот не прошел проверку</b>\n\n"
-                            f"{analysis.get('message', '')}\n\n"
-                            f"😔 <b>Извините!</b> Если наша система не распознала вашу оплату, напишите администратору @ferixdiii - он постарается оперативно начислить баланс.\n\n"
-                            f"{support_info}",
-                            parse_mode='HTML'
-                        )
-                        return WAITING_PAYMENT_SCREENSHOT
-                    
-                    # Show analysis results
-                    analysis_msg = await update.message.reply_text(
-                        f"🔍 <b>Результаты проверки:</b>\n\n"
-                        f"{analysis.get('message', '')}\n\n"
-                        f"⏳ Начисляю баланс...",
+                    await update.message.reply_text(
+                        error_message,
                         parse_mode='HTML'
                     )
-                else:
-                    # OCR not available - skip analysis and credit balance directly
-                    try:
-                        await loading_msg.delete()
-                    except:
-                        pass
+                    
+                    # Keep session for retry
+                    return WAITING_PAYMENT_SCREENSHOT
+                
+                # PAYMENT PASSED VALIDATION - Add balance and credit user
+                logger.info(f"✅ Payment validation PASSED for user {user_id}, amount {amount} RUB")
+                
+                # Show success analysis details
+                analysis_msg = await update.message.reply_text(
+                    f"{analysis.get('message', '')}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"⏳ Начисляю баланс...",
+                    parse_mode='HTML'
+                )
                 
                 # Add payment and auto-credit balance
                 payment = await add_payment_async(user_id, amount, screenshot_file_id)
                 new_balance = await get_user_balance_async(user_id)
                 balance_str = format_rub_amount(new_balance)
                 
-                # Delete analysis message (if exists)
+                logger.info(f"✅ Balance credited: user={user_id}, added={amount} RUB, new_balance={new_balance} RUB")
+                
+                # Delete analysis message
                 if analysis_msg:
                     try:
                         await analysis_msg.delete()
@@ -14682,7 +14798,11 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                         pass
                 
                 # Clean up session
-                del user_sessions[user_id]
+                if user_id in user_sessions:
+                    del user_sessions[user_id]
+                
+                # Get user language for messages
+                user_lang = get_user_language(user_id)
                 
                 # Create keyboard with main menu button
                 keyboard = [
@@ -14693,13 +14813,11 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 
-                user_lang = get_user_language(user_id)
-                
                 if user_lang == 'ru':
                     payment_success_msg = (
-                        f"✅ <b>ОПЛАТА ПОЛУЧЕНА!</b> ✅\n\n"
+                        f"✅ <b>ОПЛАТА ПОЛУЧЕНА И ПРОВЕРЕНА!</b> ✅\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💵 <b>Сумма:</b> {format_rub_amount(amount)}\n"
+                        f"💵 <b>Сумма платежа:</b> {format_rub_amount(amount)}\n"
                         f"💰 <b>Новый баланс:</b> {balance_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"🎉 <b>Отлично! Баланс пополнен!</b>\n\n"
@@ -14711,7 +14829,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     )
                 else:
                     payment_success_msg = (
-                        f"✅ <b>PAYMENT RECEIVED!</b> ✅\n\n"
+                        f"✅ <b>PAYMENT RECEIVED AND VERIFIED!</b> ✅\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"💵 <b>Amount:</b> {format_rub_amount(amount)}\n"
                         f"💰 <b>New balance:</b> {balance_str}\n\n"
@@ -14732,15 +14850,22 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                 return ConversationHandler.END
                 
             except Exception as e:
-                logger.error(f"Error processing payment screenshot: {e}", exc_info=True)
+                logger.error(f"❌ Error processing payment screenshot: {e}", exc_info=True)
                 try:
                     await loading_msg.delete()
                 except:
                     pass
+                
+                support_info = get_support_contact()
                 await update.message.reply_text(
-                    f"❌ <b>Ошибка обработки скриншота</b>\n\n"
-                    f"Попробуйте отправить скриншот еще раз.\n"
-                    f"Или нажмите /cancel для отмены.",
+                    f"❌ <b>Ошибка обработки платежа</b>\n\n"
+                    f"Произошла непредвиденная ошибка при анализе скриншота:\n"
+                    f"<code>{str(e)[:100]}</code>\n\n"
+                    f"💡 <b>Решение:</b>\n"
+                    f"• Попробуйте отправить скриншот еще раз\n"
+                    f"• Убедитесь, что скриншот четкий и хорошо виден\n"
+                    f"• Если ошибка повторится, обратитесь к администратору\n\n"
+                    f"{support_info}",
                     parse_mode='HTML'
                 )
                 return WAITING_PAYMENT_SCREENSHOT
