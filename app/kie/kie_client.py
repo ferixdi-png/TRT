@@ -17,6 +17,7 @@ import aiohttp
 from app.utils.logging_config import get_logger
 from app.observability.trace import trace_event, url_summary
 from app.observability.structured_logs import log_structured_event
+from app.resilience import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 
 logger = get_logger(__name__)
 
@@ -41,6 +42,7 @@ class KIEClient:
         max_retries: Optional[int] = None,
         base_delay: Optional[float] = None,
         max_delay: Optional[float] = None,
+        circuit_breaker_enabled: bool = True,
     ) -> None:
         self.api_key = api_key or os.getenv("KIE_API_KEY")
         self.base_url = (base_url or os.getenv("KIE_API_URL", "https://api.kie.ai")).rstrip("/")
@@ -50,6 +52,26 @@ class KIEClient:
         self.base_delay = float(base_delay or os.getenv("KIE_RETRY_BASE_DELAY", "1.0"))
         self.max_delay = float(max_delay or os.getenv("KIE_RETRY_MAX_DELAY", "60.0"))
         self._session: Optional[aiohttp.ClientSession] = None
+        
+        # PR-3: Circuit Breaker for KIE API
+        self.circuit_breaker_enabled = circuit_breaker_enabled and os.getenv("KIE_CIRCUIT_BREAKER_ENABLED", "true").lower() == "true"
+        if self.circuit_breaker_enabled:
+            self.circuit_breaker = CircuitBreaker(
+                config=CircuitBreakerConfig(
+                    failure_threshold=int(os.getenv("KIE_CB_FAILURE_THRESHOLD", "5")),
+                    success_threshold=int(os.getenv("KIE_CB_SUCCESS_THRESHOLD", "2")),
+                    timeout=float(os.getenv("KIE_CB_TIMEOUT", "60.0")),
+                    name="kie_api",
+                )
+            )
+            logger.info(
+                "[CIRCUIT_BREAKER] enabled=true name=kie_api failure_threshold=%s timeout=%s",
+                self.circuit_breaker.config.failure_threshold,
+                self.circuit_breaker.config.timeout,
+            )
+        else:
+            self.circuit_breaker = None
+            logger.info("[CIRCUIT_BREAKER] enabled=false")
 
     async def close(self) -> None:
         if self._session and not self._session.closed:
@@ -146,6 +168,53 @@ class KIEClient:
         params: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        # PR-3: Circuit Breaker wrapper
+        if self.circuit_breaker:
+            try:
+                return await self.circuit_breaker.call(
+                    self._request_json_impl,
+                    method,
+                    path,
+                    payload=payload,
+                    params=params,
+                    correlation_id=correlation_id,
+                )
+            except CircuitBreakerError as exc:
+                # Circuit is OPEN - fast fail with user-friendly message
+                logger.warning(
+                    "[CIRCUIT_BREAKER] request_rejected method=%s path=%s state=%s",
+                    method,
+                    path,
+                    exc.state.value,
+                )
+                correlation_id = correlation_id or uuid4().hex[:8]
+                return {
+                    "ok": False,
+                    "status": 503,
+                    "error": f"Circuit breaker {exc.state.value}",
+                    "user_message": (
+                        "⚠️ KIE API временно недоступен из-за множественных сбоев.\n"
+                        f"Попробуйте через {int(exc.until - time.monotonic()) if exc.until else 60} сек.\n"
+                        f"ID: {correlation_id}"
+                    ),
+                    "correlation_id": correlation_id,
+                    "error_code": "circuit_breaker_open",
+                }
+        else:
+            return await self._request_json_impl(
+                method, path, payload=payload, params=params, correlation_id=correlation_id
+            )
+
+    async def _request_json_impl(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Internal implementation (wrapped by circuit breaker)."""
         if not self.api_key:
             correlation_id = correlation_id or uuid4().hex[:8]
             error = self._classify_error(

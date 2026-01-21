@@ -146,22 +146,60 @@ class JsonStorage(BaseStorage):
     
     async def set_user_balance(self, user_id: int, amount: float) -> None:
         """Установить баланс пользователя"""
+        # PR-4: Get balance before change for audit logging
+        balance_before = await self.get_user_balance(user_id)
+        
         data = await self._load_json(self.balances_file)
         data[str(user_id)] = amount
         await self._save_json(self.balances_file, data)
+        
+        # PR-4: Log audit event (caller should provide context)
+        # Note: Detailed audit logging happens at service layer
+        from app.utils.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.info(
+            "BALANCE_SET user_id=%s balance_before=%.2f balance_after=%.2f delta=%.2f",
+            user_id,
+            balance_before,
+            amount,
+            amount - balance_before,
+        )
     
     async def add_user_balance(self, user_id: int, amount: float) -> float:
         """Добавить к балансу"""
-        current = await self.get_user_balance(user_id)
-        new_balance = current + amount
+        balance_before = await self.get_user_balance(user_id)
+        new_balance = balance_before + amount
         await self.set_user_balance(user_id, new_balance)
+        
+        # PR-4: Audit logging
+        from app.utils.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.info(
+            "BALANCE_ADD user_id=%s amount=%.2f balance_before=%.2f balance_after=%.2f",
+            user_id,
+            amount,
+            balance_before,
+            new_balance,
+        )
         return new_balance
     
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
         """Вычесть из баланса"""
-        current = await self.get_user_balance(user_id)
-        if current >= amount:
-            await self.set_user_balance(user_id, current - amount)
+        balance_before = await self.get_user_balance(user_id)
+        if balance_before >= amount:
+            new_balance = balance_before - amount
+            await self.set_user_balance(user_id, new_balance)
+            
+            # PR-4: Audit logging
+            from app.utils.logging_config import get_logger
+            logger = get_logger(__name__)
+            logger.info(
+                "BALANCE_SUBTRACT user_id=%s amount=%.2f balance_before=%.2f balance_after=%.2f",
+                user_id,
+                amount,
+                balance_before,
+                new_balance,
+            )
             return True
         return False
     

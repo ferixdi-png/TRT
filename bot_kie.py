@@ -9212,7 +9212,7 @@ async def _button_callback_impl(
             return SELECTING_AMOUNT
         
         # Admin functions (only for admin)
-        if is_admin(user_id):
+        if get_is_admin(user_id):
             if data.startswith("admin_user_info:"):
                 await query.answer()
                 parts = data.split(":", 1)
@@ -10352,7 +10352,7 @@ async def _button_callback_impl(
                         '/help - Help\n\n'
                     )
                 
-                if is_admin(user_id):
+                if get_is_admin(user_id):
                     if user_lang == 'ru':
                         help_text += (
                             '👑 <b>Административные:</b>\n'
