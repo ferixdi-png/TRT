@@ -1002,40 +1002,6 @@ models:
     notes: upscale factor 1x/2x/4xs
   description_ru: Апскейл видео до 4K и выше. Topaz восстанавливает детали и убирает
     артефакты.
-- id: wan/2-2-a14b-text-to-video-turbo
-  title_ru: Wan 2.2 Text to Video
-  type: t2v
-  modes:
-  - unit: video
-    credits: 80.0
-    official_usd: 0.4
-    notes: 5.0s-720p
-  - unit: video
-    credits: 60.0
-    official_usd: 0.3
-    notes: 5.0s-580p
-  - unit: video
-    credits: 40.0
-    official_usd: 0.2
-    notes: 5.0s-480p
-  description_ru: 'Wan 2.2 Turbo: быстрая генерация видео из текста. Скорость — приоритет.'
-- id: wan/2-2-a14b-image-to-video-turbo
-  title_ru: Wan 2.2 Image to Video
-  type: i2v
-  modes:
-  - unit: video
-    credits: 80.0
-    official_usd: 0.4
-    notes: 5.0s-720p
-  - unit: video
-    credits: 60.0
-    official_usd: 0.3
-    notes: 5.0s-580p
-  - unit: video
-    credits: 40.0
-    official_usd: 0.2
-    notes: 5.0s-480p
-  description_ru: Фото в видео, турбо-режим. Wan 2.2 генерирует быстро и дёшево.
 - id: wan/2-2-a14b-speech-to-video-turbo
   title_ru: Wan 2.2 A14B Turbo API Speech to Video
   type: t2v
