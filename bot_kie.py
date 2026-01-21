@@ -4178,7 +4178,7 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         user_id = update.effective_user.id
         message_func = update.message.reply_text
 
-    if user_id != ADMIN_ID:
+    if not is_admin(user_id):
         if is_callback:
             await query.answer("❌ Эта функция доступна только администратору.", show_alert=True)
         else:
@@ -6499,7 +6499,7 @@ async def _button_callback_impl(
         # Handle admin user mode toggle (MUST be first, before any other checks)
         if data == "admin_user_mode":
             # Toggle user mode for admin
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -6651,7 +6651,7 @@ async def _button_callback_impl(
         
         if data == "admin_back_to_admin":
             # Return to admin mode - send new message directly
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9207,7 +9207,7 @@ async def _button_callback_impl(
             return SELECTING_AMOUNT
         
         # Admin functions (only for admin)
-        if user_id == ADMIN_ID:
+        if is_admin(user_id):
             if data.startswith("admin_user_info:"):
                 await query.answer()
                 parts = data.split(":", 1)
@@ -9327,7 +9327,7 @@ async def _button_callback_impl(
         # Handle admin view all generations
         if data == "admin_view_generations":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору." if get_user_language(user_id) == 'ru' else "This function is available only to administrator.")
                 return ConversationHandler.END
             
@@ -9409,7 +9409,7 @@ async def _button_callback_impl(
         
         # Handle admin generation navigation
         if data.startswith("admin_gen_nav:"):
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Доступ запрещен", show_alert=True)
                 return ConversationHandler.END
             
@@ -9442,7 +9442,7 @@ async def _button_callback_impl(
         
         # Handle admin view generation result
         if data.startswith("admin_gen_view:"):
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Доступ запрещен", show_alert=True)
                 return ConversationHandler.END
             
@@ -9511,7 +9511,7 @@ async def _button_callback_impl(
         
         if data == "admin_settings":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору." if get_user_language(user_id) == 'ru' else "This function is available only to administrator.")
                 return ConversationHandler.END
             
@@ -9600,7 +9600,7 @@ async def _button_callback_impl(
             return ConversationHandler.END
 
         if data == "admin_config_check":
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
 
@@ -9619,7 +9619,7 @@ async def _button_callback_impl(
         
         if data == "admin_promocodes":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9684,7 +9684,7 @@ async def _button_callback_impl(
         
         if data == "admin_broadcast":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9743,7 +9743,7 @@ async def _button_callback_impl(
         
         if data == "admin_create_broadcast":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9765,7 +9765,7 @@ async def _button_callback_impl(
         
         if data == "admin_set_currency_rate":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9799,7 +9799,7 @@ async def _button_callback_impl(
         
         if data == "admin_broadcast_stats":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9851,7 +9851,7 @@ async def _button_callback_impl(
         
         if data == "admin_search":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9867,7 +9867,7 @@ async def _button_callback_impl(
         
         if data == "admin_add":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -9883,7 +9883,7 @@ async def _button_callback_impl(
         
         if data == "admin_test_ocr":
             # Check admin access
-            if user_id != ADMIN_ID:
+            if not is_admin(user_id):
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -10347,7 +10347,7 @@ async def _button_callback_impl(
                         '/help - Help\n\n'
                     )
                 
-                if user_id == ADMIN_ID:
+                if is_admin(user_id):
                     if user_lang == 'ru':
                         help_text += (
                             '👑 <b>Административные:</b>\n'
@@ -14703,7 +14703,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
 
     # Handle admin user lookup
     if user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_user_lookup':
-        if user_id != ADMIN_ID:
+        if not is_admin(user_id):
             await update.message.reply_text("❌ Эта функция доступна только администратору.")
             user_sessions.pop(user_id, None)
             return ConversationHandler.END
@@ -14722,7 +14722,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
 
     # Handle admin manual topup
     if user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_manual_topup_amount':
-        if user_id != ADMIN_ID:
+        if not is_admin(user_id):
             await update.message.reply_text("❌ Эта функция доступна только администратору.")
             user_sessions.pop(user_id, None)
             return ConversationHandler.END
@@ -19870,7 +19870,7 @@ async def main():
             user_id = update.effective_user.id
             message_func = update.message.reply_text
         
-        if user_id != ADMIN_ID:
+        if not is_admin(user_id):
             if is_callback:
                 await query.answer("❌ Эта функция доступна только администратору.", show_alert=True)
             else:
@@ -19936,7 +19936,7 @@ async def main():
     
     async def admin_block_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Block a user (admin only)."""
-        if update.effective_user.id != ADMIN_ID:
+        if not is_admin(update.effective_user.id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         
@@ -19953,7 +19953,7 @@ async def main():
     
     async def admin_unblock_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Unblock a user (admin only)."""
-        if update.effective_user.id != ADMIN_ID:
+        if not is_admin(update.effective_user.id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         
@@ -19970,7 +19970,7 @@ async def main():
     
     async def admin_user_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Check user balance (admin only)."""
-        if update.effective_user.id != ADMIN_ID:
+        if not is_admin(update.effective_user.id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         
@@ -20100,7 +20100,7 @@ async def main():
     async def selftest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Self-test command для проверки конфигурации (admin only)."""
         user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
+        if not is_admin(user_id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         
@@ -20170,7 +20170,7 @@ async def main():
     async def config_check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Partner config check command (admin only)."""
         user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
+        if not is_admin(user_id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         from app.config_env import build_config_self_check_report
