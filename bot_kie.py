@@ -5856,6 +5856,10 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
         if context and getattr(context, "user_data", None) is not None:
             context.user_data["last_callback_handled_update_id"] = update_id
 
+        if data == "type_header:ignore":
+            logger.debug("Ignored non-actionable menu header button press.")
+            return ConversationHandler.END
+
         if data == "reset_step":
             session_store.clear(user_id)
             await show_main_menu(update, context, source="reset_step")
