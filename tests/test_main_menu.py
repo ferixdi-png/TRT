@@ -46,13 +46,13 @@ async def test_start_command(harness):
     assert header_message['reply_markup'] is not None, "Should have reply_markup"
     keyboard = header_message['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [
-        "БЕСПЛАТНЫЕ МОДЕЛИ",
-        "Из текста в фото",
-        "Из фото в фото",
-        "Из текста в видео",
-        "Из фото в видео",
-        "Баланс",
-        "Партнерка",
+        "🆓 БЕСПЛАТНЫЕ МОДЕЛИ",
+        "📝➡️🖼️ Из текста в фото",
+        "🖼️➡️🖼️ Из фото в фото",
+        "📝➡️🎬 Из текста в видео",
+        "🖼️➡️🎬 Из фото в видео",
+        "💳 Баланс",
+        "🤝 Партнерка",
     ]
     assert "Версия" not in header_message['text']
     assert "Что нового" not in header_message['text']
@@ -138,13 +138,13 @@ async def test_unknown_callback_shows_main_menu(harness):
     header_payload = next(payload for payload in payloads if payload.get("reply_markup"))
     keyboard = header_payload['reply_markup'].inline_keyboard
     assert [button.text for row in keyboard for button in row] == [
-        "БЕСПЛАТНЫЕ МОДЕЛИ",
-        "Из текста в фото",
-        "Из фото в фото",
-        "Из текста в видео",
-        "Из фото в видео",
-        "Баланс",
-        "Партнерка",
+        "🆓 БЕСПЛАТНЫЕ МОДЕЛИ",
+        "📝➡️🖼️ Из текста в фото",
+        "🖼️➡️🖼️ Из фото в фото",
+        "📝➡️🎬 Из текста в видео",
+        "🖼️➡️🎬 Из фото в видео",
+        "💳 Баланс",
+        "🤝 Партнерка",
     ]
     assert all("Версия" not in message['text'] for message in payloads)
     assert all("Что нового" not in message['text'] for message in payloads)
