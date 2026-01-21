@@ -7640,10 +7640,25 @@ async def _button_callback_impl(
                 model_emoji = model.get('emoji', '🤖')
                 model_id = model.get('id')
 
-                button_text = f"{model_emoji} {model_name}"
+                # Get price for the model (show price in gen_type menus)
+                from app.pricing.price_ssot import get_min_price
+                min_price = get_min_price(model_id)
+                
+                if min_price is not None:
+                    # Format price with RUB symbol
+                    price_formatted = format_rub_amount(float(min_price))
+                    button_text = f"{model_emoji} {model_name} • {price_formatted}"
+                else:
+                    button_text = f"{model_emoji} {model_name}"
+                
                 if len(button_text.encode("utf-8")) > 60:
-                    truncated = model_name[:40].rstrip()
-                    button_text = f"{model_emoji} {truncated}..."
+                    # Truncate name to fit price
+                    max_name_length = 25 if min_price else 40
+                    truncated = model_name[:max_name_length].rstrip()
+                    if min_price is not None:
+                        button_text = f"{model_emoji} {truncated}... • {price_formatted}"
+                    else:
+                        button_text = f"{model_emoji} {truncated}..."
                 
                 # Ensure callback_data is not too long (Telegram limit: 64 bytes)
                 callback_data = f"select_model:{model_id}"
