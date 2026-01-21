@@ -26,11 +26,12 @@ models:
       image_input:
         type: array
         item_type: string
-        required: true
+        required: false
+        max_items: 8
       prompt:
         type: string
         required: true
-        max: 10000
+        max: 20000
       aspect_ratio:
         type: enum
         required: false
