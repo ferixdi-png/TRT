@@ -4,7 +4,10 @@
 """
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import asyncio
 import logging
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
@@ -31,6 +34,9 @@ _get_models_by_generation_type = None
 _get_generation_type_info = None
 _get_client = None
 _KIE_CREDITS_UNAVAILABLE_UNTIL: Optional[datetime] = None
+_KIE_CREDITS_CACHE: Dict[str, Any] = {"timestamp": None, "value": None}
+KIE_CREDITS_CACHE_TTL_SECONDS = int(os.getenv("KIE_CREDITS_CACHE_TTL_SECONDS", "120"))
+KIE_CREDITS_TIMEOUT_SECONDS = float(os.getenv("KIE_CREDITS_TIMEOUT_SECONDS", "2.0"))
 
 # Константы (будут установлены из bot_kie.py)
 FREE_GENERATIONS_PER_DAY = 3
@@ -174,15 +180,45 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
         now = datetime.now(timezone.utc)
         global _KIE_CREDITS_UNAVAILABLE_UNTIL
         if _KIE_CREDITS_UNAVAILABLE_UNTIL and now < _KIE_CREDITS_UNAVAILABLE_UNTIL:
-            result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> Недоступен"
+            result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> временно недоступно"
             return result
+        cache_ts = _KIE_CREDITS_CACHE.get("timestamp")
+        cached_value = _KIE_CREDITS_CACHE.get("value")
+        if cache_ts and isinstance(cache_ts, datetime):
+            if (now - cache_ts).total_seconds() < KIE_CREDITS_CACHE_TTL_SECONDS and cached_value:
+                if cached_value.get("ok"):
+                    credits = cached_value.get("credits", 0)
+                    credits_rub = credits * CREDIT_TO_USD * _get_usd_to_rub_rate()
+                    credits_rub_str = f"{credits_rub:.2f}".rstrip('0').rstrip('.')
+                    result['kie_credits'] = credits
+                    result['kie_credits_rub'] = credits_rub
+                    result['kie_credits_rub_str'] = credits_rub_str
+                    return result
+                result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> временно недоступно"
+                return result
         try:
             kie = _get_client()
             get_credits = getattr(kie, "get_credits", None)
             if not callable(get_credits):
                 logger.warning("KIE client has no get_credits method. Hint: update KIE client integration.")
             else:
-                balance_result = await get_credits()
+                try:
+                    balance_result = await asyncio.wait_for(get_credits(), timeout=KIE_CREDITS_TIMEOUT_SECONDS)
+                except Exception as exc:
+                    correlation_id = uuid.uuid4().hex
+                    logger.warning(
+                        "KIE credits request timed out or failed (corr_id=%s): %s",
+                        correlation_id,
+                        exc,
+                    )
+                    balance_result = {
+                        "ok": False,
+                        "status": 0,
+                        "error": "timeout",
+                        "correlation_id": correlation_id,
+                    }
+                _KIE_CREDITS_CACHE["timestamp"] = now
+                _KIE_CREDITS_CACHE["value"] = balance_result
                 if balance_result and balance_result.get('ok'):
                     credits = balance_result.get('credits', 0)
                     credits_rub = credits * CREDIT_TO_USD * _get_usd_to_rub_rate()
@@ -195,7 +231,7 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
                     if status == 404:
                         _KIE_CREDITS_UNAVAILABLE_UNTIL = now + timedelta(hours=6)
                         logger.warning("KIE credits endpoint unavailable (404). Suppressing for 6 hours.")
-                    result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> Недоступен"
+                    result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> временно недоступно"
                     from app.observability.structured_logs import log_structured_event
 
                     log_structured_event(
@@ -209,7 +245,14 @@ async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any
                         param={"status": status},
                     )
         except Exception as e:
-            logger.error(f"❌❌❌ KIE API ERROR in get_credits (get_balance_info): {e}", exc_info=True)
+            correlation_id = uuid.uuid4().hex
+            logger.error(
+                "❌❌❌ KIE API ERROR in get_credits (get_balance_info) corr_id=%s error=%s",
+                correlation_id,
+                e,
+                exc_info=True,
+            )
+            result["kie_credits_error"] = "💰 <b>Баланс KIE API:</b> временно недоступно"
     
     return result
 

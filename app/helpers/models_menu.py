@@ -5,6 +5,8 @@
 
 import hashlib
 import logging
+import os
+import time
 from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 # Кеш маппинга коротких callback_data
 _callback_mapping: Dict[str, str] = {}
 _reverse_mapping: Dict[str, str] = {}
+_MODEL_CARD_CACHE: Dict[Tuple[str, int, str], Tuple[float, str, InlineKeyboardMarkup]] = {}
+MODEL_CARD_CACHE_TTL_SECONDS = int(os.getenv("MODEL_CARD_CACHE_TTL_SECONDS", "300"))
 
 OTHER_MODELS_TYPE = "other"
 OTHER_MODELS_FORCE = {
@@ -388,6 +392,12 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
     """
     if mode_index < 0 or mode_index >= len(model.modes):
         mode_index = 0
+
+    cache_key = (model.id, mode_index, user_lang)
+    cached = _MODEL_CARD_CACHE.get(cache_key)
+    now = time.monotonic()
+    if cached and now - cached[0] < MODEL_CARD_CACHE_TTL_SECONDS:
+        return cached[1], cached[2]
     
     price_rub = get_min_price(model.id)
     price_display = format_price_rub(price_rub) if price_rub is not None else "—"
@@ -498,7 +508,9 @@ def build_model_card_text(model: ModelSpec, mode_index: int = 0, user_lang: str 
             InlineKeyboardButton("🔙 Back to models", callback_data="show_models")
         ])
     
-    return card_text, InlineKeyboardMarkup(keyboard)
+    keyboard_markup = InlineKeyboardMarkup(keyboard)
+    _MODEL_CARD_CACHE[cache_key] = (now, card_text, keyboard_markup)
+    return card_text, keyboard_markup
 
 
 def resolve_model_id_from_callback(callback_data: str) -> Optional[str]:

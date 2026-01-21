@@ -66,3 +66,18 @@ class PerUserRateLimiter:
             bucket = TokenBucket.create(self.rate, self.capacity, self._time_fn)
             self._buckets[user_id] = bucket
         return bucket.consume(amount)
+
+
+class PerKeyRateLimiter:
+    def __init__(self, rate: float, capacity: float, time_fn: Callable[[], float] | None = None) -> None:
+        self.rate = rate
+        self.capacity = capacity
+        self._time_fn = time_fn or time.monotonic
+        self._buckets: Dict[Hashable, TokenBucket] = {}
+
+    def check(self, key: Hashable, amount: float = 1.0) -> Tuple[bool, float]:
+        bucket = self._buckets.get(key)
+        if bucket is None:
+            bucket = TokenBucket.create(self.rate, self.capacity, self._time_fn)
+            self._buckets[key] = bucket
+        return bucket.consume(amount)

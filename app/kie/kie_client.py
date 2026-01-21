@@ -587,15 +587,20 @@ class KIEClient:
             }
 
         data = result.get("data", {})
-        if isinstance(data, dict):
-            credits = (
-                data.get("credits")
-                or data.get("credit")
-                or data.get("data", {}).get("credits")
-                or data.get("data", {}).get("credit")
-            )
-        else:
-            credits = None
+        credits = None
+        if isinstance(data, (int, float)) and not isinstance(data, bool):
+            credits = float(data)
+        elif isinstance(data, dict):
+            nested = data.get("data")
+            if isinstance(nested, (int, float)) and not isinstance(nested, bool):
+                credits = float(nested)
+            else:
+                credits = (
+                    data.get("credits")
+                    or data.get("credit")
+                    or (nested.get("credits") if isinstance(nested, dict) else None)
+                    or (nested.get("credit") if isinstance(nested, dict) else None)
+                )
         if credits is None:
             log_structured_event(
                 correlation_id=result.get("correlation_id"),
