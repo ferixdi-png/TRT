@@ -6724,61 +6724,9 @@ async def initialize_and_run():
 
     application = await build_application(settings)
     
-    # ==================== P1 FIX: ПРОГРЕВ ВСЕХ КЕШЕЙ МОДЕЛЕЙ ====================
-    # ПРОБЛЕМА: get_visible_models_by_generation_type() вычисляет visibility для КАЖДОЙ
-    #           модели при первом вызове → 60+ секунд (медленная проверка SKU/schema)
-    # РЕШЕНИЕ: прогреваем ВСЕ model-related кеши при старте
-    logger.info("🔥 Warming up model caches (registry + catalog + visibility)...")
-    warmup_start = time.time()
-    
-    try:
-        # 1. Прогрев app.models.registry (может использоваться в некоторых местах)
-        from app.models.registry import get_models_sync
-        registry_models = get_models_sync()
-        logger.info(f"   ✓ Registry cache: {len(registry_models)} models loaded")
-        
-        # 2. Прогрев app.kie_catalog (используется для model cards)
-        from app.kie_catalog import load_catalog
-        catalog_models = load_catalog()
-        logger.info(f"   ✓ Catalog cache: {len(catalog_models)} models loaded")
-        
-        # 3. ОПЦИОНАЛЬНО: Прогрев visibility cache (может быть медленным)
-        # Импортируем _get_visible_model_ids из bot_kie.py, чтобы заполнить
-        # глобальный кеш _VISIBLE_MODEL_IDS_CACHE (с таймаутом!)
-        visible_ids = None
-        try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).parent))
-            from bot_kie import _get_visible_model_ids
-            # Используем таймаут 10 секунд для предотвращения зависания
-            visible_ids = await asyncio.wait_for(
-                asyncio.to_thread(_get_visible_model_ids),
-                timeout=10.0
-            )
-            logger.info(f"   ✓ Visibility cache: {len(visible_ids)} visible models (took < 10s)")
-        except asyncio.TimeoutError:
-            logger.warning("   ⚠️ Visibility cache warmup timeout (>10s) - skipping, will be lazy-loaded on first use")
-            visible_ids = set()
-        except Exception as e:
-            logger.warning(f"   ⚠️ Visibility cache warmup failed: {e} - will be lazy-loaded on first use")
-            visible_ids = set()
-        
-        warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
-        logger.info(
-            f"✅ Model caches warmed up in {warmup_elapsed_ms}ms "
-            f"(registry={len(registry_models)}, catalog={len(catalog_models)}, visible={len(visible_ids)})"
-        )
-        if visible_ids:
-            logger.info("   Next gen_type callbacks will be FAST (0ms cache hits)")
-        
-    except Exception as warmup_exc:
-        warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
-        logger.error(
-            f"⚠️ Model cache warmup failed in {warmup_elapsed_ms}ms: {warmup_exc}",
-            exc_info=True
-        )
-        logger.warning("   Bot will continue but first requests may be slower")
-    # ==================== END P1 FIX ====================
+    # NOTE: Прогрев кешей отключен - может вызывать зависание при старте
+    # Кеши будут заполнены лениво (lazy-load) при первом использовании
+    logger.info("✅ Application created and ready to serve requests")
     
     await run(settings, application)
 
