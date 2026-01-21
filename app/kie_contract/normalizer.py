@@ -9,15 +9,24 @@ from app.kie_contract.schema_loader import get_model_schema
 def _coerce_value(field_type: str, value: Any) -> Any:
     if value is None:
         return value
-    if field_type == "number":
+    if field_type in {"number", "integer"}:
         if isinstance(value, str) and value.strip():
             try:
-                return int(value)
+                numeric_value = float(value) if field_type == "number" else int(value)
             except ValueError:
                 try:
-                    return float(value)
+                    numeric_value = float(value)
                 except ValueError:
                     return value
+            if field_type == "integer":
+                if isinstance(numeric_value, float) and numeric_value.is_integer():
+                    return int(numeric_value)
+                return numeric_value if isinstance(numeric_value, int) else value
+            if isinstance(numeric_value, float) and numeric_value.is_integer():
+                return int(numeric_value)
+            return numeric_value
+        if field_type == "integer" and isinstance(value, float) and value.is_integer():
+            return int(value)
         return value
     if field_type == "boolean":
         if isinstance(value, str):
@@ -38,7 +47,7 @@ def normalize_payload(model_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if not schema:
         return dict(payload)
 
-    normalized: Dict[str, Any] = {}
+    normalized: Dict[str, Any] = dict(payload)
     for field_name, field_spec in schema.items():
         if field_name not in payload:
             continue
