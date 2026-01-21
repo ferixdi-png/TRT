@@ -1808,6 +1808,8 @@ def _build_current_price_line(
     chat_id: Optional[int] = None,
     is_admin: bool = False,
 ) -> str:
+    from app.pricing.price_resolver import format_price_rub as format_price_value
+
     quote = session.get("price_quote")
     if quote is None:
         quote = _update_price_quote(
@@ -1826,7 +1828,19 @@ def _build_current_price_line(
     if not quote:
         price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
     else:
-        price_text = f"Текущая цена: {quote['price_rub']} ₽" if user_lang == "ru" else f"Current price: {quote['price_rub']} ₽"
+        breakdown = quote.get("breakdown", {}) if isinstance(quote, dict) else {}
+        price_value = quote.get("price_rub") if isinstance(quote, dict) else None
+        is_free = bool(breakdown.get("free_sku")) or str(price_value) in {"0", "0.0", "0.00"}
+        if price_value is None:
+            price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
+        elif is_free:
+            price_text = "🎁 Бесплатно" if user_lang == "ru" else "🎁 Free"
+        else:
+            formatted_price = format_price_value(price_value)
+            if user_lang == "ru":
+                price_text = f"Цена по прайсу: {formatted_price} ₽"
+            else:
+                price_text = f"Price (RUB): {formatted_price} ₽"
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
@@ -12714,7 +12728,9 @@ async def send_confirmation_message(
     if is_free:
         price_display = "0.00"
     elif price_quote:
-        price_display = price_quote.get("price_rub")
+        from app.pricing.price_resolver import format_price_rub as format_price_value
+
+        price_display = format_price_value(price_quote.get("price_rub"))
     else:
         price_display = None
     if not is_free and not price_display:
@@ -12728,9 +12744,13 @@ async def send_confirmation_message(
         return ConversationHandler.END
     price_str = price_display
     price_line = (
-        f"Текущая цена: {price_display} ₽"
-        if price_display
-        else ("Цена: уточняется" if user_lang == "ru" else "Price: уточняется")
+        f"Цена по прайсу: {price_display} ₽"
+        if price_display and user_lang == "ru"
+        else (
+            f"Price (RUB): {price_display} ₽"
+            if price_display
+            else ("Цена: уточняется" if user_lang == "ru" else "Price: уточняется")
+        )
     )
     if is_free:
         remaining = await get_user_free_generations_remaining(user_id)
