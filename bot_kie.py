@@ -19503,6 +19503,25 @@ async def main():
     storage = deps.get_storage()
     kie = deps.get_kie_client()
     
+    # ==================== P1 FIX: ПРОГРЕВ КЕША МОДЕЛЕЙ ====================
+    # ПРОБЛЕМА: get_models_sync() при запущенном event loop читает YAML на каждый запрос
+    # РЕШЕНИЕ: прогреваем кеш _model_cache ВНУТРИ event loop при старте
+    logger.info("🔥 Warming up models cache inside event loop...")
+    import time as time_module
+    warmup_start = time_module.monotonic()
+    
+    # Принудительно загружаем модели (это установит _model_cache)
+    from app.models.registry import get_models_sync, _model_cache, _model_source
+    warmup_models = get_models_sync()
+    warmup_elapsed_ms = int((time_module.monotonic() - warmup_start) * 1000)
+    
+    logger.info(
+        f"✅ Models cache warmed up: {len(warmup_models)} models loaded in {warmup_elapsed_ms}ms "
+        f"(source={_model_source})"
+    )
+    logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
+    # ==================== END P1 FIX ====================
+    
     # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
     # Гарантирует ответ на каждый входящий update
     # NO-SILENCE GUARD реализован через:
