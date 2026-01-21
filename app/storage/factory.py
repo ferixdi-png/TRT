@@ -91,6 +91,15 @@ def create_storage(
 
     if runtime_mode in {"off", "disabled", "github"}:
         _storage_instance = github_storage
+        logger.info(
+            "[PERSISTENCE] storage_mode=GITHUB_JSON repo=%s branch=%s prefix=%s runtime_files=%s "
+            "runtime_dir=%s runtime_cache_only=true PERSISTENCE_OK=true balances_and_free_limits_persist_in=github",
+            github_storage.config.storage_repo,
+            github_storage.config.storage_branch,
+            github_storage.config.storage_prefix,
+            ",".join(sorted(runtime_files)),
+            runtime_dir,
+        )
         return _storage_instance
 
     if runtime_mode in {"postgres", "pg", "auto"} and os.getenv("DATABASE_URL"):
@@ -132,6 +141,15 @@ def create_storage(
         "[STORAGE] runtime_override=true mode=hybrid runtime_dir=%s runtime_files=%s",
         runtime_dir,
         ",".join(sorted(runtime_files)),
+    )
+    logger.info(
+        "[PERSISTENCE] storage_mode=GITHUB_JSON repo=%s branch=%s prefix=%s runtime_files=%s "
+        "runtime_dir=%s runtime_cache_only=true PERSISTENCE_OK=true balances_and_free_limits_persist_in=github",
+        github_storage.config.storage_repo,
+        github_storage.config.storage_branch,
+        github_storage.config.storage_prefix,
+        ",".join(sorted(runtime_files)),
+        runtime_dir,
     )
     return _storage_instance
 
