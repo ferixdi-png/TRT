@@ -1999,7 +1999,7 @@ def _validate_nano_banana_pro(
     if model_id not in ["nano-banana-pro", "google/nano-banana-pro"]:
         return True, None
     
-    # Валидация prompt: обязательный, максимум 10000 символов
+    # Валидация prompt: обязательный, максимум 20000 символов
     prompt = normalized_input.get('prompt')
     if not prompt:
         return False, "Поле 'prompt' обязательно для генерации изображения"
@@ -2010,8 +2010,8 @@ def _validate_nano_banana_pro(
     prompt_len = len(prompt.strip())
     if prompt_len == 0:
         return False, "Поле 'prompt' не может быть пустым"
-    if prompt_len > 10000:
-        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+    if prompt_len > 20000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 20000)"
     
     # Валидация image_input: опциональный массив (до 8 изображений)
     image_input = normalized_input.get('image_input')

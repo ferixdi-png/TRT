@@ -590,6 +590,7 @@ from telegram.ext import (
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
 # ==================== TELEGRAM TEXT LIMITS ====================
 TELEGRAM_TEXT_LIMIT = 4000
@@ -1808,6 +1809,8 @@ def _build_current_price_line(
     chat_id: Optional[int] = None,
     is_admin: bool = False,
 ) -> str:
+    from app.pricing.price_resolver import format_price_rub as format_price_value
+
     quote = session.get("price_quote")
     if quote is None:
         quote = _update_price_quote(
@@ -1826,7 +1829,19 @@ def _build_current_price_line(
     if not quote:
         price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
     else:
-        price_text = f"Текущая цена: {quote['price_rub']} ₽" if user_lang == "ru" else f"Current price: {quote['price_rub']} ₽"
+        breakdown = quote.get("breakdown", {}) if isinstance(quote, dict) else {}
+        price_value = quote.get("price_rub") if isinstance(quote, dict) else None
+        is_free = bool(breakdown.get("free_sku")) or str(price_value) in {"0", "0.0", "0.00"}
+        if price_value is None:
+            price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
+        elif is_free:
+            price_text = "🎁 Бесплатно" if user_lang == "ru" else "🎁 Free"
+        else:
+            formatted_price = format_price_value(price_value)
+            if user_lang == "ru":
+                price_text = f"Цена по прайсу: {formatted_price} ₽"
+            else:
+                price_text = f"Price (RUB): {formatted_price} ₽"
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
@@ -7120,8 +7135,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
-            except Exception as e:
-                logger.error(f"Error editing message in gen_type: {e}", exc_info=True)
+            except BadRequest as exc:
+                if "Message is not modified" in str(exc):
+                    await query.answer()
+                    return SELECTING_MODEL
+                logger.error(f"Error editing message in gen_type: {exc}", exc_info=True)
                 try:
                     await query.message.reply_text(
                         gen_type_text,
@@ -7526,7 +7544,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Add other generation types
             keyboard.extend(gen_type_rows)
-            
+
             # Add free tools button (always visible, prominent)
             keyboard.append([])  # Empty row for spacing
             if user_lang == 'ru':
@@ -7537,7 +7555,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard.append([
                     InlineKeyboardButton("🆓 FREE TOOLS", callback_data="free_tools")
                 ])
-            
+
+            # Add "Other models" shortcut
+            if user_lang == 'ru':
+                keyboard.append([
+                    InlineKeyboardButton("🧩 Другие модели", callback_data="show_all_models_list")
+                ])
+            else:
+                keyboard.append([
+                    InlineKeyboardButton("🧩 Other models", callback_data="show_all_models_list")
+                ])
+
             # Add button to show all models directly (without grouping by type)
             keyboard.append([])  # Empty row for spacing
             if user_lang == 'ru':
@@ -7563,8 +7591,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='HTML'
                 )
-            except Exception as e:
-                logger.error(f"Error editing message in show_models: {e}", exc_info=True)
+            except BadRequest as exc:
+                if "Message is not modified" in str(exc):
+                    await query.answer()
+                    return SELECTING_MODEL
+                logger.error(f"Error editing message in show_models: {exc}", exc_info=True)
                 try:
                     await query.message.reply_text(
                         models_text,
@@ -12714,7 +12745,9 @@ async def send_confirmation_message(
     if is_free:
         price_display = "0.00"
     elif price_quote:
-        price_display = price_quote.get("price_rub")
+        from app.pricing.price_resolver import format_price_rub as format_price_value
+
+        price_display = format_price_value(price_quote.get("price_rub"))
     else:
         price_display = None
     if not is_free and not price_display:
@@ -12728,9 +12761,13 @@ async def send_confirmation_message(
         return ConversationHandler.END
     price_str = price_display
     price_line = (
-        f"Текущая цена: {price_display} ₽"
-        if price_display
-        else ("Цена: уточняется" if user_lang == "ru" else "Price: уточняется")
+        f"Цена по прайсу: {price_display} ₽"
+        if price_display and user_lang == "ru"
+        else (
+            f"Price (RUB): {price_display} ₽"
+            if price_display
+            else ("Цена: уточняется" if user_lang == "ru" else "Price: уточняется")
+        )
     )
     if is_free:
         remaining = await get_user_free_generations_remaining(user_id)
@@ -19317,7 +19354,9 @@ async def main():
     # Admin commands
     async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Admin user lookup and manual top-up."""
-        if update.effective_user.id != ADMIN_ID:
+        user_id = update.effective_user.id if update.effective_user else None
+        logger.info("ADMIN_COMMAND: user_id=%s", user_id)
+        if user_id is None or not is_admin(user_id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         upsert_user_registry_entry(update.effective_user)

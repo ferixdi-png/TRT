@@ -99,14 +99,26 @@ async def build_main_menu_keyboard(
     Строит главное меню клавиатуры.
     Убрано дублирование - используется в start().
     """
+    if user_lang == "ru":
+        return [
+            [InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
+            [InlineKeyboardButton("📝➡️🖼️ Из текста в фото", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton("🖼️➡️🖼️ Из фото в фото", callback_data="gen_type:image-to-image")],
+            [InlineKeyboardButton("📝➡️🎬 Из текста в видео", callback_data="gen_type:text-to-video")],
+            [InlineKeyboardButton("🖼️➡️🎬 Из фото в видео", callback_data="gen_type:image-to-video")],
+            [InlineKeyboardButton("🧩 Другие модели", callback_data="show_all_models_list")],
+            [InlineKeyboardButton("💳 Баланс", callback_data="check_balance")],
+            [InlineKeyboardButton("🤝 Партнерка", callback_data="referral_info")],
+        ]
     return [
-        [InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
-        [InlineKeyboardButton("📝➡️🖼️ Из текста в фото", callback_data="gen_type:text-to-image")],
-        [InlineKeyboardButton("🖼️➡️🖼️ Из фото в фото", callback_data="gen_type:image-to-image")],
-        [InlineKeyboardButton("📝➡️🎬 Из текста в видео", callback_data="gen_type:text-to-video")],
-        [InlineKeyboardButton("🖼️➡️🎬 Из фото в видео", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("💳 Баланс", callback_data="check_balance")],
-        [InlineKeyboardButton("🤝 Партнерка", callback_data="referral_info")],
+        [InlineKeyboardButton("🆓 FREE MODELS", callback_data="free_tools")],
+        [InlineKeyboardButton("📝➡️🖼️ Text to Image", callback_data="gen_type:text-to-image")],
+        [InlineKeyboardButton("🖼️➡️🖼️ Image to Image", callback_data="gen_type:image-to-image")],
+        [InlineKeyboardButton("📝➡️🎬 Text to Video", callback_data="gen_type:text-to-video")],
+        [InlineKeyboardButton("🖼️➡️🎬 Image to Video", callback_data="gen_type:image-to-video")],
+        [InlineKeyboardButton("🧩 Other models", callback_data="show_all_models_list")],
+        [InlineKeyboardButton("💳 Balance", callback_data="check_balance")],
+        [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
     ]
 
 

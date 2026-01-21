@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 _callback_mapping: Dict[str, str] = {}
 _reverse_mapping: Dict[str, str] = {}
 
+OTHER_MODELS_TYPE = "other"
+OTHER_MODELS_FORCE = {
+    "sora-watermark-remover",
+    "sora-2-watermark-remover",
+}
+
 
 def _get_model_brand(model_id: str, title: str) -> str:
     """Определяет бренд модели по ID или названию."""
@@ -91,7 +97,8 @@ def _get_type_emoji(model_type: str) -> str:
         'bg_remove': '✂️',
         'watermark_remove': '💧',
         'music': '🎼',
-        'lip_sync': '👄'
+        'lip_sync': '👄',
+        'other': '🧩'
     }
     return emoji_map.get(model_type, '🤖')
 
@@ -112,7 +119,8 @@ def _get_type_name_ru(model_type: str) -> str:
         'bg_remove': 'Удаление фона',
         'watermark_remove': 'Удаление водяного знака',
         'music': 'Музыка',
-        'lip_sync': 'Синхронизация губ'
+        'lip_sync': 'Синхронизация губ',
+        'other': 'Другие модели'
     }
     return name_map.get(model_type, model_type)
 
@@ -167,18 +175,22 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
     """
     catalog = load_catalog()
     
+    type_order = ['t2i', 'i2i', 't2v', 'i2v', 'v2v', 'tts', 'stt', 'sfx', 'audio_isolation', 
+                  'upscale', 'bg_remove', 'watermark_remove', 'music', 'lip_sync', OTHER_MODELS_TYPE]
+    
     # Группируем по типам
     models_by_type: Dict[str, List[ModelSpec]] = defaultdict(list)
     for model in catalog:
         if not is_model_visible(model.id):
             continue
-        models_by_type[model.type].append(model)
+        model_type = model.type
+        if model.id in OTHER_MODELS_FORCE or model_type not in type_order:
+            model_type = OTHER_MODELS_TYPE
+        models_by_type[model_type].append(model)
     
     keyboard = []
     
     # Сортируем типы для отображения
-    type_order = ['t2i', 'i2i', 't2v', 'i2v', 'v2v', 'tts', 'stt', 'sfx', 'audio_isolation', 
-                  'upscale', 'bg_remove', 'watermark_remove', 'music', 'lip_sync']
     
     for model_type in type_order:
         if model_type not in models_by_type:
