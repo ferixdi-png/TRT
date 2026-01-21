@@ -5,7 +5,7 @@ Builder для входных параметров KIE AI API.
 
 import re
 import logging
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Set
 from app.kie_catalog.catalog import ModelSpec, ModelMode
 from app.kie_catalog.input_schemas import (
     get_schema_for_type,
@@ -56,9 +56,12 @@ def _parse_resolution_from_notes(notes: Optional[str]) -> Optional[str]:
         return None
     
     # Ищем паттерны типа "720p", "1080p", "1K", "2K", "4K"
-    match = re.search(r'(\d+p|\d+K)', notes, re.IGNORECASE)
+    match = re.search(r'(\d+p|\d+k)', notes, re.IGNORECASE)
     if match:
-        return match.group(1).lower()
+        raw_value = match.group(1)
+        if raw_value.lower().endswith("k"):
+            return raw_value[:-1] + "K"
+        return raw_value.lower()
     
     return None
 
@@ -87,11 +90,20 @@ def _check_required_fields(
     video_fields = {'video_url', 'video'}
     audio_fields = {'audio_url', 'audio'}
     
+    def _has_value(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (list, tuple, set, dict)):
+            return bool(value)
+        return True
+
     # Проверяем группы полей
     if image_fields.intersection(required_fields):
         has_image = any(
-            input_data.get(field) for field in image_fields
-            if field in input_data and input_data[field]
+            _has_value(input_data.get(field)) for field in image_fields
+            if field in input_data
         )
         if not has_image:
             if model_type == 'i2i':
@@ -103,8 +115,8 @@ def _check_required_fields(
     
     if video_fields.intersection(required_fields):
         has_video = any(
-            input_data.get(field) for field in video_fields
-            if field in input_data and input_data[field]
+            _has_value(input_data.get(field)) for field in video_fields
+            if field in input_data
         )
         if not has_video:
             if model_type == 'v2v':
@@ -114,8 +126,8 @@ def _check_required_fields(
     
     if audio_fields.intersection(required_fields):
         has_audio = any(
-            input_data.get(field) for field in audio_fields
-            if field in input_data and input_data[field]
+            _has_value(input_data.get(field)) for field in audio_fields
+            if field in input_data
         )
         if not has_audio:
             if model_type == 'stt':
@@ -130,7 +142,7 @@ def _check_required_fields(
         if field in image_fields or field in video_fields or field in audio_fields:
             continue  # Уже проверили выше
         
-        if field not in input_data or not input_data[field]:
+        if field not in input_data or not _has_value(input_data[field]):
             if field == 'prompt':
                 return False, "Введите текст для генерации"
             elif field == 'text':
