@@ -1,3 +1,26 @@
+## 2026-02-15: Полный прод-аудит (no-DB, STORAGE_MODE=GITHUB_JSON)
+
+### Top-10 Critical (P0/P1) — риск → где → сценарий → почему критично → план фикса
+1. **P0: runtime-migration пропускается при активном event loop** → `app/storage/factory.py:create_storage` → webhook режим (loop уже запущен) не копирует данные из GitHub, но ставит marker → потеря лимитов/балансов при рестарте → **фикc:** async миграция планируется в loop и завершает marker только после записи.  
+2. **P0: двойное/нулевое зачисление платежа** → `app/storage/github_storage.py:mark_payment_status`, `app/storage/json_storage.py:mark_payment_status` → повторный approve или JSON storage всегда пропускает credit → риск двойного списания/незачисления → **фикс:** `balance_charged` + credit по success-статусам.  
+3. **P0: гонки при параллельных апдейтах в GitHub storage** → `app/storage/github_storage.py:_update_json` → одновременные апдейты балансов/лимитов → потеря записей → **фикс:** per-file lock + retry/merge на 409.  
+4. **P0: runtime-данные только в /tmp** → `app/storage/hybrid_storage.py` → перезапуск очищает runtime → потеря баланса/лимитов → **фикс:** write-through в GitHub для balance/free-limits.  
+5. **P1: атомарность JSON без БД** → `app/storage/json_storage.py:_save_json` → параллельная запись corrupt → **фикс:** filelock + temp+rename.  
+6. **P1: No-silence guard** → `app/observability/no_silence_guard.py`, `bot_kie.py` → callback/ошибка без ответа → “тишина” UX → **фикс:** global guard + fallback reply.  
+7. **P1: fallback для неизвестных callback** → `app/buttons/fallback.py` → неизвестный callback ломает UX → **фикс:** fallback handler с возвратом в меню.  
+8. **P1: запрет писать в code branch** → `app/config_env.py` → storage == code branch → потеря кода → **фикс:** guard STORAGE_BRANCH != GITHUB_BRANCH.  
+9. **P1: fail-fast на обязательные env storage** → `app/storage/github_storage.py:_load_config` → отсутствие токена/instance → silent fail → **фикс:** ValueError + лог.  
+10. **P1: webhook lock fallback без БД** → `app/utils/singleton_lock.py` → webhook двойной запуск → дубли/гонки → **фикс:** file lock fallback.
+
+### Было → стало (закрытые пункты этого прохода)
+- **Runtime migration:** было `runtime_migration_skipped` при running loop и marker ставился без миграции → стало: миграция планируется в loop, marker пишет только после завершения, лог `runtime_migration_completed`.  
+- **Payments idempotency:** было риск double-credit и JSON storage не начислял баланс из-за порядка обновления → стало: `balance_charged` + credit по `approved/completed` с идемпотентной защитой.
+
+### Как проверял
+- `pytest -q tests/test_storage_runtime_migration.py tests/test_payment_idempotency_storage.py`
+
+---
+
 ## 2026-02-14: SSOT для презентации партнёрам (audit + фиксы)
 
 ### Актуальный список (single source of truth)
