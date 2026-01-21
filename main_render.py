@@ -6742,21 +6742,34 @@ async def initialize_and_run():
         catalog_models = load_catalog()
         logger.info(f"   ✓ Catalog cache: {len(catalog_models)} models loaded")
         
-        # 3. КРИТИЧНО: Прогрев visibility cache (самый медленный!)
+        # 3. ОПЦИОНАЛЬНО: Прогрев visibility cache (может быть медленным)
         # Импортируем _get_visible_model_ids из bot_kie.py, чтобы заполнить
-        # глобальный кеш _VISIBLE_MODEL_IDS_CACHE
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent))
-        from bot_kie import _get_visible_model_ids
-        visible_ids = _get_visible_model_ids()
-        logger.info(f"   ✓ Visibility cache: {len(visible_ids)} visible models")
+        # глобальный кеш _VISIBLE_MODEL_IDS_CACHE (с таймаутом!)
+        visible_ids = None
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent))
+            from bot_kie import _get_visible_model_ids
+            # Используем таймаут 10 секунд для предотвращения зависания
+            visible_ids = await asyncio.wait_for(
+                asyncio.to_thread(_get_visible_model_ids),
+                timeout=10.0
+            )
+            logger.info(f"   ✓ Visibility cache: {len(visible_ids)} visible models (took < 10s)")
+        except asyncio.TimeoutError:
+            logger.warning("   ⚠️ Visibility cache warmup timeout (>10s) - skipping, will be lazy-loaded on first use")
+            visible_ids = set()
+        except Exception as e:
+            logger.warning(f"   ⚠️ Visibility cache warmup failed: {e} - will be lazy-loaded on first use")
+            visible_ids = set()
         
         warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
         logger.info(
-            f"✅ All model caches warmed up in {warmup_elapsed_ms}ms "
+            f"✅ Model caches warmed up in {warmup_elapsed_ms}ms "
             f"(registry={len(registry_models)}, catalog={len(catalog_models)}, visible={len(visible_ids)})"
         )
-        logger.info("   Next gen_type callbacks will be FAST (0ms cache hits)")
+        if visible_ids:
+            logger.info("   Next gen_type callbacks will be FAST (0ms cache hits)")
         
     except Exception as warmup_exc:
         warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
