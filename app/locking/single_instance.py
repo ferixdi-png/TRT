@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+import os
 from typing import Dict
 
 from app.utils import singleton_lock as lock_utils
@@ -34,15 +35,20 @@ class SingletonLock:
 
     async def acquire(self, timeout: float = 5.0) -> bool:
         del timeout
-        return await lock_utils.acquire_singleton_lock(require_lock=True)
+        dsn = os.getenv("DATABASE_URL", "").strip() or None
+        return await lock_utils.acquire_singleton_lock(dsn=dsn, require_lock=True)
 
     async def release(self) -> None:
         await lock_utils.release_singleton_lock()
 
 
 def acquire_single_instance_lock() -> bool:
-    logger.info("🔒 DB_DISABLED: github-only mode (file lock)")
-    return _run_coro_sync(lock_utils.acquire_singleton_lock(require_lock=True), label="acquire")
+    dsn = os.getenv("DATABASE_URL", "").strip() or None
+    if dsn:
+        logger.info("🔒 DB lock requested (DATABASE_URL present)")
+    else:
+        logger.info("🔒 DB lock requested without DATABASE_URL (fallback allowed=%s)", lock_utils._allow_file_fallback())
+    return _run_coro_sync(lock_utils.acquire_singleton_lock(dsn=dsn, require_lock=True), label="acquire")
 
 
 def release_single_instance_lock() -> None:
