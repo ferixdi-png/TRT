@@ -100,13 +100,13 @@ async def build_main_menu_keyboard(
     Убрано дублирование - используется в start().
     """
     return [
-        [InlineKeyboardButton("БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
-        [InlineKeyboardButton("Из текста в фото", callback_data="gen_type:text-to-image")],
-        [InlineKeyboardButton("Из фото в фото", callback_data="gen_type:image-to-image")],
-        [InlineKeyboardButton("Из текста в видео", callback_data="gen_type:text-to-video")],
-        [InlineKeyboardButton("Из фото в видео", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("Баланс", callback_data="check_balance")],
-        [InlineKeyboardButton("Партнерка", callback_data="referral_info")],
+        [InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ МОДЕЛИ", callback_data="free_tools")],
+        [InlineKeyboardButton("📝➡️🖼️ Из текста в фото", callback_data="gen_type:text-to-image")],
+        [InlineKeyboardButton("🖼️➡️🖼️ Из фото в фото", callback_data="gen_type:image-to-image")],
+        [InlineKeyboardButton("📝➡️🎬 Из текста в видео", callback_data="gen_type:text-to-video")],
+        [InlineKeyboardButton("🖼️➡️🎬 Из фото в видео", callback_data="gen_type:image-to-video")],
+        [InlineKeyboardButton("💳 Баланс", callback_data="check_balance")],
+        [InlineKeyboardButton("🤝 Партнерка", callback_data="referral_info")],
     ]
 
 
