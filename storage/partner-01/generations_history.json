@@ -170,6 +170,21 @@
       ],
       "task_id": "c5f7c304583d6a4bb9b18c093b75511b",
       "timestamp": 1768977890
+    },
+    {
+      "id": 9,
+      "is_free": true,
+      "model_id": "google/nano-banana",
+      "model_name": "Google Nano Banana Text to Image",
+      "params": {
+        "prompt": "Ultra-photorealistic close-up portrait photo of a beautiful young woman (adult, 22–28), natural everyday look, no heavy makeup, realistic skin with visible micro-pores, fine peach fuzz, subtle blemishes, natural lip texture, detailed eyelashes and eyebrow hairs, tiny skin highlights, realistic under-eye softness.\n\nShot as if on an iPhone in Portrait Mode: 1x lens look (≈26mm equivalent), HDR but natural, skin tones true-to-life, accurate white balance, realistic noise/grain, no over-smoothing.\n\nLighting: soft window light from the side + gentle bounce fill, natural shadow gradients, accurate subsurface scattering in skin, realistic specular highlights on forehead/nose/cheeks, shadow detail preserved (no crushed blacks).\n\nFocus: razor-sharp focus on nearest eye, realistic depth of field falloff, slight lens breathing feel, subtle background bokeh (real lens blur, not artificial).\n\nColor: true iPhone color science, warm-neutral skin tones, natural contrast, clean dynamic range, no extreme stylization.\n\nComposition: head-and-shoulders, slightly off-center, candid feel, natural posture, authentic expression, no “model pose”, background softly blurred indoor scene with minimal clutter.\n\nOutput should look indistinguishable from a real iPhone photo: documentary realism, lifelike texture, micro-details everywhere, zero CGI vibe.\n\n❌ NEGATIVE PROMPT (обязательно, чтобы не было “пластика”)\n\nCGI, 3D render, uncanny, doll-like, plastic skin, beauty filter, over-smoothed skin, waxy, airbrushed, overly perfect face, exaggerated makeup, anime, illustration, painterly, HDR overcooked, oversharpening, harsh contrast, fake bokeh, face distortion, asymmetry, deformed hands, extra fingers, bad teeth, weird eyes, mismatched pupils, overly glossy lips, watermark, logo, text, low-res, blurry"
+      },
+      "price": 0.0,
+      "result_urls": [
+        "https://tempfile.aiquickdraw.com/workers/nano/image_1768978117810_rb6d0w.png"
+      ],
+      "task_id": "d4e9fdd85098dd387064bae689edac23",
+      "timestamp": 1768978125
     }
   ],
   "7881587044": [
