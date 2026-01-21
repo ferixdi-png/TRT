@@ -713,6 +713,8 @@ TELEGRAM_TEXT_LIMIT = 4000
 TELEGRAM_CHUNK_LIMIT = 3900
 
 _CALLBACK_ANSWER_PATCHED = False
+_CALLBACK_EDIT_TEXT_PATCHED = False
+_MESSAGE_EDIT_TEXT_PATCHED = False
 
 
 def _patch_callback_query_answer() -> None:
@@ -752,6 +754,88 @@ def _patch_callback_query_answer() -> None:
 
 
 _patch_callback_query_answer()
+
+
+def _patch_callback_query_edit_message_text() -> None:
+    """Patch CallbackQuery.edit_message_text to ignore benign 'Message is not modified' errors.
+
+    This error is expected when a user presses the same menu button twice and the bot
+    attempts to edit the message with identical content/markup.
+    """
+
+    global _CALLBACK_EDIT_TEXT_PATCHED
+    if _CALLBACK_EDIT_TEXT_PATCHED:
+        return
+
+    original_edit = CallbackQuery.edit_message_text
+
+    async def safe_edit_message_text(self, *args, **kwargs):
+        try:
+            return await original_edit(self, *args, **kwargs)
+        except BadRequest as exc:
+            message = str(exc).lower()
+            if "message is not modified" in message:
+                logger.info(
+                    "Ignoring benign edit_message_text(no-op): query_id=%s error=%s",
+                    getattr(self, "id", None),
+                    exc,
+                )
+                # Return current message object (best-effort) to match PTB expectations.
+                return getattr(self, "message", None)
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Failed to edit callback message text: query_id=%s error=%s",
+                getattr(self, "id", None),
+                exc,
+            )
+            return getattr(self, "message", None)
+
+    CallbackQuery.edit_message_text = safe_edit_message_text
+    _CALLBACK_EDIT_TEXT_PATCHED = True
+
+
+def _patch_message_edit_text() -> None:
+    """Patch Message.edit_text to ignore benign 'Message is not modified' errors."""
+
+    global _MESSAGE_EDIT_TEXT_PATCHED
+    if _MESSAGE_EDIT_TEXT_PATCHED:
+        return
+
+    try:
+        from telegram import Message
+    except Exception:
+        return
+
+    original_edit = Message.edit_text
+
+    async def safe_message_edit_text(self, *args, **kwargs):
+        try:
+            return await original_edit(self, *args, **kwargs)
+        except BadRequest as exc:
+            message = str(exc).lower()
+            if "message is not modified" in message:
+                logger.info(
+                    "Ignoring benign message.edit_text(no-op): message_id=%s error=%s",
+                    getattr(self, "message_id", None),
+                    exc,
+                )
+                return self
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Failed to edit message text: message_id=%s error=%s",
+                getattr(self, "message_id", None),
+                exc,
+            )
+            return self
+
+    Message.edit_text = safe_message_edit_text
+    _MESSAGE_EDIT_TEXT_PATCHED = True
+
+
+_patch_callback_query_edit_message_text()
+_patch_message_edit_text()
 
 # Убрано: from dotenv import load_dotenv
 # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard)
