@@ -238,6 +238,21 @@ def _log_structured_warning(**fields: Any) -> None:
     logger.warning("STRUCTURED_LOG %s", json.dumps(payload, ensure_ascii=False, default=str))
 
 
+def _log_handler_latency(handler: str, start_ts: float, update: Update) -> None:
+    duration_ms = int((time.monotonic() - start_ts) * 1000)
+    user_id = update.effective_user.id if update and update.effective_user else None
+    chat_id = update.effective_chat.id if update and update.effective_chat else None
+    update_id = update.update_id if update else None
+    logger.info(
+        "HANDLER_LATENCY handler=%s duration_ms=%s user_id=%s chat_id=%s update_id=%s",
+        handler,
+        duration_ms,
+        user_id,
+        chat_id,
+        update_id,
+    )
+
+
 def _extract_session_snapshot(
     context: ContextTypes.DEFAULT_TYPE,
     user_id: Optional[int],
@@ -5332,33 +5347,12 @@ async def respond_price_undefined(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
-    user_id = update.effective_user.id if update.effective_user else None
-    chat_id = update.effective_chat.id if update.effective_chat else None
-    upsert_user_registry_entry(update.effective_user)
-    correlation_id = ensure_correlation_id(update, context)
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        chat_id=chat_id,
-        update_id=update.update_id,
-        action="COMMAND_START",
-        action_path="command:/start",
-        outcome="received",
-    )
-    if _should_dedupe_update(
-        update,
-        context,
-        action="COMMAND_START",
-        action_path="command:/start",
-        user_id=user_id,
-        chat_id=chat_id,
-    ):
-        return
-    logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
+    start_ts = time.monotonic()
     try:
-        await show_main_menu(update, context, source="/start")
-    except Exception as exc:
-        logger.error("❌ /start handler failed: %s", exc, exc_info=True)
+        user_id = update.effective_user.id if update.effective_user else None
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        upsert_user_registry_entry(update.effective_user)
+        correlation_id = ensure_correlation_id(update, context)
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -5366,21 +5360,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             update_id=update.update_id,
             action="COMMAND_START",
             action_path="command:/start",
-            stage="UI_ROUTER",
-            outcome="failed",
-            error_code="ERR_TG_START_HANDLER",
-            fix_hint="Проверьте обработчик /start и доступность меню.",
+            outcome="received",
         )
-        message = (
-            "❌ <b>Не удалось открыть меню</b>\n\n"
-            "Что случилось: ошибка обработки команды /start.\n"
-            "Что сделать: попробуйте снова через /start.\n"
-            "Код: <code>ERR_TG_START_HANDLER</code>"
-        )
-        if update.message:
-            await update.message.reply_text(message, parse_mode="HTML")
-        elif update.callback_query and update.callback_query.message:
-            await update.callback_query.message.reply_text(message, parse_mode="HTML")
+        if _should_dedupe_update(
+            update,
+            context,
+            action="COMMAND_START",
+            action_path="command:/start",
+            user_id=user_id,
+            chat_id=chat_id,
+        ):
+            return
+        logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
+        try:
+            await show_main_menu(update, context, source="/start")
+        except Exception as exc:
+            logger.error("❌ /start handler failed: %s", exc, exc_info=True)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="COMMAND_START",
+                action_path="command:/start",
+                stage="UI_ROUTER",
+                outcome="failed",
+                error_code="ERR_TG_START_HANDLER",
+                fix_hint="Проверьте обработчик /start и доступность меню.",
+            )
+            message = (
+                "❌ <b>Не удалось открыть меню</b>\n\n"
+                "Что случилось: ошибка обработки команды /start.\n"
+                "Что сделать: попробуйте снова через /start.\n"
+                "Код: <code>ERR_TG_START_HANDLER</code>"
+            )
+            if update.message:
+                await update.message.reply_text(message, parse_mode="HTML")
+            elif update.callback_query and update.callback_query.message:
+                await update.callback_query.message.reply_text(message, parse_mode="HTML")
+    finally:
+        _log_handler_latency("start", start_ts, update)
 
 
 async def reset_wizard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -5467,27 +5486,40 @@ async def list_models(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the generation process."""
-    global kie
-    user_id = update.effective_user.id
-    
-    # Check if KIE API is configured (initialize if needed)
-    if kie is None:
-        kie = get_client()
-    if not kie.api_key:
+    start_ts = time.monotonic()
+    try:
+        global kie
+        user_id = update.effective_user.id
+        
+        # Check if KIE API is configured (initialize if needed)
+        if kie is None:
+            kie = get_client()
+        if not kie.api_key:
+            await update.message.reply_text(
+                '❌ API не настроен. Укажите API ключ в файле .env'
+            )
+            return
+        
         await update.message.reply_text(
-            '❌ API не настроен. Укажите API ключ в файле .env'
+            '🚀 Начинаем генерацию!\n\n'
+            'Сначала выберите модель из списка:',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📋 Показать модели", callback_data="show_models")
+            ]])
         )
-        return
-    
-    await update.message.reply_text(
-        '🚀 Начинаем генерацию!\n\n'
-        'Сначала выберите модель из списка:',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("📋 Показать модели", callback_data="show_models")
-        ]])
-    )
-    
-    return SELECTING_MODEL
+        
+        return SELECTING_MODEL
+    finally:
+        _log_handler_latency("start_generation", start_ts, update)
+
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Latency wrapper for button callbacks."""
+    start_ts = time.monotonic()
+    try:
+        return await _button_callback_impl(update, context)
+    finally:
+        _log_handler_latency("button_callback", start_ts, update)
 
 
 async def show_admin_generation(query, context, gen: dict, current_index: int, total_count: int):
@@ -5666,7 +5698,7 @@ async def show_payment_screenshot(query, payment: dict, current_index: int, tota
             pass
 
 
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle button callbacks. CRITICAL: Always calls query.answer() to prevent button hanging."""
     import time
     start_time = time.time()
@@ -7620,7 +7652,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 from app.helpers.models_menu_handlers import handle_show_all_models_list
                 user_lang = get_user_language(user_id)
-                await handle_show_all_models_list(query, user_id, user_lang)
+                reset_session_context(
+                    user_id,
+                    reason="show_all_models_list",
+                    clear_gen_type=True,
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                )
+                set_session_context(
+                    user_id,
+                    to_context=UI_CONTEXT_MODEL_MENU,
+                    reason="show_all_models_list",
+                    clear_gen_type=True,
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                )
+                await handle_show_all_models_list(
+                    query,
+                    user_id,
+                    user_lang,
+                    default_model_id="sora-watermark-remover",
+                )
                 return SELECTING_MODEL
             except Exception as e:
                 logger.error(f"Error in handle_show_all_models_list: {e}", exc_info=True)
@@ -13429,6 +13483,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def input_parameters(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Latency wrapper for parameter input."""
+    start_ts = time.monotonic()
+    try:
+        return await _input_parameters_impl(update, context)
+    finally:
+        _log_handler_latency("input_parameters", start_ts, update)
+
+
+async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle parameter input."""
     import time
     start_time = time.time()
@@ -15915,6 +15978,15 @@ async def active_session_router(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Latency wrapper for global text routing."""
+    start_ts = time.monotonic()
+    try:
+        await _global_text_router_impl(update, context)
+    finally:
+        _log_handler_latency("global_text_router", start_ts, update)
+
+
+async def _global_text_router_impl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Global router for TEXT messages - shows main menu when no active session."""
     from telegram.ext import ApplicationHandlerStop
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
@@ -15971,6 +16043,15 @@ async def global_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def global_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Latency wrapper for global photo routing."""
+    start_ts = time.monotonic()
+    try:
+        await _global_photo_router_impl(update, context)
+    finally:
+        _log_handler_latency("global_photo_router", start_ts, update)
+
+
+async def _global_photo_router_impl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Global router for PHOTO messages - routes to input_parameters if waiting_for expects image."""
     from telegram.ext import ApplicationHandlerStop
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action

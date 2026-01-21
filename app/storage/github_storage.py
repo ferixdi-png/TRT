@@ -70,6 +70,7 @@ class GitHubStorage(BaseStorage):
         self._legacy_warning_logged = False
         self._read_cache: Dict[str, "GitHubStorage._ReadCacheEntry"] = {}
         self._read_cache_ttl = float(os.getenv("GITHUB_READ_CACHE_TTL", "3"))
+        self._read_cache_ttl_hot = float(os.getenv("GITHUB_READ_CACHE_TTL_HOT", "8"))
         self._read_inflight: Dict[int, Dict[str, asyncio.Future]] = {}
         self._read_inflight_lock = threading.Lock()
         self._write_locks_by_loop: Dict[int, Dict[str, asyncio.Lock]] = {}
@@ -86,6 +87,14 @@ class GitHubStorage(BaseStorage):
         self.payments_file = "payments.json"
         self.referrals_file = "referrals.json"
         self.jobs_file = "generation_jobs.json"
+        self._hot_read_files = {
+            self.balances_file,
+            self.languages_file,
+            self.free_generations_file,
+            self.hourly_free_usage_file,
+            self.referral_free_bank_file,
+            self.admin_limits_file,
+        }
 
         logger.info(
             "[STORAGE] mode=github instance=%s prefix=%s repo=%s branch=%s parallel=%s retries=%s timeout=%ss",
@@ -290,7 +299,8 @@ class GitHubStorage(BaseStorage):
         if not entry:
             return None
         age = time.monotonic() - entry.fetched_at
-        if age <= self._read_cache_ttl:
+        ttl = self._read_cache_ttl_hot if filename in self._hot_read_files else self._read_cache_ttl
+        if age <= ttl:
             return entry
         return None
 

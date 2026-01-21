@@ -21,6 +21,17 @@ _file_lock_path: Optional[Path] = None
 _no_db_warned = False
 
 
+def _is_production_env() -> bool:
+    env_name = (os.getenv("ENV") or os.getenv("ENVIRONMENT") or "").strip().lower()
+    return env_name in {"prod", "production"}
+
+
+def _allow_file_fallback() -> bool:
+    if os.getenv("SINGLETON_LOCK_ALLOW_FILE_FALLBACK", "").lower() in ("1", "true", "yes"):
+        return True
+    return not _is_production_env()
+
+
 def _locks_disabled() -> bool:
     disabled = os.getenv("DISABLE_DB_LOCKS", "0").lower() in ("1", "true", "yes")
     return disabled
@@ -194,6 +205,9 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
     global _singleton_lock_instance
     
     if not dsn:
+        dsn = os.getenv("DATABASE_URL", "").strip() or None
+
+    if not dsn:
         global _no_db_warned
         storage_mode = os.getenv("STORAGE_MODE", "github").lower()
         if _locks_disabled():
@@ -201,6 +215,13 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
             logger.info("[LOCK] singleton_disabled=true reason=disabled_by_env")
             return True
         if require_lock:
+            if not _allow_file_fallback():
+                logger.error(
+                    "[LOCK] LOCK_MODE=none reason=database_url_missing env=production file_fallback=false storage_mode=%s",
+                    storage_mode,
+                )
+                _set_lock_state("none", False, reason="database_url_missing")
+                return False
             if not _no_db_warned:
                 _no_db_warned = True
                 logger.warning(
