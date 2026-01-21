@@ -1722,6 +1722,28 @@ models:
         - '3:2'
         - '1:1'
     model_mode: text_to_image
+  grok-imagine/text-to-video:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 5000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - '2:3'
+        - '3:2'
+        - '1:1'
+      mode:
+        type: enum
+        required: false
+        values:
+        - fun
+        - normal
+        - spicy
+    model_mode: text_to_video
   openai/4o-image:
     model_type: text_to_image
     input:

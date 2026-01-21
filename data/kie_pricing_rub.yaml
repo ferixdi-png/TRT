@@ -744,6 +744,12 @@ models:
         price_rub: 6
         params: {}
         notes: per 6 images
+  - id: grok-imagine/text-to-video
+    skus:
+      - unit: video
+        price_rub: 15.71
+        params: {}
+        notes: text-to-video 6s
   - id: google/veo-3.1
     unmapped:
       - unit: video
