@@ -704,7 +704,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     ConversationHandler, CallbackQueryHandler, TypeHandler
 )
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
@@ -20517,6 +20517,39 @@ async def main():
         logger.info("🚀 Initializing application...")
         await application.initialize()
         await application.start()
+        
+        # Регистрируем команды в меню Telegram
+        logger.info("📋 Setting up bot commands menu...")
+        try:
+            # Базовые команды для всех пользователей
+            user_commands = [
+                BotCommand("start", "Главное меню"),
+                BotCommand("help", "Помощь"),
+                BotCommand("balance", "Проверить баланс"),
+                BotCommand("cancel", "Отменить текущее действие"),
+            ]
+            
+            # Команды для администраторов
+            admin_commands = user_commands + [
+                BotCommand("admin", "Панель администратора"),
+                BotCommand("payments", "Список платежей"),
+                BotCommand("selftest", "Самодиагностика бота"),
+            ]
+            
+            # Устанавливаем команды для обычных пользователей
+            await application.bot.set_my_commands(user_commands)
+            logger.info(f"✅ Registered {len(user_commands)} user commands")
+            
+            # Устанавливаем команды для администраторов
+            from telegram import BotCommandScopeAllChatAdministrators
+            await application.bot.set_my_commands(
+                admin_commands, 
+                scope=BotCommandScopeAllChatAdministrators()
+            )
+            logger.info(f"✅ Registered {len(admin_commands)} admin commands")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to set bot commands: {e}")
+            # Не критично - продолжим работу
         
         logger.info("📡 Starting polling...")
         

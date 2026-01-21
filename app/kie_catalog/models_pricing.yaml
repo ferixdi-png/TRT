@@ -841,7 +841,7 @@ models:
   - unit: removal
     credits: 15.7
     official_usd: 0.0786
-  description_ru: Удаление водяного знака Sora с видео. Очищает готовые ролики.
+  description_ru: Убирает водяной знак OpenAI с видео Sora. Профессиональная очистка готовых роликов для публикации.
 - id: sora-2-watermark-remover
   title_ru: OpenAI Sora 2 Watermark Remover
   type: watermark_remove
@@ -849,7 +849,7 @@ models:
   - unit: removal
     credits: 15.7
     official_usd: 0.0786
-  description_ru: Удаление водяного знака с видео Sora 2. Чистый результат без лого.
+  description_ru: Убирает водяной знак OpenAI с видео Sora 2. Профессиональная очистка готовых роликов для публикации.
 - id: openai/4o-image
   title_ru: OpenAI 4o Image Text to Image
   type: t2i
