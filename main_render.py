@@ -6689,30 +6689,47 @@ async def initialize_and_run():
 
     application = await build_application(settings)
     
-    # ==================== P1 FIX: ПРОГРЕВ КЕША МОДЕЛЕЙ ====================
-    # ПРОБЛЕМА: get_models_sync() при запущенном event loop читает YAML на каждый запрос
-    # РЕШЕНИЕ: прогреваем кеш _model_cache ВНУТРИ event loop при старте
-    logger.info("🔥 Warming up models cache inside event loop...")
+    # ==================== P1 FIX: ПРОГРЕВ ВСЕХ КЕШЕЙ МОДЕЛЕЙ ====================
+    # ПРОБЛЕМА: get_visible_models_by_generation_type() вычисляет visibility для КАЖДОЙ
+    #           модели при первом вызове → 60+ секунд (медленная проверка SKU/schema)
+    # РЕШЕНИЕ: прогреваем ВСЕ model-related кеши при старте
+    logger.info("🔥 Warming up model caches (registry + catalog + visibility)...")
     warmup_start = time.time()
     
     try:
-        # Принудительно загружаем модели (это установит _model_cache)
-        from app.models.registry import get_models_sync, _model_cache, _model_source
-        warmup_models = get_models_sync()
-        warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
+        # 1. Прогрев app.models.registry (может использоваться в некоторых местах)
+        from app.models.registry import get_models_sync
+        registry_models = get_models_sync()
+        logger.info(f"   ✓ Registry cache: {len(registry_models)} models loaded")
         
+        # 2. Прогрев app.kie_catalog (используется для model cards)
+        from app.kie_catalog import load_catalog
+        catalog_models = load_catalog()
+        logger.info(f"   ✓ Catalog cache: {len(catalog_models)} models loaded")
+        
+        # 3. КРИТИЧНО: Прогрев visibility cache (самый медленный!)
+        # Импортируем _get_visible_model_ids из bot_kie.py, чтобы заполнить
+        # глобальный кеш _VISIBLE_MODEL_IDS_CACHE
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+        from bot_kie import _get_visible_model_ids
+        visible_ids = _get_visible_model_ids()
+        logger.info(f"   ✓ Visibility cache: {len(visible_ids)} visible models")
+        
+        warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
         logger.info(
-            f"✅ Models cache warmed up: {len(warmup_models)} models loaded in {warmup_elapsed_ms}ms "
-            f"(source={_model_source})"
+            f"✅ All model caches warmed up in {warmup_elapsed_ms}ms "
+            f"(registry={len(registry_models)}, catalog={len(catalog_models)}, visible={len(visible_ids)})"
         )
-        logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
+        logger.info("   Next gen_type callbacks will be FAST (0ms cache hits)")
+        
     except Exception as warmup_exc:
         warmup_elapsed_ms = int((time.time() - warmup_start) * 1000)
         logger.error(
-            f"⚠️ Models cache warmup failed in {warmup_elapsed_ms}ms: {warmup_exc}",
+            f"⚠️ Model cache warmup failed in {warmup_elapsed_ms}ms: {warmup_exc}",
             exc_info=True
         )
-        logger.warning("   Bot will continue but may have slower first requests")
+        logger.warning("   Bot will continue but first requests may be slower")
     # ==================== END P1 FIX ====================
     
     await run(settings, application)
