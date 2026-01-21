@@ -166,7 +166,11 @@ def _resolve_model_id(callback_data: str) -> Optional[str]:
     return None
 
 
-def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
+def build_models_menu_by_type(
+    user_lang: str = 'ru',
+    *,
+    default_model_id: Optional[str] = None,
+) -> InlineKeyboardMarkup:
     """
     Строит меню моделей, сгруппированных по типам.
     
@@ -189,6 +193,19 @@ def build_models_menu_by_type(user_lang: str = 'ru') -> InlineKeyboardMarkup:
         models_by_type[model_type].append(model)
     
     keyboard = []
+
+    if default_model_id:
+        default_model = get_model(default_model_id)
+        if default_model and is_model_visible(default_model.id):
+            type_emoji = _get_type_emoji(default_model.type)
+            button_text = f"⭐ {type_emoji} {default_model.title_ru}"
+            keyboard.append([
+                InlineKeyboardButton(
+                    button_text,
+                    callback_data=_create_callback_data(default_model.id),
+                )
+            ])
+            keyboard.append([])  # Spacer after default shortcut
     
     # Сортируем типы для отображения
     
