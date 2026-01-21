@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Глобальный экземпляр storage (singleton)
 _storage_instance: Optional[BaseStorage] = None
 _storage_mode_logged = False
+_runtime_migration_task: Optional[asyncio.Task] = None
 
 
 def create_storage(
@@ -110,31 +111,55 @@ def create_storage(
     runtime_storage = JsonStorage(runtime_dir)
 
     marker_path = os.path.join(runtime_dir, ".runtime_migrated")
-    def _run_coro(coro_factory):
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(coro_factory())
-        logger.warning("[STORAGE] runtime_migration_skipped=true reason=event_loop_running")
-        return None
-
-    if not os.path.exists(marker_path):
+    async def _migrate_runtime() -> None:
+        migrated = []
         for filename in runtime_files:
             try:
-                payload = _run_coro(lambda: github_storage.read_json_file(filename, default={})) or {}
-            except RuntimeError:
-                payload = {}
+                payload = await github_storage.read_json_file(filename, default={})
+            except Exception as exc:
+                logger.warning("[STORAGE] runtime_migration_read_failed path=%s error=%s", filename, exc)
+                continue
             if payload:
                 try:
-                    _run_coro(lambda: runtime_storage.write_json_file(filename, payload))
-                except RuntimeError:
-                    pass
+                    await runtime_storage.write_json_file(filename, payload)
+                    migrated.append(filename)
+                except Exception as exc:
+                    logger.warning("[STORAGE] runtime_migration_write_failed path=%s error=%s", filename, exc)
         try:
             os.makedirs(runtime_dir, exist_ok=True)
             with open(marker_path, "w", encoding="utf-8") as marker_file:
                 marker_file.write("ok")
+            logger.info(
+                "[STORAGE] runtime_migration_completed migrated_files=%s",
+                ",".join(sorted(migrated)) if migrated else "none",
+            )
         except Exception as exc:
             logger.warning("[STORAGE] runtime_migration_marker_failed error=%s", exc)
+
+    def _schedule_migration(loop: asyncio.AbstractEventLoop) -> None:
+        global _runtime_migration_task
+        if _runtime_migration_task and not _runtime_migration_task.done():
+            return
+        _runtime_migration_task = loop.create_task(_migrate_runtime())
+
+        def _done_callback(task: asyncio.Task) -> None:
+            try:
+                task.result()
+            except Exception as exc:
+                logger.warning("[STORAGE] runtime_migration_failed error=%s", exc)
+
+        _runtime_migration_task.add_done_callback(_done_callback)
+        logger.info("[STORAGE] runtime_migration_scheduled=true")
+
+    if not os.path.exists(marker_path):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            _schedule_migration(loop)
+        else:
+            asyncio.run(_migrate_runtime())
 
     _storage_instance = HybridStorage(github_storage, runtime_storage, runtime_files=runtime_files)
     logger.info(
@@ -173,3 +198,8 @@ def reset_storage() -> None:
     """Сбросить storage instance (для тестов)"""
     global _storage_instance
     _storage_instance = None
+
+
+def get_runtime_migration_task() -> Optional[asyncio.Task]:
+    """Expose last scheduled runtime migration task for tests."""
+    return _runtime_migration_task
