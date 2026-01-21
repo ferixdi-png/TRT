@@ -1918,7 +1918,7 @@ DATA_DIR = os.getenv('DATA_DIR', './data')
 if not os.path.exists(DATA_DIR):
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        logger.info(f"✅ Created data directory: {DATA_DIR}")
+        logger.info(f"✅ Created local data directory (cache/fallback): {DATA_DIR}")
     except Exception as e:
         logger.error(f"❌ Failed to create data directory {DATA_DIR}: {e}")
         # Fallback to current directory if data dir creation fails
@@ -1971,7 +1971,7 @@ DATA_DIR = os.getenv('DATA_DIR', './data')
 if not os.path.exists(DATA_DIR):
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        logger.info(f"✅ Created data directory: {DATA_DIR}")
+        logger.info(f"✅ Created local data directory (cache/fallback): {DATA_DIR}")
     except Exception as e:
         logger.error(f"❌ Failed to create data directory {DATA_DIR}: {e}")
         # Fallback to current directory if data dir creation fails
@@ -3685,10 +3685,17 @@ def get_payment_stats() -> dict:
     payments = get_all_payments()
     total_amount = sum(p.get("amount", 0) for p in payments)
     total_count = len(payments)
+    successful_statuses = {"completed", "approved"}
+    successful_payments = [
+        p for p in payments if p.get("status", "completed") in successful_statuses
+    ]
+    successful_amount = sum(p.get("amount", 0) for p in successful_payments)
     return {
         "total_amount": total_amount,
         "total_count": total_count,
-        "payments": payments
+        "successful_count": len(successful_payments),
+        "successful_amount": successful_amount,
+        "payments": payments,
     }
 
 
@@ -3744,6 +3751,7 @@ def get_extended_admin_stats() -> dict:
     payment_stats = get_payment_stats()
     total_revenue = payment_stats.get('total_amount', 0)
     total_payments = payment_stats.get('total_count', 0)
+    successful_payments = payment_stats.get('successful_count', 0)
     
     # Calculate conversion rate (users who made at least one payment)
     users_with_payments = set()
@@ -3777,10 +3785,123 @@ def get_extended_admin_stats() -> dict:
         'revenue_week': revenue_week,
         'revenue_month': revenue_month,
         'total_payments': total_payments,
+        'successful_payments': successful_payments,
         'conversion_rate': conversion_rate,
         'avg_check': avg_check,
         'total_generations': total_generations
     }
+
+
+async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE, is_callback: bool = False):
+    """Render admin panel with extended statistics."""
+    if is_callback:
+        query = update_or_query
+        user_id = query.from_user.id
+        message_func = query.edit_message_text
+        try:
+            await query.answer()
+        except Exception:
+            pass
+    else:
+        update = update_or_query
+        user_id = update.effective_user.id
+        message_func = update.message.reply_text
+
+    if user_id != ADMIN_ID:
+        if is_callback:
+            await query.answer("❌ Эта функция доступна только администратору.", show_alert=True)
+        else:
+            await update.message.reply_text("❌ Эта команда доступна только администратору.")
+        return
+
+    generation_types = get_generation_types()
+    total_models = len(get_models_sync())
+
+    stats = get_extended_admin_stats()
+
+    kie_balance_info = ""
+    if kie is not None:
+        try:
+            balance_result = await kie.get_credits()
+            if balance_result.get('ok'):
+                balance = balance_result.get('credits', 0)
+                balance_rub = balance * CREDIT_TO_USD * get_usd_to_rub_rate()
+                balance_rub_str = f"{balance_rub:.2f}"
+                kie_balance_info = f"💰 <b>Баланс KIE API:</b> {balance_rub_str} ₽ ({balance} кредитов)\n\n"
+            else:
+                status = balance_result.get("status")
+                if status == 404:
+                    kie_balance_info = "💰 <b>Баланс KIE API:</b> Баланс KIE недоступен (endpoint 404)\n\n"
+                else:
+                    kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
+        except Exception as e:
+            logger.error(f"Error getting KIE balance: {e}")
+            kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
+    else:
+        kie_balance_info = "💰 <b>Баланс KIE API:</b> Клиент не инициализирован\n\n"
+
+    top_models_text = ""
+    if stats['top_models']:
+        top_models_text = "\n<b>Топ-5 моделей:</b>\n"
+        for i, model in enumerate(stats['top_models'], 1):
+            top_models_text += f"{i}. {model['name']}: {model['count']} использований\n"
+        top_models_text += "\n"
+    else:
+        top_models_text = "\n<b>Топ-5 моделей:</b> Нет данных\n\n"
+
+    admin_text = (
+        f'👑 <b>ПАНЕЛЬ АДМИНИСТРАТОРА</b> 👑\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'{kie_balance_info}'
+        f'📊 <b>РАСШИРЕННАЯ СТАТИСТИКА:</b>\n\n'
+        f'👥 <b>Пользователи:</b>\n'
+        f'   • Всего: <b>{stats["total_users"]}</b>\n'
+        f'   • Активных сегодня: <b>{stats["active_today"]}</b>\n'
+        f'   • Активных за неделю: <b>{stats["active_week"]}</b>\n'
+        f'   • Активных за месяц: <b>{stats["active_month"]}</b>\n\n'
+        f'🎨 <b>Генерации:</b>\n'
+        f'   • Всего генераций: <b>{stats["total_generations"]}</b>\n'
+        f'{top_models_text}'
+        f'💰 <b>Финансы:</b>\n'
+        f'   • Общий доход: <b>{format_rub_amount(stats["total_revenue"])}</b>\n'
+        f'   • Доход сегодня: <b>{format_rub_amount(stats["revenue_today"])}</b>\n'
+        f'   • Доход за неделю: <b>{format_rub_amount(stats["revenue_week"])}</b>\n'
+        f'   • Доход за месяц: <b>{format_rub_amount(stats["revenue_month"])}</b>\n'
+        f'   • Всего пополнений: <b>{stats["total_payments"]}</b>\n'
+        f'   • Успешных пополнений: <b>{stats["successful_payments"]}</b>\n'
+        f'   • Средний чек: <b>{format_rub_amount(stats["avg_check"])}</b>\n'
+        f'   • Конверсия в оплату: <b>{stats["conversion_rate"]:.1f}%</b>\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'📊 <b>СИСТЕМА:</b>\n\n'
+        f'✅ <b>{total_models} премиум моделей</b> в арсенале\n'
+        f'✅ <b>{len(generation_types)} категорий</b> контента\n'
+        f'✅ Безлимитный доступ ко всем генерациям\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'⚙️ <b>АДМИНИСТРАТИВНЫЕ ФУНКЦИИ:</b>\n\n'
+        f'📈 Просмотр статистики и аналитики\n'
+        f'👥 Управление пользователями\n'
+        f'🎁 Управление промокодами\n'
+        f'🧪 Тестирование OCR системы\n'
+        f'💼 Полный контроль над ботом\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'💫 <b>ВЫБЕРИТЕ ДЕЙСТВИЕ:</b>'
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("📊 Обновить статистику", callback_data="admin_stats")],
+        [InlineKeyboardButton("📚 Просмотр генераций", callback_data="admin_view_generations")],
+        [InlineKeyboardButton("⚙️ Настройки", callback_data="admin_settings")],
+        [InlineKeyboardButton("🔍 Поиск", callback_data="admin_search")],
+        [InlineKeyboardButton("📝 Добавить", callback_data="admin_add")],
+        [InlineKeyboardButton("🧪 Тест OCR", callback_data="admin_test_ocr")],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_menu")],
+    ]
+
+    await message_func(
+        admin_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML',
+    )
 
 
 def get_payment_details() -> str:
@@ -8651,100 +8772,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
 
             if data == "admin_stats":
-                # Answer callback immediately
-                try:
-                    await query.answer()
-                except:
-                    pass
-                
-                # Show full admin panel menu with extended statistics
-                generation_types = get_generation_types()
-                total_models = len(get_models_sync())
-                
-                # Get extended statistics
-                stats = get_extended_admin_stats()
-                
-                # Get KIE API balance (for admin info only)
-                kie_balance_info = ""
-                try:
-                    balance_result = await kie.get_credits()
-                    if balance_result.get('ok'):
-                        balance = balance_result.get('credits', 0)
-                        balance_rub = balance * CREDIT_TO_USD * get_usd_to_rub_rate()
-                        balance_rub_str = f"{balance_rub:.2f}"
-                        kie_balance_info = f"💰 <b>Баланс KIE API:</b> {balance_rub_str} ₽ ({balance} кредитов)\n\n"
-                    else:
-                        status = balance_result.get("status")
-                        if status == 404:
-                            kie_balance_info = "💰 <b>Баланс KIE API:</b> Баланс KIE недоступен (endpoint 404)\n\n"
-                        else:
-                            kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
-                except Exception as e:
-                    logger.error(f"Error getting KIE balance: {e}")
-                    kie_balance_info = "💰 <b>Баланс KIE API:</b> Недоступен\n\n"
-                
-                # Format top models
-                top_models_text = ""
-                if stats['top_models']:
-                    top_models_text = "\n<b>Топ-5 моделей:</b>\n"
-                    for i, model in enumerate(stats['top_models'], 1):
-                        top_models_text += f"{i}. {model['name']}: {model['count']} использований\n"
-                    top_models_text += "\n"
-                else:
-                    top_models_text = "\n<b>Топ-5 моделей:</b> Нет данных\n\n"
-                
-                admin_text = (
-                    f'👑 <b>ПАНЕЛЬ АДМИНИСТРАТОРА</b> 👑\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'{kie_balance_info}'
-                    f'📊 <b>РАСШИРЕННАЯ СТАТИСТИКА:</b>\n\n'
-                    f'👥 <b>Пользователи:</b>\n'
-                    f'   • Всего: <b>{stats["total_users"]}</b>\n'
-                    f'   • Активных сегодня: <b>{stats["active_today"]}</b>\n'
-                    f'   • Активных за неделю: <b>{stats["active_week"]}</b>\n'
-                    f'   • Активных за месяц: <b>{stats["active_month"]}</b>\n\n'
-                    f'🎨 <b>Генерации:</b>\n'
-                    f'   • Всего генераций: <b>{stats["total_generations"]}</b>\n'
-                    f'{top_models_text}'
-                    f'💰 <b>Финансы:</b>\n'
-                    f'   • Общий доход: <b>{format_rub_amount(stats["total_revenue"])}</b>\n'
-                    f'   • Доход сегодня: <b>{format_rub_amount(stats["revenue_today"])}</b>\n'
-                    f'   • Доход за неделю: <b>{format_rub_amount(stats["revenue_week"])}</b>\n'
-                    f'   • Доход за месяц: <b>{format_rub_amount(stats["revenue_month"])}</b>\n'
-                    f'   • Всего платежей: <b>{stats["total_payments"]}</b>\n'
-                    f'   • Средний чек: <b>{format_rub_amount(stats["avg_check"])}</b>\n'
-                    f'   • Конверсия в оплату: <b>{stats["conversion_rate"]:.1f}%</b>\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'📊 <b>СИСТЕМА:</b>\n\n'
-                    f'✅ <b>{total_models} премиум моделей</b> в арсенале\n'
-                    f'✅ <b>{len(generation_types)} категорий</b> контента\n'
-                    f'✅ Безлимитный доступ ко всем генерациям\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'⚙️ <b>АДМИНИСТРАТИВНЫЕ ФУНКЦИИ:</b>\n\n'
-                    f'📈 Просмотр статистики и аналитики\n'
-                    f'👥 Управление пользователями\n'
-                    f'🎁 Управление промокодами\n'
-                    f'🧪 Тестирование OCR системы\n'
-                    f'💼 Полный контроль над ботом\n\n'
-                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💫 <b>ВЫБЕРИТЕ ДЕЙСТВИЕ:</b>'
-                )
-                
-                keyboard = [
-                    [InlineKeyboardButton("📊 Обновить статистику", callback_data="admin_stats")],
-                    [InlineKeyboardButton("📚 Просмотр генераций", callback_data="admin_view_generations")],
-                    [InlineKeyboardButton("⚙️ Настройки", callback_data="admin_settings")],
-                    [InlineKeyboardButton("🔍 Поиск", callback_data="admin_search")],
-                    [InlineKeyboardButton("📝 Добавить", callback_data="admin_add")],
-                    [InlineKeyboardButton("🧪 Тест OCR", callback_data="admin_test_ocr")],
-                    [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_menu")]
-                ]
-                
-                await query.edit_message_text(
-                    admin_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
+                await render_admin_panel(query, context, is_callback=True)
                 return ConversationHandler.END
             
             # Handle payment screenshots viewing
@@ -19291,14 +19319,7 @@ async def main():
             return
         upsert_user_registry_entry(update.effective_user)
         if not context.args or len(context.args) == 0:
-            user_sessions[update.effective_user.id] = {"waiting_for": "admin_user_lookup"}
-            await update.message.reply_text(
-                "👤 <b>Админ-поиск пользователя</b>\n\n"
-                "Отправьте user_id пользователя, чтобы увидеть его баланс и пополнения.\n"
-                "Пример: <code>123456789</code>\n\n"
-                "Отмена: /cancel",
-                parse_mode='HTML'
-            )
+            await render_admin_panel(update, context, is_callback=False)
             return
         try:
             target_user_id = int(context.args[0])

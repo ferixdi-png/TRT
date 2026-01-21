@@ -1665,6 +1665,20 @@ tests/test_409_conflict_fix.py ........
 - `python scripts/verify_no_db.py`
 - `pytest -q`
 
+## 2026-03-01: Persistence (No DB) — contract
+**Contract (Render, `STORAGE_MODE=GITHUB_JSON`):**
+- **Source of truth:** GitHub JSON storage (branch `storage`, prefix `storage/<BOT_INSTANCE_ID>`); runtime dir `/tmp/trt-runtime` is cache/override only and write-through mirrors runtime changes back to GitHub (`HYBRID_RUNTIME_WRITE_THROUGH`, `HYBRID_BALANCE_WRITE_THROUGH`).【F:app/storage/factory.py†L72-L131】【F:app/storage/hybrid_storage.py†L20-L132】
+- **Read/write paths:** legacy helpers in `bot_kie.py` use storage layer (`read_json_file`/`write_json_file`) for `user_balances.json`, `daily_free_generations.json`, `hourly_free_usage.json`, `referral_free_bank.json`, `admin_limits.json`, `payments.json` (with local cache only as fallback).【F:bot_kie.py†L2035-L2228】
+- **GitHub storage commits:** `GitHubStorage` resolves repo/branch/prefix from env and writes via Contents API with retries (storage branch must differ from code branch).【F:app/storage/github_storage.py†L55-L140】
+- **Successful payment statuses:** `completed`, `approved`.【F:bot_kie.py†L3683-L3699】
+
+**ENV (required / recommended):**
+- `STORAGE_MODE=GITHUB_JSON`, `STORAGE_BRANCH`/`STORAGE_GITHUB_BRANCH`, `STORAGE_GITHUB_REPO`, `BOT_INSTANCE_ID`, `GITHUB_TOKEN` (GitHub storage).【F:app/storage/github_storage.py†L84-L140】
+- `RUNTIME_STORAGE_DIR=/tmp/trt-runtime`, `HYBRID_RUNTIME_WRITE_THROUGH=1`, `HYBRID_BALANCE_WRITE_THROUGH=1` (runtime cache + write-through).【F:app/storage/factory.py†L72-L131】【F:app/storage/hybrid_storage.py†L20-L132】
+
+**Startup log (single source of truth):**
+- `[PERSISTENCE] ... PERSISTENCE_OK=true balances_and_free_limits_persist_in=github` confirms GitHub persistence and runtime cache-only mode.【F:app/storage/factory.py†L72-L131】
+
 ## 2026-02-14: Storage branch + free quota + pricing UX fixes
 **Было → стало:**
 - **Было:** storage JSON записи коммитились в основной ветке → Render ловил redeploy storm; free quota считалась по model_id; счетчик/баланс могли показывать устаревшие значения; enum-параметры с ценами показывали только общую цену без цен на кнопках.
