@@ -15,6 +15,26 @@ from contextlib import suppress
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 logger = logging.getLogger("entrypoints.run_bot")
 
+_TRUTHY = {"1", "true", "yes", "on"}
+_FALSY = {"0", "false", "no", "off"}
+
+
+def _read_bool_env(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in _TRUTHY:
+        return True
+    if normalized in _FALSY:
+        return False
+    logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+    return default
+
+
+def is_preflight_strict() -> bool:
+    return _read_bool_env("BILLING_PREFLIGHT_STRICT", True)
+
 def configure_logging() -> None:
     """Configure root logger if it was not configured earlier."""
     if logging.getLogger().handlers:
@@ -104,7 +124,10 @@ async def main() -> None:
     health_started = await start_healthcheck(port)
 
     from app.storage import get_storage
-    from app.diagnostics.billing_preflight import run_billing_preflight
+    from app.diagnostics.billing_preflight import (
+        format_billing_preflight_report,
+        run_billing_preflight,
+    )
 
     storage = get_storage()
     db_ok = False
@@ -124,10 +147,18 @@ async def main() -> None:
     logger.info("DB connection OK, running billing preflight.")
 
     preflight_report = await run_billing_preflight(storage, db_pool=None)
-    if preflight_report.get("result") == "FAIL":
-        logger.error("Billing preflight failed, aborting startup before Telegram updates.")
-        await stop_healthcheck(health_started)
-        sys.exit(1)
+    preflight_result = preflight_report.get("result")
+    logger.info("Billing preflight result: %s", preflight_result)
+    if preflight_result == "FAIL":
+        logger.error("Billing preflight failed: %s", format_billing_preflight_report(preflight_report))
+        how_to_fix = preflight_report.get("how_to_fix") or []
+        if how_to_fix:
+            logger.error("Billing preflight suggested fixes: %s", "; ".join(how_to_fix))
+        if is_preflight_strict():
+            logger.error("Billing preflight strict mode enabled; aborting startup before Telegram updates.")
+            await stop_healthcheck(health_started)
+            sys.exit(1)
+        logger.warning("Billing preflight strict mode disabled; continuing startup.")
 
     loop = asyncio.get_running_loop()
     shutdown_event = asyncio.Event()
