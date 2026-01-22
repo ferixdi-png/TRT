@@ -12256,7 +12256,7 @@ async def _button_callback_impl(
             elif is_free_available:
                 # For free models with free generations, show free count
                 available_count = f"🎁 {remaining_free} бесплатно в день"
-            elif price_value is not None and user_balance >= price_value:
+            elif price_value is not None and price_value > 0 and user_balance >= price_value:
                 available_count = int(user_balance / price_value)
             else:
                 available_count = 0
@@ -12313,7 +12313,7 @@ async def _button_callback_impl(
                     model_info_text += (
                         f"🎁 <b>Бесплатно:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} в день\n"
                     )
-                    if price_value is not None and user_balance >= price_value:
+                    if price_value is not None and price_value > 0 and user_balance >= price_value:
                         paid_count = int(user_balance / price_value)
                         model_info_text += f"💳 <b>Платных:</b> {paid_count} генераций\n"
                     model_info_text += "\n"
