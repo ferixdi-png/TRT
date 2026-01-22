@@ -14,6 +14,7 @@
 | 6 | P1 | GitHub storage path triggered on startup | Фабрика storage могла запускать GitHub-migration/валидацию | `app/storage/factory.py` | Лишний путь выполнения и предупреждения | Принудительно использовать PostgresStorage | Старт без GITHUB_* env и без warning | ✅ Исправлено |
 | 7 | P1 | Startup logs contain irrelevant warnings | GitHub-валидации запускались даже при DB режиме | `app/storage/factory.py`, `app/config_env.py` | Шум логов и ложные алармы | Убрать GitHub проверки из DB-only пути | Старт без предупреждений про GITHUB_* | ✅ Исправлено |
 | 8 | P1 | Partner onboarding hardening | Требуются fail-fast проверки, диагностика /admin и tenant-изоляция | `app/config_env.py`, `app/admin/*`, `app/storage/postgres_storage.py`, `bot_kie.py` | Ошибки деплоя у партнёров и пересечение данных | Ужесточить валидацию ENV, добавить диагностику и fallback-логику | Проверить /admin + смоуки | ✅ VERIFIED |
+| 9 | P1 | Нет прозрачной валидации billing-данных до старта Telegram | Отсутствует preflight проверки и агрегаты по всем партнёрам | `app/diagnostics/billing_preflight.py`, `entrypoints/run_bot.py`, `app/admin/diagnostics.py`, `bot_kie.py` | Старт без подтверждения целостности балансов/лимитов | Добавить billing preflight + лог блок + /admin preflight | Проверить логи до polling + /admin preflight | ✅ VERIFIED |
 
 ## ✅ Покрыто
 
