@@ -19660,15 +19660,15 @@ async def main():
     logger.info(f"🔑 GITHUB_TOKEN: {'✅ Set' if github_token else '❌ NOT SET'}")
     logger.info(f"📦 GITHUB_STORAGE_REPO: {'✅ Set' if github_storage_repo else '❌ NOT SET'}")
     logger.info("🗄️ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
-    
-        # Проверка режима распределенной блокировки
-        redis_url = os.getenv("REDIS_URL", "").strip()
-        if redis_url:
-            logger.info(f"🔒 LOCK_MODE=redis (multi-instance safe)")
-            logger.info(f"🔗 REDIS_URL: {'✅ Set (multi-instance scaling enabled)' if redis_url else '❌ NOT SET'}")
-        else:
-            logger.info(f"🔒 LOCK_MODE=file (single-instance only)")
-            logger.warning("⚠️ REDIS_URL not set - using file-based locks (not suitable for multi-instance)")
+
+    # Проверка режима распределенной блокировки
+    redis_url = os.getenv("REDIS_URL", "").strip()
+    if redis_url:
+        logger.info(f"🔒 LOCK_MODE=redis (multi-instance safe)")
+        logger.info(f"🔗 REDIS_URL: {'✅ Set (multi-instance scaling enabled)' if redis_url else '❌ NOT SET'}")
+    else:
+        logger.info(f"🔒 LOCK_MODE=file (single-instance only)")
+        logger.warning("⚠️ REDIS_URL not set - using file-based locks (not suitable for multi-instance)")
     
     # FAIL-FAST: если есть критические ошибки - выходим сразу
     if validation_errors:
