@@ -14,20 +14,7 @@ logger = logging.getLogger(__name__)
 REQUIRED_ENV: Tuple[str, ...] = (
     "ADMIN_ID",
     "BOT_INSTANCE_ID",
-    "BOT_MODE",
-    "GITHUB_BRANCH",
-    "GITHUB_COMMITTER_EMAIL",
-    "GITHUB_COMMITTER_NAME",
-    "GITHUB_REPO",
-    "GITHUB_TOKEN",
     "KIE_API_KEY",
-    "PAYMENT_BANK",
-    "PAYMENT_CARD_HOLDER",
-    "PAYMENT_PHONE",
-    "PORT",
-    "STORAGE_PREFIX",
-    "SUPPORT_TELEGRAM",
-    "SUPPORT_TEXT",
     "TELEGRAM_BOT_TOKEN",
     "WEBHOOK_BASE_URL",
 )
@@ -52,6 +39,7 @@ OPTIONAL_ENV: Tuple[str, ...] = (
     "STORAGE_BRANCH",
     "TEST_MODE",
     "WEBHOOK_URL",
+    # остальные опциональные
 )
 
 SECRET_ENV = {

@@ -6,12 +6,15 @@
 
 Партнёру достаточно указать **только 4 переменные**:
 
+
 ```env
 TELEGRAM_BOT_TOKEN=<ваш токен от @BotFather>
 BOT_INSTANCE_ID=partner-your-name
 ADMIN_ID=<ваш Telegram user ID>
 WEBHOOK_BASE_URL=<URL вашего деплоя>
+KIE_API_KEY=<ваш персональный API-ключ для AI>
 ```
+
 
 ## Общие переменные (от владельца)
 
@@ -21,7 +24,6 @@ WEBHOOK_BASE_URL=<URL вашего деплоя>
 DATABASE_URL=<общий Postgres владельца>
 REDIS_URL=<общий Redis владельца>
 STORAGE_MODE=db
-KIE_API_KEY=<API ключ для AI запросов>
 ```
 
 ## Опциональные переменные (партнёр может переопределить)
