@@ -11,16 +11,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from app.utils.logging_config import setup_logging as setup_structured_logging
 from app.utils.singleton_lock import is_lock_acquired, get_safe_mode
 from app.storage import get_storage
-
-
-def setup_logging():
-    """Setup logging configuration."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
 
 
 def get_bot_mode() -> str:
@@ -202,7 +195,7 @@ async def start_healthcheck_server(port: Optional[int] = None):
 
 async def main():
     """Main application entry point."""
-    setup_logging()
+    setup_structured_logging()
     
     logger.info("Starting application...")
     
