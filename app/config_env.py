@@ -167,6 +167,8 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
     webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
     storage_mode = os.getenv("STORAGE_MODE", "").strip()
     # Только если github storage — требуем github-переменные
+    committer_email = ""
+    committer_name = ""
     if storage_mode == "github":
         bot_mode = require("BOT_MODE")
         github_branch = require("GITHUB_BRANCH")
