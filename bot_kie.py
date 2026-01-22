@@ -19152,7 +19152,13 @@ def initialize_data_files():
         sys.exit(0)
     
     logger.info("✅ Single instance lock acquired - this is the leader instance")
-    logger.info("[LOCK_STATUS] mode=%s degraded=%s", get_lock_mode(), is_lock_degraded())
+    lock_mode = get_lock_mode()
+    lock_degraded = is_lock_degraded()
+    logger.info("🔒 [LOCK_STATUS] mode=%s degraded=%s", lock_mode, lock_degraded)
+    if lock_degraded:
+        logger.warning("⚠️  DEGRADED LOCK MODE: For multi-instance scaling on Render, set DATABASE_URL + REDIS_URL")
+    else:
+        logger.info("✅ Distributed lock healthy (postgres advisory or redis)")
     
     # Регистрируем освобождение lock при выходе
     import atexit
@@ -19444,6 +19450,8 @@ async def _register_all_handlers_internal(application: Application):
         fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
                    CommandHandler('cancel', cancel)],
         per_message=True,
+        per_chat=True,
+        per_user=True,
     )
     
     # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
@@ -20225,6 +20233,8 @@ async def main():
             CommandHandler('cancel', cancel)
         ],
         per_message=True,
+        per_chat=True,
+        per_user=True,
     )
 
     # Inbound update logger/context middleware (must be first)

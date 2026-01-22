@@ -97,13 +97,11 @@ def setup_logging(level: int = logging.INFO, include_request_id: bool = True) ->
     root_logger.addHandler(console_handler)
     
     # Настраиваем уровни для внешних библиотек
-    httpx_logger = logging.getLogger('httpx')
-    httpx_logger.setLevel(logging.WARNING)
-    httpx_logger.addFilter(RedactTelegramTokenFilter())
-    httpcore_logger = logging.getLogger('httpcore')
-    httpcore_logger.setLevel(logging.WARNING)
-    httpcore_logger.addFilter(RedactTelegramTokenFilter())
-    logging.getLogger('telegram').setLevel(logging.WARNING)
+    # CRITICAL: каждому логгеру нужен свой filter instance, иначе не применяется
+    for logger_name in ('httpx', 'httpcore', 'telegram', 'aiohttp', 'aiohttp.access', 'root'):
+        lib_logger = logging.getLogger(logger_name)
+        lib_logger.setLevel(logging.WARNING)
+        lib_logger.addFilter(RedactTelegramTokenFilter())
     logging.getLogger('asyncio').setLevel(logging.WARNING)
 
 
