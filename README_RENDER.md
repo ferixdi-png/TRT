@@ -25,13 +25,23 @@
 
 4. **Переменные окружения:**
    ```
-   TELEGRAM_BOT_TOKEN=ваш_токен
+   TELEGRAM_BOT_TOKEN=ваш_новый_токен (ПОСЛЕ /revoke в BotFather!)
    KIE_API_KEY=ваш_ключ
    ADMIN_ID=ваш_id
-   # Для масштабирования на несколько инстансов (Render Postgres)
+   
+   # CRITICAL: Для масштабирования (multi-instance safe locks) ⚠️
+   # Обязательно при запуске 2+ инстансов:
    DATABASE_URL=postgresql://user:pass@host:5432/dbname
+   REDIS_URL=redis://host:6379/0
+   
+   # Без DATABASE_URL/REDIS_URL:
+   #   lock_mode=file, lock_degraded=true (НЕ безопасно для 2+ инстансов!)
+   # С DATABASE_URL:
+   #   lock_mode=postgres, lock_degraded=false ✅ (safe для 2+ инстансов)
+   # С REDIS_URL:
+   #   Дополнительное хранилище: сессии, кэш, дедупликация callback'ов
    ```
-   Если DATABASE_URL не задан, бот использует file-lock и lock_degraded=true для multi-instance.
+   **ВАЖНО:** Токен уже скомпрометирован — используйте /revoke в BotFather и установите новый!
 
 5. **Запустите!**
 
