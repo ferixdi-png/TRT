@@ -13398,12 +13398,19 @@ async def send_confirmation_message(
     if price_str:
         keyboard.insert(0, [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")])
 
+    # Extract numeric price from quote
+    price_numeric = 0.0
+    if is_free:
+        price_numeric = 0.0
+    elif price_quote:
+        price_numeric = float(price_quote.get("price_rub", 0.0))
+    
     # Build enhanced confirmation message
     confirm_msg_base = build_confirmation_text(
         model_id=model_id,
         model_name=model_name,
         params=params,
-        price=price,
+        price=price_numeric,
         user_id=user_id,
         lang=user_lang,
         is_free=is_free,
