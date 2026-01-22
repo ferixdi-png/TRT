@@ -3057,18 +3057,28 @@ _storage_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 
 def _run_storage_coro_sync(coro, *, label: str = "storage_call"):
+    storage_mode = os.getenv("STORAGE_MODE", "unknown")
+    partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "unknown").strip()
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
+    logger.warning(
+        "STORAGE_SYNC_CALL_IN_RUNNING_LOOP label=%s storage_mode=%s partner_id=%s",
+        label,
+        storage_mode,
+        partner_id,
+    )
     future = _storage_executor.submit(lambda: asyncio.run(coro))
     try:
         return future.result(timeout=STORAGE_IO_TIMEOUT_SECONDS)
     except concurrent.futures.TimeoutError as exc:
         logger.error(
-            "SYNC_STORAGE_CALL_TIMEOUT label=%s timeout=%.2fs",
+            "SYNC_STORAGE_CALL_TIMEOUT label=%s timeout=%.2fs storage_mode=%s partner_id=%s",
             label,
             STORAGE_IO_TIMEOUT_SECONDS,
+            storage_mode,
+            partner_id,
         )
         raise TimeoutError(f"{label} timed out after {STORAGE_IO_TIMEOUT_SECONDS}s") from exc
     except Exception as exc:
