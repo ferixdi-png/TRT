@@ -31,7 +31,13 @@
 - **Автоматически:** Устанавливается при создании PostgreSQL Database в Render
 - **Использование в коде:** `os.getenv('DATABASE_URL')`
 
-### 4. `ADMIN_ID`
+### 4. `REDIS_URL`
+- **Описание:** URL Redis для распределенных блокировок (multi-instance)
+- **Автоматически:** Добавьте Managed Redis в Render → Environment добавит `REDIS_URL`
+- **Использование в коде:** `os.getenv('REDIS_URL')` (используется как первичный lock backend)
+- **Важно:** Без Redis бот работает только в single-instance режиме (файл-лок)
+
+### 5. `ADMIN_ID`
 - **Описание:** ID администратора Telegram
 - **Как получить:** Отправьте `/start` боту [@userinfobot](https://t.me/userinfobot)
 - **Использование в коде:** `int(os.getenv('ADMIN_ID', '0'))`
@@ -62,6 +68,8 @@
 - `KIE_TIMEOUT_SECONDS` - Таймаут запросов (по умолчанию: `30`)
 - `MAX_CONCURRENT_GENERATIONS_PER_USER` - Максимум генераций (по умолчанию: `3`)
 - `DB_MAXCONN` - Максимум соединений с БД (по умолчанию: `3`)
+- `STORAGE_MODE` - `auto` (по умолчанию). `auto` использует PostgreSQL при наличии `DATABASE_URL`, иначе GitHub storage
+- `PARTNER_ID`/`BOT_INSTANCE_ID` - идентификатор партнера/инстанса, используется как ключ изоляции данных в PostgreSQL
 
 ---
 
@@ -73,10 +81,15 @@
    - `TELEGRAM_BOT_TOKEN`
    - `KIE_API_KEY`
    - `DATABASE_URL` (автоматически при создании БД)
+   - `REDIS_URL` (для распределенных блокировок и multi-instance)
    - `ADMIN_ID`
 4. При необходимости добавьте опциональные переменные
 5. Сохраните изменения
 6. Перезапустите сервис
+
+### Примечания по хранению и блокировкам
+- `STORAGE_MODE=auto` использует PostgreSQL, если задан `DATABASE_URL`; при первом старте пустой БД данные мигрируются из GitHub storage автоматически
+- Redis-лок (`REDIS_URL`) обязателен для работы в нескольких инстансах (Render autoscaling). Без Redis бот переходит в file-lock режим (только один инстанс)
 
 ---
 

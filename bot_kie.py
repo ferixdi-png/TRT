@@ -19662,24 +19662,35 @@ async def main():
     # Проверяем обязательные переменные ПЕРЕД любой инициализацией
     validation_errors = []
     
+    storage_mode_raw = os.getenv("STORAGE_MODE", "auto").strip().lower()
+    storage_mode_effective = "postgres" if storage_mode_raw == "auto" and os.getenv("DATABASE_URL") else storage_mode_raw
     telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     kie_api_key = os.getenv("KIE_API_KEY", "").strip()
     github_token = os.getenv("GITHUB_TOKEN", "").strip()
     github_storage_repo = os.getenv("GITHUB_STORAGE_REPO", "").strip()
-    
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    redis_url = os.getenv("REDIS_URL", "").strip()
+
     if not telegram_bot_token:
         validation_errors.append("TELEGRAM_BOT_TOKEN is required")
-    if not github_token:
-        validation_errors.append("GITHUB_TOKEN is required for storage")
-    if not github_storage_repo:
-        validation_errors.append("GITHUB_STORAGE_REPO is required for storage")
-    
-    # Логируем статус всех критичных переменных
+
+    if storage_mode_effective == "postgres":
+        if not database_url:
+            validation_errors.append("DATABASE_URL is required for STORAGE_MODE=postgres")
+    else:
+        if not github_token:
+            validation_errors.append("GITHUB_TOKEN is required for GitHub storage")
+        if not github_storage_repo:
+            validation_errors.append("GITHUB_STORAGE_REPO is required for GitHub storage")
+
     logger.info(f"🔑 TELEGRAM_BOT_TOKEN: {'✅ Set' if telegram_bot_token else '❌ NOT SET'}")
     logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key else '⚠️ NOT SET (degraded mode)'}")
-    logger.info(f"🔑 GITHUB_TOKEN: {'✅ Set' if github_token else '❌ NOT SET'}")
-    logger.info(f"📦 GITHUB_STORAGE_REPO: {'✅ Set' if github_storage_repo else '❌ NOT SET'}")
-    logger.info("🗄️ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
+    logger.info(f"🗄️ STORAGE_MODE: {storage_mode_raw} (effective={storage_mode_effective})")
+    logger.info(f"🗃️ DATABASE_URL: {'✅ Set' if database_url else '❌ NOT SET'}")
+    logger.info(f"🔗 REDIS_URL: {'✅ Set' if redis_url else '❌ NOT SET'}")
+    if storage_mode_effective != "postgres":
+        logger.info(f"🔑 GITHUB_TOKEN: {'✅ Set' if github_token else '❌ NOT SET'}")
+        logger.info(f"📦 GITHUB_STORAGE_REPO: {'✅ Set' if github_storage_repo else '❌ NOT SET'}")
 
     # Проверка режима распределенной блокировки
     redis_url = os.getenv("REDIS_URL", "").strip()
@@ -19702,6 +19713,14 @@ async def main():
         logger.error("🔧 Then redeploy the service")
         logger.error("=" * 60)
         sys.exit(1)
+
+    logger.info(
+        "BOOT_STATUS storage_mode=%s db_enabled=%s redis_enabled=%s lock_mode_target=%s",
+        storage_mode_effective,
+        str(bool(database_url)).lower(),
+        str(bool(redis_url)).lower(),
+        "redis" if redis_url else "file",
+    )
     
     # Предупреждение о необязательных, но рекомендуемых переменных
     if not kie_api_key:
@@ -19714,24 +19733,22 @@ async def main():
     from app.config import get_settings
     settings = get_settings(validate=True)
     
-    # CRITICAL: Ensure GitHub storage is reachable before anything else
-    logger.info("🔒 Ensuring GitHub storage persistence...")
+    # CRITICAL: Ensure storage is reachable before anything else
+    logger.info("🔒 Ensuring storage persistence...")
     try:
         from app.storage.factory import get_storage
 
         storage_instance = get_storage()
         storage_ok = storage_instance.test_connection()
         if storage_ok:
-            logger.info("✅ GitHub storage read/write ok")
+            logger.info("✅ Storage backend ready")
         else:
-            logger.warning("⚠️ GitHub storage test did not pass")
+            logger.warning("⚠️ Storage backend test did not pass")
     except Exception as e:
-        logger.error(f"❌ CRITICAL: GitHub storage health check failed: {e}")
+        logger.error(f"❌ CRITICAL: Storage health check failed: {e}")
         logger.error("❌ Persistence may be unavailable!")
     
-    # Storage initialization is handled by app.storage.factory (already initialized above)
-    
-    # Initialize all data files first (for JSON fallback)
+    # Initialize all data files first (legacy JSON fallback)
     logger.info("🔧 Initializing data files...")
     initialize_data_files()
 

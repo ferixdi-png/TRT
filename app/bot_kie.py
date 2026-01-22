@@ -74,7 +74,7 @@ async def generation_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# Fixed ConversationHandler: removed per_message=True to avoid PTB warnings
+# ConversationHandler: per_message enabled so callbacks/messages are handled per update
 # Using CallbackQueryHandler for entry_points and state handlers
 generation_handler = ConversationHandler(
     entry_points=[
@@ -89,6 +89,6 @@ generation_handler = ConversationHandler(
     fallbacks=[
         CallbackQueryHandler(generation_cancel, pattern="^cancel$"),
     ],
-    # Removed per_message=True to fix PTB warning
-    # per_message=True causes issues with message context
+    # Enable per_message to ensure updates are handled per message context
+    per_message=True,
 )
