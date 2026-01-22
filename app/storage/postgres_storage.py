@@ -23,9 +23,9 @@ class PostgresStorage(BaseStorage):
 
     def __init__(self, dsn: str, partner_id: Optional[str] = None):
         self.dsn = dsn
-        self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "partner-01").strip()
+        self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "").strip()
         if not self.partner_id:
-            self.partner_id = "partner-01"
+            raise ValueError("BOT_INSTANCE_ID is required for multi-tenant storage")
         max_pool_env = os.getenv("DB_MAX_CONN", "5")
         try:
             self.max_pool_size = max(1, int(max_pool_env))
@@ -548,6 +548,16 @@ class PostgresStorage(BaseStorage):
 
     def test_connection(self) -> bool:
         return True
+
+    async def ping(self) -> bool:
+        try:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("SELECT 1")
+            return True
+        except Exception as exc:
+            logger.warning("[STORAGE] ping_failed partner_id=%s error=%s", self.partner_id, exc)
+            return False
 
     async def close(self) -> None:
         pools = list(self._pools.values())

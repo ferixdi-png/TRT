@@ -4433,52 +4433,63 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+def _resolve_payment_details() -> tuple[str, str, str, str]:
+    card_holder = os.getenv("PAYMENT_CARD_HOLDER", "").strip()
+    phone = os.getenv("PAYMENT_PHONE", "").strip()
+    bank = os.getenv("PAYMENT_BANK", "").strip()
+
+    if not phone and not bank and not card_holder:
+        card_holder = os.getenv("OWNER_PAYMENT_CARD_HOLDER", "").strip()
+        phone = os.getenv("OWNER_PAYMENT_PHONE", "").strip()
+        bank = os.getenv("OWNER_PAYMENT_BANK", "").strip()
+        source = "owner"
+    else:
+        source = "partner"
+
+    return phone, bank, card_holder, source
+
+
 def get_payment_details() -> str:
-    """Get payment details from .env (СБП - Система быстрых платежей)."""
+    """Get payment details from ENV (СБП - Система быстрых платежей)."""
     # Убрано: load_dotenv()
     # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard или системные ENV)
     # Для локальной разработки используйте системные ENV переменные
-    
-    # Get from environment (works both for .env and Render Environment Variables)
-    card_holder = os.getenv('PAYMENT_CARD_HOLDER', '').strip()
-    phone = os.getenv('PAYMENT_PHONE', '').strip()
-    bank = os.getenv('PAYMENT_BANK', '').strip()
-    
-    # Enhanced debug logging for troubleshooting
-    logger.debug(f"Loading payment details - PAYMENT_PHONE: {'SET' if phone else 'NOT SET'}, PAYMENT_BANK: {'SET' if bank else 'NOT SET'}, PAYMENT_CARD_HOLDER: {'SET' if card_holder else 'NOT SET'}")
-    
-    # Check if any payment details are missing
+
+    phone, bank, card_holder, source = _resolve_payment_details()
+
+    logger.debug(
+        "Loading payment details source=%s PAYMENT_PHONE=%s PAYMENT_BANK=%s PAYMENT_CARD_HOLDER=%s",
+        source,
+        "SET" if phone else "NOT SET",
+        "SET" if bank else "NOT SET",
+        "SET" if card_holder else "NOT SET",
+    )
+
     if not phone and not bank and not card_holder:
         logger.warning("Payment details not found in environment variables!")
-        logger.warning("Make sure these environment variables are set in Render dashboard:")
-        logger.warning("  - PAYMENT_PHONE")
-        logger.warning("  - PAYMENT_BANK")
-        logger.warning("  - PAYMENT_CARD_HOLDER")
-        # Also log all environment variables that start with PAYMENT_ for debugging
-        payment_env_vars = {k: v for k, v in os.environ.items() if k.startswith('PAYMENT_')}
-        logger.debug(f"All PAYMENT_* environment variables: {payment_env_vars}")
-    
+        logger.warning("Set PAYMENT_* for partner or OWNER_PAYMENT_* for defaults.")
+
     details = "💳 <b>Реквизиты для оплаты (СБП):</b>\n\n"
-    
+
     if phone:
         details += f"📱 <b>Номер телефона:</b> <code>{phone}</code>\n"
     if bank:
         details += f"🏦 <b>Банк:</b> {bank}\n"
     if card_holder:
         details += f"👤 <b>Получатель:</b> {card_holder}\n"
-    
+
     if not phone and not bank and not card_holder:
         details += "⚠️ <b>ВНИМАНИЕ: Реквизиты не настроены!</b>\n\n"
-        details += "Администратору необходимо указать следующие переменные окружения:\n"
-        details += "• <code>PAYMENT_PHONE</code> - номер телефона для СБП\n"
-        details += "• <code>PAYMENT_BANK</code> - название банка\n"
-        details += "• <code>PAYMENT_CARD_HOLDER</code> - имя получателя\n\n"
+        details += "Администратору необходимо указать переменные окружения:\n"
+        details += "• <code>PAYMENT_PHONE</code> / <code>OWNER_PAYMENT_PHONE</code>\n"
+        details += "• <code>PAYMENT_BANK</code> / <code>OWNER_PAYMENT_BANK</code>\n"
+        details += "• <code>PAYMENT_CARD_HOLDER</code> / <code>OWNER_PAYMENT_CARD_HOLDER</code>\n\n"
         details += "На Render: добавьте их в разделе Environment Variables\n"
         details += "Локально: добавьте в файл .env\n\n"
-    
+
     details += "\n⚠️ <b>Важно:</b> После оплаты отправьте скриншот перевода в этот чат.\n\n"
     details += "✅ <b>Баланс начислится автоматически</b> после отправки скриншота."
-    
+
     return details
 
 
@@ -4532,43 +4543,52 @@ def build_manual_payment_instructions(
     )
 
 
+def _resolve_support_details() -> tuple[str, str, str]:
+    support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip()
+    support_text = os.getenv("SUPPORT_TEXT", "").strip()
+
+    if not support_telegram and not support_text:
+        support_telegram = os.getenv("OWNER_SUPPORT_TELEGRAM", "").strip()
+        support_text = os.getenv("OWNER_SUPPORT_TEXT", "").strip()
+        source = "owner"
+    else:
+        source = "partner"
+
+    return support_telegram, support_text, source
+
+
 def get_support_contact() -> str:
-    """Get support contact information from .env (only Telegram)."""
+    """Get support contact information from ENV (only Telegram)."""
     # Убрано: load_dotenv()
     # Все переменные окружения ТОЛЬКО из ENV (Render Dashboard или системные ENV)
     # Для локальной разработки используйте системные ENV переменные
-    
-    support_telegram = os.getenv('SUPPORT_TELEGRAM', '').strip()
-    support_text = os.getenv('SUPPORT_TEXT', '').strip()
-    fallback_telegram = "@ferixdiii"
-    
-    # Enhanced debug logging for troubleshooting
-    logger.debug(f"Loading support contact - SUPPORT_TELEGRAM: {'SET' if support_telegram else 'NOT SET'}, SUPPORT_TEXT: {'SET' if support_text else 'NOT SET'}")
-    
+
+    support_telegram, support_text, source = _resolve_support_details()
+
+    logger.debug(
+        "Loading support contact source=%s SUPPORT_TELEGRAM=%s SUPPORT_TEXT=%s",
+        source,
+        "SET" if support_telegram else "NOT SET",
+        "SET" if support_text else "NOT SET",
+    )
+
     contact = "🆘 <b>Поддержка</b>\n\n"
-    
+
     if support_text:
         contact += f"{support_text}\n\n"
     else:
         contact += "Если у вас возникли вопросы или проблемы, свяжитесь с нами:\n\n"
-    
+
     if support_telegram:
-        telegram_username = support_telegram.replace('@', '')
+        telegram_username = support_telegram.replace("@", "")
         contact += f"💬 <b>Telegram:</b> @{telegram_username}\n"
     else:
-        support_telegram = fallback_telegram
         logger.warning("Support contact not found in environment variables!")
-        logger.warning("Make sure these environment variables are set in Render dashboard:")
-        logger.warning("  - SUPPORT_TELEGRAM")
-        logger.warning("  - SUPPORT_TEXT (optional)")
-        # Also log all environment variables that start with SUPPORT_ for debugging
-        support_env_vars = {k: v for k, v in os.environ.items() if k.startswith('SUPPORT_')}
-        logger.debug(f"All SUPPORT_* environment variables: {support_env_vars}")
+        logger.warning("Set SUPPORT_* for partner or OWNER_SUPPORT_* for defaults.")
         contact += "⚠️ <b>Контактная информация не настроена.</b>\n\n"
-        contact += "Администратору необходимо указать SUPPORT_TELEGRAM в файле .env или в настройках Render (Environment Variables).\n\n"
-        contact += f"Контакт администратора: {support_telegram}\n"
+        contact += "Администратору необходимо указать SUPPORT_TELEGRAM или OWNER_SUPPORT_TELEGRAM.\n\n"
         contact += "Обратитесь к администратору."
-    
+
     return contact
 
 
@@ -20303,34 +20323,10 @@ async def main():
         
         # If "info" argument, show instance diagnostics
         if context.args and context.args[0].lower() == "info":
-            from app.utils.singleton_lock import get_lock_mode, is_lock_degraded
-            from app.storage.factory import get_storage
-            
-            bot_instance_id = os.getenv("BOT_INSTANCE_ID") or os.getenv("PARTNER_ID") or "NOT_SET"
-            storage_mode = os.getenv("STORAGE_MODE", "auto").strip().lower()
-            database_url = os.getenv("DATABASE_URL", "").strip()
-            redis_url = os.getenv("REDIS_URL", "").strip()
-            lock_mode = get_lock_mode()
-            lock_degraded = is_lock_degraded()
-            
-            storage = get_storage()
-            storage_type = storage.__class__.__name__
-            
-            db_status = "✅ Connected" if database_url else "❌ Not configured"
-            redis_status = "✅ Connected" if redis_url else "❌ Not configured"
-            lock_status = f"{'✅' if not lock_degraded else '⚠️'} {lock_mode}"
-            
-            text = (
-                "🔧 <b>Instance Diagnostics</b>\n\n"
-                f"🆔 <b>BOT_INSTANCE_ID:</b> <code>{bot_instance_id}</code>\n"
-                f"🗄️ <b>STORAGE_MODE:</b> <code>{storage_mode}</code>\n"
-                f"📦 <b>Storage Backend:</b> {storage_type}\n"
-                f"🗃️ <b>Database:</b> {db_status}\n"
-                f"🔴 <b>Redis:</b> {redis_status}\n"
-                f"🔒 <b>Lock Mode:</b> {lock_status}\n\n"
-                f"<i>Use /admin info to see this again</i>"
-            )
-            await update.message.reply_text(text, parse_mode='HTML')
+            from app.admin.diagnostics import build_admin_diagnostics_report
+
+            report = await build_admin_diagnostics_report()
+            await update.message.reply_text(report, parse_mode='HTML')
             return
         
         if not context.args or len(context.args) == 0:
