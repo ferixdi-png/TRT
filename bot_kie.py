@@ -3415,12 +3415,34 @@ async def _commit_post_delivery_charge(
         return outcome
 
     before_balance = await get_user_balance_async(user_id)
+    # FIX #2: Strict check - verify balance is sufficient before subtracting
+    if before_balance < price:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="insufficient_funds",
+            param={
+                "task_id": task_id,
+                "required": price,
+                "available": before_balance,
+            },
+        )
+        logger.error(f"❌ Insufficient balance: user={user_id}, required={price}, available={before_balance}")
+        return outcome
+    
     success = await subtract_user_balance_async(user_id, price)
     after_balance = await get_user_balance_async(user_id) if success else before_balance
     if success:
         session["balance_charged"] = True
         registry.add(task_key)
         outcome["charged"] = True
+        # FIX #2: Log history operation when balance is charged
+        logger.info(f"💸 Balance charged: user_id={user_id}, model_id={model_id}, amount={price}, before={before_balance}, after={after_balance}")
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -3557,7 +3579,16 @@ def add_referral(referrer_id: int, referred_id: int):
     
     # Check if already referred
     if referred_key in data and data[referred_key].get('referred_by'):
-        return  # Already referred by someone
+        # FIX #4: If already referred before, don't give bonus again (idempotent)
+        logger.warning(f"⚠️ Duplicate referral attempt: referred_id={referred_id}, already has referrer={data[referred_key].get('referred_by')}")
+        return
+    
+    # FIX #4: Check if bonus was already awarded in recent time (prevent double-award in same session)
+    if referred_key in data and data[referred_key].get('referred_at'):
+        last_referred_time = data[referred_key].get('referred_at', 0)
+        if time.time() - last_referred_time < 10:  # Within 10 seconds = same request replay
+            logger.warning(f"⚠️ Duplicate referral within 10s: referred_id={referred_id}, skipping bonus")
+            return
     
     # Add referral relationship
     if referred_key not in data:
@@ -3575,6 +3606,7 @@ def add_referral(referrer_id: int, referred_id: int):
         data[referrer_key]['referred_users'].append(referred_id)
     
     save_referrals_data(data)
+    logger.info(f"🤝 Referral added: referrer={referrer_id}, referred={referred_id}")
     
     # Give bonus generations to referrer
     try:
@@ -4103,10 +4135,19 @@ def _persist_payment_record(user_id: int, amount: float, screenshot_file_id: str
 
 def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
     """Add a payment record. Returns payment dict with id, timestamp, etc."""
+    # FIX #1: Check duplicate by screenshot_file_id before charging balance
+    if screenshot_file_id and check_duplicate_payment(screenshot_file_id):
+        logger.warning(f"⚠️ Duplicate payment attempt: screenshot_file_id={screenshot_file_id}")
+        existing = load_json_file(PAYMENTS_FILE, {})
+        for p in existing.values():
+            if p.get('screenshot_file_id') == screenshot_file_id:
+                return p  # Return existing payment record (idempotent)
+    
     payment = _persist_payment_record(user_id, amount, screenshot_file_id)
 
-    # Auto-add balance
+    # Auto-add balance (only once per unique payment_id)
     add_user_balance(user_id, amount)
+    logger.info(f"💰 Payment topped up: user_id={user_id}, amount={amount}, payment_id={payment.get('id')}")
 
     return payment
 
