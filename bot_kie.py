@@ -854,6 +854,7 @@ from helpers import (
     build_main_menu_keyboard, get_balance_info, format_balance_message,
     get_balance_keyboard, set_constants
 )
+from price_confirmation import show_price_confirmation, build_confirmation_text
 # Используем registry как единый источник моделей
 from app.models.registry import get_models_sync
 from app.services.free_tools_service import (
@@ -8414,57 +8415,20 @@ async def _button_callback_impl(
                         )
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
-
-                    free_counter_line = ""
-                    try:
-                        free_counter_line = await get_free_counter_line(
-                            user_id,
-                            user_lang=user_lang,
-                            correlation_id=correlation_id,
-                            action_path="confirm_screen",
-                            sku_id=sku_id,
-                        )
-                    except Exception as exc:
-                        logger.warning("Failed to resolve free counter line: %s", exc)
                     
-                    # Format improved confirmation message with price
-                    if user_lang == 'ru':
-                        confirm_msg = _append_free_counter_text(
-                            (
-                            f"📋 <b>Подтверждение генерации</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Модель:</b> {model_name}\n\n"
-                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>Что будет дальше:</b>\n"
-                            f"• Генерация начнется после подтверждения\n"
-                            f"• Результат придет автоматически\n"
-                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-                            f"🚀 <b>Готовы начать?</b>"
-                            ),
-                            free_counter_line,
-                        )
-                    else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str}"
-                        confirm_msg = _append_free_counter_text(
-                            (
-                            f"📋 <b>Generation Confirmation</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Model:</b> {model_name}\n\n"
-                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info_en}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>What's next:</b>\n"
-                            f"• Generation will start after confirmation\n"
-                            f"• Result will come automatically\n"
-                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                            f"🚀 <b>Ready to start?</b>"
-                            ),
-                            free_counter_line,
-                        )
+                    # Build enhanced confirmation message
+                    confirm_msg_base = build_confirmation_text(
+                        model_id=model_id,
+                        model_name=model_name,
+                        params=params,
+                        price=price,
+                        user_id=user_id,
+                        lang=user_lang,
+                        is_free=is_free,
+                        bonus_available=0.0,
+                        discount=None
+                    )
+                    confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
                     
                     logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
                     await query.edit_message_text(
@@ -8563,44 +8527,19 @@ async def _button_callback_impl(
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str}"
                     
-                    # Format improved confirmation message with price
-                    if user_lang == 'ru':
-                        confirm_msg = _append_free_counter_text(
-                            (
-                            f"📋 <b>Подтверждение генерации</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Модель:</b> {model_name}\n\n"
-                            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>Что будет дальше:</b>\n"
-                            f"• Генерация начнется после подтверждения\n"
-                            f"• Результат придет автоматически\n"
-                            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-                            f"🚀 <b>Готовы начать?</b>"
-                            ),
-                            free_counter_line,
-                        )
-                    else:
-                        price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str}"
-                        confirm_msg = _append_free_counter_text(
-                            (
-                            f"📋 <b>Generation Confirmation</b>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"🤖 <b>Model:</b> {model_name}\n\n"
-                            f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{price_info_en}\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💡 <b>What's next:</b>\n"
-                            f"• Generation will start after confirmation\n"
-                            f"• Result will come automatically\n"
-                            f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                            f"🚀 <b>Ready to start?</b>"
-                            ),
-                            free_counter_line,
-                        )
+                    # Build enhanced confirmation message
+                    confirm_msg_base = build_confirmation_text(
+                        model_id=model_id,
+                        model_name=model_name,
+                        params=params,
+                        price=price,
+                        user_id=user_id,
+                        lang=user_lang,
+                        is_free=is_free,
+                        bonus_available=0.0,
+                        discount=None
+                    )
+                    confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
                     
                     logger.info(f"✅ [UX IMPROVEMENT] Sending improved confirmation message to user {user_id}")
                     await query.edit_message_text(
@@ -13459,38 +13398,19 @@ async def send_confirmation_message(
     if price_str:
         keyboard.insert(0, [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")])
 
-    confirm_msg = _append_free_counter_text(
-        (
-            f"📋 <b>Подтверждение генерации</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🤖 <b>Модель:</b> {model_name}\n\n"
-            f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{price_info}\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"💡 <b>Что будет дальше:</b>\n"
-            f"• Генерация начнется после подтверждения\n"
-            f"• Результат придет автоматически\n"
-            f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-            f"🚀 <b>Готовы начать?</b>"
-            if user_lang == 'ru'
-            else (
-                f"📋 <b>Generation Confirmation</b>\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"🤖 <b>Model:</b> {model_name}\n\n"
-                f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{price_info}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"💡 <b>What's next:</b>\n"
-                f"• Generation will start after confirmation\n"
-                f"• Result will come automatically\n"
-                f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                f"🚀 <b>Ready to start?</b>"
-            )
-        ),
-        free_counter_line,
+    # Build enhanced confirmation message
+    confirm_msg_base = build_confirmation_text(
+        model_id=model_id,
+        model_name=model_name,
+        params=params,
+        price=price,
+        user_id=user_id,
+        lang=user_lang,
+        is_free=is_free,
+        bonus_available=0.0,
+        discount=None
     )
+    confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
 
     logger.info(
         "✅ CONFIRMATION: action_path=%s model_id=%s waiting_for=%s current_param=%s outcome=sent",
