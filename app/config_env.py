@@ -7,14 +7,13 @@ import sys
 import logging
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
 REQUIRED_ENV: Tuple[str, ...] = (
     "ADMIN_ID",
     "BOT_INSTANCE_ID",
-    "KIE_API_KEY",
     "TELEGRAM_BOT_TOKEN",
     "WEBHOOK_BASE_URL",
 )
@@ -29,8 +28,14 @@ OPTIONAL_ENV: Tuple[str, ...] = (
     "GITHUB_TIMEOUT_SECONDS",
     "GITHUB_WRITE_RETRIES",
     "GITHUB_ONLY_STORAGE",
+    "KIE_API_KEY",
     "KIE_API_URL",
     "KIE_RESULT_CDN_BASE_URL",
+    "OWNER_PAYMENT_BANK",
+    "OWNER_PAYMENT_CARD_HOLDER",
+    "OWNER_PAYMENT_PHONE",
+    "OWNER_SUPPORT_TELEGRAM",
+    "OWNER_SUPPORT_TEXT",
     "PORT_ALT",
     "PRICE_MULTIPLIER",
     "STORAGE_MODE",
@@ -49,13 +54,27 @@ SECRET_ENV = {
 }
 
 _COMMON_STORAGE_PREFIXES = {"storage", "data", "shared", "default"}
+_ENV_EXAMPLES = {
+    "TELEGRAM_BOT_TOKEN": "123456:ABCDEF",
+    "ADMIN_ID": "123456789",
+    "BOT_INSTANCE_ID": "partner-01",
+    "WEBHOOK_BASE_URL": "https://your-service.onrender.com",
+}
 
 
 class ConfigValidationError(RuntimeError):
     """Raised when required environment variables are missing or invalid."""
 
     def __init__(self, missing: List[str], invalid: List[str]):
-        super().__init__("Configuration validation failed")
+        details = []
+        if missing:
+            details.append(f"missing: {', '.join(missing)}")
+        if invalid:
+            details.append(f"invalid: {', '.join(invalid)}")
+        message = "Configuration validation failed"
+        if details:
+            message = f"{message} ({'; '.join(details)})"
+        super().__init__(message)
         self.missing = missing
         self.invalid = invalid
 
@@ -101,7 +120,26 @@ def _is_valid_branch(value: str) -> bool:
 
 
 def _is_valid_instance(value: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z0-9._-]+", value))
+    return bool(re.fullmatch(r"[a-z0-9._/-]+", value))
+
+
+def _is_valid_webhook_base_url(value: str) -> bool:
+    if not value:
+        return False
+    parts = urlsplit(value)
+    return parts.scheme == "https" and bool(parts.netloc)
+
+
+def normalize_webhook_base_url(value: str) -> str:
+    if not value:
+        return ""
+    parts = urlsplit(value.strip())
+    path = parts.path or ""
+    while "//" in path:
+        path = path.replace("//", "/")
+    if path.endswith("/") and path != "/":
+        path = path.rstrip("/")
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment)).rstrip("/")
 
 
 def mask_secret(value: str) -> str:
@@ -162,9 +200,14 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
 
     admin_id = require("ADMIN_ID")
     bot_instance_id = require("BOT_INSTANCE_ID")
-    kie_api_key = require("KIE_API_KEY")
     telegram_bot_token = require("TELEGRAM_BOT_TOKEN")
-    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
+    webhook_base_url_raw = os.getenv("WEBHOOK_BASE_URL", "").strip()
+    if not webhook_base_url_raw:
+        missing_required.append("WEBHOOK_BASE_URL")
+    webhook_base_url = normalize_webhook_base_url(webhook_base_url_raw)
+    if webhook_base_url_raw and webhook_base_url and webhook_base_url != webhook_base_url_raw:
+        logger.info("WEBHOOK_BASE_URL normalized: %s -> %s", webhook_base_url_raw, webhook_base_url)
+    kie_api_key = os.getenv("KIE_API_KEY", "").strip()
     storage_mode = os.getenv("STORAGE_MODE", "").strip().lower()
     # DB-only runtime: github переменные не требуются
     committer_email = ""
@@ -176,13 +219,13 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
     storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
     committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "").strip()
     committer_name = os.getenv("GITHUB_COMMITTER_NAME", "").strip()
-    payment_bank = require("PAYMENT_BANK")
-    payment_card_holder = require("PAYMENT_CARD_HOLDER")
-    payment_phone = require("PAYMENT_PHONE")
     port = os.getenv("PORT", "").strip()
     storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
-    support_telegram = require("SUPPORT_TELEGRAM")
-    support_text = require("SUPPORT_TEXT")
+    payment_bank = os.getenv("PAYMENT_BANK", "").strip()
+    payment_card_holder = os.getenv("PAYMENT_CARD_HOLDER", "").strip()
+    payment_phone = os.getenv("PAYMENT_PHONE", "").strip()
+    support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip()
+    support_text = os.getenv("SUPPORT_TEXT", "").strip()
 
     if bot_mode in {"webhook", "web"}:
         if not port:
@@ -192,8 +235,11 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
 
     if admin_id and not admin_id.isdigit():
         invalid_required.append("ADMIN_ID (must be number)")
-    if bot_instance_id and not _is_valid_instance(bot_instance_id):
-        invalid_required.append("BOT_INSTANCE_ID (letters/numbers/._- only)")
+    if bot_instance_id:
+        if " " in bot_instance_id or not _is_valid_instance(bot_instance_id):
+            invalid_required.append("BOT_INSTANCE_ID (lowercase letters/numbers/._/- only)")
+        if not (3 <= len(bot_instance_id) <= 64):
+            invalid_required.append("BOT_INSTANCE_ID (length 3-64)")
     if bot_mode and bot_mode not in {"polling", "webhook", "web", "smoke"}:
         invalid_required.append("BOT_MODE (polling/webhook/web/smoke)")
     if github_branch and not _is_valid_branch(github_branch):
@@ -207,25 +253,17 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
     if github_token and len(github_token) < 10:
         invalid_required.append("GITHUB_TOKEN (appears too short)")
     if kie_api_key and len(kie_api_key) < 10:
-        invalid_required.append("KIE_API_KEY (appears too short)")
-    if not payment_bank and "PAYMENT_BANK" not in missing_required:
-        invalid_required.append("PAYMENT_BANK (must be non-empty)")
-    if not payment_card_holder and "PAYMENT_CARD_HOLDER" not in missing_required:
-        invalid_required.append("PAYMENT_CARD_HOLDER (must be non-empty)")
-    if not payment_phone and "PAYMENT_PHONE" not in missing_required:
-        invalid_required.append("PAYMENT_PHONE (must be non-empty)")
+        invalid_optional.append("KIE_API_KEY (appears too short)")
     if port and not port.isdigit():
         invalid_required.append("PORT (must be number)")
     if storage_mode and storage_mode not in {"auto", "github", "postgres", "db", "github_json"}:
-        invalid_required.append("STORAGE_MODE (auto/github/postgres/db/github_json)")
+        invalid_optional.append("STORAGE_MODE (auto/github/postgres/db/github_json)")
     if support_telegram and not _is_valid_username(support_telegram):
-        invalid_required.append("SUPPORT_TELEGRAM (format @username)")
-    if not support_text and "SUPPORT_TEXT" not in missing_required:
-        invalid_required.append("SUPPORT_TEXT (must be non-empty)")
+        invalid_optional.append("SUPPORT_TELEGRAM (format @username)")
     if not telegram_bot_token and "TELEGRAM_BOT_TOKEN" not in missing_required:
         invalid_required.append("TELEGRAM_BOT_TOKEN (must be non-empty)")
-    if webhook_base_url and not _is_valid_url(webhook_base_url):
-        invalid_required.append("WEBHOOK_BASE_URL (must be URL)")
+    if webhook_base_url_raw and not _is_valid_webhook_base_url(webhook_base_url_raw):
+        invalid_required.append("WEBHOOK_BASE_URL (must be https:// URL)")
     if storage_branch and github_branch and storage_branch == github_branch:
         invalid_required.append("STORAGE_BRANCH must differ from GITHUB_BRANCH")
 
@@ -259,8 +297,13 @@ def _log_validation_errors(result: ConfigValidationResult) -> None:
     logger.error("=" * 60)
     if result.missing_required:
         logger.error("Missing required env vars: %s", ", ".join(result.missing_required))
+        for name in result.missing_required:
+            example = _ENV_EXAMPLES.get(name, f"{name}=<value>")
+            logger.error("MISSING_ENV %s. How to fix: set %s", name, example)
     if result.invalid_required:
         logger.error("Invalid required env vars: %s", ", ".join(result.invalid_required))
+        for name in result.invalid_required:
+            logger.error("INVALID_ENV %s. How to fix: check formatting and redeploy.", name)
     logger.error("=" * 60)
 
 
@@ -296,11 +339,14 @@ def build_config_self_check_report() -> str:
     bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
     storage_prefix_raw = os.getenv("STORAGE_PREFIX", "").strip()
     storage_prefix = resolve_storage_prefix(storage_prefix_raw, bot_instance_id).effective_prefix
-    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
+    webhook_base_url = normalize_webhook_base_url(os.getenv("WEBHOOK_BASE_URL", "").strip())
 
     lines.append("\n<b>Computed</b>")
     lines.append(f"• BOT_INSTANCE_ID: {bot_instance_id or 'missing'}")
     lines.append(f"• STORAGE_PREFIX: {storage_prefix or 'missing'}")
     lines.append(f"• WEBHOOK_BASE_URL: {webhook_base_url or 'missing'}")
+
+    if not os.getenv("KIE_API_KEY"):
+        lines.append("\n⚠️ <b>AI key not set</b>: KIE_API_KEY is missing, AI generation will be disabled.")
 
     return "\n".join(lines)

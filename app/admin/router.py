@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .ui import render_root, render_users, render_payments, render_stats, render_broadcast_intro
+from .diagnostics import build_admin_diagnostics_report
 from .repo import users_summary, payments_summary, stats_summary, export_csv
 from .auth import is_admin
 
@@ -17,8 +18,9 @@ async def show_admin_root(update_or_query: Any, context: ContextTypes.DEFAULT_TY
         if not is_admin(user_id):
             await query.answer("❌ Эта функция доступна только администратору.", show_alert=True)
             return
-        text, kb = render_root()
-        await query.edit_message_text(text, reply_markup=kb)
+        diagnostics = await build_admin_diagnostics_report()
+        text, kb = render_root(diagnostics)
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
         await query.answer()
     else:
         update: Update = update_or_query
@@ -26,8 +28,9 @@ async def show_admin_root(update_or_query: Any, context: ContextTypes.DEFAULT_TY
         if not is_admin(user_id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
-        text, kb = render_root()
-        await update.message.reply_text(text, reply_markup=kb)
+        diagnostics = await build_admin_diagnostics_report()
+        text, kb = render_root(diagnostics)
+        await update.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -41,8 +44,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data or ""
     if data == "adm:root":
-        text, kb = render_root()
-        await query.edit_message_text(text, reply_markup=kb)
+        diagnostics = await build_admin_diagnostics_report()
+        text, kb = render_root(diagnostics)
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
         await query.answer()
         return
 
@@ -74,8 +78,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_document(chat_id=chat_id, document=users_buf, filename="users.csv")
             await context.bot.send_document(chat_id=chat_id, document=payments_buf, filename="payments.csv")
         await query.answer("Экспорт отправлен")
-        text, kb = render_root()
-        await query.edit_message_text(text, reply_markup=kb)
+        diagnostics = await build_admin_diagnostics_report()
+        text, kb = render_root(diagnostics)
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
         return
 
     if data == "adm:broadcast":
@@ -89,8 +94,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.delete_message()
         except Exception:
             # Fallback to replace with root panel
-            text, kb = render_root()
-            await query.edit_message_text(text, reply_markup=kb)
+            diagnostics = await build_admin_diagnostics_report()
+            text, kb = render_root(diagnostics)
+            await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
         await query.answer()
         return
 

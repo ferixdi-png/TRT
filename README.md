@@ -52,6 +52,23 @@ BOT_MODE=polling python bot_kie.py
 
 ---
 
+## 🤝 Partner quickstart (5 минут)
+
+Для партнёров достаточно **4–5 переменных** в Render ENV:
+
+```env
+TELEGRAM_BOT_TOKEN=123456:ABCDEF
+ADMIN_ID=123456789
+BOT_INSTANCE_ID=partner-01
+WEBHOOK_BASE_URL=https://your-service.onrender.com
+KIE_API_KEY=optional-kie-api-key
+```
+
+Проверка после деплоя: откройте `/admin` и убедитесь, что статус DB/Redis **ok**, `BOT_INSTANCE_ID` отображается, а ключевые ENV отмечены как `SET`.  
+Подробная инструкция: `docs/PARTNER_QUICKSTART.md`.
+
+---
+
 ## 🧪 ТЕСТИРОВАНИЕ
 
 ```bash
