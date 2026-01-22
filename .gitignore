@@ -23,7 +23,10 @@ render.yaml
 *.session.*
 
 # Storage with live data (partner-specific)
+# Keep repo-level data in storage/ ignored, but allow application storage code in app/storage
 storage/
+!app/storage/
+!app/storage/*.py
 data/partner-*/
 
 # Temporary files
