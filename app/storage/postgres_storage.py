@@ -88,13 +88,13 @@ class PostgresStorage(BaseStorage):
             await conn.execute(
                 """
                 INSERT INTO storage_json (partner_id, filename, payload)
-                VALUES ($1, $2, $3)
+                VALUES ($1, $2, $3::jsonb)
                 ON CONFLICT (partner_id, filename)
                 DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
                 """,
                 self.partner_id,
                 filename,
-                data,
+                json.dumps(data) if data else "{}",
             )
 
     async def _update_json(self, filename: str, update_fn: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Dict[str, Any]:
