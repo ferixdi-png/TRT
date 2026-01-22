@@ -324,5 +324,7 @@ class PTBHarness:
                 object.__setattr__(update.message, "_bot", self.application.bot)
             if update.callback_query and update.callback_query.message:
                 object.__setattr__(update.callback_query.message, "_bot", self.application.bot)
+            if update.callback_query:
+                object.__setattr__(update.callback_query, "_bot", self.application.bot)
         except Exception:
             pass

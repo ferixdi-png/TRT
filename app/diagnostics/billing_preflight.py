@@ -11,6 +11,18 @@ from typing import Any, Dict, List, Optional
 
 import asyncpg
 
+from app.diagnostics.sql_helpers import (
+    AggregateResult,
+    STATUS_ERROR,
+    STATUS_OK as SQL_STATUS_OK,
+    STATUS_UNKNOWN as SQL_STATUS_UNKNOWN,
+    count_payload_entries,
+    count_payload_nonempty,
+    fetch_column_type,
+    merge_status,
+    run_row,
+    run_scalar,
+)
 from app.pricing.free_policy import get_free_daily_limit
 from app.storage.postgres_storage import PostgresStorage
 
@@ -18,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 STATUS_OK = "OK"
 STATUS_DEGRADED = "DEGRADED"
+STATUS_UNKNOWN = "UNKNOWN"
 STATUS_FAIL = "FAIL"
 
 RESULT_READY = "READY"
@@ -69,30 +82,43 @@ def _build_report_json(report: Dict[str, Any]) -> str:
 
 def format_billing_preflight_report(report: Dict[str, Any]) -> str:
     sections = report.get("sections", {})
-    def _line(name: str, section_key: str, suffix: str = "") -> str:
-        section = sections.get(section_key, {})
-        status = section.get("status", STATUS_DEGRADED)
-        meta = section.get("meta", {})
-        details = section.get("details", "")
-        if suffix:
-            suffix = f" {suffix}"
-        return f"{name}: {status} {details}{suffix}".strip()
+    db_meta = sections.get("db", {}).get("meta", {})
+    storage_meta = sections.get("storage_rw", {}).get("meta", {})
+    tenants_meta = sections.get("tenants", {}).get("meta", {})
+    balances_meta = sections.get("balances", {}).get("meta", {})
+    free_meta = sections.get("free_limits", {}).get("meta", {})
+    attempts_meta = sections.get("attempts", {}).get("meta", {})
 
     lines = [
         "BILLING PREFLIGHT (db-only)",
-        _line("DB", "db", f"(lat={sections.get('db', {}).get('meta', {}).get('latency_ms', 'n/a')}ms)"),
-        _line("PARTNERS", "tenants"),
-        _line("BALANCES", "balances"),
-        _line("FREE_LIMITS", "free_limits"),
-        _line("ATTEMPTS", "attempts"),
-        _line("STORAGE_RW", "storage_rw", f"(lat={sections.get('storage_rw', {}).get('meta', {}).get('latency_ms', 'n/a')}ms)"),
+        f"DB: {sections.get('db', {}).get('status', STATUS_DEGRADED)} (lat={db_meta.get('latency_ms', 'n/a')}ms)",
+        (
+            "PARTNERS: "
+            f"found={tenants_meta.get('partners_found', 'n/a')} "
+            f"(sample {tenants_meta.get('partners_sample', [])})"
+        ),
+        (
+            "BALANCES: "
+            f"records={balances_meta.get('records', 'n/a')} "
+            f"status={sections.get('balances', {}).get('status', STATUS_UNKNOWN)}"
+            f"{balances_meta.get('note', '')}"
+        ),
+        (
+            "FREE_LIMITS: "
+            f"records={free_meta.get('records', 'n/a')} "
+            f"status={sections.get('free_limits', {}).get('status', STATUS_UNKNOWN)}"
+            f"{free_meta.get('note', '')}"
+        ),
+        (
+            "ATTEMPTS: "
+            f"last24h={attempts_meta.get('last24h', 'n/a')} "
+            f"dup={attempts_meta.get('dup_request_id', 'n/a')} "
+            f"status={sections.get('attempts', {}).get('status', STATUS_UNKNOWN)}"
+            f"{attempts_meta.get('note', '')}"
+        ),
+        f"STORAGE_RW: {sections.get('storage_rw', {}).get('status', STATUS_DEGRADED)} (lat={storage_meta.get('latency_ms', 'n/a')}ms)",
         f"RESULT: {report.get('result', RESULT_DEGRADED)}",
     ]
-    how_to_fix = report.get("how_to_fix") or []
-    if how_to_fix:
-        lines.append("HOW TO FIX:")
-        for hint in how_to_fix:
-            lines.append(f"- {hint}")
     return "\n".join(lines)
 
 
@@ -121,6 +147,8 @@ def _section_status(sections: List[_Section]) -> str:
     if any(section.status == STATUS_FAIL for section in sections):
         return STATUS_FAIL
     if any(section.status == STATUS_DEGRADED for section in sections):
+        return STATUS_DEGRADED
+    if any(section.status == STATUS_UNKNOWN for section in sections):
         return STATUS_DEGRADED
     return STATUS_OK
 
@@ -243,93 +271,94 @@ async def run_billing_preflight(
             free_file = getattr(storage, "free_generations_file", "daily_free_generations.json")
             payments_file = getattr(storage, "payments_file", "payments.json")
 
-            total_balance_records = await conn.fetchval(
-                "/* billing_preflight:balances_total */ "
-                "SELECT COALESCE(SUM(jsonb_object_length(payload)),0) "
-                "FROM storage_json WHERE filename=$1",
-                balances_file,
+            payload_type = await fetch_column_type(conn, "storage_json", "payload")
+
+            total_balance_records = await count_payload_entries(
+                conn, balances_file, column_type=payload_type, key="balances_total"
             )
-            partners_with_balances = await conn.fetchval(
-                "/* billing_preflight:balances_partners */ "
-                "SELECT COUNT(*) FROM storage_json "
-                "WHERE filename=$1 AND jsonb_object_length(payload) > 0",
-                balances_file,
+            partners_with_balances = await count_payload_nonempty(
+                conn, balances_file, column_type=payload_type, key="balances_partners"
             )
-            balances_updated_24h = await conn.fetchval(
+            balances_updated_24h = await run_scalar(
+                conn,
+                "balances_updated_24h",
                 "/* billing_preflight:balances_updated_24h */ "
                 "SELECT COUNT(*) FROM storage_json "
                 "WHERE filename=$1 AND updated_at >= now() - interval '24 hours'",
                 balances_file,
             )
-            negative_balances = await conn.fetchval(
+            negative_balances = await run_scalar(
+                conn,
+                "balances_negative",
                 "/* billing_preflight:balances_negative */ "
                 "SELECT COALESCE(SUM(CASE "
                 "WHEN value ~ '^-?\\d+(\\.\\d+)?$' AND value::numeric < 0 THEN 1 ELSE 0 END),0) "
-                "FROM storage_json s, jsonb_each_text(s.payload) "
+                "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
                 "WHERE s.filename=$1",
                 balances_file,
             )
 
-            total_free_records = await conn.fetchval(
-                "/* billing_preflight:free_total */ "
-                "SELECT COALESCE(SUM(jsonb_object_length(payload)),0) "
-                "FROM storage_json WHERE filename=$1",
-                free_file,
+            total_free_records = await count_payload_entries(
+                conn, free_file, column_type=payload_type, key="free_total"
             )
-            partners_with_free = await conn.fetchval(
-                "/* billing_preflight:free_partners */ "
-                "SELECT COUNT(*) FROM storage_json "
-                "WHERE filename=$1 AND jsonb_object_length(payload) > 0",
-                free_file,
+            partners_with_free = await count_payload_nonempty(
+                conn, free_file, column_type=payload_type, key="free_partners"
             )
-            free_range = await conn.fetchrow(
+            free_range = await run_row(
+                conn,
+                "free_range",
                 "/* billing_preflight:free_range */ "
                 "SELECT "
                 "MIN(CASE WHEN value ~ '^\\d+$' THEN value::int END) AS min_used, "
                 "MAX(CASE WHEN value ~ '^\\d+$' THEN value::int END) AS max_used "
-                "FROM storage_json s, jsonb_each_text(s.payload) "
+                "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
                 "WHERE s.filename=$1",
                 free_file,
             )
             free_limit = get_free_daily_limit()
-            free_violations = await conn.fetchval(
+            free_violations = await run_scalar(
+                conn,
+                "free_violations",
                 "/* billing_preflight:free_violations */ "
                 "SELECT COALESCE(SUM(CASE "
                 "WHEN value ~ '^\\d+$' AND value::int > $2 THEN 1 ELSE 0 END),0) "
-                "FROM storage_json s, jsonb_each_text(s.payload) "
+                "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
                 "WHERE s.filename=$1",
                 free_file,
                 free_limit,
             )
 
-            total_attempts = await conn.fetchval(
-                "/* billing_preflight:attempts_total */ "
-                "SELECT COALESCE(SUM(jsonb_object_length(payload)),0) "
-                "FROM storage_json WHERE filename=$1",
-                payments_file,
+            total_attempts = await count_payload_entries(
+                conn, payments_file, column_type=payload_type, key="attempts_total"
             )
-            attempts_last_24h = await conn.fetchval(
+            attempts_last_24h = await run_scalar(
+                conn,
+                "attempts_last_24h",
                 "/* billing_preflight:attempts_last_24h */ "
-                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload) AS e(key, value) "
+                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
                 "WHERE s.filename=$1 "
                 "AND (value->>'created_at') IS NOT NULL "
                 "AND (value->>'created_at') <> '' "
                 "AND (value->>'created_at')::timestamptz >= now() - interval '24 hours'",
                 payments_file,
             )
-            request_id_rows = await conn.fetchval(
+            request_id_rows = await run_scalar(
+                conn,
+                "request_id_present",
                 "/* billing_preflight:request_id_present */ "
-                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload) AS e(key, value) "
+                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
                 "WHERE s.filename=$1 AND value ? 'request_id'",
                 payments_file,
             )
-            duplicate_request_id = 0
-            if request_id_rows:
-                duplicate_request_id = await conn.fetchval(
+            duplicate_request_id = AggregateResult(value=0, status=SQL_STATUS_OK, note="")
+            if request_id_rows.status == SQL_STATUS_OK and request_id_rows.value:
+                duplicate_request_id = await run_scalar(
+                    conn,
+                    "request_id_duplicates",
                     "/* billing_preflight:request_id_duplicates */ "
                     "WITH reqs AS ("
                     "SELECT value->>'request_id' AS request_id "
-                    "FROM storage_json s, jsonb_each(s.payload) AS e(key, value) "
+                    "FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
                     "WHERE s.filename=$1 AND value ? 'request_id'"
                     ") "
                     "SELECT COALESCE(SUM(cnt - 1),0) FROM ("
@@ -341,9 +370,11 @@ async def run_billing_preflight(
                 )
 
             stale_minutes = 30
-            stale_pending = await conn.fetchval(
+            stale_pending = await run_scalar(
+                conn,
+                "stale_pending",
                 "/* billing_preflight:stale_pending */ "
-                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload) AS e(key, value) "
+                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
                 "WHERE s.filename=$1 "
                 "AND value->>'status' = 'pending' "
                 "AND (value->>'created_at') IS NOT NULL "
@@ -364,53 +395,106 @@ async def run_billing_preflight(
             "storage_partner": _mask_partner_id(partner_id),
         }
         if missing_partner_rows:
-            tenants_status = STATUS_FAIL
+            tenants_status = STATUS_DEGRADED
             tenants_details = f"missing_partner_id={int(missing_partner_rows)}"
         elif partner_id and not partner_present and partners_found:
-            tenants_status = STATUS_FAIL
+            tenants_status = STATUS_DEGRADED
             tenants_details = "tenant isolation mismatch"
 
         balances_status = STATUS_OK
-        balances_details = (
-            f"records={int(total_balance_records)}, partners={int(partners_with_balances)}, "
-            f"neg={int(negative_balances)}, updated24h={int(balances_updated_24h)}"
+        balances_note = ""
+        balances_merge = merge_status(
+            total_balance_records,
+            partners_with_balances,
+            balances_updated_24h,
+            negative_balances,
         )
-        if total_balance_records == 0:
+        if balances_merge in {STATUS_ERROR, SQL_STATUS_UNKNOWN}:
+            balances_status = STATUS_UNKNOWN
+            balances_note = f" ({total_balance_records.note or 'aggregate_compat'})"
+        balances_details = (
+            f"records={total_balance_records.value if total_balance_records.value is not None else 'n/a'}, "
+            f"partners={partners_with_balances.value if partners_with_balances.value is not None else 'n/a'}, "
+            f"neg={negative_balances.value if negative_balances.value is not None else 'n/a'}, "
+            f"updated24h={balances_updated_24h.value if balances_updated_24h.value is not None else 'n/a'}"
+        )
+        if total_balance_records.value == 0:
             balances_details += " (initialized=0)"
-        if negative_balances:
-            balances_status = STATUS_FAIL
+        if negative_balances.status == SQL_STATUS_OK and negative_balances.value:
+            balances_status = STATUS_DEGRADED
+            balances_note = " (negative balances)"
 
         free_status = STATUS_OK
+        free_note = ""
+        free_merge = merge_status(total_free_records, partners_with_free, free_range, free_violations)
+        if free_merge in {STATUS_ERROR, SQL_STATUS_UNKNOWN}:
+            free_status = STATUS_UNKNOWN
+            free_note = f" ({total_free_records.note or 'aggregate_compat'})"
         free_details = (
-            f"records={int(total_free_records)}, partners={int(partners_with_free)}, "
-            f"violations={int(free_violations)}, "
-            f"used_today_range={free_range['min_used']}-{free_range['max_used']}"
+            f"records={total_free_records.value if total_free_records.value is not None else 'n/a'}, "
+            f"partners={partners_with_free.value if partners_with_free.value is not None else 'n/a'}, "
+            f"violations={free_violations.value if free_violations.value is not None else 'n/a'}, "
+            f"used_today_range="
+            f"{(free_range.value or {}).get('min_used')}-{(free_range.value or {}).get('max_used')}"
         )
-        if total_free_records == 0:
+        if total_free_records.value == 0:
             free_details += " (initialized=0)"
-        if free_violations:
+        if free_violations.status == SQL_STATUS_OK and free_violations.value:
             free_status = STATUS_DEGRADED
+            free_note = " (violations)"
 
         attempts_status = STATUS_OK
-        attempts_details = (
-            f"total={int(total_attempts)}, last24h={int(attempts_last_24h)}, "
-            f"dup_request_id={int(duplicate_request_id)}, stale_pending={int(stale_pending)}"
+        attempts_note = ""
+        attempts_merge = merge_status(
+            total_attempts,
+            attempts_last_24h,
+            request_id_rows,
+            duplicate_request_id,
+            stale_pending,
         )
-        if not request_id_rows:
+        if attempts_merge in {STATUS_ERROR, SQL_STATUS_UNKNOWN}:
+            attempts_status = STATUS_UNKNOWN
+            attempts_note = f" ({total_attempts.note or 'aggregate_compat'})"
+        attempts_details = (
+            f"total={total_attempts.value if total_attempts.value is not None else 'n/a'}, "
+            f"last24h={attempts_last_24h.value if attempts_last_24h.value is not None else 'n/a'}, "
+            f"dup_request_id={duplicate_request_id.value if duplicate_request_id.value is not None else 'n/a'}, "
+            f"stale_pending={stale_pending.value if stale_pending.value is not None else 'n/a'}"
+        )
+        if request_id_rows.status == SQL_STATUS_OK and not request_id_rows.value:
             attempts_details += " (request_id=not_tracked)"
-        if duplicate_request_id:
-            attempts_status = STATUS_FAIL
-        if stale_pending:
-            attempts_status = STATUS_DEGRADED if attempts_status != STATUS_FAIL else attempts_status
+        if duplicate_request_id.status == SQL_STATUS_OK and duplicate_request_id.value:
+            attempts_status = STATUS_DEGRADED
+            attempts_note = " (dup_request_id)"
+        if stale_pending.status == SQL_STATUS_OK and stale_pending.value:
+            attempts_status = STATUS_DEGRADED if attempts_status != STATUS_UNKNOWN else attempts_status
+            attempts_note = " (stale_pending)"
 
         storage_rw_section = await _storage_rw_smoke(storage, pool, bot_instance_id=partner_id)
 
         report["sections"] = {
             "db": {"status": db_section.status, "details": db_section.details, "meta": db_section.meta},
             "tenants": {"status": tenants_status, "details": tenants_details, "meta": tenant_meta},
-            "balances": {"status": balances_status, "details": balances_details, "meta": {}},
-            "free_limits": {"status": free_status, "details": free_details, "meta": {"daily_limit": free_limit}},
-            "attempts": {"status": attempts_status, "details": attempts_details, "meta": {"stale_minutes": stale_minutes}},
+            "balances": {
+                "status": balances_status,
+                "details": balances_details,
+                "meta": {"records": total_balance_records.value, "note": balances_note},
+            },
+            "free_limits": {
+                "status": free_status,
+                "details": free_details,
+                "meta": {"daily_limit": free_limit, "records": total_free_records.value, "note": free_note},
+            },
+            "attempts": {
+                "status": attempts_status,
+                "details": attempts_details,
+                "meta": {
+                    "stale_minutes": stale_minutes,
+                    "last24h": attempts_last_24h.value,
+                    "dup_request_id": duplicate_request_id.value,
+                    "note": attempts_note,
+                },
+            },
             "storage_rw": {
                 "status": storage_rw_section.status,
                 "details": storage_rw_section.details,
@@ -428,31 +512,32 @@ async def run_billing_preflight(
                 storage_rw_section,
             ]
         )
-        report["result"] = RESULT_READY if overall == STATUS_OK else RESULT_DEGRADED if overall == STATUS_DEGRADED else RESULT_FAIL
+        if db_section.status == STATUS_FAIL or storage_rw_section.status == STATUS_FAIL:
+            report["result"] = RESULT_FAIL
+        else:
+            report["result"] = RESULT_READY if overall == STATUS_OK else RESULT_DEGRADED
 
         how_to_fix: List[str] = []
-        if tenants_status == STATUS_FAIL:
+        if tenants_status == STATUS_DEGRADED:
             how_to_fix.append("Verify BOT_INSTANCE_ID and tenant rows in storage_json.")
-        if balances_status == STATUS_FAIL:
-            how_to_fix.append("Investigate negative balances; audit balance deductions and storage consistency.")
-        if free_status == STATUS_DEGRADED and free_violations:
+        if balances_status == STATUS_DEGRADED:
+            how_to_fix.append("Review balances consistency; check negative balances or stale updates.")
+        if free_status == STATUS_DEGRADED and free_violations.status == SQL_STATUS_OK and free_violations.value:
             how_to_fix.append("Check free usage counters; reset or adjust daily limits if needed.")
-        if attempts_status == STATUS_FAIL:
-            how_to_fix.append("Investigate duplicate request_id entries in payments.")
-        if attempts_status == STATUS_DEGRADED and stale_pending:
+        if attempts_status == STATUS_DEGRADED and stale_pending.status == SQL_STATUS_OK and stale_pending.value:
             how_to_fix.append("Review pending payments older than threshold; clean up if safe.")
         if storage_rw_section.status == STATUS_FAIL:
             how_to_fix.append("Verify diagnostics tenant access for storage_json.")
         report["how_to_fix"] = how_to_fix
 
     except Exception as exc:
-        logger.error("BILLING_PREFLIGHT failed: %s", exc, exc_info=True)
+        logger.debug("BILLING_PREFLIGHT failed: %s", exc, exc_info=True)
         report["sections"]["db"] = {
-            "status": STATUS_FAIL,
+            "status": STATUS_DEGRADED,
             "details": f"query failed ({str(exc)[:80]})",
             "meta": {},
         }
-        report["result"] = RESULT_FAIL
+        report["result"] = RESULT_DEGRADED
         report["how_to_fix"] = [
             "Check storage_json schema and database permissions.",
             "Verify DATABASE_URL points to the correct Postgres instance.",
