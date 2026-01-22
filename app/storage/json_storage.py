@@ -186,22 +186,32 @@ class JsonStorage(BaseStorage):
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
         """Вычесть из баланса"""
         balance_before = await self.get_user_balance(user_id)
-        if balance_before >= amount:
-            new_balance = balance_before - amount
-            await self.set_user_balance(user_id, new_balance)
-            
-            # PR-4: Audit logging
-            from app.utils.logging_config import get_logger
-            logger = get_logger(__name__)
-            logger.info(
-                "BALANCE_SUBTRACT user_id=%s amount=%.2f balance_before=%.2f balance_after=%.2f",
-                user_id,
-                amount,
-                balance_before,
-                new_balance,
+        # FIX #5: Strict check - NEVER allow negative balance
+        if balance_before < amount:
+            logger.warning(
+                f"❌ Insufficient balance for subtraction: user_id={user_id}, required={amount}, available={balance_before}"
             )
-            return True
-        return False
+            return False
+        
+        new_balance = balance_before - amount
+        # FIX #5: Extra safety - ensure result is not negative
+        if new_balance < 0:
+            logger.error(f"🚨 CRITICAL: Attempted negative balance! user_id={user_id}, new_balance={new_balance}")
+            return False
+        
+        await self.set_user_balance(user_id, new_balance)
+        
+        # PR-4: Audit logging
+        from app.utils.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.info(
+            "BALANCE_SUBTRACT user_id=%s amount=%.2f balance_before=%.2f balance_after=%.2f",
+            user_id,
+            amount,
+            balance_before,
+            new_balance,
+        )
+        return True
     
     async def get_user_language(self, user_id: int) -> str:
         """Получить язык пользователя"""
@@ -261,8 +271,11 @@ class JsonStorage(BaseStorage):
             user_data['date'] = today
             user_data['count'] = 0
         
-        user_data['count'] = user_data.get('count', 0) + 1
+        # FIX #3: Ensure count doesn't go negative and log safely
+        old_count = max(0, int(user_data.get('count', 0)))
+        user_data['count'] = old_count + 1
         await self._save_json(self.free_generations_file, data)
+        logger.info(f"📊 Free gen incremented: user_id={user_id}, date={today}, count={old_count+1}")
 
     async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
         data = await self._load_json(self.hourly_free_usage_file)
