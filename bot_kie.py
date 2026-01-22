@@ -2507,6 +2507,47 @@ def get_cache_key(filename: str) -> str:
     }
     return cache_map.get(filename, filename)
 
+
+def _normalize_storage_payload(
+    payload: Any,
+    *,
+    filename: str,
+    source: str,
+    default: Dict[str, Any],
+) -> Dict[str, Any]:
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        try:
+            nested = json.loads(payload)
+        except Exception:
+            nested = None
+        if isinstance(nested, dict):
+            return nested
+    correlation_id = f"storage-{uuid.uuid4().hex[:8]}"
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="STORAGE_JSON_READ",
+        action_path="bot_kie.load_json_file",
+        stage="sanitize",
+        outcome="fallback_default",
+        error_code="STORAGE_JSON_TYPE_INVALID",
+        fix_hint="Storage JSON payload должен быть объектом; возвращаем default.",
+        param={
+            "filename": filename,
+            "source": source,
+            "payload_type": type(payload).__name__,
+        },
+    )
+    logger.warning(
+        "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s source=%s payload_type=%s",
+        correlation_id,
+        filename,
+        source,
+        type(payload).__name__,
+    )
+    return default.copy()
+
 def load_json_file(filename: str, default: dict = None) -> dict:
     """Load JSON file with caching and locking for performance (optimized for 1000+ users).
     Automatically creates file if it doesn't exist (for critical files)."""
@@ -2523,7 +2564,16 @@ def load_json_file(filename: str, default: dict = None) -> dict:
             if cache_key != filename:  # Only for mapped cache keys
                 cached_data = _data_cache.get(cache_key)
                 if cached_data is not None:
-                    return cached_data.copy()
+                    if isinstance(cached_data, dict):
+                        return cached_data.copy()
+                    _data_cache.pop(cache_key, None)
+                    _data_cache['cache_timestamps'].pop(cache_key, None)
+                    _normalize_storage_payload(
+                        cached_data,
+                        filename=filename,
+                        source="cache",
+                        default=default,
+                    )
     
     # Get lock for this file type
     lock_key = cache_key if cache_key in _file_locks else 'balances'  # Default to balances lock
@@ -2541,7 +2591,13 @@ def load_json_file(filename: str, default: dict = None) -> dict:
                     storage.read_json_file(storage_filename, default),
                     label=f"read:{storage_filename}",
                 )
-                if cache_key != filename:
+                data = _normalize_storage_payload(
+                    data,
+                    filename=filename,
+                    source="storage",
+                    default=default,
+                )
+                if cache_key != filename and isinstance(data, dict):
                     _data_cache[cache_key] = data.copy()
                     _data_cache['cache_timestamps'][cache_key] = current_time
                 return data
@@ -2555,8 +2611,14 @@ def load_json_file(filename: str, default: dict = None) -> dict:
             if os.path.exists(filename):
                 with open(filename, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+                    data = _normalize_storage_payload(
+                        data,
+                        filename=filename,
+                        source="local_file",
+                        default=default,
+                    )
                     # Update cache (thread-safe)
-                    if cache_key != filename:
+                    if cache_key != filename and isinstance(data, dict):
                         _data_cache[cache_key] = data.copy()
                         _data_cache['cache_timestamps'][cache_key] = current_time
                     return data

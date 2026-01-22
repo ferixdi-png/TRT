@@ -82,7 +82,24 @@ class JsonStorage(BaseStorage):
                 content = await f.read()
                 if not content.strip():
                     return {}
-                return json.loads(content)
+                payload = json.loads(content)
+                if isinstance(payload, dict):
+                    return payload
+                if isinstance(payload, str):
+                    try:
+                        nested = json.loads(payload)
+                    except json.JSONDecodeError:
+                        nested = None
+                    if isinstance(nested, dict):
+                        return nested
+                correlation_id = uuid.uuid4().hex[:8]
+                logger.warning(
+                    "STORAGE_JSON_TYPE_INVALID correlation_id=%s file=%s payload_type=%s",
+                    correlation_id,
+                    file_path,
+                    type(payload).__name__,
+                )
+                return {}
         except FileNotFoundError:
             return {}
         except json.JSONDecodeError:
