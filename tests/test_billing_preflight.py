@@ -56,7 +56,7 @@ class FakePool:
 
 
 def _query_key(query: str) -> str:
-    match = re.search(r"billing_preflight:([a-z_]+)", query)
+    match = re.search(r"billing_preflight:([a-z0-9_]+)", query)
     if not match:
         raise KeyError(f"Unknown query: {query}")
     return match.group(1)
@@ -64,6 +64,7 @@ def _query_key(query: str) -> str:
 
 def _base_responses():
     return {
+        "column_type": {"data_type": "jsonb", "udt_name": "jsonb"},
         "partners_count": 0,
         "partners_sample": [],
         "partners_top": [],
@@ -161,9 +162,9 @@ async def test_billing_preflight_detects_violations():
 
     report = await run_billing_preflight(storage, fake_pool)
 
-    assert report["result"] == "FAIL"
-    assert report["sections"]["balances"]["status"] == "FAIL"
-    assert report["sections"]["attempts"]["status"] == "FAIL"
+    assert report["result"] == "DEGRADED"
+    assert report["sections"]["balances"]["status"] == "DEGRADED"
+    assert report["sections"]["attempts"]["status"] == "DEGRADED"
 
 
 @pytest.mark.asyncio
@@ -186,3 +187,74 @@ async def test_billing_preflight_no_pii_in_report():
 
     assert "partner-01" not in report_json
     assert "p***01" in report_json
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_text_payload_compatible():
+    responses = _base_responses()
+    responses.update(
+        {
+            "column_type": {"data_type": "text", "udt_name": "text"},
+            "balances_total": 1,
+            "balances_partners": 1,
+            "free_total": 1,
+            "free_partners": 1,
+            "attempts_total": 1,
+        }
+    )
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["result"] == "READY"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_json_payload_compatible():
+    responses = _base_responses()
+    responses.update(
+        {
+            "column_type": {"data_type": "json", "udt_name": "json"},
+            "balances_total": 2,
+            "balances_partners": 1,
+            "free_total": 1,
+            "free_partners": 1,
+            "attempts_total": 1,
+        }
+    )
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["result"] == "READY"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_aggregate_failure_degraded():
+    responses = _base_responses()
+    responses.update(
+        {
+            "balances_total": RuntimeError("json cast failed"),
+            "balances_total_fallback": 1,
+        }
+    )
+
+    class ErroringConn(FakeConn):
+        async def fetchval(self, query, *args):
+            value = self.responses[_query_key(query)]
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+    fake_conn = ErroringConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["result"] == "DEGRADED"
+    assert report["sections"]["balances"]["status"] == "UNKNOWN"
