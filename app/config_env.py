@@ -159,26 +159,37 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
             missing_required.append(name)
         return value
 
+
     admin_id = require("ADMIN_ID")
     bot_instance_id = require("BOT_INSTANCE_ID")
-    bot_mode = require("BOT_MODE")
-    github_branch = require("GITHUB_BRANCH")
-    committer_email = require("GITHUB_COMMITTER_EMAIL")
-    committer_name = require("GITHUB_COMMITTER_NAME")
-    github_repo = require("GITHUB_REPO")
-    github_token = require("GITHUB_TOKEN")
     kie_api_key = require("KIE_API_KEY")
+    telegram_bot_token = require("TELEGRAM_BOT_TOKEN")
+    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
+    storage_mode = os.getenv("STORAGE_MODE", "").strip()
+    # Только если github storage — требуем github-переменные
+    if storage_mode == "github":
+        bot_mode = require("BOT_MODE")
+        github_branch = require("GITHUB_BRANCH")
+        committer_email = require("GITHUB_COMMITTER_EMAIL")
+        committer_name = require("GITHUB_COMMITTER_NAME")
+        github_repo = require("GITHUB_REPO")
+        github_token = require("GITHUB_TOKEN")
+        storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
+    else:
+        bot_mode = os.getenv("BOT_MODE", "").strip()
+        github_branch = os.getenv("GITHUB_BRANCH", "").strip()
+        committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "").strip()
+        committer_name = os.getenv("GITHUB_COMMITTER_NAME", "").strip()
+        github_repo = os.getenv("GITHUB_REPO", "").strip()
+        github_token = os.getenv("GITHUB_TOKEN", "").strip()
+        storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
     payment_bank = require("PAYMENT_BANK")
     payment_card_holder = require("PAYMENT_CARD_HOLDER")
     payment_phone = require("PAYMENT_PHONE")
     port = os.getenv("PORT", "").strip()
-    storage_mode = os.getenv("STORAGE_MODE", "").strip()
     storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
     support_telegram = require("SUPPORT_TELEGRAM")
     support_text = require("SUPPORT_TEXT")
-    telegram_bot_token = require("TELEGRAM_BOT_TOKEN")
-    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
-    storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
 
     if bot_mode in {"webhook", "web"}:
         if not port:
