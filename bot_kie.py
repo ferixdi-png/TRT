@@ -4121,23 +4121,27 @@ def _persist_payment_record(user_id: int, amount: float, screenshot_file_id: str
         except Exception as e:
             logger.error(f"Error creating payments file {PAYMENTS_FILE}: {e}")
 
-    payments = load_json_file(PAYMENTS_FILE, {})
-    payment_id = len(payments) + 1
-    import time
-    payment = {
-        "id": payment_id,
-        "user_id": user_id,
-        "amount": amount,
-        "timestamp": time.time(),
-        "screenshot_file_id": screenshot_file_id,
-        "status": "completed"  # Auto-completed
-    }
-    payments[str(payment_id)] = payment
+    lock = _file_locks.get('payments', _file_locks['balances'])
+    with lock:
+        payments = load_json_file(PAYMENTS_FILE, {})
+        payment_id = len(payments) + 1
+        while str(payment_id) in payments:
+            payment_id += 1
+        import time
+        payment = {
+            "id": payment_id,
+            "user_id": user_id,
+            "amount": amount,
+            "timestamp": time.time(),
+            "screenshot_file_id": screenshot_file_id,
+            "status": "completed"  # Auto-completed
+        }
+        payments[str(payment_id)] = payment
 
-    # Force immediate save for payments (critical data)
-    if PAYMENTS_FILE in _last_save_time:
-        del _last_save_time[PAYMENTS_FILE]
-    save_json_file(PAYMENTS_FILE, payments, use_cache=True)
+        # Force immediate save for payments (critical data)
+        if PAYMENTS_FILE in _last_save_time:
+            del _last_save_time[PAYMENTS_FILE]
+        save_json_file(PAYMENTS_FILE, payments, use_cache=True)
 
     # Verify payment was saved
     if os.path.exists(PAYMENTS_FILE):
@@ -4173,6 +4177,12 @@ def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> 
 
 async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
     """Async add payment with balance credit through async storage."""
+    if screenshot_file_id and check_duplicate_payment(screenshot_file_id):
+        logger.warning(f"⚠️ Duplicate payment attempt: screenshot_file_id={screenshot_file_id}")
+        existing = load_json_file(PAYMENTS_FILE, {})
+        for p in existing.values():
+            if p.get('screenshot_file_id') == screenshot_file_id:
+                return p
     payment = _persist_payment_record(user_id, amount, screenshot_file_id)
     await add_user_balance_async(user_id, amount)
     return payment
