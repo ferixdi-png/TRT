@@ -103,6 +103,32 @@ async def main() -> None:
 
     health_started = await start_healthcheck(port)
 
+    from app.storage import get_storage
+    from app.diagnostics.billing_preflight import run_billing_preflight
+
+    storage = get_storage()
+    db_ok = False
+    try:
+        if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
+            db_ok = await storage.ping()
+        elif hasattr(storage, "test_connection"):
+            db_ok = await asyncio.to_thread(storage.test_connection)
+    except Exception as exc:
+        logger.error("DB connectivity check failed: %s", exc, exc_info=True)
+        db_ok = False
+
+    if not db_ok:
+        logger.error("DB connection failed, aborting startup before Telegram updates.")
+        await stop_healthcheck(health_started)
+        sys.exit(1)
+    logger.info("DB connection OK, running billing preflight.")
+
+    preflight_report = await run_billing_preflight(storage, db_pool=None)
+    if preflight_report.get("result") == "FAIL":
+        logger.error("Billing preflight failed, aborting startup before Telegram updates.")
+        await stop_healthcheck(health_started)
+        sys.exit(1)
+
     loop = asyncio.get_running_loop()
     shutdown_event = asyncio.Event()
 

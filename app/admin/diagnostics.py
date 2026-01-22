@@ -7,10 +7,16 @@ from typing import List, Optional
 
 from app.config_env import normalize_webhook_base_url, validate_config
 from app.diagnostics.boot import format_boot_report, get_cached_boot_report, get_cached_boot_report_text
+from app.diagnostics.billing_preflight import (
+    format_billing_preflight_report,
+    get_cached_billing_preflight,
+    get_cached_billing_preflight_text,
+)
 from app.storage.factory import get_storage
 
 logger = logging.getLogger(__name__)
 _BOOT_REPORT_KEY = "_diagnostics/boot.json"
+_BILLING_PREFLIGHT_KEY = "_diagnostics/billing_preflight.json"
 
 
 def _env_set(name: str) -> bool:
@@ -77,6 +83,24 @@ async def _load_boot_report_text() -> Optional[str]:
     return format_boot_report(report)
 
 
+async def _load_billing_preflight_text() -> Optional[str]:
+    cached_text = get_cached_billing_preflight_text()
+    if cached_text:
+        return cached_text
+    cached_report = get_cached_billing_preflight()
+    if cached_report:
+        return format_billing_preflight_report(cached_report)
+    try:
+        storage = get_storage()
+        report = await storage.read_json_file(_BILLING_PREFLIGHT_KEY, default={})
+    except Exception as exc:
+        logger.warning("admin diagnostics billing preflight fetch failed: %s", exc)
+        return None
+    if not report:
+        return None
+    return format_billing_preflight_report(report)
+
+
 async def build_admin_diagnostics_report() -> str:
     bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
     webhook_base_raw = os.getenv("WEBHOOK_BASE_URL", "").strip()
@@ -87,6 +111,7 @@ async def build_admin_diagnostics_report() -> str:
     db_status = await _db_status()
     redis_status = await _redis_status()
     boot_report_text = await _load_boot_report_text()
+    billing_preflight_text = await _load_billing_preflight_text()
     lines = [
         "🧭 <b>Partner diagnostics</b>",
         f"• BOT_INSTANCE_ID: <code>{bot_instance_id or 'missing'}</code>",
@@ -104,6 +129,11 @@ async def build_admin_diagnostics_report() -> str:
         lines.append("")
         lines.append("🧾 <b>Boot report</b>")
         lines.append(boot_report_text)
+
+    if billing_preflight_text:
+        lines.append("")
+        lines.append("💳 <b>Billing preflight</b>")
+        lines.append(billing_preflight_text)
 
     diagnostics = validate_config(strict=False)
     hints: List[str] = []
