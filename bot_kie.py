@@ -1531,6 +1531,44 @@ _processed_update_ttl_seconds = 120
 active_generations = {}
 active_generations_lock = asyncio.Lock()
 
+# Track in-flight generation tasks to allow user-triggered cancellation
+active_generation_tasks: Dict[int, asyncio.Task] = {}
+active_generation_tasks_lock = asyncio.Lock()
+
+
+async def _remove_active_generation_task(user_id: int) -> None:
+    """Remove task tracking entry (best-effort, ignores missing users)."""
+    async with active_generation_tasks_lock:
+        active_generation_tasks.pop(user_id, None)
+
+
+async def register_active_generation_task(user_id: int) -> None:
+    """Register the current asyncio.Task for cancellation hooks."""
+    task = asyncio.current_task()
+    if not task:
+        return
+    async with active_generation_tasks_lock:
+        active_generation_tasks[user_id] = task
+
+    def _cleanup(_task: asyncio.Task) -> None:
+        asyncio.create_task(_remove_active_generation_task(user_id))
+
+    task.add_done_callback(_cleanup)
+
+
+async def cancel_active_generation(user_id: int) -> bool:
+    """Cancel an in-flight generation task for the user if present."""
+    async with active_generation_tasks_lock:
+        task = active_generation_tasks.get(user_id)
+        if not task:
+            return False
+        if task.done():
+            active_generation_tasks.pop(user_id, None)
+            return False
+        task.cancel()
+        active_generation_tasks.pop(user_id, None)
+        return True
+
 # Pending result deliveries for retry (user_id, task_id) -> payload
 pending_deliveries: Dict[tuple[int, str], Dict[str, Any]] = {}
 pending_deliveries_lock = asyncio.Lock()
@@ -17013,6 +17051,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         action_path="confirm_generate",
         outcome="received",
     )
+
+    # Track running generation task for user-driven cancellation
+    await register_active_generation_task(user_id)
     
     # Answer callback immediately if present
     if query:
@@ -18010,6 +18051,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=build_back_to_menu_keyboard(user_lang),
         )
         return ConversationHandler.END
+    except asyncio.CancelledError:
+        logger.info("Generation cancelled by user_id=%s", user_id)
+        try:
+            await send_or_edit_message(
+                "❌ Генерация остановлена по запросу. Вы можете запустить новую.",
+                parse_mode="HTML",
+            )
+        except Exception:
+            # If editing/sending fails, silently continue to exit the flow
+            pass
+        user_sessions.pop(user_id, None)
+        return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
         log_structured_event(
@@ -18712,6 +18765,33 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current operation."""
     user_id = update.effective_user.id
+
+    # If a generation is in-flight, cancel it first
+    generation_cancelled = await cancel_active_generation(user_id)
+    if generation_cancelled:
+        if update.callback_query:
+            try:
+                await update.callback_query.answer("Останавливаю генерацию…")
+            except Exception:
+                pass
+        cancel_text = (
+            "❌ Генерация остановлена. Можете запустить новую."
+            if get_user_language(user_id) == "ru"
+            else "❌ Generation cancelled. You can start a new one."
+        )
+        try:
+            if update.callback_query and update.callback_query.message:
+                await update.callback_query.edit_message_text(cancel_text)
+            elif update.message:
+                await update.message.reply_text(cancel_text)
+        except Exception:
+            try:
+                await context.bot.send_message(chat_id=user_id, text=cancel_text)
+            except Exception:
+                pass
+        user_sessions.pop(user_id, None)
+        await ensure_main_menu(update, context, source="cancel_generation", prefer_edit=False)
+        return ConversationHandler.END
     
     # Handle callback query (button press)
     if update.callback_query:
