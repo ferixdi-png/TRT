@@ -5131,45 +5131,66 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     else:
         name = user.mention_html() if user else "друг"
 
-    if is_new:
-        header_text = t(
-            "welcome_new",
-            lang=user_lang,
-            name=name,
-            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-            free_limit=FREE_GENERATIONS_PER_DAY,
-            models=total_models,
-            types=len(generation_types),
-            online=online_count,
-            ref_bonus=REFERRAL_BONUS_GENERATIONS,
-            ref_link=referral_link,
+    if user_lang == "ru":
+        header_text = (
+            "🔥 FERIXDI AI — Ultra Creative Suite\n"
+            "Премиальная AI-студия в Telegram для маркетинга / SMM / арбитража.\n"
+            "Здесь делают креатив не “поиграться”, а быстро собрать материал под трафик: варианты, стили, усиление качества — и сразу в работу.\n\n"
+            "⚡ Что ты получаешь:\n"
+            "• 🎨 Визуал-пак под рекламу — генерация, стили, вариации, апскейл, фон\n"
+            "• 🧩 Ремикс изображения — прокачать исходник, сменить вайб, усилить детали\n"
+            "• 🎬 Видео-креативы — из идеи в ролик, из изображения в движение, улучшение качества\n"
+            "• 🧼 Ремастер качества — “поднять” контент так, чтобы выглядел дорого и чисто\n"
+            "• 🚀 Скорость производства — минимум действий, максимум результата\n\n"
+            "🧩 Спец-раздел (доп. категории):\n"
+            "Там живут инструменты под нестандартные задачи — например удаление ватермарки и другие функции, которые будут добавляться дальше.\n\n"
+            "📌 Как работать:\n"
+            "1) Выбираешь раздел\n"
+            "2) Даёшь ТЗ или загружаешь файл\n"
+            "3) Подтверждаешь → забираешь результат ✅\n\n"
+            "👇 Выберите раздел ниже."
         )
         referral_bonus_text = ""
     else:
-        referral_bonus_text = ""
-        if referrals_count > 0:
-            referral_bonus_text = t(
-                "msg_referral_bonus",
+        if is_new:
+            header_text = t(
+                "welcome_new",
                 lang=user_lang,
-                count=referrals_count,
-                bonus=referrals_count * REFERRAL_BONUS_GENERATIONS,
+                name=name,
+                free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+                free_limit=FREE_GENERATIONS_PER_DAY,
+                models=total_models,
+                types=len(generation_types),
+                online=online_count,
+                ref_bonus=REFERRAL_BONUS_GENERATIONS,
+                ref_link=referral_link,
+            )
+            referral_bonus_text = ""
+        else:
+            referral_bonus_text = ""
+            if referrals_count > 0:
+                referral_bonus_text = t(
+                    "msg_referral_bonus",
+                    lang=user_lang,
+                    count=referrals_count,
+                    bonus=referrals_count * REFERRAL_BONUS_GENERATIONS,
+                )
+
+            header_text = t(
+                "welcome_returning",
+                lang=user_lang,
+                name=name,
+                online=online_count,
+                free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
+                free_limit=FREE_GENERATIONS_PER_DAY,
+                models=total_models,
+                types=len(generation_types),
             )
 
-        header_text = t(
-            "welcome_returning",
-            lang=user_lang,
-            name=name,
-            online=online_count,
-            free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
-            free_limit=FREE_GENERATIONS_PER_DAY,
-            models=total_models,
-            types=len(generation_types),
-        )
-
-    if user_lang == "en":
-        header_text += "\n👇 Select a section from the menu below."
-    else:
-        header_text += "\n👇 Выберите раздел в меню ниже."
+        if user_lang == "en":
+            header_text += "\n👇 Select a section from the menu below."
+        else:
+            header_text += "\n👇 Выберите раздел в меню ниже."
 
     from app.utils.singleton_lock import get_lock_admin_notice, get_lock_mode, is_lock_degraded
 
@@ -7649,9 +7670,9 @@ async def _button_callback_impl(
             if gen_type == "text-to-image":
                 user_lang = get_user_language(user_id)
                 if user_lang == 'ru':
-                    button_text = f"🆓 Бесплатные модели ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
+                    button_text = f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
                 else:
-                    button_text = f"🆓 Free tools ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
+                    button_text = f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
                 keyboard.append([
                     InlineKeyboardButton(button_text, callback_data="free_tools")
                 ])
@@ -7907,7 +7928,7 @@ async def _button_callback_impl(
                     free_counter_line = f"{free_counter_line}\n🔄 Лимит обновляется раз в день."
             if user_lang == 'ru':
                 free_tools_text = (
-                    f"🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ</b>\n\n"
+                    f"🆓 <b>FAST TOOLS</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>Все инструменты в этом разделе полностью бесплатны!</b>\n\n"
                     f"🤖 <b>Доступные инструменты ({len(free_skus)}):</b>\n\n"
@@ -7915,7 +7936,7 @@ async def _button_callback_impl(
                 )
             else:
                 free_tools_text = (
-                    f"🆓 <b>FREE TOOLS</b>\n\n"
+                    f"🆓 <b>FAST TOOLS</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>All tools in this section are completely free!</b>\n\n"
                     f"🤖 <b>Available tools ({len(free_skus)}):</b>\n\n"
@@ -8059,9 +8080,9 @@ async def _button_callback_impl(
             keyboard = []
             
             if user_lang == 'ru':
-                button_text = f"🆓 Бесплатные модели ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
+                button_text = f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
             else:
-                button_text = f"🆓 Free tools ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
+                button_text = f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
             keyboard.append([
                 InlineKeyboardButton(button_text, callback_data="free_tools")
             ])
@@ -8144,11 +8165,11 @@ async def _button_callback_impl(
             keyboard.append([])  # Empty row for spacing
             if user_lang == 'ru':
                 keyboard.append([
-                    InlineKeyboardButton("🆓 БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ", callback_data="free_tools")
+                    InlineKeyboardButton("🆓 FAST TOOLS", callback_data="free_tools")
                 ])
             else:
                 keyboard.append([
-                    InlineKeyboardButton("🆓 FREE TOOLS", callback_data="free_tools")
+                    InlineKeyboardButton("🆓 FAST TOOLS", callback_data="free_tools")
                 ])
 
             # Add "Other models" shortcut
@@ -10168,7 +10189,7 @@ async def _button_callback_impl(
                     f'━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🎯 <b>У нас {total_models} моделей в {len(categories)} категориях:</b>\n\n'
                     f'🖼️ <b>Изображения</b>\n'
-                    f'• free tools - бесплатные модели (5 раз в день)\n'
+                    f'• free tools (FAST TOOLS) — 5 раз в день\n'
                     f'• Nano Banana Pro - качество 2K/4K\n'
                     f'• Imagen 4 Ultra - новейшая от Google\n\n'
                     f'🎬 <b>Видео</b>\n'
@@ -10359,7 +10380,7 @@ async def _button_callback_impl(
             
                 keyboard = [
                     [InlineKeyboardButton("📋 Все модели", callback_data="all_models")],
-                    [InlineKeyboardButton("🆓 Бесплатные модели", callback_data="free_tools")],
+                    [InlineKeyboardButton("🆓 FAST TOOLS", callback_data="free_tools")],
                     [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")]
                 ]
                 
@@ -10413,7 +10434,7 @@ async def _button_callback_impl(
                         '👋 <b>Добро пожаловать!</b>\n\n'
                         '🎯 <b>Быстрый старт:</b>\n'
                         '1. Нажмите "📋 Все модели"\n'
-                        '2. Выберите "🆓 Бесплатные модели" (это бесплатно!)\n'
+                        '2. Выберите "🆓 FAST TOOLS" (это бесплатно!)\n'
                         '3. Введите описание, например: "Кот в космосе"\n'
                         '4. Нажмите "✅ Генерировать"\n'
                         '5. Получите результат через 10-30 секунд!\n\n'
@@ -10433,7 +10454,7 @@ async def _button_callback_impl(
                         '👋 <b>Welcome!</b>\n\n'
                         '🎯 <b>Quick Start:</b>\n'
                         '1. Click "📋 All Models"\n'
-                        '2. Select "🆓 Free tools" (it\'s free!)\n'
+                        '2. Select "🆓 FAST TOOLS" (it\'s free!)\n'
                         '3. Enter description, e.g.: "Cat in space"\n'
                         '4. Click "✅ Generate"\n'
                         '5. Get result in 10-30 seconds!\n\n'
