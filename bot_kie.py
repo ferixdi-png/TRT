@@ -20331,6 +20331,18 @@ async def main():
             report = await build_admin_diagnostics_report()
             await update.message.reply_text(report, parse_mode='HTML')
             return
+
+        if context.args and context.args[0].lower() == "preflight":
+            from app.diagnostics.billing_preflight import (
+                format_billing_preflight_report,
+                run_billing_preflight,
+            )
+            from app.storage import get_storage
+
+            storage_instance = get_storage()
+            report = await run_billing_preflight(storage_instance, db_pool=None)
+            await update.message.reply_text(format_billing_preflight_report(report))
+            return
         
         if not context.args or len(context.args) == 0:
             try:
