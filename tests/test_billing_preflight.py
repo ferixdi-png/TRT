@@ -9,6 +9,7 @@ class FakeStorage:
     def __init__(self, partner_id: str = "partner-01"):
         self.partner_id = partner_id
         self.data = {}
+        self.diagnostics_storage = None
 
     async def write_json_file(self, filename, data):
         self.data[filename] = data
@@ -258,3 +259,23 @@ async def test_billing_preflight_aggregate_failure_degraded():
 
     assert report["result"] == "DEGRADED"
     assert report["sections"]["balances"]["status"] == "UNKNOWN"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_storage_rw_fallback_degraded():
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+
+    class FailingDiagnosticsStorage(FakeStorage):
+        async def write_json_file(self, filename, data):
+            raise PermissionError("tenant denied")
+
+    storage = FakeStorage()
+    storage.diagnostics_storage = FailingDiagnosticsStorage(partner_id="diagnostics")
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["result"] == "DEGRADED"
+    assert report["sections"]["storage_rw"]["status"] == "DEGRADED"
+    assert report["sections"]["storage_rw"]["meta"]["fallback_used"] is True
