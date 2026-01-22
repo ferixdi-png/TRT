@@ -8,7 +8,7 @@ from app.storage.factory import reset_storage
 
 @pytest.fixture(autouse=True)
 def _storage_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("STORAGE_MODE", "github_json")
+    monkeypatch.setenv("STORAGE_MODE", "db")
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     monkeypatch.setenv("BOT_INSTANCE_ID", "test-instance")

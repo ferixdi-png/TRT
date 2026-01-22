@@ -10,17 +10,14 @@ from app.utils.healthcheck import get_health_status, start_health_server, stop_h
 
 
 @pytest.mark.asyncio
-async def test_webhook_without_db_github_storage_registers_route(harness, monkeypatch):
+async def test_webhook_db_only_registers_route(harness, monkeypatch):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
 
     monkeypatch.setenv("BOT_MODE", "webhook")
-    monkeypatch.setenv("STORAGE_MODE", "github_json")
-    monkeypatch.setenv("GITHUB_REPO", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     monkeypatch.setenv("BOT_INSTANCE_ID", "test-instance")
-    monkeypatch.setenv("GITHUB_STORAGE_STUB", "1")
+    monkeypatch.setenv("STORAGE_MODE", "db")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
     reset_settings()
