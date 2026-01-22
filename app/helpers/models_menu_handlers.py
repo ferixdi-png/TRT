@@ -24,15 +24,18 @@ async def handle_show_all_models_list(
     user_id: int,
     user_lang: str,
     default_model_id: Optional[str] = None,
+    *,
+    skip_answer: bool = False,
 ) -> None:
     """
     Обработчик для callback 'show_all_models_list'.
     Показывает все модели из каталога с ценами.
     """
-    try:
-        await query.answer()
-    except:
-        pass
+    if not skip_answer:
+        try:
+            await query.answer()
+        except Exception:
+            pass
     
     logger.info(f"User {user_id} clicked 'show_all_models_list'")
     

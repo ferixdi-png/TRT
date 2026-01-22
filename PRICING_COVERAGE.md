@@ -261,6 +261,9 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+### model-sora-2-image-to-video
+**sora-2-image-to-video** — `READY`
+
 ### model-sora-2-text-to-video
 **sora-2-text-to-video** — `READY`
 
