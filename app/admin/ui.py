@@ -16,9 +16,12 @@ def admin_root_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def render_root() -> Tuple[str, InlineKeyboardMarkup]:
+def render_root(diagnostics: str = "") -> Tuple[str, InlineKeyboardMarkup]:
+    header = "Админ-панель\n"
+    if diagnostics:
+        header = f"{header}\n{diagnostics}\n\n"
     text = (
-        "Админ-панель\n\n"
+        f"{header}"
         "Выберите раздел:"
     )
     return text, admin_root_kb()

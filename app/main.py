@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from app.utils.logging_config import setup_logging as setup_structured_logging
 from app.utils.singleton_lock import is_lock_acquired, get_safe_mode
 from app.storage import get_storage
+from app.config_env import validate_or_exit, normalize_webhook_base_url
 
 
 def get_bot_mode() -> str:
@@ -203,11 +204,21 @@ def _log_startup_summary(bot_mode: str) -> None:
         port = int(port_env)
     except ValueError:
         port = 10000
+    bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
+    webhook_base_url = normalize_webhook_base_url(os.getenv("WEBHOOK_BASE_URL", "").strip())
+    redis_configured = bool(os.getenv("REDIS_URL", "").strip())
+    token_status = "SET" if os.getenv("TELEGRAM_BOT_TOKEN") else "NOT_SET"
+    kie_status = "SET" if os.getenv("KIE_API_KEY") else "NOT_SET"
     logger.info(
-        "[STARTUP] storage_backend=db db_maxconn=%s port=%s mode=%s",
+        "[STARTUP] storage_backend=db db_maxconn=%s port=%s mode=%s bot_instance_id=%s webhook_base_url=%s redis_configured=%s telegram_bot_token=%s kie_api_key=%s",
         db_maxconn,
         port,
         bot_mode,
+        bot_instance_id or "missing",
+        webhook_base_url or "missing",
+        "yes" if redis_configured else "no",
+        token_status,
+        kie_status,
     )
 
 
@@ -216,6 +227,8 @@ async def main():
     setup_structured_logging()
     
     logger.info("Starting application...")
+
+    validate_or_exit()
     
     # Initialize storage
     await initialize_storage()
