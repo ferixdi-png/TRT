@@ -32,3 +32,6 @@ aioresponses>=0.7.6
 
 # File locking
 filelock>=3.13.0
+
+# Redis (async) for distributed locking
+redis[asyncio]>=5.0.0

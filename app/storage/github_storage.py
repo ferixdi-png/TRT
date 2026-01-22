@@ -21,6 +21,7 @@ import aiohttp
 
 from app.storage.base import BaseStorage
 from app.config_env import resolve_storage_prefix
+from app.utils.distributed_lock import distributed_lock
 
 logger = logging.getLogger(__name__)
 
@@ -1298,34 +1299,44 @@ class GitHubStorage(BaseStorage):
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         lock = self._get_write_lock(filename)
-        async with lock:
-            last_error: Optional[Exception] = None
-            for attempt in range(1, self.config.max_retries + 1):
-                _, sha = await self._read_json(filename, force_refresh=True)
-                try:
-                    new_sha = await self._write_json(filename, data, sha)
-                    self._set_request_cache(filename, data, new_sha or sha)
-                    self._set_read_cache(filename, data, new_sha or sha)
-                    if attempt > 1:
-                        logger.info(
-                            "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+        lock_key = f"{self.config.partner_id}:{filename}"
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+            if not acquired:
+                logger.error("[GITHUB] distributed_lock failed for %s", lock_key)
+                raise RuntimeError(f"Failed to acquire distributed lock for {filename}")
+            async with lock:
+                last_error: Optional[Exception] = None
+                for attempt in range(1, self.config.max_retries + 1):
+                    _, sha = await self._read_json(filename, force_refresh=True)
+                    try:
+                        new_sha = await self._write_json(filename, data, sha)
+                        self._set_request_cache(filename, data, new_sha or sha)
+                        self._set_read_cache(filename, data, new_sha or sha)
+                        if attempt > 1:
+                            logger.info(
+                                "[GITHUB] write_conflict resolved=true attempts=%s path=%s",
+                                attempt,
+                                self._storage_path(filename),
+                            )
+                        return
+                    except GitHubConflictError as exc:
+                        last_error = exc
+                        logger.warning(
+                            "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
                             attempt,
                             self._storage_path(filename),
                         )
-                    return
-                except GitHubConflictError as exc:
-                    last_error = exc
-                    logger.warning(
-                        "[GITHUB] write_retry attempt=%s path=%s reason=conflict",
-                        attempt,
-                        self._storage_path(filename),
-                    )
-                    await self._backoff(attempt)
-            raise RuntimeError("Exceeded GitHub write retries") from last_error
+                        await self._backoff(attempt)
+                raise RuntimeError("Exceeded GitHub write retries") from last_error
 
     async def update_json_file(
         self,
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        return await self._update_json(filename, update_fn)
+        lock_key = f"{self.config.partner_id}:{filename}"
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+            if not acquired:
+                logger.error("[GITHUB] distributed_lock failed for %s", lock_key)
+                raise RuntimeError(f"Failed to acquire distributed lock for {filename}")
+            return await self._update_json(filename, update_fn)
