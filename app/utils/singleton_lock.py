@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import time
+import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +20,8 @@ _lock_degraded_reason: Optional[str] = None
 _file_lock_handle = None
 _file_lock_path: Optional[Path] = None
 _no_db_warned = False
+_pg_conn = None
+_pg_lock_key: Optional[int] = None
 
 
 def _is_production_env() -> bool:
@@ -173,6 +176,63 @@ def _acquire_file_lock() -> bool:
         return False
 
 
+def _derive_pg_lock_key() -> int:
+    global _pg_lock_key
+    if _pg_lock_key is not None:
+        return _pg_lock_key
+    seed = (
+        os.getenv("PG_ADVISORY_LOCK_KEY")
+        or os.getenv("PARTNER_ID")
+        or os.getenv("BOT_INSTANCE_ID")
+        or "trt_bot_lock"
+    )
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    _pg_lock_key = int(digest[:8], 16) % 2147483647
+    return _pg_lock_key
+
+
+async def _acquire_postgres_lock(dsn: str) -> bool:
+    global _pg_conn
+    try:
+        import asyncpg  # type: ignore
+    except ImportError as exc:
+        logger.error("[LOCK] LOCK_MODE=postgres missing_asyncpg=true reason=%s", exc)
+        return False
+
+    try:
+        conn = await asyncpg.connect(dsn)
+        lock_key = _derive_pg_lock_key()
+        acquired = await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock_key)
+        if not acquired:
+            await conn.close()
+            logger.error(
+                "[LOCK] LOCK_MODE=postgres lock_acquired=false lock_key=%s reason=pg_try_advisory_lock_failed",
+                lock_key,
+            )
+            return False
+        _pg_conn = conn
+        logger.info("[LOCK] LOCK_MODE=postgres lock_acquired=true lock_key=%s", lock_key)
+        return True
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.error("[LOCK] LOCK_MODE=postgres lock_acquire_failed=true reason=%s", exc)
+        return False
+
+
+async def _release_postgres_lock() -> None:
+    global _pg_conn
+    if _pg_conn is None:
+        return
+    lock_key = _derive_pg_lock_key()
+    try:
+        await _pg_conn.execute("SELECT pg_advisory_unlock($1)", lock_key)
+        await _pg_conn.close()
+        logger.info("[LOCK] LOCK_MODE=postgres lock_released=true lock_key=%s", lock_key)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.error("[LOCK] LOCK_MODE=postgres lock_release_failed=true reason=%s", exc)
+    finally:
+        _pg_conn = None
+
+
 def _release_file_lock() -> None:
     global _file_lock_handle, _file_lock_path
     if _file_lock_handle is None:
@@ -243,17 +303,24 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
         logger.info("[LOCK] singleton_disabled=true reason=disabled_by_env")
         return True
 
-    try:
-        from app.locking.single_instance import SingletonLock
+    pg_acquired = await _acquire_postgres_lock(dsn)
+    if pg_acquired:
+        _set_lock_state("postgres", True, reason=None)
+        return True
 
-        _singleton_lock_instance = SingletonLock(dsn)
-        result = await _singleton_lock_instance.acquire()
-        _set_lock_state("db", result, reason=None if result else "lock_not_acquired")
-        return result
-    except Exception as e:
-        logger.error(f"Failed to acquire singleton lock: {e}")
-        _set_lock_state("db", False, reason="lock_acquire_failed")
+    reason = "postgres_lock_failed"
+    if _allow_file_fallback():
+        logger.warning("[LOCK] LOCK_MODE=postgres fallback_to_file=true reason=%s", reason)
+        acquired = _acquire_file_lock()
+        if acquired:
+            _set_lock_state("file", True, reason="file_lock_fallback")
+            return True
+        _set_lock_state("file", False, reason="file_lock_failed")
         return False
+
+    logger.error("[LOCK] LOCK_MODE=postgres lock_acquired=false reason=%s", reason)
+    _set_lock_state("postgres", False, reason=reason)
+    return False
 
 
 async def release_singleton_lock() -> None:
@@ -273,6 +340,9 @@ async def release_singleton_lock() -> None:
             logger.error(f"Failed to release singleton lock: {e}")
         finally:
             _singleton_lock_instance = None
+
+    if _lock_mode == "postgres":
+        await _release_postgres_lock()
 
     if _file_lock_handle is not None:
         _release_file_lock()
