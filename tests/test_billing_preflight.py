@@ -1,3 +1,4 @@
+import json
 import re
 
 import pytest
@@ -10,9 +11,13 @@ class FakeStorage:
         self.partner_id = partner_id
         self.data = {}
         self.diagnostics_storage = None
+        self.force_string_payload = False
 
     async def write_json_file(self, filename, data):
-        self.data[filename] = data
+        if self.force_string_payload:
+            self.data[filename] = json.dumps(data)
+        else:
+            self.data[filename] = data
 
     async def read_json_file(self, filename, default=None):
         if filename in self.data:
@@ -279,3 +284,18 @@ async def test_billing_preflight_storage_rw_fallback_degraded():
     assert report["result"] == "DEGRADED"
     assert report["sections"]["storage_rw"]["status"] == "DEGRADED"
     assert report["sections"]["storage_rw"]["meta"]["fallback_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_storage_rw_handles_string_payload():
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+
+    storage = FakeStorage()
+    storage.force_string_payload = True
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["result"] == "READY"
+    assert report["sections"]["storage_rw"]["status"] == "OK"
