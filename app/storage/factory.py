@@ -15,6 +15,9 @@ _storage_instance: Optional[BaseStorage] = None
 
 def _resolve_mode(explicit_mode: Optional[str]) -> str:
     mode = (explicit_mode or os.getenv("STORAGE_MODE", "auto")).strip().lower()
+    # db is alias for postgres
+    if mode == "db":
+        mode = "postgres"
     if mode not in {"auto", "github", "postgres"}:
         logger.warning("[STORAGE] unknown mode=%s, falling back to auto", mode)
         mode = "auto"
@@ -38,8 +41,10 @@ def create_storage(
 
     if mode == "postgres":
         if not database_url:
-            raise RuntimeError("STORAGE_MODE=postgres but DATABASE_URL is missing")
-        partner_id = os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "partner-01"
+            raise RuntimeError("STORAGE_MODE=postgres/db but DATABASE_URL is missing")
+        partner_id = os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or ""
+        if not partner_id:
+            raise RuntimeError("BOT_INSTANCE_ID is required for multi-tenant storage")
         storage = PostgresStorage(database_url, partner_id=partner_id)
 
         async def _maybe_migrate() -> None:
