@@ -284,7 +284,7 @@ TRANSLATIONS = {
         'btn_confirm_generate_text': '✅ Генерировать',
         'btn_copy_link': '📋 Скопировать ссылку',
         'btn_all_models_text': '📋 Все модели',
-        'btn_z_image_free': '🆓 Бесплатные модели',
+        'btn_z_image_free': '🆓 FAST TOOLS',
         'btn_next_step': '▶️ Далее',
         'btn_complete': '▶️ Завершить',
         'btn_custom_amount': '💰 Своя сумма',
