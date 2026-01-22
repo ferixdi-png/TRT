@@ -224,8 +224,8 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
         invalid_required.append("PAYMENT_PHONE (must be non-empty)")
     if port and not port.isdigit():
         invalid_required.append("PORT (must be number)")
-    if storage_mode and storage_mode not in {"github", "github_json"}:
-        invalid_required.append("STORAGE_MODE (github/github_json)")
+    if storage_mode and storage_mode not in {"auto", "github", "postgres"}:
+        invalid_required.append("STORAGE_MODE (auto/github/postgres)")
     if support_telegram and not _is_valid_username(support_telegram):
         invalid_required.append("SUPPORT_TELEGRAM (format @username)")
     if not support_text and "SUPPORT_TEXT" not in missing_required:
