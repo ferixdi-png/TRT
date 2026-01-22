@@ -7106,7 +7106,6 @@ async def _button_callback_impl(
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
-                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 if user_lang == 'en':
@@ -7171,7 +7170,6 @@ async def _button_callback_impl(
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
-                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 if user_lang == 'en':
@@ -7231,7 +7229,6 @@ async def _button_callback_impl(
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
-                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 image_text = (
@@ -7353,7 +7350,6 @@ async def _button_callback_impl(
                         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                     ],
-                    [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
                 
@@ -8181,7 +8177,6 @@ async def _button_callback_impl(
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
             ])
-            keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
             
             try:
@@ -8240,7 +8235,6 @@ async def _button_callback_impl(
                     query,
                     user_id,
                     user_lang,
-                    default_model_id="sora-watermark-remover",
                 )
                 return SELECTING_MODEL
             except Exception as e:
@@ -8302,7 +8296,6 @@ async def _button_callback_impl(
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                     InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
                 ],
-                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                 [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
             ]
             await query.edit_message_text(
@@ -13000,7 +12993,6 @@ async def prompt_for_specific_param(
         ]
         if is_optional:
             keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
-        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         instruction_line = _media_first_instruction(user_lang) if not is_optional else ""
         prompt_text = (
@@ -13057,7 +13049,6 @@ async def prompt_for_specific_param(
         ]
         if is_optional:
             keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
-        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         instruction_line = _media_first_instruction(user_lang) if not is_optional else ""
         prompt_text = (
@@ -13121,7 +13112,6 @@ async def prompt_for_specific_param(
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
         ])
-        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         description = param_info.get('description', '')
         detail_lines = [format_hint, required_label]
@@ -13213,7 +13203,6 @@ async def prompt_for_specific_param(
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
         ])
-        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
         description = param_info.get('description', '')
         detail_lines = [format_hint, required_label]
@@ -13261,7 +13250,6 @@ async def prompt_for_specific_param(
         InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
         InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
     ])
-    keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
     keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
     description = param_info.get('description', '')
     detail_lines = [format_hint, required_label]
@@ -13623,7 +13611,6 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             if is_optional:
                 skip_text = "⏭️ Пропустить (auto)" if user_lang == 'ru' else "⏭️ Skip (auto)"
                 keyboard.append([InlineKeyboardButton(skip_text, callback_data=f"set_param:{param_name}:{SKIP_PARAM_VALUE}")])
-            keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
             await context.bot.send_message(
@@ -13678,7 +13665,6 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                 InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
             ])
-            keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
             keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
             param_desc = param_info.get('description', '')
@@ -13910,7 +13896,6 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
             InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
         ])
-        keyboard.append([InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
         default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
@@ -15920,7 +15905,6 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                         if audio_required:
                             keyboard = [
                                 [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                             ]
                             free_counter_line = await _resolve_free_counter_line(
                                 user_id,
@@ -15966,7 +15950,6 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     if audio_required:
                         keyboard = [
                             [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                            [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                         ]
                         free_counter_line = await _resolve_free_counter_line(
                             user_id,
@@ -15994,7 +15977,6 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                             [InlineKeyboardButton("🎤 Загрузить аудио (опционально)", callback_data="add_audio")],
                             [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_audio")],
                             [InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")],
-                            [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")]
                         ]
                         free_counter_line = await _resolve_free_counter_line(
                             user_id,
@@ -16029,7 +16011,6 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     if image_required:
                         keyboard = [
                             [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")],
-                            [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                         ]
                         image_param_name = 'image_urls' if 'image_urls' in input_params else 'image_input'
                         free_counter_line = await _resolve_free_counter_line(
@@ -16059,7 +16040,6 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                                     InlineKeyboardButton("✅ Да", callback_data="add_image"),
                                     InlineKeyboardButton("❌ Нет", callback_data="skip_image"),
                                 ],
-                                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")],
                             ]
                             free_counter_line = await _resolve_free_counter_line(
                                 user_id,
@@ -16083,7 +16063,6 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                             keyboard = [
                                 [InlineKeyboardButton("📷 Добавить изображение", callback_data="add_image")],
                                 [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_image")],
-                                [InlineKeyboardButton(_get_reset_step_label(user_lang), callback_data="reset_step")]
                             ]
                             free_counter_line = await _resolve_free_counter_line(
                                 user_id,
