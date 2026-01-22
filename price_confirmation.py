@@ -2,6 +2,7 @@
 Модуль для пошагового подтверждения стоимости перед генерацией.
 """
 
+import asyncio
 import logging
 from typing import Dict, Any, Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -20,7 +21,8 @@ async def show_price_confirmation(
     lang: str = 'ru',
     is_free: bool = False,
     bonus_available: float = 0.0,
-    discount: Optional[float] = None
+    discount: Optional[float] = None,
+    correlation_id: Optional[str] = None,
 ) -> Optional[Any]:
     """
     Показывает финальное подтверждение с детализацией цены.
@@ -37,6 +39,7 @@ async def show_price_confirmation(
         is_free: Бесплатная ли генерация
         bonus_available: Доступные бонусы
         discount: Размер скидки (0.0-1.0)
+        correlation_id: Идентификатор корреляции
     
     Returns:
         Сообщение бота или None
@@ -107,11 +110,17 @@ async def show_price_confirmation(
             
             # Получаем баланс пользователя
             user_balance = 0.0
+            from app.state.user_state import get_user_balance_async
             try:
-                from app.state.user_state import get_user_balance
-                user_balance = get_user_balance(user_id)
-            except:
-                pass
+                user_balance = await get_user_balance_async(user_id)
+            except Exception as exc:
+                logger.warning(
+                    "USER_BALANCE_FETCH_FAILED error_code=USER_BALANCE_FETCH_FAILED correlation_id=%s model_id=%s is_free=%s err=%s",
+                    correlation_id,
+                    model_id,
+                    is_free,
+                    exc,
+                )
             
             balance_after = max(0, user_balance - final_price) if not is_free else user_balance
             
@@ -363,7 +372,9 @@ def build_confirmation_text(
     lang: str = 'ru',
     is_free: bool = False,
     bonus_available: float = 0.0,
-    discount: Optional[float] = None
+    discount: Optional[float] = None,
+    user_balance: Optional[float] = None,
+    correlation_id: Optional[str] = None,
 ) -> str:
     """
     Строит текст подтверждения генерации с детализацией цены.
@@ -435,12 +446,35 @@ def build_confirmation_text(
             time_estimate = "10-30 сек"
         
         # Получаем баланс пользователя
-        user_balance = 0.0
-        try:
-            from app.state.user_state import get_user_balance
-            user_balance = get_user_balance(user_id)
-        except:
-            pass
+        if user_balance is None:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                in_async_loop = False
+            else:
+                in_async_loop = True
+
+            if in_async_loop:
+                logger.warning(
+                    "CONFIRMATION_BALANCE_ASYNC_MISSING error_code=CONFIRMATION_BALANCE_ASYNC_MISSING correlation_id=%s model_id=%s is_free=%s",
+                    correlation_id,
+                    model_id,
+                    is_free,
+                )
+                user_balance = 0.0
+            else:
+                from app.state import user_state
+                try:
+                    user_balance = user_state.get_user_balance(user_id)
+                except Exception as exc:
+                    logger.warning(
+                        "CONFIRMATION_BALANCE_FETCH_FAILED error_code=CONFIRMATION_BALANCE_FETCH_FAILED correlation_id=%s model_id=%s is_free=%s err=%s",
+                        correlation_id,
+                        model_id,
+                        is_free,
+                        exc,
+                    )
+                    user_balance = 0.0
         
         balance_after = max(0, user_balance - final_price) if not is_free else user_balance
         
@@ -600,4 +634,3 @@ def build_confirmation_text(
     except Exception as e:
         logger.error(f"❌ Ошибка при построении текста подтверждения: {e}", exc_info=True)
         return "❌ Ошибка при подготовке подтверждения."
-
