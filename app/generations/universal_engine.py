@@ -617,6 +617,10 @@ async def run_generation(
             record_info=record,
         )
 
+    # Notify progress callback that generation is complete and we're preparing result
+    if progress_callback:
+        await progress_callback({"stage": "KIE_COMPLETE", "task_id": task_id, "state": state})
+
     parse_start = time.monotonic()
     try:
         base_url = get_settings().kie_result_cdn_base_url

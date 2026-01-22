@@ -17439,67 +17439,101 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
     status_message = await send_or_edit_message(loading_msg)
 
-    accepted_msg = (
-        "✅ <b>Принято!</b>\n\n"
-        "Генерация запущена, ожидайте результат...\n"
-        f"🤖 <b>Модель:</b> {model_name}"
-        if user_lang == 'ru'
-        else (
-            "✅ <b>Accepted!</b>\n\n"
-            "Generation started, please wait...\n"
-            f"🤖 <b>Model:</b> {model_name}"
-        )
-    )
-    accepted_msg = _append_free_counter_text(accepted_msg, free_counter_line)
-
+    # Progress tracking state
     last_progress_ts = 0.0
+    last_stage = None
 
     async def progress_callback(event: Dict[str, Any]) -> None:
-        nonlocal last_progress_ts
-        stage = event.get("stage")
-        if stage == "KIE_CREATE":
-            await send_or_edit_message(accepted_msg)
+        nonlocal last_progress_ts, last_stage, status_message
+        if not status_message:
             return
-        if stage == "KIE_POLL":
-            now = time.monotonic()
-            if now - last_progress_ts < 25:
-                return
-            last_progress_ts = now
+        
+        stage = event.get("stage")
+        if stage == last_stage:
+            return
+        
+        # Limit updates to avoid flood limits
+        now = time.monotonic()
+        if stage == last_stage and now - last_progress_ts < 3:
+            return
+        
+        last_progress_ts = now
+        last_stage = stage
+        
+        # Build progress message based on stage
+        if stage == "KIE_CREATE":
+            if user_lang == "ru":
+                progress_msg = (
+                    "🚀 <b>Генерация началась…</b>\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n"
+                    "⏳ Создаю задачу в KIE AI..."
+                )
+            else:
+                progress_msg = (
+                    "🚀 <b>Generation started…</b>\n\n"
+                    f"🤖 <b>Model:</b> {model_name}\n"
+                    "⏳ Creating task in KIE AI..."
+                )
+        elif stage == "KIE_POLL":
             elapsed = int(event.get("elapsed") or 0)
             if user_lang == "ru":
-                progress_text = f"⏳ Генерирую… прошло {elapsed} сек."
+                progress_msg = (
+                    "⚙️ <b>Готовлю результат…</b>\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n"
+                    f"⏱️ Прошло: {elapsed} сек\n"
+                    "💡 Обрабатываю ваш запрос..."
+                )
             else:
-                progress_text = f"⏳ Generating… {elapsed}s elapsed."
-            try:
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    action="TG_SEND_ATTEMPT",
-                    action_path="confirm_generate.progress",
-                    model_id=model_id,
-                    stage="TG_SEND",
-                    outcome="attempt",
-                    error_code="TG_SEND_ATTEMPT",
-                    fix_hint="Прогресс-апдейт генерации.",
-                    param={"tg_method": "send_message"},
+                progress_msg = (
+                    "⚙️ <b>Preparing result…</b>\n\n"
+                    f"🤖 <b>Model:</b> {model_name}\n"
+                    f"⏱️ Elapsed: {elapsed}s\n"
+                    "💡 Processing your request..."
                 )
-                await context.bot.send_message(chat_id=chat_id, text=progress_text)
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    action="TG_SEND_OK",
-                    action_path="confirm_generate.progress",
-                    model_id=model_id,
-                    stage="TG_SEND",
-                    outcome="success",
-                    error_code="TG_SEND_OK",
-                    fix_hint="Прогресс-апдейт доставлен.",
-                    param={"tg_method": "send_message"},
+        elif stage == "KIE_COMPLETE":
+            if user_lang == "ru":
+                progress_msg = (
+                    "📤 <b>Отправляю файл…</b>\n\n"
+                    f"🤖 <b>Модель:</b> {model_name}\n"
+                    "✅ Генерация завершена, загружаю результат..."
                 )
-            except Exception as send_exc:
-                logger.warning("Progress update failed: %s", send_exc)
+            else:
+                progress_msg = (
+                    "📤 <b>Sending file…</b>\n\n"
+                    f"🤖 <b>Model:</b> {model_name}\n"
+                    "✅ Generation complete, uploading result..."
+                )
+        else:
+            return
+        
+        progress_msg = _append_free_counter_text(progress_msg, free_counter_line)
+        
+        try:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="PROGRESS_UPDATE",
+                action_path="confirm_generate.progress",
+                model_id=model_id,
+                stage="PROGRESS_INDICATOR",
+                outcome="attempt",
+                param={"stage": stage, "tg_method": "edit_message_text"},
+            )
+            await status_message.edit_text(progress_msg, parse_mode="HTML")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="PROGRESS_UPDATE",
+                action_path="confirm_generate.progress",
+                model_id=model_id,
+                stage="PROGRESS_INDICATOR",
+                outcome="success",
+                param={"stage": stage},
+            )
+        except Exception as send_exc:
+            logger.warning("Progress update failed: %s", send_exc)
 
     try:
         from app.generations.telegram_sender import deliver_result
