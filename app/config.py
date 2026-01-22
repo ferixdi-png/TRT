@@ -82,6 +82,7 @@ class Settings:
         # Storage configuration
         self.github_only_storage = os.getenv('GITHUB_ONLY_STORAGE', 'true').lower() in ('1', 'true', 'yes')
         self.storage_mode = os.getenv('STORAGE_MODE', 'db').strip()
+        logger.warning(f"[DEBUG] STORAGE_MODE from env: '{self.storage_mode}'")
         self.data_dir = os.getenv('DATA_DIR', '/app/data')
         
         # Bot mode
