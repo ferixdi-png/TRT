@@ -28,7 +28,10 @@
    TELEGRAM_BOT_TOKEN=ваш_токен
    KIE_API_KEY=ваш_ключ
    ADMIN_ID=ваш_id
+   # Для масштабирования на несколько инстансов (Render Postgres)
+   DATABASE_URL=postgresql://user:pass@host:5432/dbname
    ```
+   Если DATABASE_URL не задан, бот использует file-lock и lock_degraded=true для multi-instance.
 
 5. **Запустите!**
 

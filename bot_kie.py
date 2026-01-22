@@ -15,9 +15,15 @@ import re
 import math
 import uuid
 import hashlib
+import warnings
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Set
+
+from app.utils.logging_config import setup_logging
+
+# Initialize unified logging as early as possible to ensure token redaction and handlers
+setup_logging()
 
 from app.observability.structured_logs import (
     build_action_path,
@@ -34,11 +40,6 @@ from app.observability.trace import (
 from app.observability.error_catalog import ERROR_CATALOG
 from app.middleware.rate_limit import PerKeyRateLimiter, PerUserRateLimiter, TTLCache
 from app.session_store import get_session_store, get_session_cached
-# Enable logging FIRST (before any other imports that might log)
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
 
 logger = logging.getLogger(__name__)
 DEBUG_VERBOSE_LOGS = os.getenv("DEBUG_VERBOSE_LOGS", "0").lower() in ("1", "true", "yes")
@@ -707,6 +708,14 @@ from telegram.ext import (
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
+from telegram.warnings import PTBUserWarning
+
+# Suppress PTB warning about per_message handlers (we enforce correct behavior manually)
+warnings.filterwarnings(
+    "ignore",
+    message=".*per_message=True.*",
+    category=PTBUserWarning,
+)
 
 # ==================== TELEGRAM TEXT LIMITS ====================
 TELEGRAM_TEXT_LIMIT = 4000
@@ -19133,6 +19142,7 @@ def initialize_data_files():
         release_single_instance_lock,
         is_lock_held,
     )
+    from app.utils.singleton_lock import get_lock_mode, is_lock_degraded
     
     logger.info("🔒 Acquiring single instance lock...")
     if not acquire_single_instance_lock():
@@ -19142,6 +19152,7 @@ def initialize_data_files():
         sys.exit(0)
     
     logger.info("✅ Single instance lock acquired - this is the leader instance")
+    logger.info("[LOCK_STATUS] mode=%s degraded=%s", get_lock_mode(), is_lock_degraded())
     
     # Регистрируем освобождение lock при выходе
     import atexit
@@ -19431,7 +19442,8 @@ async def _register_all_handlers_internal(application: Application):
             ]
         },
         fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
-                   CommandHandler('cancel', cancel)]
+                   CommandHandler('cancel', cancel)],
+        per_message=True,
     )
     
     # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
@@ -20211,7 +20223,8 @@ async def main():
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_topup_user:'),
             CallbackQueryHandler(cancel, pattern='^cancel$'),
             CommandHandler('cancel', cancel)
-        ]
+        ],
+        per_message=True,
     )
 
     # Inbound update logger/context middleware (must be first)

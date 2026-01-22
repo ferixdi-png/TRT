@@ -21,6 +21,7 @@ Pillow>=10.0.0  # Optional - импортируется лениво
 pytesseract>=0.3.10  # Optional - импортируется лениво
 
 # PostgreSQL database
+asyncpg>=0.29.0
 
 # Testing (опционально, для локальной разработки)
 pytest>=7.4.0
