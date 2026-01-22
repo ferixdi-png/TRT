@@ -20618,6 +20618,10 @@ async def main():
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
         
+        # КРИТИЧНО: Инициализируем application для webhook режима
+        await application.initialize()
+        logger.info("✅ Application initialized for webhook mode")
+        
         # Устанавливаем webhook
         try:
             from telegram import Bot
