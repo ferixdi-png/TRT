@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 from app.utils.logging_config import setup_logging as setup_structured_logging
 from app.utils.singleton_lock import is_lock_acquired, get_safe_mode
 from app.storage import get_storage
-from app.config_env import validate_or_exit, normalize_webhook_base_url
+from app.config_env import normalize_webhook_base_url
+from app.diagnostics.boot import log_boot_report, run_boot_diagnostics
 
 
 def get_bot_mode() -> str:
@@ -227,8 +228,11 @@ async def main():
     setup_structured_logging()
     
     logger.info("Starting application...")
-
-    validate_or_exit()
+    report = await run_boot_diagnostics(os.environ, storage=None, redis_client=None)
+    log_boot_report(report)
+    if report.get("result") == "FAIL":
+        logger.error("BOOT DIAGNOSTICS failed, aborting startup.")
+        sys.exit(1)
     
     # Initialize storage
     await initialize_storage()
