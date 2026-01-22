@@ -6,12 +6,15 @@
 # Documentation (not needed in container)
 *.md
 !README.md
+*.txt
 
 # Large/non-runtime directories
 5656-main/
 BB_Scanner/
 artifacts/
 storage/
+archive/
+docs/
 
 # Environment files
 .env

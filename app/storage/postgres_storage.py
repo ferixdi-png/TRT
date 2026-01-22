@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -101,7 +102,24 @@ class PostgresStorage(BaseStorage):
             )
             if not row:
                 return {}
-            return dict(row[0]) if isinstance(row[0], dict) else row[0]
+            payload = row[0]
+            if isinstance(payload, dict):
+                return dict(payload)
+            if isinstance(payload, str):
+                try:
+                    parsed = json.loads(payload)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    return parsed
+            correlation_id = uuid.uuid4().hex[:8]
+            logger.warning(
+                "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s payload_type=%s",
+                correlation_id,
+                filename,
+                type(payload).__name__,
+            )
+            return {}
 
     async def _load_json(self, filename: str) -> Dict[str, Any]:
         lock = self._get_file_lock(filename)
