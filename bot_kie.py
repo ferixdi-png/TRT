@@ -20607,6 +20607,21 @@ async def main():
         # КРИТИЧНО: Инициализируем application для webhook режима
         await application.initialize()
         logger.info("✅ Application initialized for webhook mode")
+
+        # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
+        try:
+            from app.utils.healthcheck import start_health_server
+
+            port_str = os.getenv("PORT", "10000").strip()
+            try:
+                port = int(port_str)
+            except ValueError:
+                port = 10000
+            webhook_handler = await create_webhook_handler()
+            started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
+            logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
+        except Exception as health_exc:
+            logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
         
         # Устанавливаем webhook
         try:
@@ -20619,8 +20634,7 @@ async def main():
             logger.info("✅ Webhook mode ready - waiting for updates via webhook")
             logger.info("   Bot will receive updates at: {webhook_url}")
             
-            # В webhook режиме просто ждём (webhook handler должен быть настроен отдельно)
-            # Для Render Web Service это нормально - они будут отправлять POST запросы
+            # В webhook режиме просто ждём (webhook handler настроен выше)
             while True:
                 await asyncio.sleep(60)  # Health check loop
         except Conflict as e:
