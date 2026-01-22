@@ -1,6 +1,7 @@
 # Environment variables (NEVER commit .env files!)
 .env
 .env.*
+!.env.partner.example
 *.pem
 *.key
 *.p12
@@ -148,4 +149,3 @@ artifacts/verify_last_pass.json
 # *.bat
 # *.sh
 # *.ps1
-

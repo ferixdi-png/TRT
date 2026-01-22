@@ -14,6 +14,7 @@ from app.config_env import (
     resolve_storage_prefix,
     validate_config,
     ConfigValidationError,
+    normalize_webhook_base_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ class Settings:
             logger.warning(f"Invalid ADMIN_ID: {admin_id_str}, using 0")
 
         self.bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
+        if not self.bot_instance_id:
+            logger.warning("BOT_INSTANCE_ID not set - multi-tenant storage will be blocked")
         raw_storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
         storage_resolution = resolve_storage_prefix(raw_storage_prefix, self.bot_instance_id)
         self.storage_prefix = storage_resolution.effective_prefix
@@ -87,11 +90,14 @@ class Settings:
         
         # Bot mode
         self.bot_mode = os.getenv('BOT_MODE', 'polling').lower()
-        self.webhook_base_url = os.getenv('WEBHOOK_BASE_URL', '').strip()
+        raw_webhook_base_url = os.getenv('WEBHOOK_BASE_URL', '').strip()
+        self.webhook_base_url = normalize_webhook_base_url(raw_webhook_base_url)
         self.webhook_url = resolve_webhook_url(
             os.getenv('WEBHOOK_URL', '').strip(),
             self.webhook_base_url
         )
+        if raw_webhook_base_url and self.webhook_base_url and raw_webhook_base_url != self.webhook_base_url:
+            logger.info("WEBHOOK_BASE_URL normalized: %s -> %s", raw_webhook_base_url, self.webhook_base_url)
         if self.webhook_base_url and not os.getenv('WEBHOOK_URL'):
             os.environ['WEBHOOK_URL'] = self.webhook_url
         
@@ -199,7 +205,7 @@ def reset_settings():
 
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
 BOT_MODE = os.getenv('BOT_MODE', 'polling').lower()
-WEBHOOK_BASE_URL = os.getenv('WEBHOOK_BASE_URL', '').strip()
+WEBHOOK_BASE_URL = normalize_webhook_base_url(os.getenv('WEBHOOK_BASE_URL', '').strip())
 WEBHOOK_URL = resolve_webhook_url(
     os.getenv('WEBHOOK_URL', '').strip(),
     WEBHOOK_BASE_URL
