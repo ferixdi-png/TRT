@@ -1,11 +1,13 @@
 """
 Singleton lock utilities for preventing multiple bot instances.
 """
+import asyncio
 import logging
 import os
 import sys
 import time
 import hashlib
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +27,10 @@ _pg_lock_key: Optional[int] = None
 _redis_client = None
 _redis_lock_key: Optional[str] = None
 _redis_lock_value: Optional[str] = None
+_redis_renew_task: Optional[asyncio.Task] = None
+_redis_renew_stop: Optional[threading.Event] = None
+_redis_renew_loop: Optional[asyncio.AbstractEventLoop] = None
+_redis_renew_thread: Optional[threading.Thread] = None
 
 
 def _is_production_env() -> bool:
@@ -42,6 +48,144 @@ def _locks_disabled() -> bool:
     disabled = os.getenv("DISABLE_DB_LOCKS", "0").lower() in ("1", "true", "yes")
     return disabled
 
+def _get_redis_lock_ttl_seconds() -> int:
+    try:
+        ttl = int(os.getenv("REDIS_LOCK_TTL_SECONDS", "30"))
+    except ValueError:
+        ttl = 30
+    return max(5, ttl)
+
+
+def _get_redis_renew_interval_seconds(ttl_seconds: int) -> int:
+    try:
+        interval = int(os.getenv("REDIS_LOCK_RENEW_INTERVAL_SECONDS", "0"))
+    except ValueError:
+        interval = 0
+    if interval <= 0:
+        interval = max(1, ttl_seconds // 3)
+    return max(1, interval)
+
+
+async def _stop_redis_renewal() -> None:
+    global _redis_renew_task, _redis_renew_stop, _redis_renew_loop, _redis_renew_thread
+    if _redis_renew_stop is not None:
+        _redis_renew_stop.set()
+    if _redis_renew_thread is not None:
+        if _redis_renew_loop is not None and _redis_renew_loop.is_running() and _redis_renew_task is not None:
+            _redis_renew_loop.call_soon_threadsafe(_redis_renew_task.cancel)
+            _redis_renew_loop.call_soon_threadsafe(_redis_renew_loop.stop)
+        _redis_renew_thread.join(timeout=2)
+        _redis_renew_thread = None
+        _redis_renew_task = None
+        _redis_renew_loop = None
+        _redis_renew_stop = None
+        return
+    if _redis_renew_task is not None:
+        _redis_renew_task.cancel()
+        try:
+            await _redis_renew_task
+        except asyncio.CancelledError:
+            pass
+        _redis_renew_task = None
+    _redis_renew_loop = None
+    _redis_renew_stop = None
+
+
+async def _renew_redis_lock(ttl_seconds: int, interval_seconds: int) -> None:
+    global _redis_client, _redis_lock_key, _redis_lock_value
+    if _redis_client is None or _redis_lock_key is None or _redis_lock_value is None:
+        return
+    lua_script = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("expire", KEYS[1], ARGV[2])
+else
+    return 0
+end
+"""
+    while True:
+        if _redis_renew_stop is not None and _redis_renew_stop.is_set():
+            break
+        try:
+            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            break
+        try:
+            renewed = await _redis_client.eval(
+                lua_script,
+                1,
+                _redis_lock_key,
+                _redis_lock_value,
+                ttl_seconds,
+            )
+            if renewed != 1:
+                logger.error(
+                    "[LOCK] LOCK_MODE=redis lock_renew_failed=true error_code=LOCK_RENEW_FAILED reason=not_owner "
+                    "lock_key=%s correlation_id=%s",
+                    _redis_lock_key,
+                    _redis_lock_value,
+                )
+                _set_lock_state("redis", False, reason="redis_lock_lost")
+                break
+            logger.debug(
+                "[LOCK] LOCK_MODE=redis lock_renewed=true ttl=%s lock_key=%s correlation_id=%s",
+                ttl_seconds,
+                _redis_lock_key,
+                _redis_lock_value,
+            )
+        except Exception as exc:
+            logger.error(
+                "[LOCK] LOCK_MODE=redis lock_renew_failed=true error_code=LOCK_RENEW_EXCEPTION reason=%s "
+                "lock_key=%s correlation_id=%s",
+                exc,
+                _redis_lock_key,
+                _redis_lock_value,
+            )
+
+
+def _start_redis_renewal(ttl_seconds: int) -> None:
+    global _redis_renew_task, _redis_renew_stop, _redis_renew_loop, _redis_renew_thread
+    if _redis_client is None or _redis_lock_key is None or _redis_lock_value is None:
+        return
+    if _redis_renew_task is not None and not _redis_renew_task.done():
+        return
+    interval_seconds = _get_redis_renew_interval_seconds(ttl_seconds)
+    _redis_renew_stop = threading.Event()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+
+        def _run_loop() -> None:
+            asyncio.set_event_loop(loop)
+            global _redis_renew_task
+            _redis_renew_task = loop.create_task(_renew_redis_lock(ttl_seconds, interval_seconds))
+            try:
+                loop.run_until_complete(_redis_renew_task)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                loop.close()
+
+        _redis_renew_loop = loop
+        _redis_renew_thread = threading.Thread(target=_run_loop, name="redis-lock-renewal", daemon=True)
+        _redis_renew_thread.start()
+        logger.info(
+            "[LOCK] LOCK_MODE=redis lock_renewal_thread_started=true ttl=%s interval=%s lock_key=%s correlation_id=%s",
+            ttl_seconds,
+            interval_seconds,
+            _redis_lock_key,
+            _redis_lock_value,
+        )
+        return
+    _redis_renew_loop = loop
+    _redis_renew_task = loop.create_task(_renew_redis_lock(ttl_seconds, interval_seconds))
+    logger.info(
+        "[LOCK] LOCK_MODE=redis lock_renewal_started=true ttl=%s interval=%s lock_key=%s correlation_id=%s",
+        ttl_seconds,
+        interval_seconds,
+        _redis_lock_key,
+        _redis_lock_value,
+    )
 # Module-global SingletonLock instance
 _singleton_lock_instance = None
 
@@ -237,6 +381,7 @@ async def _release_redis_lock() -> None:
     global _redis_client, _redis_lock_key, _redis_lock_value
     if _redis_client is None or _redis_lock_key is None:
         return
+    await _stop_redis_renewal()
     try:
         # Use Lua script for atomic check-and-delete
         lua_script = """
@@ -341,10 +486,12 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
         return True
 
     if redis_url:
-        redis_acquired = await _acquire_redis_lock(redis_url)
+        ttl_seconds = _get_redis_lock_ttl_seconds()
+        redis_acquired = await _acquire_redis_lock(redis_url, ttl_seconds=ttl_seconds)
         if redis_acquired:
             _set_lock_state("redis", True, reason=None)
             logger.info("[LOCK] LOCK_MODE=redis lock_acquired=true for multi-instance scaling")
+            _start_redis_renewal(ttl_seconds)
             return True
         logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=redis_lock_failed")
 
