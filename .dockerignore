@@ -7,6 +7,7 @@
 *.md
 !README.md
 *.txt
+!requirements.txt
 
 # Large/non-runtime directories
 5656-main/
