@@ -81,7 +81,7 @@ class Settings:
         
         # Storage configuration
         self.github_only_storage = os.getenv('GITHUB_ONLY_STORAGE', 'true').lower() in ('1', 'true', 'yes')
-        self.storage_mode = 'github_json'
+        self.storage_mode = os.getenv('STORAGE_MODE', 'db').strip()
         self.data_dir = os.getenv('DATA_DIR', '/app/data')
         
         # Bot mode
@@ -143,11 +143,10 @@ class Settings:
     def get_storage_mode(self) -> str:
         """
         Определяет режим хранения данных.
-
         Returns:
-            'github' (единственный режим хранения)
+            'db', 'github', 'auto', 'postgres' (по значению STORAGE_MODE)
         """
-        return "github_json"
+        return self.storage_mode
     
     def validate(self):
         """Валидирует обязательные настройки"""
