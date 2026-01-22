@@ -191,9 +191,27 @@ async def _resolve_kie_download_url(url: str, kie_client: Any, correlation_id: O
 
 
 def _build_caption(correlation_id: Optional[str], media_kind: str) -> str:
-    short_kind = media_kind or "result"
-    corr = correlation_id or "corr-na-na"
-    return f"✅ Готово ({short_kind}). ID: {corr}"
+    """
+    Строит дружелюбное сообщение о готовом результате.
+    """
+    # Эмодзи и текст в зависимости от типа медиа
+    if media_kind == "image":
+        emoji = "🎨"
+        text = "Ваше изображение готово!"
+    elif media_kind == "video":
+        emoji = "🎬"
+        text = "Ваше видео готово!"
+    elif media_kind == "audio":
+        emoji = "🎵"
+        text = "Ваш аудио готов!"
+    elif media_kind == "document":
+        emoji = "📄"
+        text = "Ваш документ готов!"
+    else:
+        emoji = "✨"
+        text = "Ваш результат готов!"
+    
+    return f"{emoji} {text}"
 
 
 async def _resolve_single_media(
