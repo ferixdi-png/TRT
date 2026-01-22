@@ -175,7 +175,7 @@ def test_render_webhook_fallback_starts_health_server():
             "DATA_DIR": temp_dir,
             "RENDER": "true",
             "TEST_MODE": "1",
-            "STORAGE_MODE": "github_json",
+            "STORAGE_MODE": "db",
             "GITHUB_REPO": "owner/repo",
             "GITHUB_TOKEN": "test-token",
             "BOT_INSTANCE_ID": "test-instance",

@@ -1,6 +1,6 @@
 """
 Main application entry point with BOT_MODE logic.
-DB locks and PostgreSQL are disabled (GitHub storage only).
+PostgreSQL storage only.
 """
 import os
 import sys
@@ -37,14 +37,14 @@ def get_bot_mode() -> str:
 
 
 async def initialize_storage() -> bool:
-    """Initialize GitHub storage."""
+    """Initialize PostgreSQL storage."""
     storage = get_storage()
     if hasattr(storage, "initialize") and asyncio.iscoroutinefunction(storage.initialize):
         storage_ok = await storage.initialize()
         if storage_ok:
-            logger.info("[STORAGE] github_initialized=true")
+            logger.info("[STORAGE] db_initialized=true")
             return True
-        logger.warning("[STORAGE] github_initialized=false")
+        logger.warning("[STORAGE] db_initialized=false")
     return False
 
 
@@ -119,11 +119,12 @@ async def start_healthcheck_server(port: Optional[int] = None):
         app_web.router.add_get("/health", healthcheck)
         
         # NEVER hardcode ports - use PORT from environment (Render requirement)
-        port_env = os.getenv("PORT")
-        if not port_env:
-            logger.warning("PORT not set, cannot start healthcheck server")
-            return
-        port = port or int(port_env)
+        port_env = os.getenv("PORT", "10000").strip()
+        try:
+            port = port or int(port_env)
+        except ValueError:
+            logger.warning("Invalid PORT=%s, using default 10000", port_env)
+            port = 10000
         logger.info(f"Starting healthcheck server on port {port}")
         
         runner = web.AppRunner(app_web)
@@ -166,11 +167,12 @@ async def start_healthcheck_server(port: Optional[int] = None):
                     pass  # Suppress logs
             
             # NEVER hardcode ports - use PORT from environment (Render requirement)
-            port_env = os.getenv("PORT")
-            if not port_env:
-                logger.warning("PORT not set, cannot start fallback healthcheck server")
-                return
-            port = port or int(port_env)
+            port_env = os.getenv("PORT", "10000").strip()
+            try:
+                port = port or int(port_env)
+            except ValueError:
+                logger.warning("Invalid PORT=%s, using default 10000", port_env)
+                port = 10000
             httpd = socketserver.TCPServer(("0.0.0.0", port), HealthCheckHandler)
             logger.info(f"Starting simple healthcheck server on port {port}")
             
@@ -193,6 +195,22 @@ async def start_healthcheck_server(port: Optional[int] = None):
         logger.error(f"Failed to start healthcheck server: {e}")
 
 
+def _log_startup_summary(bot_mode: str) -> None:
+    storage = get_storage()
+    db_maxconn = getattr(storage, "max_pool_size", None) or int(os.getenv("DB_MAX_CONN", "5"))
+    port_env = os.getenv("PORT", "10000").strip()
+    try:
+        port = int(port_env)
+    except ValueError:
+        port = 10000
+    logger.info(
+        "[STARTUP] storage_backend=db db_maxconn=%s port=%s mode=%s",
+        db_maxconn,
+        port,
+        bot_mode,
+    )
+
+
 async def main():
     """Main application entry point."""
     setup_structured_logging()
@@ -205,6 +223,7 @@ async def main():
     # Determine bot mode
     bot_mode = get_bot_mode()
     logger.info(f"BOT_MODE: {bot_mode}, Safe mode: {get_safe_mode()}")
+    _log_startup_summary(bot_mode)
     
     # Start services based on mode
     try:
@@ -215,22 +234,14 @@ async def main():
             else:
                 logger.info("[LOCK] Passive mode: telegram runner disabled")
                 # Start healthcheck only (runs indefinitely)
-                if os.getenv("PORT"):
-                    await start_healthcheck_server()
-                else:
-                    # No PORT, just wait to keep process alive
-                    logger.info("[LOCK] Passive mode: keeping process alive (no PORT set)")
-                    await asyncio.Event().wait()
+                await start_healthcheck_server()
         elif bot_mode == "web" or (os.getenv("PORT") and not is_lock_acquired()):
             # Web/healthcheck only mode (runs indefinitely)
             await start_healthcheck_server()
         else:
             logger.warning("No services to start. Set BOT_MODE, PORT, or TELEGRAM_BOT_TOKEN")
             # Keep process alive even if nothing started
-            if os.getenv("PORT"):
-                await start_healthcheck_server()
-            else:
-                await asyncio.Event().wait()
+            await start_healthcheck_server()
     except KeyboardInterrupt:
         logger.info("Shutdown requested")
     finally:
