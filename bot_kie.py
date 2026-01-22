@@ -8593,6 +8593,7 @@ async def _button_callback_impl(
                     except Exception as exc:
                         logger.warning("Failed to resolve free counter line: %s", exc)
                     
+                    user_balance = await get_user_balance_async(user_id)
                     # Build enhanced confirmation message
                     confirm_msg_base = build_confirmation_text(
                         model_id=model_id,
@@ -8603,7 +8604,9 @@ async def _button_callback_impl(
                         lang=user_lang,
                         is_free=is_free,
                         bonus_available=0.0,
-                        discount=None
+                        discount=None,
+                        user_balance=user_balance,
+                        correlation_id=correlation_id,
                     )
                     confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
                     
@@ -8704,6 +8707,7 @@ async def _button_callback_impl(
                     else:
                         price_info = f"💰 <b>Стоимость:</b> {price_str}"
                     
+                    user_balance = await get_user_balance_async(user_id)
                     # Build enhanced confirmation message
                     confirm_msg_base = build_confirmation_text(
                         model_id=model_id,
@@ -8714,7 +8718,9 @@ async def _button_callback_impl(
                         lang=user_lang,
                         is_free=is_free,
                         bonus_available=0.0,
-                        discount=None
+                        discount=None,
+                        user_balance=user_balance,
+                        correlation_id=correlation_id,
                     )
                     confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
                     
@@ -13536,6 +13542,7 @@ async def send_confirmation_message(
     elif price_quote:
         price_numeric = float(price_quote.get("price_rub", 0.0))
     
+    user_balance = await get_user_balance_async(user_id)
     # Build enhanced confirmation message
     confirm_msg_base = build_confirmation_text(
         model_id=model_id,
@@ -13546,7 +13553,9 @@ async def send_confirmation_message(
         lang=user_lang,
         is_free=is_free,
         bonus_available=0.0,
-        discount=None
+        discount=None,
+        user_balance=user_balance,
+        correlation_id=correlation_id,
     )
     confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
 
