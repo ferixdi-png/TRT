@@ -19674,9 +19674,9 @@ async def main():
     if not telegram_bot_token:
         validation_errors.append("TELEGRAM_BOT_TOKEN is required")
 
-    if storage_mode_effective == "postgres":
+    if storage_mode_effective in ("postgres", "db"):
         if not database_url:
-            validation_errors.append("DATABASE_URL is required for STORAGE_MODE=postgres")
+            validation_errors.append("DATABASE_URL is required for STORAGE_MODE=postgres/db")
     else:
         if not github_token:
             validation_errors.append("GITHUB_TOKEN is required for GitHub storage")
