@@ -183,6 +183,7 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
         github_repo = os.getenv("GITHUB_REPO", "").strip()
         github_token = os.getenv("GITHUB_TOKEN", "").strip()
         storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
+        # Не валидируем committer_email/committer_name если не github
     payment_bank = require("PAYMENT_BANK")
     payment_card_holder = require("PAYMENT_CARD_HOLDER")
     payment_phone = require("PAYMENT_PHONE")
