@@ -231,6 +231,22 @@ async def _storage_rw_smoke(
             try:
                 await asyncio.wait_for(target_storage.write_json_file(filename, payload), timeout=timeout_s)
                 loaded = await asyncio.wait_for(target_storage.read_json_file(filename, default={}), timeout=timeout_s)
+                if not isinstance(loaded, dict):
+                    normalized = None
+                    if isinstance(loaded, str):
+                        try:
+                            normalized = json.loads(loaded)
+                        except json.JSONDecodeError:
+                            normalized = None
+                    if isinstance(normalized, dict):
+                        loaded = normalized
+                    else:
+                        logger.warning(
+                            "BILLING_PREFLIGHT storage_rw invalid payload code=BPF_STORAGE_RW_BAD_PAYLOAD type=%s",
+                            type(loaded).__name__,
+                        )
+                        last_error = f"invalid_payload type={type(loaded).__name__}"
+                        continue
                 if loaded.get("nonce") == payload["nonce"]:
                     return True, None
                 last_error = "rw mismatch"
@@ -308,6 +324,9 @@ async def _storage_rw_smoke(
             "BILLING_PREFLIGHT storage_rw fallback failed code=BPF_STORAGE_RW_FALLBACK_FAILED error=%s",
             fallback_error,
         )
+        error_code = "BPF_STORAGE_RW_FALLBACK_FAILED"
+        if fallback_error and "invalid_payload" in fallback_error:
+            error_code = "BPF_STORAGE_RW_BAD_PAYLOAD"
         meta = {
             "rw_ok": False,
             "delete_ok": False,
@@ -318,11 +337,14 @@ async def _storage_rw_smoke(
             "diagnostics_source": diagnostics_source,
             "timeout_s": timeout_s,
             "retries": retries,
-            "error_code": "BPF_STORAGE_RW_FALLBACK_FAILED",
+            "error_code": error_code,
         }
         return _Section(STATUS_FAIL, f"rw failed ({fallback_error or primary_error})", meta)
 
     details = "rw mismatch" if primary_error == "rw mismatch" else f"rw failed ({primary_error})"
+    error_code = "BPF_STORAGE_RW_FAILED"
+    if primary_error and "invalid_payload" in primary_error:
+        error_code = "BPF_STORAGE_RW_BAD_PAYLOAD"
     meta = {
         "rw_ok": False,
         "delete_ok": False,
@@ -330,7 +352,7 @@ async def _storage_rw_smoke(
         "diagnostics_source": diagnostics_source,
         "timeout_s": timeout_s,
         "retries": retries,
-        "error_code": "BPF_STORAGE_RW_FAILED",
+        "error_code": error_code,
     }
     if diagnostics_init_error:
         meta["diagnostics_init_error"] = diagnostics_init_error
