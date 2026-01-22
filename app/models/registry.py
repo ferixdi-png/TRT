@@ -45,6 +45,9 @@ _model_cache: Optional[List[Dict[str, Any]]] = None
 _model_source: Optional[str] = None
 _model_timestamp: Optional[datetime] = None
 
+# Cache for KIE_MODELS import (expensive operation - 51 seconds!)
+_kie_models_import_cache: Optional[List[Dict[str, Any]]] = None
+
 
 async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """
@@ -399,7 +402,7 @@ def get_model_registry() -> Dict[str, Any]:
 # Synchronous wrapper for compatibility
 def get_models_sync() -> List[Dict[str, Any]]:
     """Synchronous wrapper - loads models blocking."""
-    global _model_cache, _model_source, _model_timestamp
+    global _model_cache, _model_source, _model_timestamp, _kie_models_import_cache
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -410,14 +413,19 @@ def get_models_sync() -> List[Dict[str, Any]]:
                     if yaml_models_dict:
                         normalized = []
                         enrich_data = {}
-                        try:
-                            from kie_models import KIE_MODELS
-                            for model in KIE_MODELS:
-                                model_id = model.get('id')
-                                if model_id:
-                                    enrich_data[model_id] = model
-                        except ImportError:
-                            pass
+                        
+                        # Use cached KIE_MODELS import if available (51s import!)
+                        if _kie_models_import_cache is None:
+                            try:
+                                from kie_models import KIE_MODELS
+                                _kie_models_import_cache = KIE_MODELS
+                            except ImportError:
+                                _kie_models_import_cache = []
+                        
+                        for model in _kie_models_import_cache:
+                            model_id = model.get('id')
+                            if model_id:
+                                enrich_data[model_id] = model
                         
                         for model_id, yaml_data in yaml_models_dict.items():
                             try:
@@ -433,11 +441,14 @@ def get_models_sync() -> List[Dict[str, Any]]:
                 except Exception:
                     pass
             
-            # Fallback to kie_models.py
-            from kie_models import KIE_MODELS
+            # Fallback to kie_models.py (use cache!)
+            if _kie_models_import_cache is None:
+                from kie_models import KIE_MODELS
+                _kie_models_import_cache = KIE_MODELS
+            
             normalized = []
             seen_ids = set()
-            for model in KIE_MODELS:
+            for model in _kie_models_import_cache:
                 try:
                     norm_model = _normalize_model(model)
                     if norm_model['id'] not in seen_ids:
@@ -459,14 +470,19 @@ def get_models_sync() -> List[Dict[str, Any]]:
                 if yaml_models_dict:
                     normalized = []
                     enrich_data = {}
-                    try:
-                        from kie_models import KIE_MODELS
-                        for model in KIE_MODELS:
-                            model_id = model.get('id')
-                            if model_id:
-                                enrich_data[model_id] = model
-                    except ImportError:
-                        pass
+                    
+                    # Use cached KIE_MODELS import if available
+                    if _kie_models_import_cache is None:
+                        try:
+                            from kie_models import KIE_MODELS
+                            _kie_models_import_cache = KIE_MODELS
+                        except ImportError:
+                            _kie_models_import_cache = []
+                    
+                    for model in _kie_models_import_cache:
+                        model_id = model.get('id')
+                        if model_id:
+                            enrich_data[model_id] = model
                     
                     for model_id, yaml_data in yaml_models_dict.items():
                         try:
@@ -482,11 +498,14 @@ def get_models_sync() -> List[Dict[str, Any]]:
             except Exception:
                 pass
         
-        # Final fallback
-        from kie_models import KIE_MODELS
+        # Final fallback (use cache!)
+        if _kie_models_import_cache is None:
+            from kie_models import KIE_MODELS
+            _kie_models_import_cache = KIE_MODELS
+        
         normalized = []
         seen_ids = set()
-        for model in KIE_MODELS:
+        for model in _kie_models_import_cache:
             try:
                 norm_model = _normalize_model(model)
                 if norm_model['id'] not in seen_ids:
