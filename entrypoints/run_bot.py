@@ -39,6 +39,20 @@ ASYNC_HEALTHCHECK_HINT = (
     "Render may consider the service unhealthy if nothing else binds the port."
 )
 
+async def get_webhook_handler():
+    """Get webhook handler if bot is in webhook mode."""
+    try:
+        bot_mode = os.getenv("BOT_MODE", "").lower()
+        if bot_mode != "webhook":
+            return None
+        
+        # Import and return webhook handler from bot_kie
+        from bot_kie import create_webhook_handler
+        return await create_webhook_handler()
+    except Exception as exc:
+        logger.debug("Webhook handler not available: %s", exc)
+        return None
+
 async def start_healthcheck(port: int) -> bool:
     """Start the aiohttp healthcheck server; never raise on failure."""
     try:
@@ -48,7 +62,8 @@ async def start_healthcheck(port: int) -> bool:
         return False
 
     try:
-        started = await start_health_server(port=port, self_check=True)
+        webhook_handler = await get_webhook_handler()
+        started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
         if started:
             logger.info("Healthcheck server started on port %s", port)
         else:

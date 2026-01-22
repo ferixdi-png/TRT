@@ -19561,6 +19561,52 @@ async def _register_all_handlers_internal(application: Application):
     logger.info("✅ Basic handlers registered (full registration happens in main())")
 
 
+# Global webhook handler for aiohttp (webhook mode)
+_application_for_webhook: Optional[Application] = None
+
+
+async def create_webhook_handler():
+    """Create aiohttp webhook handler for Telegram updates."""
+    from aiohttp import web
+    import uuid
+    
+    async def webhook_handler(request: web.Request) -> web.StreamResponse:
+        """Handle incoming Telegram webhook updates."""
+        try:
+            correlation_id = str(uuid.uuid4())[:8]
+            logger.debug(f"[WEBHOOK] {correlation_id} handler_invoked")
+            
+            if _application_for_webhook is None:
+                logger.warning(f"[WEBHOOK] {correlation_id} bot_not_ready")
+                return web.Response(status=503, text="Bot not ready")
+            
+            try:
+                data = await request.json()
+            except Exception as exc:
+                logger.warning(f"[WEBHOOK] {correlation_id} parse_error={exc}")
+                return web.Response(status=400, text="Invalid JSON")
+            
+            # Process update
+            try:
+                update = Update.de_json(data, _application_for_webhook.bot)
+                if update:
+                    logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
+                    await _application_for_webhook.process_update(update)
+                    logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
+                    return web.Response(status=200, text="ok")
+                else:
+                    logger.warning(f"[WEBHOOK] {correlation_id} update_parse_failed")
+                    return web.Response(status=400, text="Invalid update")
+            except Exception as exc:
+                logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
+                return web.Response(status=500, text="Processing error")
+        except Exception as exc:
+            logger.error(f"[WEBHOOK] handler_exception={exc}", exc_info=True)
+            return web.Response(status=500, text="Internal error")
+    
+    return webhook_handler
+
+
 async def main():
     """Start the bot."""
     global storage, kie
@@ -20607,6 +20653,9 @@ async def main():
     
     # Если webhook режим - НЕ запускаем polling
     if bot_mode == "webhook":
+        global _application_for_webhook
+        _application_for_webhook = application  # Register app for webhook handler
+        
         webhook_url = WEBHOOK_URL or os.getenv("WEBHOOK_URL")
         if not webhook_url:
             logger.error("❌ WEBHOOK_URL not set for webhook mode!")
