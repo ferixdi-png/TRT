@@ -93,6 +93,28 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _read_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("BILLING_PREFLIGHT invalid %s=%s, using %s", name, raw, default)
+        return default
+
+
+def _read_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("BILLING_PREFLIGHT invalid %s=%s, using %s", name, raw, default)
+        return default
+
+
 def format_billing_preflight_report(report: Dict[str, Any]) -> str:
     sections = report.get("sections", {})
     db_meta = sections.get("db", {}).get("meta", {})
@@ -176,36 +198,143 @@ async def _storage_rw_smoke(
         return _Section(STATUS_FAIL, "storage unavailable", {"rw_ok": False})
 
     diagnostic_storage = storage
-    if hasattr(storage, "dsn"):
-        diagnostic_storage = PostgresStorage(storage.dsn, partner_id="diagnostics")
+    diagnostics_source = "primary"
+    diagnostics_init_error: Optional[str] = None
+    if hasattr(storage, "diagnostics_storage"):
+        diagnostic_storage = getattr(storage, "diagnostics_storage") or storage
+        diagnostics_source = "custom"
+    elif hasattr(storage, "get_diagnostics_storage"):
+        try:
+            diagnostic_storage = storage.get_diagnostics_storage()
+            diagnostics_source = "custom"
+        except Exception as exc:
+            diagnostics_init_error = str(exc)[:120]
+            diagnostic_storage = storage
+    elif hasattr(storage, "dsn"):
+        try:
+            diagnostic_storage = PostgresStorage(storage.dsn, partner_id="diagnostics")
+            diagnostics_source = "postgres"
+        except Exception as exc:
+            diagnostics_init_error = str(exc)[:120]
+            diagnostic_storage = storage
+
+    timeout_s = _read_float_env("BILLING_PREFLIGHT_STORAGE_TIMEOUT_S", 2.0)
+    retries = max(1, _read_int_env("BILLING_PREFLIGHT_STORAGE_RETRIES", 2))
 
     filename = f"_diagnostics/{bot_instance_id or 'unknown'}/billing_preflight.json"
     payload = {"nonce": os.urandom(6).hex(), "ts": int(time.time())}
     start = time.monotonic()
-    try:
-        await diagnostic_storage.write_json_file(filename, payload)
-        loaded = await diagnostic_storage.read_json_file(filename, default={})
-        rw_ok = loaded.get("nonce") == payload["nonce"]
-    except Exception as exc:
-        return _Section(STATUS_FAIL, f"rw failed ({str(exc)[:60]})", {"rw_ok": False})
+
+    async def _attempt_rw(target_storage: Any) -> tuple[bool, Optional[str]]:
+        last_error: Optional[str] = None
+        for attempt in range(1, retries + 1):
+            try:
+                await asyncio.wait_for(target_storage.write_json_file(filename, payload), timeout=timeout_s)
+                loaded = await asyncio.wait_for(target_storage.read_json_file(filename, default={}), timeout=timeout_s)
+                if loaded.get("nonce") == payload["nonce"]:
+                    return True, None
+                last_error = "rw mismatch"
+            except Exception as exc:
+                last_error = str(exc)[:120]
+            if attempt < retries:
+                await asyncio.sleep(0.05)
+        return False, last_error
+
+    rw_ok, primary_error = await _attempt_rw(diagnostic_storage)
 
     delete_ok = False
-    try:
-        async with db_pool.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                "diagnostics",
-                filename,
-            )
-        delete_ok = True
-    except Exception as exc:
-        logger.warning("BILLING_PREFLIGHT storage delete failed: %s", exc)
+    partner_for_delete = getattr(diagnostic_storage, "partner_id", "diagnostics")
+    if rw_ok:
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.execute(
+                    "DELETE FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                    partner_for_delete,
+                    filename,
+                )
+            delete_ok = True
+        except Exception as exc:
+            logger.warning("BILLING_PREFLIGHT storage delete failed: %s", exc)
 
     latency_ms = int((time.monotonic() - start) * 1000)
-    status = STATUS_OK if rw_ok else STATUS_FAIL
-    details = "ok" if rw_ok else "rw mismatch"
-    meta = {"rw_ok": rw_ok, "delete_ok": delete_ok, "latency_ms": latency_ms}
-    return _Section(status, details, meta)
+    if rw_ok:
+        status = STATUS_OK
+        details = "ok"
+        meta = {
+            "rw_ok": True,
+            "delete_ok": delete_ok,
+            "latency_ms": latency_ms,
+            "diagnostics_source": diagnostics_source,
+            "timeout_s": timeout_s,
+            "retries": retries,
+        }
+        if diagnostics_init_error:
+            meta["diagnostics_init_error"] = diagnostics_init_error
+        return _Section(status, details, meta)
+
+    if diagnostic_storage is not storage:
+        logger.warning(
+            "BILLING_PREFLIGHT storage_rw diagnostics failed code=BPF_STORAGE_RW_DIAGNOSTICS_FAILED error=%s",
+            primary_error,
+        )
+        fallback_start = time.monotonic()
+        fallback_ok, fallback_error = await _attempt_rw(storage)
+        fallback_latency_ms = int((time.monotonic() - fallback_start) * 1000)
+        if fallback_ok:
+            fallback_partner = getattr(storage, "partner_id", bot_instance_id or "unknown")
+            try:
+                async with db_pool.acquire() as conn:
+                    await conn.execute(
+                        "DELETE FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                        fallback_partner,
+                        filename,
+                    )
+                delete_ok = True
+            except Exception as exc:
+                logger.warning("BILLING_PREFLIGHT storage delete failed: %s", exc)
+            meta = {
+                "rw_ok": True,
+                "delete_ok": delete_ok,
+                "latency_ms": fallback_latency_ms,
+                "fallback_used": True,
+                "primary_error": primary_error,
+                "diagnostics_source": diagnostics_source,
+                "timeout_s": timeout_s,
+                "retries": retries,
+                "error_code": "BPF_STORAGE_RW_DIAGNOSTICS_FAILED",
+            }
+            return _Section(STATUS_DEGRADED, "rw ok on tenant fallback", meta)
+        logger.error(
+            "BILLING_PREFLIGHT storage_rw fallback failed code=BPF_STORAGE_RW_FALLBACK_FAILED error=%s",
+            fallback_error,
+        )
+        meta = {
+            "rw_ok": False,
+            "delete_ok": False,
+            "latency_ms": fallback_latency_ms,
+            "fallback_used": True,
+            "primary_error": primary_error,
+            "fallback_error": fallback_error,
+            "diagnostics_source": diagnostics_source,
+            "timeout_s": timeout_s,
+            "retries": retries,
+            "error_code": "BPF_STORAGE_RW_FALLBACK_FAILED",
+        }
+        return _Section(STATUS_FAIL, f"rw failed ({fallback_error or primary_error})", meta)
+
+    details = "rw mismatch" if primary_error == "rw mismatch" else f"rw failed ({primary_error})"
+    meta = {
+        "rw_ok": False,
+        "delete_ok": False,
+        "latency_ms": latency_ms,
+        "diagnostics_source": diagnostics_source,
+        "timeout_s": timeout_s,
+        "retries": retries,
+        "error_code": "BPF_STORAGE_RW_FAILED",
+    }
+    if diagnostics_init_error:
+        meta["diagnostics_init_error"] = diagnostics_init_error
+    return _Section(STATUS_FAIL, details, meta)
 
 
 async def run_billing_preflight(
