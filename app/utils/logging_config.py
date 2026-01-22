@@ -4,6 +4,7 @@
 """
 
 import logging
+import re
 import sys
 import uuid
 from contextvars import ContextVar
@@ -38,6 +39,17 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
+class RedactTelegramTokenFilter(logging.Filter):
+    """Редактирует токены Telegram в логах, чтобы не утекали URL с bot<token>."""
+
+    TOKEN_PATTERN = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self.TOKEN_PATTERN.sub("bot<REDACTED>", record.msg)
+        return True
+
+
 def setup_logging(level: int = logging.INFO, include_request_id: bool = True) -> None:
     """
     Настраивает унифицированное логирование
@@ -65,15 +77,20 @@ def setup_logging(level: int = logging.INFO, include_request_id: bool = True) ->
     console_handler.setLevel(level)
     console_handler.setFormatter(logging.Formatter(log_format))
     
-    # Добавляем фильтр для request-id
+    # Добавляем фильтр для request-id и редактирования токена
     if include_request_id:
         console_handler.addFilter(RequestIdFilter())
+    console_handler.addFilter(RedactTelegramTokenFilter())
     
     root_logger.addHandler(console_handler)
     
     # Настраиваем уровни для внешних библиотек
-    logging.getLogger('httpx').setLevel(logging.WARNING)
-    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    httpx_logger = logging.getLogger('httpx')
+    httpx_logger.setLevel(logging.WARNING)
+    httpx_logger.addFilter(RedactTelegramTokenFilter())
+    httpcore_logger = logging.getLogger('httpcore')
+    httpcore_logger.setLevel(logging.WARNING)
+    httpcore_logger.addFilter(RedactTelegramTokenFilter())
     logging.getLogger('telegram').setLevel(logging.WARNING)
     logging.getLogger('asyncio').setLevel(logging.WARNING)
 

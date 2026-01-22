@@ -8131,7 +8131,7 @@ async def _button_callback_impl(
                 
                 # Skip if no models in this type
                 if models_count == 0:
-                    logger.warning(f"No models found for generation type: {gen_type}")
+                    logger.debug("No models found for generation type: %s", gen_type)
                     continue
                 
                 # Identify text-to-image type (will be added separately)
@@ -8241,12 +8241,12 @@ async def _button_callback_impl(
             return SELECTING_MODEL
         
         if data == "show_all_models_list":
+            import asyncio
             # Answer callback immediately
             try:
                 await query.answer()
             except Exception as e:
                 logger.error(f"Error answering callback for show_all_models_list: {e}")
-                pass
             
             logger.info(f"User {user_id} clicked 'show_all_models_list' button")
             
@@ -8271,11 +8271,50 @@ async def _button_callback_impl(
                     update_id=update_id,
                     chat_id=query.message.chat_id if query.message else None,
                 )
-                await handle_show_all_models_list(
-                    query,
-                    user_id,
-                    user_lang,
+                loading_text = (
+                    "⏳ Загружаю список моделей…" if user_lang == 'ru' else "⏳ Loading models list…"
                 )
+                try:
+                    await query.edit_message_text(loading_text, parse_mode='HTML')
+                except Exception as edit_exc:
+                    logger.debug("Could not show loading state for show_all_models_list: %s", edit_exc)
+                
+                async def _render_all_models_list():
+                    try:
+                        await asyncio.wait_for(
+                            handle_show_all_models_list(
+                                query,
+                                user_id,
+                                user_lang,
+                                skip_answer=True,
+                            ),
+                            timeout=10,
+                        )
+                    except asyncio.TimeoutError:
+                        fallback = (
+                            "⚠️ Слишком долго. Попробуй ещё раз." if user_lang == 'ru' else "⚠️ Too slow. Please try again."
+                        )
+                        try:
+                            await query.edit_message_text(fallback, parse_mode='HTML')
+                        except Exception:
+                            pass
+                    except Exception as exc:
+                        logger.error("Error in handle_show_all_models_list: %s", exc, exc_info=True)
+                        fallback = (
+                            "❌ Ошибка при загрузке моделей. Попробуйте позже." if user_lang == 'ru' else "❌ Error loading models. Please try later."
+                        )
+                        try:
+                            await query.edit_message_text(fallback, parse_mode='HTML')
+                        except Exception:
+                            try:
+                                await query.answer(fallback, show_alert=True)
+                            except Exception:
+                                pass
+                
+                if context and getattr(context, "application", None):
+                    context.application.create_task(_render_all_models_list())
+                else:
+                    await _render_all_models_list()
                 return SELECTING_MODEL
             except Exception as e:
                 logger.error(f"Error in handle_show_all_models_list: {e}", exc_info=True)
@@ -8286,16 +8325,6 @@ async def _button_callback_impl(
                     error_msg = "❌ Error loading models. Please try later."
                 await query.answer(error_msg, show_alert=True)
                 return SELECTING_MODEL
-            
-            try:
-                await query.edit_message_text(
-                    models_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except Exception as e:
-                logger.error(f"Error showing all models: {e}", exc_info=True)
-                await query.answer("❌ Ошибка. Попробуйте еще раз", show_alert=True)
             
             return SELECTING_MODEL
         
@@ -19165,8 +19194,17 @@ async def create_bot_application(settings) -> Application:
         f"📊 models_registry source={registry_info['used_source']} "
         f"path={get_registry_path()} count={registry_info['count']}"
     )
-    if registry_info.get('yaml_total_models'):
-        logger.info(f"📊 YAML total_models={registry_info['yaml_total_models']}")
+    yaml_total = registry_info.get('yaml_total_models')
+    if yaml_total:
+        logger.info(f"📊 YAML total_models={yaml_total}")
+        runtime_delta = len(models_list) - yaml_total
+        if runtime_delta:
+            logger.info(
+                "📊 runtime_models_added=%s total_models=%s yaml_total=%s",
+                runtime_delta,
+                len(models_list),
+                yaml_total,
+            )
     
     logger.info(f"Creating application with {len(models_list)} models in {len(categories)} categories: {categories}")
     
@@ -19393,7 +19431,8 @@ async def _register_all_handlers_internal(application: Application):
             ]
         },
         fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
-                   CommandHandler('cancel', cancel)]
+                   CommandHandler('cancel', cancel)],
+        per_message=True,
     )
     
     # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
@@ -19766,8 +19805,17 @@ async def main():
         f"📊 models_registry source={registry_info['used_source']} "
         f"path={get_registry_path()} count={registry_info['count']}"
     )
-    if registry_info.get('yaml_total_models'):
-        logger.info(f"📊 YAML total_models={registry_info['yaml_total_models']}")
+    yaml_total = registry_info.get('yaml_total_models')
+    if yaml_total:
+        logger.info(f"📊 YAML total_models={yaml_total}")
+        runtime_delta = len(models_list) - yaml_total
+        if runtime_delta:
+            logger.info(
+                "📊 runtime_models_added=%s total_models=%s yaml_total=%s",
+                runtime_delta,
+                len(models_list),
+                yaml_total,
+            )
     
     logger.info(f"Bot starting with {len(models_list)} models in {len(categories)} categories: {categories}")
     if sora_models:
@@ -20155,11 +20203,8 @@ async def main():
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_topup_user:'),
             CallbackQueryHandler(cancel, pattern='^cancel$'),
             CommandHandler('cancel', cancel)
-        ]
-        # REMOVED # D) per_message=True removed to avoid PTBUserWarning
-        # - it prevents MessageHandler from working!
-        # # D) per_message=True removed to avoid PTBUserWarning
-        # requires ALL handlers to be CallbackQueryHandler, which breaks photo/audio handling
+        ],
+        per_message=True,
     )
 
     # Inbound update logger/context middleware (must be first)
@@ -20672,7 +20717,7 @@ async def main():
                 return
             
             logger.info("✅ Webhook mode ready - waiting for updates via webhook")
-            logger.info("   Bot will receive updates at: {webhook_url}")
+            logger.info("   Bot will receive updates at: %s", webhook_url)
             
             # В webhook режиме просто ждём (webhook handler настроен выше)
             while True:
