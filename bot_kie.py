@@ -14793,6 +14793,11 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
     
     # Handle payment screenshot
     if user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'payment_screenshot':
+        if update.message and update.message.text:
+            cancel_text = update.message.text.strip().lower()
+            if cancel_text in ['/cancel', 'отмена', 'cancel']:
+                user_sessions.pop(user_id, None)
+                return await cancel(update, context)
         if update.message.photo:
             # User sent payment screenshot
             if user_id not in user_sessions:
