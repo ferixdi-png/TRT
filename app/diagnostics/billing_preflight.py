@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import asyncpg
@@ -77,7 +78,19 @@ def get_cached_billing_preflight_text() -> Optional[str]:
 
 
 def _build_report_json(report: Dict[str, Any]) -> str:
-    return json.dumps(report, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(_json_safe(report), ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_json_safe(item) for item in value)
+    return value
 
 
 def format_billing_preflight_report(report: Dict[str, Any]) -> str:
@@ -126,7 +139,7 @@ async def _persist_preflight_report(storage: Any, report: Dict[str, Any]) -> Non
     if storage is None:
         return
     try:
-        await storage.write_json_file(_BILLING_PREFLIGHT_KEY, report)
+        await storage.write_json_file(_BILLING_PREFLIGHT_KEY, _json_safe(report))
     except Exception as exc:
         logger.warning("BILLING_PREFLIGHT persist failed: %s", exc)
 
