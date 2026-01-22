@@ -138,16 +138,19 @@ async function startBot() {
     process.exit(1);
   }
   
-  // Check if bot script exists (try bot_kie.py first, then run_bot.py)
-  let botScript = path.join(__dirname, 'bot_kie.py');
-  if (!fs.existsSync(botScript)) {
-    botScript = path.join(__dirname, 'run_bot.py');
-    if (!fs.existsSync(botScript)) {
-      console.error(`❌ Bot script not found. Tried: bot_kie.py and run_bot.py`);
-      console.error(`❌ Current directory: ${__dirname}`);
-      console.error(`❌ Files in directory:`, fs.readdirSync(__dirname).filter(f => f.endsWith('.py')).join(', '));
-      process.exit(1);
-    }
+  // Check if bot script exists (prefer canonical entrypoint, keep fallbacks for compatibility)
+  const candidateScripts = [
+    path.join(__dirname, 'entrypoints', 'run_bot.py'),
+    path.join(__dirname, 'run_bot.py'),
+    path.join(__dirname, 'bot_kie.py'),
+  ];
+
+  const botScript = candidateScripts.find((candidate) => fs.existsSync(candidate));
+  if (!botScript) {
+    console.error(`❌ Bot script not found. Tried: ${candidateScripts.join(', ')}`);
+    console.error(`❌ Current directory: ${__dirname}`);
+    console.error(`❌ Files in directory:`, fs.readdirSync(__dirname).filter(f => f.endsWith('.py')).join(', '));
+    process.exit(1);
   }
   
   console.log(`📝 Starting bot script: ${botScript}`);
