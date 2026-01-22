@@ -35,17 +35,16 @@ def test_balance_logging_exists():
         "Critical balance logging not found"
 
 
-def test_balance_saves_to_github_storage():
-    """Проверяет что баланс сохраняется в GitHub storage"""
+def test_balance_uses_storage_backend():
+    """Проверяет что баланс сохраняется через storage backend"""
     bot_file = project_root / "bot_kie.py"
     if not bot_file.exists():
         pytest.skip("bot_kie.py not found")
     
     content = bot_file.read_text(encoding='utf-8', errors='ignore')
     
-    # Проверяем сохранение в GitHub storage
-    assert 'github_json' in content.lower() or 'github storage' in content.lower(), \
-        "Balance saving to GitHub storage not found"
+    # Проверяем использование storage backend
+    assert 'get_storage' in content, "Storage backend usage not found"
 
 
 def test_balance_verification_exists():

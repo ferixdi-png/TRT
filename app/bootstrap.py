@@ -35,7 +35,7 @@ class DependencyContainer:
 
     def _storage_fallback_disabled(self, reason: str) -> None:
         logger.warning(
-            "[STORAGE] fallback_disabled=true reason=%s mode=github_only",
+            "[STORAGE] fallback_disabled=true reason=%s mode=db_only",
             reason,
         )
         

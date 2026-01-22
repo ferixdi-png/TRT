@@ -165,24 +165,17 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
     kie_api_key = require("KIE_API_KEY")
     telegram_bot_token = require("TELEGRAM_BOT_TOKEN")
     webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").strip()
-    storage_mode = os.getenv("STORAGE_MODE", "").strip()
-    # Только если github storage — требуем github-переменные
+    storage_mode = os.getenv("STORAGE_MODE", "").strip().lower()
+    # DB-only runtime: github переменные не требуются
     committer_email = ""
     committer_name = ""
-    if storage_mode == "github":
-        bot_mode = require("BOT_MODE")
-        github_branch = require("GITHUB_BRANCH")
-        committer_email = require("GITHUB_COMMITTER_EMAIL")
-        committer_name = require("GITHUB_COMMITTER_NAME")
-        github_repo = require("GITHUB_REPO")
-        github_token = require("GITHUB_TOKEN")
-        storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
-    else:
-        bot_mode = os.getenv("BOT_MODE", "").strip()
-        github_branch = os.getenv("GITHUB_BRANCH", "").strip()
-        github_repo = os.getenv("GITHUB_REPO", "").strip()
-        github_token = os.getenv("GITHUB_TOKEN", "").strip()
-        storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
+    bot_mode = os.getenv("BOT_MODE", "").strip()
+    github_branch = os.getenv("GITHUB_BRANCH", "").strip()
+    github_repo = os.getenv("GITHUB_REPO", "").strip()
+    github_token = os.getenv("GITHUB_TOKEN", "").strip()
+    storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
+    committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "").strip()
+    committer_name = os.getenv("GITHUB_COMMITTER_NAME", "").strip()
     payment_bank = require("PAYMENT_BANK")
     payment_card_holder = require("PAYMENT_CARD_HOLDER")
     payment_phone = require("PAYMENT_PHONE")
@@ -203,13 +196,12 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
         invalid_required.append("BOT_INSTANCE_ID (letters/numbers/._- only)")
     if bot_mode and bot_mode not in {"polling", "webhook", "web", "smoke"}:
         invalid_required.append("BOT_MODE (polling/webhook/web/smoke)")
-    if storage_mode == "github":
-        if github_branch and not _is_valid_branch(github_branch):
-            invalid_required.append("GITHUB_BRANCH (invalid format)")
-        if committer_email and "@" not in committer_email:
-            invalid_required.append("GITHUB_COMMITTER_EMAIL (must be email)")
-        if not committer_name and "GITHUB_COMMITTER_NAME" not in missing_required:
-            invalid_required.append("GITHUB_COMMITTER_NAME (must be non-empty)")
+    if github_branch and not _is_valid_branch(github_branch):
+        invalid_required.append("GITHUB_BRANCH (invalid format)")
+    if committer_email and "@" not in committer_email:
+        invalid_required.append("GITHUB_COMMITTER_EMAIL (must be email)")
+    if committer_name and not committer_name.strip():
+        invalid_required.append("GITHUB_COMMITTER_NAME (must be non-empty)")
     if github_repo and not _is_valid_repo(github_repo):
         invalid_required.append("GITHUB_REPO (format owner/repo)")
     if github_token and len(github_token) < 10:
@@ -224,8 +216,8 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
         invalid_required.append("PAYMENT_PHONE (must be non-empty)")
     if port and not port.isdigit():
         invalid_required.append("PORT (must be number)")
-    if storage_mode and storage_mode not in {"auto", "github", "postgres", "db"}:
-        invalid_required.append("STORAGE_MODE (auto/github/postgres/db)")
+    if storage_mode and storage_mode not in {"auto", "github", "postgres", "db", "github_json"}:
+        invalid_required.append("STORAGE_MODE (auto/github/postgres/db/github_json)")
     if support_telegram and not _is_valid_username(support_telegram):
         invalid_required.append("SUPPORT_TELEGRAM (format @username)")
     if not support_text and "SUPPORT_TEXT" not in missing_required:

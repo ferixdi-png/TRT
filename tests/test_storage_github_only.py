@@ -1,11 +1,11 @@
 from app.config import Settings
 
 
-def test_storage_mode_is_github_only(monkeypatch):
+def test_storage_mode_is_db_only(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("GITHUB_ONLY_STORAGE", "true")
     settings = Settings()
-    assert settings.get_storage_mode() == "github_json"
+    assert settings.get_storage_mode() == "db"
     assert settings.github_only_storage is True
 
 

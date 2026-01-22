@@ -79,10 +79,10 @@ class Settings:
         self.dry_run = os.getenv('DRY_RUN', '0') == '1'
         self.allow_real_generation = os.getenv('ALLOW_REAL_GENERATION', '1') != '0'
         
-        # Storage configuration
+        # Storage configuration (DB-only)
         self.github_only_storage = os.getenv('GITHUB_ONLY_STORAGE', 'true').lower() in ('1', 'true', 'yes')
-        self.storage_mode = os.getenv('STORAGE_MODE', 'db').strip()
-        logger.warning(f"[DEBUG] STORAGE_MODE from env: '{self.storage_mode}'")
+        self.storage_mode = "db"
+        logger.debug("STORAGE_MODE from env (ignored): '%s'", os.getenv("STORAGE_MODE", "").strip())
         self.data_dir = os.getenv('DATA_DIR', '/app/data')
         
         # Bot mode
@@ -145,9 +145,9 @@ class Settings:
         """
         Определяет режим хранения данных.
         Returns:
-            'db', 'github', 'auto', 'postgres' (по значению STORAGE_MODE)
+            'db'
         """
-        return self.storage_mode
+        return "db"
     
     def validate(self):
         """Валидирует обязательные настройки"""
