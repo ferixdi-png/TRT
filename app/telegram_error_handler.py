@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Callable, Awaitable, Optional
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.error import BadRequest as TelegramBadRequest
 from telegram.error import Conflict as TelegramConflict
 from telegram.ext import Application, ContextTypes
@@ -17,7 +17,8 @@ from telegram.ext import Application, ContextTypes
 from app.bot_mode import handle_conflict_gracefully
 from app.observability.error_guard import ErrorGuard
 from app.observability.error_catalog import ERROR_CATALOG
-from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
+from app.observability.exception_boundary import handle_update_exception
+from app.observability.no_silence_guard import get_no_silence_guard
 from app.observability.trace import ensure_correlation_id, trace_error, trace_event
 from app.services.user_service import get_user_language as get_user_language_async
 from app.utils.singleton_lock import release_singleton_lock
@@ -107,7 +108,7 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                 logger.info("   Exiting with code 0 (immediate termination, no restart needed)")
                 os._exit(0)
 
-            logger.exception("❌❌❌ GLOBAL ERROR HANDLER: %s: %s", error_type, error_msg)
+            logger.debug("GLOBAL ERROR HANDLER traceback: %s: %s", error_type, error_msg, exc_info=True)
             trace_error(
                 correlation_id,
                 error_code,
@@ -128,9 +129,7 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                     if update.callback_query:
                         callback_data = update.callback_query.data
 
-                fixed = await error_guard.handle_error(
-                    error, update, context, user_id, callback_data
-                )
+                fixed = await error_guard.handle_error(error, update, context, user_id, callback_data)
                 if fixed:
                     logger.info("✅ Ошибка автоматически исправлена (self-heal)")
             except Exception as heal_error:
@@ -156,9 +155,7 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
                 "Error details: %s",
                 {
                     "error_type": error_type,
-                    "error_message": error_msg,
-                    "user_id": user_id,
-                    "chat_id": chat_id,
+                    "error_message": error_msg[:120],
                 },
             )
             trace_event(
@@ -173,62 +170,13 @@ def build_error_handler() -> Callable[[object, ContextTypes.DEFAULT_TYPE], Await
             )
 
             guard = get_no_silence_guard()
+            await handle_update_exception(update, context, error, stage=None, handler=None)
             update_id = update.update_id if isinstance(update, Update) else None
-
-            if isinstance(update, Update) and update.callback_query:
-                try:
-                    error_text = "⚠️ Ошибка. Откройте /start" if user_lang == "ru" else "⚠️ Error. Open /start"
-                    await update.callback_query.answer(error_text, show_alert=True)
-                    if update_id:
-                        track_outgoing_action(update_id)
-                except Exception as answer_exc:
-                    logger.warning("Could not answer callback in error handler: %s", answer_exc)
-
-            if isinstance(update, Update) and update.message and chat_id:
-                try:
-                    error_text = (
-                        "❌ <b>Произошла ошибка</b>\n\n"
-                        "Ошибка сервера, попробуйте позже.\n\n"
-                        "Если проблема повторяется, обратитесь в поддержку."
-                    ) if user_lang == "ru" else (
-                        "❌ <b>An error occurred</b>\n\n"
-                        "Server error, please try later.\n\n"
-                        "If the problem persists, please contact support."
-                    )
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=error_text,
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup(
-                            [[InlineKeyboardButton("🏠 Главное меню" if user_lang == "ru" else "🏠 Main menu", callback_data="back_to_menu")]]
-                        ),
-                    )
-                    if update_id:
-                        track_outgoing_action(update_id)
-                except Exception as send_exc:
-                    logger.warning("Could not send error message: %s", send_exc)
-            if isinstance(update, Update):
-                try:
-                    from bot_kie import ensure_main_menu
-
-                    await ensure_main_menu(
-                        update,
-                        context,
-                        source="error_handler",
-                        correlation_id=correlation_id,
-                        prefer_edit=False,
-                    )
-                except Exception as menu_exc:
-                    logger.warning("Error handler failed to anchor menu: %s", menu_exc)
-
             if update_id:
                 await guard.check_and_ensure_response(update, context)
         except Exception as handler_exc:
-            logger.critical(
-                "❌❌❌ CRITICAL: Error handler itself failed: %s",
-                handler_exc,
-                exc_info=True,
-            )
+            logger.critical("❌❌❌ CRITICAL: Error handler itself failed: %s", handler_exc)
+            logger.debug("Error handler traceback", exc_info=True)
 
     return error_handler
 
