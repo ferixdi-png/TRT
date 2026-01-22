@@ -5,10 +5,11 @@ Stores all logical JSON files inside a single table with partner_id + filename k
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, date
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import asyncpg
 
@@ -25,8 +26,9 @@ class PostgresStorage(BaseStorage):
         self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "partner-01").strip()
         if not self.partner_id:
             self.partner_id = "partner-01"
-        self._pool: Optional[asyncpg.Pool] = None
-        self._schema_ready = False
+        self._pools: Dict[int, asyncpg.Pool] = {}
+        self._schema_ready_loops: set[int] = set()
+        self._file_locks: Dict[Tuple[int, str], asyncio.Lock] = {}
 
         # logical filenames (same as JsonStorage/GitHubStorage)
         self.balances_file = "user_balances.json"
@@ -42,15 +44,19 @@ class PostgresStorage(BaseStorage):
         self.jobs_file = "generation_jobs.json"
 
     async def _get_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=5)
-            await self._ensure_schema()
-        return self._pool
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        pool = self._pools.get(loop_id)
+        if pool is None:
+            pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=5)
+            self._pools[loop_id] = pool
+        if loop_id not in self._schema_ready_loops:
+            await self._ensure_schema(pool, loop_id)
+        return pool
 
-    async def _ensure_schema(self) -> None:
-        if self._schema_ready:
+    async def _ensure_schema(self, pool: asyncpg.Pool, loop_id: int) -> None:
+        if loop_id in self._schema_ready_loops:
             return
-        pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -67,10 +73,19 @@ class PostgresStorage(BaseStorage):
                 );
                 """
             )
-        self._schema_ready = True
+        self._schema_ready_loops.add(loop_id)
         logger.info("[STORAGE] schema_ready=true partner_id=%s", self.partner_id)
 
-    async def _load_json(self, filename: str) -> Dict[str, Any]:
+    def _get_file_lock(self, filename: str) -> asyncio.Lock:
+        loop_id = id(asyncio.get_running_loop())
+        key = (loop_id, filename)
+        lock = self._file_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._file_locks[key] = lock
+        return lock
+
+    async def _load_json_unlocked(self, filename: str) -> Dict[str, Any]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -82,7 +97,12 @@ class PostgresStorage(BaseStorage):
                 return {}
             return dict(row[0]) if isinstance(row[0], dict) else row[0]
 
-    async def _save_json(self, filename: str, data: Dict[str, Any]) -> None:
+    async def _load_json(self, filename: str) -> Dict[str, Any]:
+        lock = self._get_file_lock(filename)
+        async with lock:
+            return await self._load_json_unlocked(filename)
+
+    async def _save_json_unlocked(self, filename: str, data: Dict[str, Any]) -> None:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(
@@ -97,11 +117,18 @@ class PostgresStorage(BaseStorage):
                 json.dumps(data) if data else "{}",
             )
 
+    async def _save_json(self, filename: str, data: Dict[str, Any]) -> None:
+        lock = self._get_file_lock(filename)
+        async with lock:
+            await self._save_json_unlocked(filename, data)
+
     async def _update_json(self, filename: str, update_fn: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Dict[str, Any]:
-        current = await self._load_json(filename)
-        updated = update_fn(dict(current))
-        await self._save_json(filename, updated)
-        return updated
+        lock = self._get_file_lock(filename)
+        async with lock:
+            current = await self._load_json_unlocked(filename)
+            updated = update_fn(dict(current))
+            await self._save_json_unlocked(filename, updated)
+            return updated
 
     # ==================== USER OPERATIONS ====================
 
@@ -517,9 +544,12 @@ class PostgresStorage(BaseStorage):
         return True
 
     async def close(self) -> None:
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
+        pools = list(self._pools.values())
+        self._pools.clear()
+        self._schema_ready_loops.clear()
+        self._file_locks.clear()
+        for pool in pools:
+            await pool.close()
 
     # ==================== MIGRATION HELPERS ====================
 
