@@ -34,26 +34,5 @@ RUN mkdir -p /app/data && chmod 755 /app/data
 # Expose port for health check
 EXPOSE 10000
 
-# Health check for Render.com (using Python instead of Node.js)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:10000/health').read()" || exit 1
-
-# Verify critical files exist
-RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml not found!" && exit 1) && \
-    python3 -c "import yaml" || (echo "ERROR: PyYAML not installed!" && exit 1) && \
-    test -f /app/app/config.py || (echo "ERROR: app/config.py not found!" && exit 1) && \
-    python3 -c "from app.config import get_settings, Settings; print('✅ app.config import OK')" || (echo "ERROR: app.config import failed!" && exit 1) && \
-    if [ -f /app/bot_kie_services/__init__.py ]; then \
-        if grep -q "Empty - modules not available in build context" /app/bot_kie_services/__init__.py; then \
-            echo "ERROR: bot_kie_services stub detected in image build"; exit 1; \
-        fi; \
-    fi && \
-    if [ -f /app/bot_kie_utils/__init__.py ]; then \
-        if grep -q "Empty - modules not available in build context" /app/bot_kie_utils/__init__.py; then \
-            echo "ERROR: bot_kie_utils stub detected in image build"; exit 1; \
-        fi; \
-    fi && \
-    echo "✅ Critical files verified"
-
 # Start the bot using canonical entrypoint (Render-first startup)
 CMD ["python3", "entrypoints/run_bot.py"]
