@@ -203,12 +203,13 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
         invalid_required.append("BOT_INSTANCE_ID (letters/numbers/._- only)")
     if bot_mode and bot_mode not in {"polling", "webhook", "web", "smoke"}:
         invalid_required.append("BOT_MODE (polling/webhook/web/smoke)")
-    if github_branch and not _is_valid_branch(github_branch):
-        invalid_required.append("GITHUB_BRANCH (invalid format)")
-    if committer_email and "@" not in committer_email:
-        invalid_required.append("GITHUB_COMMITTER_EMAIL (must be email)")
-    if not committer_name and "GITHUB_COMMITTER_NAME" not in missing_required:
-        invalid_required.append("GITHUB_COMMITTER_NAME (must be non-empty)")
+    if storage_mode == "github":
+        if github_branch and not _is_valid_branch(github_branch):
+            invalid_required.append("GITHUB_BRANCH (invalid format)")
+        if committer_email and "@" not in committer_email:
+            invalid_required.append("GITHUB_COMMITTER_EMAIL (must be email)")
+        if not committer_name and "GITHUB_COMMITTER_NAME" not in missing_required:
+            invalid_required.append("GITHUB_COMMITTER_NAME (must be non-empty)")
     if github_repo and not _is_valid_repo(github_repo):
         invalid_required.append("GITHUB_REPO (format owner/repo)")
     if github_token and len(github_token) < 10:
