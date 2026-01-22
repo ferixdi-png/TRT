@@ -55,5 +55,5 @@ RUN test -f /app/models/kie_models.yaml || (echo "ERROR: models/kie_models.yaml 
     fi && \
     echo "✅ Critical files verified"
 
-# Start the bot using Render-first entrypoint
-CMD ["python3", "main_render.py"]
+# Start the bot using canonical entrypoint (Render-first startup)
+CMD ["python3", "entrypoints/run_bot.py"]
