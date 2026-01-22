@@ -20273,13 +20273,46 @@ async def main():
     # Add handlers
     # Admin commands
     async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Admin user lookup and manual top-up."""
+        """Admin user lookup and manual top-up or show diagnostics."""
         user_id = update.effective_user.id if update.effective_user else None
         logger.info("ADMIN_COMMAND: user_id=%s", user_id)
         if user_id is None or not is_admin(user_id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         upsert_user_registry_entry(update.effective_user)
+        
+        # If "info" argument, show instance diagnostics
+        if context.args and context.args[0].lower() == "info":
+            from app.utils.singleton_lock import get_lock_mode, is_lock_degraded
+            from app.storage.factory import get_storage
+            
+            bot_instance_id = os.getenv("BOT_INSTANCE_ID") or os.getenv("PARTNER_ID") or "NOT_SET"
+            storage_mode = os.getenv("STORAGE_MODE", "auto").strip().lower()
+            database_url = os.getenv("DATABASE_URL", "").strip()
+            redis_url = os.getenv("REDIS_URL", "").strip()
+            lock_mode = get_lock_mode()
+            lock_degraded = is_lock_degraded()
+            
+            storage = get_storage()
+            storage_type = storage.__class__.__name__
+            
+            db_status = "✅ Connected" if database_url else "❌ Not configured"
+            redis_status = "✅ Connected" if redis_url else "❌ Not configured"
+            lock_status = f"{'✅' if not lock_degraded else '⚠️'} {lock_mode}"
+            
+            text = (
+                "🔧 <b>Instance Diagnostics</b>\n\n"
+                f"🆔 <b>BOT_INSTANCE_ID:</b> <code>{bot_instance_id}</code>\n"
+                f"🗄️ <b>STORAGE_MODE:</b> <code>{storage_mode}</code>\n"
+                f"📦 <b>Storage Backend:</b> {storage_type}\n"
+                f"🗃️ <b>Database:</b> {db_status}\n"
+                f"🔴 <b>Redis:</b> {redis_status}\n"
+                f"🔒 <b>Lock Mode:</b> {lock_status}\n\n"
+                f"<i>Use /admin info to see this again</i>"
+            )
+            await update.message.reply_text(text, parse_mode='HTML')
+            return
+        
         if not context.args or len(context.args) == 0:
             try:
                 from app.admin.router import show_admin_root
