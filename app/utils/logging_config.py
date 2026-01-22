@@ -98,11 +98,26 @@ def setup_logging(level: int = logging.INFO, include_request_id: bool = True) ->
     
     # Настраиваем уровни для внешних библиотек
     # CRITICAL: каждому логгеру нужен свой filter instance, иначе не применяется
-    for logger_name in ('httpx', 'httpcore', 'telegram', 'aiohttp', 'aiohttp.access', 'root'):
+    for logger_name in ('httpx', 'httpcore', 'telegram', 'aiohttp', 'aiohttp.access'):
         lib_logger = logging.getLogger(logger_name)
         lib_logger.setLevel(logging.WARNING)
         lib_logger.addFilter(RedactTelegramTokenFilter())
     logging.getLogger('asyncio').setLevel(logging.WARNING)
+
+    from app.observability.structured_logs import log_structured_event
+
+    correlation_id = f"boot-{uuid.uuid4().hex[:8]}"
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="LOGGING_CONFIG",
+        stage="startup",
+        outcome="configured",
+        error_code="LOGGING_CONFIGURED",
+        param={
+            "root_level": logging.getLevelName(root_logger.level),
+            "include_request_id": include_request_id,
+        },
+    )
 
 
 def get_logger(name: str) -> logging.Logger:
