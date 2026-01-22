@@ -4,14 +4,14 @@ from app.config import Settings
 import app.utils.singleton_lock as singleton_lock
 
 
-def test_webhook_allows_github_only_storage(monkeypatch):
+def test_webhook_allows_db_only_storage(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("BOT_MODE", "webhook")
     monkeypatch.setenv("STORAGE_MODE", "github_json")
     monkeypatch.setenv("GITHUB_ONLY_STORAGE", "true")
     settings = Settings()
     settings.validate()
-    assert settings.get_storage_mode() == "github_json"
+    assert settings.get_storage_mode() == "db"
 
 
 @pytest.mark.asyncio

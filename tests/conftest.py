@@ -50,11 +50,8 @@ def test_env():
         'TELEGRAM_BOT_TOKEN': 'test_token_12345',
         'KIE_API_KEY': 'test_api_key',
         'ADMIN_ID': '12345',
-        'STORAGE_MODE': 'github_json',
-        'GITHUB_REPO': 'owner/repo',
-        'GITHUB_TOKEN': 'test-token',
+        'STORAGE_MODE': 'db',
         'BOT_INSTANCE_ID': 'test-instance',
-        'GITHUB_STORAGE_STUB': '1',
     }
     
     # Сохраняем старые значения

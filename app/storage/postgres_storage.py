@@ -26,6 +26,12 @@ class PostgresStorage(BaseStorage):
         self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "partner-01").strip()
         if not self.partner_id:
             self.partner_id = "partner-01"
+        max_pool_env = os.getenv("DB_MAX_CONN", "5")
+        try:
+            self.max_pool_size = max(1, int(max_pool_env))
+        except ValueError:
+            logger.warning("Invalid DB_MAX_CONN=%s, using default 5", max_pool_env)
+            self.max_pool_size = 5
         self._pools: Dict[int, asyncpg.Pool] = {}
         self._schema_ready_loops: set[int] = set()
         self._file_locks: Dict[Tuple[int, str], asyncio.Lock] = {}
@@ -48,7 +54,7 @@ class PostgresStorage(BaseStorage):
         loop_id = id(loop)
         pool = self._pools.get(loop_id)
         if pool is None:
-            pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=5)
+            pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=self.max_pool_size)
             self._pools[loop_id] = pool
         if loop_id not in self._schema_ready_loops:
             await self._ensure_schema(pool, loop_id)
