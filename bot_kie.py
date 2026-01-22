@@ -19431,8 +19431,7 @@ async def _register_all_handlers_internal(application: Application):
             ]
         },
         fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
-                   CommandHandler('cancel', cancel)],
-        per_message=True,
+                   CommandHandler('cancel', cancel)]
     )
     
     # NOTE: Полная регистрация handlers находится в main() начиная со строки ~25292
@@ -20203,8 +20202,7 @@ async def main():
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_topup_user:'),
             CallbackQueryHandler(cancel, pattern='^cancel$'),
             CommandHandler('cancel', cancel)
-        ],
-        per_message=True,
+        ]
     )
 
     # Inbound update logger/context middleware (must be first)

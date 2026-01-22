@@ -47,6 +47,18 @@ class RedactTelegramTokenFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
             record.msg = self.TOKEN_PATTERN.sub("bot<REDACTED>", record.msg)
+        # Редактируем также args для форматированных логов (httpx использует %s)
+        if hasattr(record, 'args') and record.args:
+            if isinstance(record.args, tuple):
+                record.args = tuple(
+                    self.TOKEN_PATTERN.sub("bot<REDACTED>", str(arg)) if isinstance(arg, str) else arg
+                    for arg in record.args
+                )
+            elif isinstance(record.args, dict):
+                record.args = {
+                    k: self.TOKEN_PATTERN.sub("bot<REDACTED>", str(v)) if isinstance(v, str) else v
+                    for k, v in record.args.items()
+                }
         return True
 
 
