@@ -4,8 +4,10 @@ Fallback Handler для неизвестных callback'ов
 """
 
 import logging
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+
+from app.observability.exception_boundary import handle_unknown_callback
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +33,15 @@ async def fallback_callback_handler(
     """
     query = update.callback_query
     
-    # Логируем проблему
-    logger.error("=" * 80)
-    logger.error("❌❌❌ UNHANDLED CALLBACK DATA")
-    logger.error("=" * 80)
-    logger.error(f"   Callback data: '{callback_data}'")
-    logger.error(f"   User ID: {user_id}")
-    logger.error(f"   Message ID: {query.message.message_id if query and query.message else 'N/A'}")
-    logger.error(f"   Query ID: {query.id if query else 'N/A'}")
     if error:
-        logger.error(f"   Error: {error}")
-    logger.error("=" * 80)
+        logger.debug("Fallback callback error detail: %s", error, exc_info=True)
+
+    correlation_id = None
+    try:
+        if query:
+            correlation_id = await handle_unknown_callback(update, context, callback_data)
+    except Exception:
+        logger.debug("Fallback unknown callback logging failed", exc_info=True)
     
     # Отвечаем пользователю
     try:
@@ -66,21 +66,27 @@ async def fallback_callback_handler(
                     source="unknown_callback_fallback",
                     prefer_edit=True,
                 )
-                logger.info("✅ Меню восстановлено через ensure_main_menu для user_id=%s", user_id)
+                logger.info("✅ Меню восстановлено через ensure_main_menu")
             except Exception as restore_error:
-                logger.error("❌ Не удалось восстановить меню: %s", restore_error, exc_info=True)
-                # Пробуем просто отправить /start
-                try:
-                    await query.message.reply_text(
-                        "Обновите меню командой /start" if user_lang == "ru" else "Update menu with /start"
-                    )
-                except Exception:
-                    pass
+                logger.debug("❌ Не удалось восстановить меню: %s", restore_error, exc_info=True)
+            # Пробуем отправить короткое сообщение с кнопкой меню
+            try:
+                keyboard = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Меню", callback_data="back_to_menu")]]
+                )
+                message_text = (
+                    "Кнопка устарела, открой меню."
+                    f" Лог: {correlation_id or 'corr-na'}"
+                )
+                await query.message.reply_text(
+                    message_text,
+                    reply_markup=keyboard,
+                )
+            except Exception:
+                pass
 
     except Exception as e:
-        logger.error("❌ Ошибка в fallback handler: %s", e, exc_info=True)
-
-
+        logger.debug("❌ Ошибка в fallback handler: %s", e, exc_info=True)
 
 
 

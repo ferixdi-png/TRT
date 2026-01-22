@@ -30,6 +30,7 @@ from app.observability.structured_logs import (
     get_correlation_id,
     log_structured_event,
 )
+from app.observability.exception_boundary import handle_update_exception, handle_unknown_callback
 from app.observability.no_silence_guard import track_outgoing_action
 from app.observability.trace import (
     ensure_correlation_id,
@@ -12608,71 +12609,19 @@ async def _button_callback_impl(
     
     # If we get here and no handler matched, log and return END
     except Exception as e:
-        logger.error(f"Error in button_callback for data '{data}': {e}", exc_info=True)
+        logger.debug("button_callback exception: %s", e, exc_info=True)
         try:
-            correlation_id = None
-            if context and getattr(context, "user_data", None) is not None:
-                if context.user_data.get("correlation_update_id") == update_id:
-                    correlation_id = context.user_data.get("correlation_id")
-                if not correlation_id:
-                    correlation_id = get_correlation_id(update_id, user_id)
-                    context.user_data["correlation_id"] = correlation_id
-                    context.user_data["correlation_update_id"] = update_id
-            else:
-                correlation_id = get_correlation_id(update_id, user_id)
-
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=query.message.chat_id if query and query.message else None,
-                update_id=update_id,
-                action="CALLBACK",
-                action_path=build_action_path(data),
-                model_id=user_sessions.get(user_id, {}).get("model_id") if user_id else None,
-                gen_type=user_sessions.get(user_id, {}).get("gen_type") if user_id else None,
-                stage="router",
-                waiting_for=user_sessions.get(user_id, {}).get("waiting_for") if user_id else None,
-                param=user_sessions.get(user_id, {}).get("current_param") if user_id else None,
-                outcome="exception",
-                duration_ms=int((time.time() - start_time) * 1000),
-                error_code="UX_CALLBACK_EXCEPTION",
-                fix_hint="check is_admin_user/calc price",
-            )
-            trace_error(
-                correlation_id,
-                "INTERNAL_EXCEPTION",
-                ERROR_CATALOG["INTERNAL_EXCEPTION"],
+            partner_id = os.getenv("BOT_INSTANCE_ID", "").strip() or None
+            await handle_update_exception(
+                update,
+                context,
                 e,
-                callback_data=data,
-                action_path=build_action_path(data),
-            )
-            user_lang = get_user_language(user_id) if user_id else "ru"
-            error_text = (
-                "⚠️ Сбой на этапе router, уже записал лог.\n"
-                f"ID: {correlation_id or 'corr-na-na'}"
-            ) if user_lang == "ru" else (
-                "⚠️ Failure at stage router, logs captured.\n"
-                f"ID: {correlation_id or 'corr-na-na'}"
-            )
-            if query and query.message:
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=error_text,
-                )
-        except Exception as structured_log_error:
-            logger.warning(
-                "STRUCTURED_LOG error on callback exception: %s",
-                structured_log_error,
-                exc_info=True,
-            )
-        try:
-            await query.answer(
-                "❌ Произошла ошибка. Обновил меню — попробуйте снова.",
-                show_alert=True,
+                stage="router",
+                handler="button_callback",
+                partner_id=partner_id,
             )
         except Exception:
-            pass
-        await show_main_menu(update, context, source="callback_exception")
+            logger.debug("button_callback exception boundary failed", exc_info=True)
         return ConversationHandler.END
     
     # 🔴 FALLBACK - универсальный обработчик для необработанных callback_data
@@ -12680,30 +12629,24 @@ async def _button_callback_impl(
     # пользователь получит понятное сообщение вместо ошибки
     # ВАЖНО: Этот код выполняется ТОЛЬКО если ни один обработчик выше не сработал
     
-    logger.warning(f"⚠️ Unhandled callback_data: '{data}' from user {user_id}")
+    logger.warning("⚠️ Unhandled callback_data detected")
     user_lang = "ru"
+    correlation_id = None
     try:
-        correlation_id = ensure_correlation_id(update, context)
-        user_lang = get_user_language(user_id) if user_id else "ru"
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=query.message.chat_id if query and query.message else None,
-            update_id=update.update_id,
-            action="UNKNOWN_CALLBACK",
-            action_path=build_action_path(data),
-            stage="UI_ROUTER",
-            outcome="unknown_callback",
-            error_code="UI_UNKNOWN_CALLBACK",
-            fix_hint="register_callback_handler_or_validate_callback_data",
+        correlation_id = await handle_unknown_callback(
+            update,
+            context,
+            data,
+            partner_id=os.getenv("BOT_INSTANCE_ID", "").strip() or None,
         )
-    except Exception as structured_log_error:
-        logger.warning("STRUCTURED_LOG unknown callback failed: %s", structured_log_error, exc_info=True)
+        user_lang = get_user_language(user_id) if user_id else "ru"
+    except Exception:
+        logger.debug("Unknown callback logging failed", exc_info=True)
     
     # Всегда отвечаем на callback, даже если не знаем что делать
     try:
         fallback_text = (
-            "Команда устарела, обновляю меню." if user_lang == "ru" else "Command outdated, refreshing menu."
+            "Кнопка устарела, открой меню." if user_lang == "ru" else "Button outdated, open menu."
         )
         await query.answer(fallback_text, show_alert=False)
     except Exception:
@@ -12712,7 +12655,24 @@ async def _button_callback_impl(
                 await context.bot.answer_callback_query(query.id, text=fallback_text, show_alert=False)
         except Exception:
             pass
-    await show_main_menu(update, context, source="unknown_callback")
+
+    try:
+        menu_keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Меню", callback_data="back_to_menu")]]
+        )
+        message_text = (
+            f"Кнопка устарела. Лог: {correlation_id or 'corr-na'}"
+            if user_lang == "ru"
+            else f"Button outdated. Log: {correlation_id or 'corr-na'}"
+        )
+        if query and query.message:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=message_text,
+                reply_markup=menu_keyboard,
+            )
+    except Exception:
+        logger.debug("Unknown callback menu send failed", exc_info=True)
     return ConversationHandler.END
 
 
@@ -19278,6 +19238,15 @@ async def create_bot_application(settings) -> Application:
     deps = application.bot_data["deps"]
     storage = deps.get_storage()
     kie = deps.get_kie_client()
+
+    # ==================== BILLING PREFLIGHT (DB-ONLY) ====================
+    from app.diagnostics.billing_preflight import format_billing_preflight_report, run_billing_preflight
+
+    try:
+        preflight_report = await run_billing_preflight(storage, db_pool=None)
+        logger.info("%s", format_billing_preflight_report(preflight_report))
+    except Exception:
+        logger.debug("Billing preflight failed to run", exc_info=True)
     
     # ==================== NO-SILENCE GUARD ====================
     from app.observability.no_silence_guard import get_no_silence_guard
@@ -20342,6 +20311,54 @@ async def main():
             storage_instance = get_storage()
             report = await run_billing_preflight(storage_instance, db_pool=None)
             await update.message.reply_text(format_billing_preflight_report(report))
+            return
+
+        if context.args and context.args[0].lower() == "corr" and len(context.args) >= 2:
+            from app.observability.error_buffer import get_error_summary
+            import datetime
+
+            corr_id = context.args[1].strip()
+            summary = get_error_summary(corr_id)
+            if not summary:
+                await update.message.reply_text("❌ Запись с этим corr-id не найдена.")
+                return
+            timestamp = summary.get("timestamp")
+            if timestamp:
+                ts = datetime.datetime.fromtimestamp(timestamp).strftime("%d.%m.%Y %H:%M:%S")
+            else:
+                ts = "n/a"
+            text = (
+                "🧭 <b>Ошибка по corr-id</b>\n\n"
+                f"ID: <code>{summary.get('correlation_id')}</code>\n"
+                f"Stage: {summary.get('stage')}\n"
+                f"Handler: {summary.get('handler')}\n"
+                f"Error: {summary.get('error_class')}\n"
+                f"Time: {ts}"
+            )
+            await update.message.reply_text(text, parse_mode="HTML")
+            return
+
+        if context.args and context.args[0].lower() == "last_errors":
+            from app.observability.error_buffer import get_last_errors
+            import datetime
+
+            items = get_last_errors(10)
+            if not items:
+                await update.message.reply_text("✅ Ошибок не зафиксировано.")
+                return
+            lines = ["🧾 <b>Последние ошибки</b>"]
+            for item in items:
+                timestamp = item.get("timestamp")
+                if timestamp:
+                    ts = datetime.datetime.fromtimestamp(timestamp).strftime("%d.%m %H:%M:%S")
+                else:
+                    ts = "n/a"
+                lines.append(
+                    f"• <code>{item.get('correlation_id')}</code> "
+                    f"{item.get('stage')}/{item.get('handler')} "
+                    f"{item.get('error_class')} @ {ts}"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
             return
         
         if not context.args or len(context.args) == 0:
