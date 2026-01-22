@@ -791,6 +791,40 @@ models:
     notes: Standard-15.0s
   description_ru: 'Sora 2: создание видео из текста с киношным качеством. Длительность
     влияет на цену.'
+- id: sora-2-pro-text-to-video
+  title_ru: OpenAI Sora 2 Pro Text to Video
+  type: t2v
+  modes:
+  - unit: video
+    credits: 150.0
+    official_usd: 0.75
+    notes: Pro Standard-10.0s
+  - unit: video
+    credits: 270.0
+    official_usd: 1.35
+    notes: Pro Standard-15.0s
+  - unit: video
+    credits: 330.0
+    official_usd: 1.65
+    notes: Pro High-10.0s
+  - unit: video
+    credits: 630.0
+    official_usd: 3.15
+    notes: Pro High-15.0s
+  description_ru: 'Sora 2 Pro: создание видео из текста с максимальным качеством. High режим для профессионального использования.'
+- id: sora-2-image-to-video
+  title_ru: OpenAI Sora 2 Image to Video
+  type: i2v
+  modes:
+  - unit: video
+    credits: 20.0
+    official_usd: 0.1
+    notes: Standard-10.0s
+  - unit: video
+    credits: 25.0
+    official_usd: 0.125
+    notes: Standard-15.0s
+  description_ru: 'Sora 2: оживление изображений в видео. Базовая версия для быстрого результата.'
 - id: sora-2-pro-image-to-video
   title_ru: OpenAI Sora 2 Image to Video
   type: i2v

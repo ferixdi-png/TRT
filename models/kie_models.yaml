@@ -117,6 +117,62 @@ models:
         - basic
         - high
     model_mode: image_edit
+  sora-2-pro-text-to-video:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 10000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - portrait
+        - landscape
+      n_frames:
+        type: enum
+        required: false
+        values:
+        - '10'
+        - '15'
+      size:
+        type: enum
+        required: false
+        values:
+        - standard
+        - high
+      remove_watermark:
+        type: boolean
+        required: false
+    model_mode: text_to_video
+  sora-2-image-to-video:
+    model_type: image_to_video
+    input:
+      image_urls:
+        type: array
+        item_type: string
+        required: true
+      prompt:
+        type: string
+        required: true
+        max: 10000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - portrait
+        - landscape
+      n_frames:
+        type: enum
+        required: false
+        values:
+        - '10'
+        - '15'
+      remove_watermark:
+        type: boolean
+        required: false
+    model_mode: image_to_video
   sora-2-pro-image-to-video:
     model_type: image_to_video
     input:
