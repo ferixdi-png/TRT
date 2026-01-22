@@ -3054,6 +3054,7 @@ def _guard_sync_wrapper_in_event_loop(wrapper_name: str) -> None:
 
 
 _storage_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+_storage_sync_warned: set[str] = set()
 
 
 def _run_storage_coro_sync(coro, *, label: str = "storage_call"):
@@ -3063,12 +3064,14 @@ def _run_storage_coro_sync(coro, *, label: str = "storage_call"):
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
-    logger.warning(
-        "STORAGE_SYNC_CALL_IN_RUNNING_LOOP label=%s storage_mode=%s partner_id=%s",
-        label,
-        storage_mode,
-        partner_id,
-    )
+    if label not in _storage_sync_warned:
+        _storage_sync_warned.add(label)
+        logger.debug(
+            "STORAGE_SYNC_CALL_IN_RUNNING_LOOP label=%s storage_mode=%s partner_id=%s",
+            label,
+            storage_mode,
+            partner_id,
+        )
     future = _storage_executor.submit(lambda: asyncio.run(coro))
     try:
         return future.result(timeout=STORAGE_IO_TIMEOUT_SECONDS)
