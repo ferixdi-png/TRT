@@ -20163,8 +20163,14 @@ async def main():
             return
         upsert_user_registry_entry(update.effective_user)
         if not context.args or len(context.args) == 0:
-            await render_admin_panel(update, context, is_callback=False)
-            return
+            try:
+                from app.admin.router import show_admin_root
+                await show_admin_root(update, context, is_callback=False)
+                return
+            except Exception:
+                # Fallback to legacy admin panel
+                await render_admin_panel(update, context, is_callback=False)
+                return
         try:
             target_user_id = int(context.args[0])
         except ValueError:
@@ -20507,6 +20513,13 @@ async def main():
     application.add_handler(CommandHandler("unblock_user", admin_unblock_user))
     application.add_handler(CommandHandler("user_balance", admin_user_balance))
     application.add_handler(CommandHandler("add_admin", admin_add_admin))
+    # Admin panel (new, modular): adm:* callbacks
+    try:
+        from app.admin.router import admin_callback
+        application.add_handler(CallbackQueryHandler(admin_callback, pattern='^adm:'))
+    except Exception:
+        # If modular admin router is unavailable, skip without breaking
+        pass
     # Add separate handlers for main menu buttons (works outside ConversationHandler)
     # This ensures the buttons work from main menu
     # NOTE: These handlers must be registered BEFORE generation_handler to catch callbacks first
