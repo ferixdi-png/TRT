@@ -10699,10 +10699,10 @@ async def _button_callback_impl(
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'{t("msg_referral_link_title", lang=user_lang)}\n\n'
                 f'<code>{referral_link}</code>\n\n'
+                f'📋 <i>Нажмите на ссылку выше, чтобы скопировать</i>\n\n'
                 f'{t("msg_referral_send", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}'
             )
             keyboard = [
-                [InlineKeyboardButton(t('btn_copy_link', lang=user_lang), url=referral_link)],
                 [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
             ]
             
