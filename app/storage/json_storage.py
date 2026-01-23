@@ -491,17 +491,27 @@ class JsonStorage(BaseStorage):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
+        *,
+        job_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        prompt_hash: Optional[str] = None,
+        result_url: Optional[str] = None,
+        error_code: Optional[str] = None,
     ) -> str:
         """Добавить задачу генерации"""
-        job_id = task_id or str(uuid.uuid4())
+        job_id = job_id or task_id or str(uuid.uuid4())
         data = await self._load_json(self.jobs_file)
         
         job = {
             'job_id': job_id,
+            'request_id': request_id,
             'user_id': user_id,
             'model_id': model_id,
             'model_name': model_name,
+            'prompt': prompt,
+            'prompt_hash': prompt_hash,
             'params': params,
             'price': price,
             'status': status,
@@ -510,7 +520,9 @@ class JsonStorage(BaseStorage):
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat(),
             'result_urls': [],
-            'error_message': None
+            'result_url': result_url,
+            'error_message': None,
+            'error_code': error_code,
         }
         
         data[job_id] = job
@@ -522,7 +534,9 @@ class JsonStorage(BaseStorage):
         job_id: str,
         status: str,
         result_urls: Optional[List[str]] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        error_code: Optional[str] = None,
+        result_url: Optional[str] = None,
     ) -> None:
         """Обновить статус задачи"""
         data = await self._load_json(self.jobs_file)
@@ -535,8 +549,14 @@ class JsonStorage(BaseStorage):
         
         if result_urls is not None:
             job['result_urls'] = result_urls
+            if result_urls:
+                job['result_url'] = result_urls[0]
         if error_message is not None:
             job['error_message'] = error_message
+        if error_code is not None:
+            job['error_code'] = error_code
+        if result_url is not None:
+            job['result_url'] = result_url
         
         await self._save_json(self.jobs_file, data)
     

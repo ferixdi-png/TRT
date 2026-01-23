@@ -29,7 +29,11 @@ class GenerationService:
         model_id: str,
         model_name: str,
         params: Dict[str, Any],
-        price: float
+        price: float,
+        *,
+        request_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        prompt_hash: Optional[str] = None,
     ) -> str:
         """
         Создать генерацию
@@ -58,7 +62,10 @@ class GenerationService:
             params=params,
             price=price,
             task_id=task_id,  # external_task_id будет сохранен как task_id
-            status="pending"
+            status="pending",
+            request_id=request_id,
+            prompt=prompt,
+            prompt_hash=prompt_hash,
         )
         
         logger.info(f"[GEN] Generation created: job_id={job_id}, task_id={task_id}, user_id={user_id}")
