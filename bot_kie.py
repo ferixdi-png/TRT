@@ -19887,6 +19887,29 @@ async def create_bot_application(settings) -> Application:
     storage = deps.get_storage()
     kie = deps.get_kie_client()
 
+    # DB-only storage preflight with counts (users/balances/payments/free_limits)
+    if storage is not None:
+        try:
+            from app.diagnostics.billing_preflight import run_billing_preflight
+
+            preflight_report = await run_billing_preflight(storage, db_pool=None)
+            sections = preflight_report.get("sections", {})
+            users_count = sections.get("users", {}).get("meta", {}).get("records")
+            balances_count = sections.get("balances", {}).get("meta", {}).get("records")
+            payments_count = sections.get("attempts", {}).get("meta", {}).get("total")
+            free_limits_count = sections.get("free_limits", {}).get("meta", {}).get("records")
+            logger.info(
+                "BOOT_STATUS db_storage=active users=%s balances=%s payments=%s free_limits=%s",
+                users_count if users_count is not None else "n/a",
+                balances_count if balances_count is not None else "n/a",
+                payments_count if payments_count is not None else "n/a",
+                free_limits_count if free_limits_count is not None else "n/a",
+            )
+        except Exception:
+            logger.warning("BOOT_STATUS db_storage=unavailable preflight_failed=true", exc_info=True)
+    else:
+        logger.warning("BOOT_STATUS db_storage=unavailable storage_instance=false")
+
     # ==================== NO-SILENCE GUARD ====================
     from app.observability.no_silence_guard import get_no_silence_guard
     no_silence_guard = get_no_silence_guard()
@@ -20397,29 +20420,6 @@ async def main():
         logger.error(f"❌ CRITICAL: Storage health check failed: {e}")
         logger.error("❌ Persistence may be unavailable!")
 
-    # DB-only storage preflight with counts (users/balances/payments/free_limits)
-    if storage_instance is not None:
-        try:
-            from app.diagnostics.billing_preflight import run_billing_preflight
-
-            preflight_report = await run_billing_preflight(storage_instance, db_pool=None)
-            sections = preflight_report.get("sections", {})
-            users_count = sections.get("users", {}).get("meta", {}).get("records")
-            balances_count = sections.get("balances", {}).get("meta", {}).get("records")
-            payments_count = sections.get("attempts", {}).get("meta", {}).get("total")
-            free_limits_count = sections.get("free_limits", {}).get("meta", {}).get("records")
-            logger.info(
-                "BOOT_STATUS db_storage=active users=%s balances=%s payments=%s free_limits=%s",
-                users_count if users_count is not None else "n/a",
-                balances_count if balances_count is not None else "n/a",
-                payments_count if payments_count is not None else "n/a",
-                free_limits_count if free_limits_count is not None else "n/a",
-            )
-        except Exception:
-            logger.warning("BOOT_STATUS db_storage=unavailable preflight_failed=true", exc_info=True)
-    else:
-        logger.warning("BOOT_STATUS db_storage=unavailable storage_instance=false")
-
     # Initialize all data files first (legacy JSON fallback)
     logger.info("🔧 Initializing data files...")
     initialize_data_files(storage_mode_effective)
@@ -20553,6 +20553,29 @@ async def main():
     deps = application.bot_data["deps"]
     storage = deps.get_storage()
     kie = deps.get_kie_client()
+
+    # DB-only storage preflight with counts (users/balances/payments/free_limits)
+    if storage is not None:
+        try:
+            from app.diagnostics.billing_preflight import run_billing_preflight
+
+            preflight_report = await run_billing_preflight(storage, db_pool=None)
+            sections = preflight_report.get("sections", {})
+            users_count = sections.get("users", {}).get("meta", {}).get("records")
+            balances_count = sections.get("balances", {}).get("meta", {}).get("records")
+            payments_count = sections.get("attempts", {}).get("meta", {}).get("total")
+            free_limits_count = sections.get("free_limits", {}).get("meta", {}).get("records")
+            logger.info(
+                "BOOT_STATUS db_storage=active users=%s balances=%s payments=%s free_limits=%s",
+                users_count if users_count is not None else "n/a",
+                balances_count if balances_count is not None else "n/a",
+                payments_count if payments_count is not None else "n/a",
+                free_limits_count if free_limits_count is not None else "n/a",
+            )
+        except Exception:
+            logger.warning("BOOT_STATUS db_storage=unavailable preflight_failed=true", exc_info=True)
+    else:
+        logger.warning("BOOT_STATUS db_storage=unavailable storage_instance=false")
     
     # ==================== P1 FIX: ПРОГРЕВ КЕША МОДЕЛЕЙ ====================
     # ПРОБЛЕМА: get_models_sync() при запущенном event loop читает YAML на каждый запрос
