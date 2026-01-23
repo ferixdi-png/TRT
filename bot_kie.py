@@ -45,6 +45,7 @@ from app.session_store import get_session_store, get_session_cached
 
 logger = logging.getLogger(__name__)
 DEBUG_VERBOSE_LOGS = os.getenv("DEBUG_VERBOSE_LOGS", "0").lower() in ("1", "true", "yes")
+DATABASE_AVAILABLE = True
 
 # ==================== CALLBACK REGISTRY HELPERS ====================
 KNOWN_CALLBACK_PREFIXES = (
