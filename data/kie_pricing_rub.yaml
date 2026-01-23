@@ -83,12 +83,32 @@ models:
         price_rub: 7.86
         params: {}
         notes: per removal
-  - id: sora-2-watermark-remover
+  - id: sora-2-pro-text-to-video
     skus:
-      - unit: removal
-        price_rub: 7.86
-        params: {}
-        notes: per removal
+      - unit: video
+        price_rub: 117.85
+        params:
+          size: standard
+          n_frames: "10"
+        notes: Pro Standard 10s
+      - unit: video
+        price_rub: 212.14
+        params:
+          size: standard
+          n_frames: "15"
+        notes: Pro Standard 15s
+      - unit: video
+        price_rub: 259.28
+        params:
+          size: high
+          n_frames: "10"
+        notes: Pro High 10s
+      - unit: video
+        price_rub: 494.99
+        params:
+          size: high
+          n_frames: "15"
+        notes: Pro High 15s
   - id: sora-2-text-to-video
     skus:
       - unit: video
@@ -106,13 +126,11 @@ models:
       - unit: video
         price_rub: 15.71
         params:
-          size: standard
           n_frames: "10"
         notes: Standard 10s
       - unit: video
         price_rub: 19.64
         params:
-          size: standard
           n_frames: "15"
         notes: Standard 15s
   - id: kling-2.6/text-to-video

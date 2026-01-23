@@ -874,7 +874,13 @@ from helpers import (
 )
 from price_confirmation import show_price_confirmation, build_confirmation_text
 # Используем registry как единый источник моделей
-from app.models.registry import get_models_sync
+from app.models.registry import (
+    get_models_sync,
+    get_generation_types,
+    get_models_by_generation_type,
+    get_generation_type_info,
+)
+from app.models.canonical import canonicalize_model_id
 from app.services.free_tools_service import (
     add_referral_free_bonus,
     check_and_consume_free_generation,
@@ -887,9 +893,6 @@ from app.services.free_tools_service import (
     get_free_tools_model_ids,
 )
 from app.pricing.ssot_catalog import format_pricing_blocked_message
-from kie_models import (
-    get_generation_types, get_models_by_generation_type, get_generation_type_info
-)
 from app.session_store import (
     get_session_store,
     get_session_cached,
@@ -898,38 +901,39 @@ from app.session_store import (
 )
 
 
-def ensure_source_of_truth():
-    """Validate registry/pricing sources and exit on mismatch."""
+def ensure_source_of_truth() -> bool:
+    """Validate registry/pricing sources and log mismatches without crashing."""
     from app.models.yaml_registry import get_registry_path, load_yaml_models
     from app.kie_catalog.catalog import get_catalog_source_info, _load_yaml_catalog
     from pricing.engine import get_settings_source_info
+    from app.models.registry_validator import validate_registry_consistency
 
     registry_path = get_registry_path()
     registry_models = load_yaml_models()
     if not registry_models:
-        logger.error(f"❌ FATAL: registry file missing or empty: {registry_path}")
-        sys.exit(1)
+        logger.error("REGISTRY_SOURCE_MISSING path=%s stage=registry_validation", registry_path)
+        return False
 
     catalog_info = get_catalog_source_info()
     raw_catalog = _load_yaml_catalog()
     if not raw_catalog:
-        logger.error(f"❌ FATAL: pricing catalog missing or empty: {catalog_info['path']}")
-        sys.exit(1)
+        logger.error("PRICING_CATALOG_MISSING path=%s stage=registry_validation", catalog_info["path"])
+        return False
 
     pricing_settings_info = get_settings_source_info()
     pricing_settings = pricing_settings_info.get("settings", {})
     price_multiplier_env = os.getenv("PRICE_MULTIPLIER", "").strip()
     if not pricing_settings_info.get("path") or pricing_settings_info.get("path") == "unknown":
         if not price_multiplier_env:
-            logger.error("❌ FATAL: pricing settings file not found and env overrides missing")
-            sys.exit(1)
+            logger.error("PRICING_SETTINGS_MISSING stage=registry_validation")
+            return False
 
     if "usd_to_rub" not in pricing_settings:
-        logger.error("❌ FATAL: usd_to_rub missing in pricing settings and USD_TO_RUB env not set")
-        sys.exit(1)
+        logger.error("PRICING_SETTINGS_USD_RUB_MISSING stage=registry_validation")
+        return False
     if not price_multiplier_env and "markup_multiplier" not in pricing_settings:
-        logger.error("❌ FATAL: markup_multiplier missing in pricing settings and PRICE_MULTIPLIER env not set")
-        sys.exit(1)
+        logger.error("PRICING_SETTINGS_MARKUP_MISSING stage=registry_validation")
+        return False
 
     usd_to_rub_value = float(pricing_settings.get("usd_to_rub"))
     markup_multiplier_value = float(price_multiplier_env or pricing_settings.get("markup_multiplier"))
@@ -939,11 +943,11 @@ def ensure_source_of_truth():
     missing_in_pricing = sorted([model_id for model_id in registry_ids if model_id not in pricing_ids])
     if missing_in_pricing:
         logger.error(
-            "❌ FATAL: registry models missing in pricing catalog: %s (catalog=%s)",
+            "REGISTRY_PRICING_MISMATCH missing=%s catalog=%s stage=registry_validation",
             ", ".join(missing_in_pricing),
             catalog_info["path"],
         )
-        sys.exit(1)
+        return False
 
     logger.info(
         "✅ SOURCE OF TRUTH: registry=%s models=%s | pricing_catalog=%s models=%s | pricing_settings=%s "
@@ -956,6 +960,9 @@ def ensure_source_of_truth():
         usd_to_rub_value,
         markup_multiplier_value,
     )
+
+    validate_registry_consistency()
+    return True
 
 
 # Вспомогательные функции для работы с реестром моделей
@@ -2696,6 +2703,13 @@ def _build_kie_request_failed_message(
         if user_lang == "ru"
         else "❌ <b>Could not start generation</b>\n\nPlease try again later."
     )
+
+
+def _is_kie_model_not_supported(message: Optional[str]) -> bool:
+    if not message:
+        return False
+    lowered = message.lower()
+    return "model name" in lowered and "not supported" in lowered
 
 # Broadcast states
 WAITING_BROADCAST_MESSAGE = 6
@@ -8493,7 +8507,6 @@ async def _button_callback_impl(
             return SELECTING_MODEL
         
         if data == "show_all_models_list":
-            import asyncio
             # Answer callback immediately
             try:
                 await query.answer()
@@ -12288,7 +12301,7 @@ async def _button_callback_impl(
             session = ensure_session_cached(context, session_store, user_id, update_id)
             session["prefill_params"] = dict(sku.params)
             session["sku_id"] = sku.sku_id
-            data = f"select_model:{sku.model_id}"
+            data = f"select_model:{canonicalize_model_id(sku.model_id)}"
 
         # Handle select_model: callback - starts generation flow directly (legacy, still supported)
         # Also handles start: callback (redirects to select_model:)
@@ -12303,10 +12316,10 @@ async def _button_callback_impl(
                     models = get_models_sync()
                     matching_models = [m for m in models if m.get('id', '').startswith(model_id)]
                     if matching_models:
-                        model_id = matching_models[0].get('id')
+                        model_id = canonicalize_model_id(matching_models[0].get('id'))
                         data = f"select_model:{model_id}"
                     else:
-                        data = f"select_model:{model_id}"
+                        data = f"select_model:{canonicalize_model_id(model_id)}"
             
             # 🔥 MAXIMUM LOGGING: select_model entry
             logger.debug(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
@@ -12343,7 +12356,7 @@ async def _button_callback_impl(
                     except:
                         pass
                 return ConversationHandler.END
-            model_id = parts[1]
+            model_id = canonicalize_model_id(parts[1])
             logger.debug(f"🔥🔥🔥 SELECT_MODEL: Parsed model_id={model_id}, user_id={user_id}")
             
             # Сначала пробуем получить из нового каталога
@@ -18197,6 +18210,52 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             error_code=exc.error_code or "KIE_REQUEST_FAILED",
             fix_hint=exc.user_message or ERROR_CATALOG.get("KIE_FAIL_STATE"),
         )
+        if _is_kie_model_not_supported(exc.user_message or str(exc)):
+            correlation_suffix = _short_correlation_suffix(correlation_id)
+            current_sku_id = None
+            try:
+                current_sku_id = session.get("sku_id")
+            except Exception:
+                current_sku_id = None
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="KIE_MODEL_NOT_SUPPORTED",
+                action_path="confirm_generate",
+                model_id=model_id,
+                sku_id=current_sku_id,
+                stage="KIE_CREATE",
+                outcome="failed",
+                error_code="KIE_MODEL_NOT_SUPPORTED",
+                fix_hint="Model name rejected by KIE.",
+            )
+            if user_lang == "ru":
+                message_text = (
+                    "⚠️ <b>Модель временно недоступна</b>\n\n"
+                    "KIE не поддерживает указанную модель. Пожалуйста, выберите другую.\n"
+                    f"ID: <code>{correlation_suffix}</code>"
+                )
+                back_label = "🔁 Выбрать другую модель"
+            else:
+                message_text = (
+                    "⚠️ <b>Model temporarily unavailable</b>\n\n"
+                    "KIE rejected the selected model. Please choose another one.\n"
+                    f"ID: <code>{correlation_suffix}</code>"
+                )
+                back_label = "🔁 Choose another model"
+            retry_keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton(back_label, callback_data="show_all_models_list")],
+                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")],
+                ]
+            )
+            await send_or_edit_message(
+                message_text,
+                parse_mode="HTML",
+                reply_markup=retry_keyboard,
+            )
+            return ConversationHandler.END
         if exc.status == 422 and user_id in user_sessions:
             properties = session.get("properties", {})
             missing_param = _extract_missing_param(exc.user_message or str(exc), properties)
