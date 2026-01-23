@@ -1972,12 +1972,11 @@ except ImportError:
 
 # Admin user ID (can be set via environment variable)
 try:
-    admin_id_str = os.getenv('ADMIN_ID', '6913446846')
-    if admin_id_str and admin_id_str != 'your_admin_id_here':
-        ADMIN_ID = int(admin_id_str)
-    else:
-        ADMIN_ID = 6913446846  # Default fallback
-except (ValueError, TypeError):
+    from app.admin.auth import get_admin_ids
+
+    admin_ids = sorted(get_admin_ids())
+    ADMIN_ID = admin_ids[0] if admin_ids else 6913446846
+except Exception:
     ADMIN_ID = 6913446846  # Default fallback if invalid
 
 # Price conversion constants
@@ -2116,11 +2115,10 @@ def save_admin_limits(data: dict):
 
 
 def is_admin(user_id: int) -> bool:
-    """Check if user is admin (main admin or limited admin)."""
-    if user_id == ADMIN_ID:
-        return True
-    admin_limits = get_admin_limits()
-    return str(user_id) in admin_limits
+    """Check if user is admin."""
+    from app.admin.auth import is_admin as is_admin_env
+
+    return is_admin_env(user_id)
 
 
 def get_admin_spent(user_id: int) -> float:
@@ -2166,14 +2164,7 @@ def get_is_admin(user_id: int) -> bool:
     If admin is in user mode (admin_user_mode = True), returns False.
     Otherwise, returns True for admin, False for regular users.
     """
-    if is_admin(user_id):
-        # Check if admin is in user mode (viewing as regular user)
-        if user_id in user_sessions and user_sessions[user_id].get('admin_user_mode', False):
-            return False  # Show as regular user
-        else:
-            return True
-    else:
-        return False
+    return is_admin(user_id)
 
 
 def is_user_mode(user_id: int) -> bool:
@@ -2307,9 +2298,9 @@ def format_rub_amount(value: float) -> str:
 
 def format_price_rub(price: float, is_admin: bool = False) -> str:
     """Format price in rubles with appropriate text (2 decimals)."""
-    price_str = format_rub_amount(price)
     if is_admin:
-        return f"💰 <b>Безлимит</b> (цена: {price_str})"
+        return "💰 <b>Админ: бесплатно</b>"
+    price_str = format_rub_amount(price)
     return f"💰 <b>{price_str}</b>"
 
 
@@ -2345,6 +2336,8 @@ def _build_price_line(
 ) -> str:
     from app.pricing.price_resolver import format_price_rub as format_price_value
 
+    if is_admin:
+        return "💰 <b>Админ: бесплатно</b>"
     prefix = "от " if user_lang == "ru" and is_from else ("from " if user_lang != "ru" and is_from else "")
     label = "Стоимость" if user_lang == "ru" else "Price"
     price_display = format_price_value(price_rub)
@@ -3778,12 +3771,20 @@ async def is_free_generation_available(user_id: int, sku_id: str) -> bool:
     return int(status.get("total_remaining", 0)) > 0
 
 
-def _format_free_counter_line(remaining: int, limit_per_day: int, next_refill_in: int, user_lang: str) -> str:
+def _format_free_counter_line(
+    remaining: int,
+    limit_per_day: int,
+    next_refill_in: int,
+    user_lang: str,
+    *,
+    is_admin: bool = False,
+) -> str:
     return format_free_counter_block(
         remaining,
         limit_per_day,
         next_refill_in,
         user_lang=user_lang,
+        is_admin=is_admin,
     )
 
 
@@ -3916,6 +3917,25 @@ async def _commit_post_delivery_charge(
     outcome: Dict[str, Any] = {"charged": False, "free_consumed": False}
     task_key = task_id or correlation_id or f"task-unknown:{uuid.uuid4().hex[:8]}"
 
+    if is_admin_user:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="admin_free",
+            param={
+                "task_id": task_id,
+                "amount": price,
+                "delivered": True,
+                "is_admin": True,
+            },
+        )
+        return outcome
+
     if is_free:
         registry = _ensure_session_task_registry(session, "free_consumed_task_ids")
         if task_key in registry:
@@ -3961,31 +3981,7 @@ async def _commit_post_delivery_charge(
         )
         return outcome
 
-    if is_admin_user:
-        if user_id != ADMIN_ID and price > 0:
-            before_spent = get_admin_spent(user_id)
-            add_admin_spent(user_id, price)
-            after_spent = get_admin_spent(user_id)
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                action="CHARGE_COMMIT",
-                action_path="delivery",
-                model_id=model_id,
-                stage="CHARGE_COMMIT",
-                outcome="admin_limit",
-                param={
-                    "task_id": task_id,
-                    "amount": price,
-                    "delivered": True,
-                    "charged_before": before_spent,
-                    "charged_after": after_spent,
-                },
-            )
-        return outcome
-
-    if user_id == ADMIN_ID or price <= 0:
+    if price <= 0:
         return outcome
 
     registry = _ensure_session_task_registry(session, "charged_task_ids")
@@ -4162,6 +4158,7 @@ async def get_free_counter_line(
         snapshot["limit_per_day"],
         snapshot["next_refill_in"],
         user_lang,
+        is_admin=bool(snapshot.get("is_admin")),
     )
     log_structured_event(
         correlation_id=correlation_id,
@@ -4176,6 +4173,7 @@ async def get_free_counter_line(
             "limit_per_day": snapshot["limit_per_day"],
             "used_today": snapshot["used_today"],
             "next_refill_in": snapshot["next_refill_in"],
+            "is_admin": snapshot.get("is_admin"),
         },
     )
     return line
@@ -12820,7 +12818,7 @@ async def _button_callback_impl(
             user_balance = await get_user_balance_async(user_id)
             is_admin = get_is_admin(user_id)
             
-            # IMPORTANT: Use get_is_admin() if user_id is available to respect admin_user_mode
+            # IMPORTANT: Use get_is_admin() if user_id is available to respect ADMIN_ID list.
             is_admin_check = get_is_admin(user_id) if user_id is not None else is_admin
             
             # Check for free generations for free models
