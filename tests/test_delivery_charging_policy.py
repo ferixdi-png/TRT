@@ -24,6 +24,7 @@ async def test_success_delivered_charge_idempotent(monkeypatch):
     monkeypatch.setattr(bot_kie, "get_user_balance_async", fake_get_balance)
     monkeypatch.setattr(bot_kie, "subtract_user_balance_async", fake_subtract)
     monkeypatch.setattr(bot_kie, "consume_free_generation", fake_consume)
+    monkeypatch.setattr("app.storage.factory.get_storage", lambda: object())
 
     session = {}
     await bot_kie._commit_post_delivery_charge(
@@ -58,7 +59,7 @@ async def test_success_delivered_charge_idempotent(monkeypatch):
 async def test_duplicate_callback_idempotent_free(monkeypatch):
     calls = {"consume": 0}
 
-    async def fake_consume(user_id, sku_id, correlation_id=None, source=None):
+    async def fake_consume(user_id, sku_id, correlation_id=None, source=None, task_id=None):
         calls["consume"] += 1
         return {"status": "ok", "used_today": 1, "remaining": 4, "limit_per_day": 5}
 

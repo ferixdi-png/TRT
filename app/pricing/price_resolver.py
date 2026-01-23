@@ -89,7 +89,7 @@ def resolve_price_quote(
     if not sku:
         return None
 
-    if sku.is_free_sku:
+    if is_admin or sku.is_free_sku:
         price_rub = Decimal("0")
     else:
         price_rub = _quantize_price(_to_decimal(sku.price_rub))
@@ -109,5 +109,6 @@ def resolve_price_quote(
         "sku_id": sku.sku_key,
         "unit": sku.unit,
         "free_sku": sku.is_free_sku,
+        "admin_free": is_admin,
     }
     return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_key)

@@ -7,7 +7,6 @@ import logging
 import asyncio
 from typing import Optional, Dict
 from app.storage import get_storage
-from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +89,9 @@ async def get_user_free_generations_remaining(user_id: int) -> int:
 
 def get_is_admin(user_id: int) -> bool:
     """Проверить является ли пользователь админом (синхронно)"""
-    settings = get_settings()
-    return user_id == settings.admin_id
+    from app.admin.auth import is_admin
+
+    return is_admin(user_id)
 
 
 async def get_admin_limit(user_id: int) -> float:

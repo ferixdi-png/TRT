@@ -10,6 +10,7 @@ from app.pricing.free_policy import get_free_daily_limit, is_sku_free_daily, lis
 from app.storage import get_storage
 from app.utils.distributed_lock import distributed_lock
 from app.observability.structured_logs import log_structured_event
+from app.admin.auth import is_admin
 
 
 @dataclass(frozen=True)
@@ -47,21 +48,37 @@ def _start_of_next_day(current_time: datetime) -> datetime:
 
 
 async def get_free_generation_status(user_id: int) -> Dict[str, int]:
-    storage = get_storage()
     cfg = get_free_tools_config()
+    if is_admin(user_id):
+        return {
+            "base_remaining": cfg.base_per_day,
+            "referral_remaining": 0,
+            "total_remaining": max(cfg.base_per_day, 1),
+            "is_admin": True,
+        }
+    storage = get_storage()
     used_count = int(await storage.get_user_free_generations_today(user_id))
     base_remaining = max(0, cfg.base_per_day - used_count)
     return {
         "base_remaining": base_remaining,
         "referral_remaining": 0,
         "total_remaining": base_remaining,
+        "is_admin": False,
     }
 
 
 async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None) -> Dict[str, int]:
     cfg = get_free_tools_config()
-    storage = get_storage()
     current_time = now or _now()
+    if is_admin(user_id):
+        return {
+            "limit_per_day": cfg.base_per_day,
+            "used_today": 0,
+            "remaining": cfg.base_per_day,
+            "next_refill_in": 0,
+            "is_admin": True,
+        }
+    storage = get_storage()
     used_count = int(await storage.get_user_free_generations_today(user_id))
     limit_per_day = int(cfg.base_per_day)
     remaining = max(0, limit_per_day - used_count)
@@ -72,6 +89,7 @@ async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None
         "used_today": used_count,
         "remaining": remaining,
         "next_refill_in": next_refill_in,
+        "is_admin": False,
     }
 
 
@@ -82,7 +100,12 @@ def format_free_counter_block(
     *,
     user_lang: str,
     now: Optional[datetime] = None,
+    is_admin: bool = False,
 ) -> str:
+    if is_admin:
+        if user_lang == "en":
+            return "🎁 Admin: unlimited free generations (quota not consumed)."
+        return "🎁 Админ: безлимитные генерации (квота не расходуется)."
     local_now = now or datetime.now()
     refill_at = local_now + timedelta(seconds=next_refill_in)
     time_str = refill_at.strftime("%H:%M")
@@ -117,6 +140,8 @@ async def check_and_consume_free_generation(
     task_id: Optional[str] = None,
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
+    if is_admin(user_id):
+        return {"status": "admin", "remaining": cfg.base_per_day, "limit_per_day": cfg.base_per_day}
     if not is_sku_free_daily(sku_id):
         return {"status": "not_free_sku"}
 
@@ -231,6 +256,8 @@ async def check_free_generation_available(
     correlation_id: Optional[str] = None,
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
+    if is_admin(user_id):
+        return {"status": "admin", "base_remaining": cfg.base_per_day}
     if not is_sku_free_daily(sku_id):
         return {"status": "not_free_sku"}
 
@@ -274,6 +301,8 @@ async def consume_free_generation(
     source: str = "delivery",
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
+    if is_admin(user_id):
+        return {"status": "admin", "remaining": cfg.base_per_day, "limit_per_day": cfg.base_per_day}
     if not is_sku_free_daily(sku_id):
         return {"status": "not_free_sku"}
 
