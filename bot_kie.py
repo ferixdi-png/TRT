@@ -967,6 +967,7 @@ from app.models.registry import (
     get_generation_types,
     get_models_by_generation_type,
     get_generation_type_info,
+    get_models_cached_only,
 )
 from app.models.canonical import canonicalize_model_id
 from app.services.free_tools_service import (
@@ -995,6 +996,7 @@ def ensure_source_of_truth() -> bool:
     from app.models.yaml_registry import get_registry_path, load_yaml_models
     from app.kie_catalog.catalog import get_catalog_source_info, _load_yaml_catalog
     from pricing.engine import get_settings_source_info
+    from app.pricing.price_ssot import list_all_models
     from app.models.registry_validator import validate_registry_consistency
 
     registry_path = get_registry_path()
@@ -1035,6 +1037,23 @@ def ensure_source_of_truth() -> bool:
             "REGISTRY_PRICING_MISMATCH missing=%s catalog=%s stage=registry_validation",
             ", ".join(missing_in_pricing),
             catalog_info["path"],
+        )
+        return False
+
+    pricing_ssot_ids = set(list_all_models())
+    missing_in_ssot = sorted([model_id for model_id in registry_ids if model_id not in pricing_ssot_ids])
+    if missing_in_ssot:
+        logger.error(
+            "REGISTRY_PRICE_SSOT_MISMATCH missing=%s stage=registry_validation",
+            ", ".join(missing_in_ssot),
+        )
+        return False
+
+    extra_in_ssot = sorted([model_id for model_id in pricing_ssot_ids if model_id not in registry_ids])
+    if extra_in_ssot:
+        logger.error(
+            "PRICE_SSOT_REGISTRY_MISMATCH extra=%s stage=registry_validation",
+            ", ".join(extra_in_ssot),
         )
         return False
 
@@ -1101,6 +1120,26 @@ def filter_visible_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [model for model in models if model.get("id") in visible_ids]
 
 
+def _gen_type_to_model_type(gen_type: str) -> str:
+    reverse_mapping = {
+        'text-to-image': 'text_to_image',
+        'text-to-video': 'text_to_video',
+        'image-to-video': 'image_to_video',
+        'image-to-image': 'image_to_image',
+        'image-edit': 'image_edit',
+        'upscale': 'image_upscale',
+        'video-upscale': 'video_upscale',
+        'video-edit': 'video_edit',
+        'speech-to-video': 'speech_to_video',
+        'text-to-speech': 'text_to_speech',
+        'speech-to-text': 'speech_to_text',
+        'text-to-music': 'text_to_music',
+        'outpaint': 'outpaint',
+        'audio-to-audio': 'audio_to_audio',
+    }
+    return reverse_mapping.get(gen_type, gen_type.replace("-", "_"))
+
+
 def _get_visible_models_by_generation_type_raw(gen_type: str) -> List[Dict[str, Any]]:
     return filter_visible_models(get_models_by_generation_type(gen_type))
 
@@ -1125,21 +1164,30 @@ def _store_gen_type_models_cache(gen_type: str, models: List[Dict[str, Any]]) ->
 
 
 def get_visible_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]:
+    models, _ = get_visible_models_by_generation_type_cached(gen_type)
+    return models
+
+
+def get_visible_models_by_generation_type_cached(gen_type: str) -> tuple[List[Dict[str, Any]], str]:
+    """Return visible models and cache status without triggering IO."""
     cached = _get_cached_gen_type_models(gen_type, allow_stale=False)
     if cached is not None:
-        return cached
-    try:
-        models = _get_visible_models_by_generation_type_raw(gen_type)
-    except Exception as exc:
+        return cached, "hit"
+
+    cached_models = get_models_cached_only()
+    if cached_models is None:
         logger.warning(
-            "GEN_TYPE_MODELS_LOAD_FAILED gen_type=%s error=%s",
+            "GEN_TYPE_MODELS_CACHE_MISS gen_type=%s reason=models_cache_empty",
             gen_type,
-            exc,
         )
-        cached = _get_cached_gen_type_models(gen_type, allow_stale=True)
-        return cached or []
+        return [], "miss"
+
+    model_type = _gen_type_to_model_type(gen_type)
+    models = filter_visible_models(
+        [model for model in cached_models if model.get("model_type") == model_type]
+    )
     _store_gen_type_models_cache(gen_type, models)
-    return models
+    return models, "miss"
 
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
@@ -1258,12 +1306,19 @@ async def _render_gen_type_menu(
             gen_type=gen_type,
             func=lambda: get_generation_type_info(gen_type),
         )
-        models = await _load_with_timeout(
-            "get_models",
-            correlation_id=correlation_id,
-            user_id=user_id,
-            gen_type=gen_type,
-            func=lambda: get_visible_models_by_generation_type(gen_type),
+        models_start = time.monotonic()
+        models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
+        models_duration_ms = int((time.monotonic() - models_start) * 1000)
+        logger.info(
+            "GEN_TYPE_MENU step=get_models status=ok duration_ms=%s corr_id=%s user_id=%s gen_type=%s "
+            "cache=%s io_detected=%s models_count=%s",
+            models_duration_ms,
+            correlation_id,
+            user_id,
+            gen_type,
+            cache_status,
+            False,
+            len(models),
         )
     except asyncio.TimeoutError:
         error_text = (
@@ -4284,25 +4339,44 @@ def save_generation_to_history(
 ):
     """Save generation to user history (GitHub JSON storage)."""
     import time
-    
-    # GitHub JSON storage method
     try:
-        # Ensure history file exists
-        if not os.path.exists(GENERATIONS_HISTORY_FILE):
-            try:
-                with open(GENERATIONS_HISTORY_FILE, 'w', encoding='utf-8') as f:
-                    json.dump({}, f, ensure_ascii=False, indent=2)
-                logger.info(f"Created history file {GENERATIONS_HISTORY_FILE}")
-            except Exception as e:
-                logger.error(f"Error creating history file {GENERATIONS_HISTORY_FILE}: {e}")
-        
+        from app.config import get_settings
+        from app.storage.factory import get_storage
+
+        if get_settings().get_storage_mode() == "db":
+            storage_instance = get_storage()
+            gen_id = _run_storage_coro_sync(
+                storage_instance.add_generation_to_history(
+                    user_id=user_id,
+                    model_id=model_id,
+                    model_name=model_name,
+                    params=params.copy(),
+                    result_urls=result_urls.copy() if result_urls else [],
+                    price=price,
+                    operation_id=task_id,
+                ),
+                label="history:add_generation",
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="PERSIST",
+                action_path="save_generation_to_history",
+                model_id=model_id,
+                task_id=task_id,
+                stage="PERSIST",
+                outcome="success",
+                param={"storage": "db", "generation_id": gen_id},
+            )
+            return gen_id
+
         history = load_json_file(GENERATIONS_HISTORY_FILE, {})
         user_key = str(user_id)
-        
+
         if user_key not in history:
             history[user_key] = []
             logger.info(f"Created new history entry for user {user_id}")
-        
+
         generation_entry = {
             'id': len(history[user_key]) + 1,
             'timestamp': int(time.time()),
@@ -4312,26 +4386,18 @@ def save_generation_to_history(
             'result_urls': result_urls.copy() if result_urls else [],
             'task_id': task_id,
             'price': price,
-            'is_free': is_free
+            'is_free': is_free,
         }
-        
+
         history[user_key].append(generation_entry)
-        
+
         # Keep only last 100 generations per user
         if len(history[user_key]) > 100:
             history[user_key] = history[user_key][-100:]
-        
-        # Force immediate save for generations history (critical data)
-        # Clear last save time to force immediate write
+
         if GENERATIONS_HISTORY_FILE in _last_save_time:
             del _last_save_time[GENERATIONS_HISTORY_FILE]
-        
-        # Ensure directory exists before saving
-        dir_path = os.path.dirname(GENERATIONS_HISTORY_FILE)
-        if dir_path and not os.path.exists(dir_path):
-            os.makedirs(dir_path, exist_ok=True)
-            logger.info(f"✅ Created directory for history file: {dir_path}")
-        
+
         save_json_file(GENERATIONS_HISTORY_FILE, history, use_cache=True)
         log_structured_event(
             correlation_id=correlation_id,
@@ -4342,32 +4408,8 @@ def save_generation_to_history(
             task_id=task_id,
             stage="PERSIST",
             outcome="success",
-            param={"storage": "github_json", "generation_id": generation_entry.get("id")},
+            param={"storage": "file", "generation_id": generation_entry.get("id")},
         )
-        
-        # Verify file was saved and data is correct (with retry)
-        max_retries = 3
-        for retry in range(max_retries):
-            if os.path.exists(GENERATIONS_HISTORY_FILE):
-                # Reload to verify
-                verify_history = load_json_file(GENERATIONS_HISTORY_FILE, {})
-                if user_key in verify_history and len(verify_history[user_key]) > 0:
-                    logger.info(f"✅ Saved generation to history: user_id={user_id}, model_id={model_id}, gen_id={generation_entry['id']}, total_for_user={len(verify_history[user_key])}")
-                    break
-                elif retry < max_retries - 1:
-                    logger.warning(f"⚠️ Retry {retry + 1}/{max_retries}: History verification failed, retrying save...")
-                    save_json_file(GENERATIONS_HISTORY_FILE, history, use_cache=False)
-                    import time
-                    time.sleep(0.1)  # Small delay before retry
-                else:
-                    logger.error(f"❌ History saved but user data not found in file after {max_retries} retries! user_key={user_key}, file_keys={list(verify_history.keys())[:5]}")
-            elif retry < max_retries - 1:
-                logger.warning(f"⚠️ Retry {retry + 1}/{max_retries}: History file not found, retrying save...")
-                save_json_file(GENERATIONS_HISTORY_FILE, history, use_cache=False)
-                time.sleep(0.1)  # Small delay before retry
-            else:
-                logger.error(f"❌ Failed to save generation history file after {max_retries} retries: {GENERATIONS_HISTORY_FILE} does not exist after save!")
-        
         return generation_entry['id']
     except Exception as e:
         logger.error(f"Error saving generation to history: {e}", exc_info=True)
@@ -4389,17 +4431,17 @@ def save_generation_to_history(
 def get_user_generations_history(user_id: int, limit: int = 20) -> list:
     """Get user's generation history."""
     try:
-        # Check if file exists, create if it doesn't
-        if not os.path.exists(GENERATIONS_HISTORY_FILE):
-            # Create empty history file
-            try:
-                with open(GENERATIONS_HISTORY_FILE, 'w', encoding='utf-8') as f:
-                    json.dump({}, f, ensure_ascii=False, indent=2)
-                logger.info(f"Created history file {GENERATIONS_HISTORY_FILE}")
-            except Exception as e:
-                logger.error(f"Error creating history file {GENERATIONS_HISTORY_FILE}: {e}")
-                return []
-        
+        from app.config import get_settings
+        from app.storage.factory import get_storage
+
+        if get_settings().get_storage_mode() == "db":
+            storage_instance = get_storage()
+            history = _run_storage_coro_sync(
+                storage_instance.get_user_generations_history(user_id, limit=limit),
+                label="history:get_user",
+            )
+            return history or []
+
         history = load_json_file(GENERATIONS_HISTORY_FILE, {})
         if not history:
             # Empty history file is normal for new users or first run - use INFO instead of WARNING
@@ -4623,81 +4665,115 @@ def check_duplicate_payment(screenshot_file_id: str) -> bool:
     return False
 
 
-def _persist_payment_record(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
-    """Persist payment record and return payment payload."""
-    # Ensure payments file exists
-    if not os.path.exists(PAYMENTS_FILE):
-        try:
-            with open(PAYMENTS_FILE, 'w', encoding='utf-8') as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-            logger.info(f"Created payments file {PAYMENTS_FILE}")
-        except Exception as e:
-            logger.error(f"Error creating payments file {PAYMENTS_FILE}: {e}")
-
+def _persist_payment_record(user_id: int, amount: float, screenshot_file_id: str = None) -> tuple[dict, bool]:
+    """Persist payment record and return (payment payload, is_new)."""
     lock = _file_locks.get('payments', _file_locks['balances'])
-    with lock:
-        payments = load_json_file(PAYMENTS_FILE, {})
-        payment_id = len(payments) + 1
-        while str(payment_id) in payments:
-            payment_id += 1
-        import time
-        payment = {
-            "id": payment_id,
-            "user_id": user_id,
-            "amount": amount,
-            "timestamp": time.time(),
-            "screenshot_file_id": screenshot_file_id,
-            "status": "completed"  # Auto-completed
-        }
-        payments[str(payment_id)] = payment
+    payment: dict = {}
+    created = False
 
-        # Force immediate save for payments (critical data)
+    with lock:
+        from app.storage.factory import get_storage
+
+        storage_instance = get_storage()
+
+        def updater(payload: dict) -> dict:
+            nonlocal payment, created
+            updated = dict(payload or {})
+            if screenshot_file_id:
+                for key, existing in updated.items():
+                    if existing.get("screenshot_file_id") == screenshot_file_id:
+                        if "balance_charged" not in existing:
+                            existing["balance_charged"] = True
+                            updated[key] = existing
+                        payment = existing
+                        created = False
+                        return updated
+
+            payment_id = len(updated) + 1
+            while str(payment_id) in updated:
+                payment_id += 1
+            import time
+            payment = {
+                "id": payment_id,
+                "user_id": user_id,
+                "amount": amount,
+                "timestamp": time.time(),
+                "screenshot_file_id": screenshot_file_id,
+                "status": "completed",
+                "balance_charged": False,
+            }
+            updated[str(payment_id)] = payment
+            created = True
+            return updated
+
         if PAYMENTS_FILE in _last_save_time:
             del _last_save_time[PAYMENTS_FILE]
-        save_json_file(PAYMENTS_FILE, payments, use_cache=True)
+        _run_storage_coro_sync(
+            storage_instance.update_json_file(os.path.basename(PAYMENTS_FILE), updater),
+            label="payments:update",
+        )
 
-    # Verify payment was saved
-    if os.path.exists(PAYMENTS_FILE):
-        verify_payments = load_json_file(PAYMENTS_FILE, {})
-        if str(payment_id) in verify_payments:
-            logger.info(f"✅ Saved payment: user_id={user_id}, amount={amount}, payment_id={payment_id}")
-        else:
-            logger.error(f"❌ Payment saved but not found in file! payment_id={payment_id}")
-    else:
-        logger.error(f"❌ Failed to save payment file: {PAYMENTS_FILE} does not exist after save!")
-
-    return payment
+    if created:
+        logger.info(
+            "✅ Saved payment: user_id=%s amount=%.2f payment_id=%s",
+            user_id,
+            amount,
+            payment.get("id"),
+        )
+    return payment, created
 
 
 def add_payment(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
     """Add a payment record. Returns payment dict with id, timestamp, etc."""
-    # FIX #1: Check duplicate by screenshot_file_id before charging balance
-    if screenshot_file_id and check_duplicate_payment(screenshot_file_id):
-        logger.warning(f"⚠️ Duplicate payment attempt: screenshot_file_id={screenshot_file_id}")
-        existing = load_json_file(PAYMENTS_FILE, {})
-        for p in existing.values():
-            if p.get('screenshot_file_id') == screenshot_file_id:
-                return p  # Return existing payment record (idempotent)
-    
-    payment = _persist_payment_record(user_id, amount, screenshot_file_id)
+    payment, created = _persist_payment_record(user_id, amount, screenshot_file_id)
+    if not payment.get("balance_charged"):
+        add_user_balance(user_id, amount)
+        payment["balance_charged"] = True
 
-    # Auto-add balance (only once per unique payment_id)
-    add_user_balance(user_id, amount)
-    logger.info(f"💰 Payment topped up: user_id={user_id}, amount={amount}, payment_id={payment.get('id')}")
+        def updater(payload: dict) -> dict:
+            updated = dict(payload or {})
+            updated[str(payment["id"])] = payment
+            return updated
 
+        from app.storage.factory import get_storage
+
+        storage_instance = get_storage()
+        _run_storage_coro_sync(
+            storage_instance.update_json_file(os.path.basename(PAYMENTS_FILE), updater),
+            label="payments:balance_charged",
+        )
+        logger.info(
+            "💰 Payment topped up: user_id=%s amount=%.2f payment_id=%s",
+            user_id,
+            amount,
+            payment.get("id"),
+        )
+    else:
+        logger.info(
+            "💰 Payment idempotent: user_id=%s amount=%.2f payment_id=%s",
+            user_id,
+            amount,
+            payment.get("id"),
+        )
     return payment
 
 
 async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str = None) -> dict:
     """Async add payment with balance credit through async storage."""
-    if screenshot_file_id and check_duplicate_payment(screenshot_file_id):
-        logger.warning(f"⚠️ Duplicate payment attempt: screenshot_file_id={screenshot_file_id}")
-        existing = load_json_file(PAYMENTS_FILE, {})
-        for p in existing.values():
-            if p.get('screenshot_file_id') == screenshot_file_id:
-                return p
-    payment = _persist_payment_record(user_id, amount, screenshot_file_id)
-    await add_user_balance_async(user_id, amount)
+    payment, created = _persist_payment_record(user_id, amount, screenshot_file_id)
+    if not payment.get("balance_charged"):
+        await add_user_balance_async(user_id, amount)
+        payment["balance_charged"] = True
+
+        def updater(payload: dict) -> dict:
+            updated = dict(payload or {})
+            updated[str(payment["id"])] = payment
+            return updated
+
+        from app.storage.factory import get_storage
+
+        storage_instance = get_storage()
+        await storage_instance.update_json_file(os.path.basename(PAYMENTS_FILE), updater)
     return payment
 
 
@@ -11237,12 +11313,17 @@ async def _button_callback_impl(
             # Check if file exists and show helpful message
             if not history:
                 user_lang = get_user_language(user_id)
-                file_exists = os.path.exists(GENERATIONS_HISTORY_FILE)
+                from app.config import get_settings
+
+                storage_is_db = get_settings().get_storage_mode() == "db"
+                file_exists = False
                 
                 # Load full history to check if there are any users at all
                 full_history = {}
                 total_users = 0
-                if file_exists:
+                if not storage_is_db:
+                    file_exists = os.path.exists(GENERATIONS_HISTORY_FILE)
+                if file_exists and not storage_is_db:
                     try:
                         full_history = load_json_file(GENERATIONS_HISTORY_FILE, {})
                         total_users = len(full_history)
@@ -11255,12 +11336,12 @@ async def _button_callback_impl(
                         "📚 <b>Мои генерации</b>\n\n"
                         "❌ У вас пока нет сохраненных генераций.\n\n"
                     )
-                    if not file_exists:
+                    if not storage_is_db and not file_exists:
                         message_text += (
                             "⚠️ <b>Примечание:</b> Файл истории не найден.\n"
                             "Это может произойти после обновления бота.\n\n"
                         )
-                    elif total_users > 0:
+                    elif not storage_is_db and total_users > 0:
                         message_text += (
                             f"ℹ️ В системе сохранено {total_users} пользователей с историей.\n"
                             f"Если вы создавали генерации ранее, они должны отображаться.\n\n"
@@ -11271,12 +11352,12 @@ async def _button_callback_impl(
                         "📚 <b>My Generations</b>\n\n"
                         "❌ You don't have any saved generations yet.\n\n"
                     )
-                    if not file_exists:
+                    if not storage_is_db and not file_exists:
                         message_text += (
                             "⚠️ <b>Note:</b> History file not found.\n"
                             "This may happen after bot update.\n\n"
                         )
-                    elif total_users > 0:
+                    elif not storage_is_db and total_users > 0:
                         message_text += (
                             f"ℹ️ System has {total_users} users with history saved.\n"
                             f"If you created generations before, they should appear.\n\n"
@@ -19511,58 +19592,34 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         del user_sessions[user_id]
     
     # Save payment record
-    # Ensure payments file exists
-    if not os.path.exists(PAYMENTS_FILE):
-        try:
-            with open(PAYMENTS_FILE, 'w', encoding='utf-8') as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-            logger.info(f"Created payments file {PAYMENTS_FILE}")
-        except Exception as e:
-            logger.error(f"Error creating payments file {PAYMENTS_FILE}: {e}")
-    
-    payments = load_json_file(PAYMENTS_FILE, {})
     payment_id = f"stars_{user_id}_{int(time.time())}"
-    payments[payment_id] = {
+    payment_record = {
+        'id': payment_id,
         'user_id': user_id,
         'amount': amount_rubles,
         'currency': 'RUB',
         'payment_method': 'telegram_stars',
         'stars_amount': amount_stars,
         'timestamp': time.time(),
-        'status': 'completed'
+        'status': 'completed',
+        'balance_charged': True,
     }
-    
-    # Ensure directory exists
-    dir_path = os.path.dirname(PAYMENTS_FILE)
-    if dir_path and not os.path.exists(dir_path):
-        os.makedirs(dir_path, exist_ok=True)
-        logger.info(f"✅ Created directory for payments file: {dir_path}")
-    
-    # Force immediate save for payments (critical data)
-    if PAYMENTS_FILE in _last_save_time:
-        del _last_save_time[PAYMENTS_FILE]
-    save_json_file(PAYMENTS_FILE, payments, use_cache=True)
-    
-    # Verify payment was saved (with retry)
-    max_retries = 3
-    for retry in range(max_retries):
-        if os.path.exists(PAYMENTS_FILE):
-            verify_payments = load_json_file(PAYMENTS_FILE, {})
-            if payment_id in verify_payments:
-                logger.info(f"✅ Saved Stars payment: user_id={user_id}, amount={amount_rubles}, payment_id={payment_id}")
-                break
-            elif retry < max_retries - 1:
-                logger.warning(f"⚠️ Retry {retry + 1}/{max_retries}: Payment verification failed, retrying save...")
-                save_json_file(PAYMENTS_FILE, payments, use_cache=False)
-                time.sleep(0.1)  # Small delay before retry
-            else:
-                logger.error(f"❌ Stars payment saved but not found in file after {max_retries} retries! payment_id={payment_id}")
-        elif retry < max_retries - 1:
-            logger.warning(f"⚠️ Retry {retry + 1}/{max_retries}: Payment file not found, retrying save...")
-            save_json_file(PAYMENTS_FILE, payments, use_cache=False)
-            time.sleep(0.1)  # Small delay before retry
-        else:
-            logger.error(f"❌ Failed to save Stars payment file after {max_retries} retries: {PAYMENTS_FILE} does not exist after save!")
+
+    def updater(payload: dict) -> dict:
+        updated = dict(payload or {})
+        updated[payment_id] = payment_record
+        return updated
+
+    from app.storage.factory import get_storage
+
+    storage_instance = get_storage()
+    await storage_instance.update_json_file(os.path.basename(PAYMENTS_FILE), updater)
+    logger.info(
+        "✅ Saved Stars payment: user_id=%s amount=%.2f payment_id=%s",
+        user_id,
+        amount_rubles,
+        payment_id,
+    )
     
     # Send confirmation message
     balance_str = f"{await get_user_balance_async(user_id):.2f}"
@@ -20457,6 +20514,18 @@ async def main():
     )
     logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
     # ==================== END P1 FIX ====================
+
+    # ==================== GEN TYPE MENU CACHE WARMUP ====================
+    logger.info("🔥 Warming up generation type menu cache...")
+    gen_type_counts = {}
+    for gen_type in get_generation_types():
+        models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
+        gen_type_counts[gen_type] = {
+            "count": len(models),
+            "cache": cache_status,
+        }
+    logger.info("✅ GEN_TYPE_MENU cache ready: %s", gen_type_counts)
+    # ==================== END GEN TYPE MENU CACHE WARMUP ====================
     
     # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
     # Гарантирует ответ на каждый входящий update
