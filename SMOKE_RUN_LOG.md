@@ -147,6 +147,21 @@ Final status: STOP
 
 Date: 2026-01-24
 
+### Graceful shutdown: CancelledError path
+- Command: `pytest tests/test_graceful_shutdown.py`
+- Test coverage: `tests/test_graceful_shutdown.py::test_entrypoint_main_cancelled_is_graceful`
+
+### Release criteria
+- On SIGTERM/Cancel, logs do **not** contain NameError or "Fatal error in entrypoint".
+- Loop-closed shutdown paths skip cleanup with `reason=loop_closed` log lines.
+- `lock_release_failed` is acceptable only as INFO with `reason=loop_closed`.
+
+Final status: CONTINUE
+
+---
+
+Date: 2026-01-24
+
 ### Scope requested
 - BILLING_PREFLIGHT regression fix (PoolConnectionProxy callable)
 - `pytest` billing preflight coverage

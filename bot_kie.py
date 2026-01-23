@@ -804,7 +804,7 @@ from telegram.ext import (
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand
 from telegram.ext import ContextTypes
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Conflict
 from telegram.warnings import PTBUserWarning
 
 # Suppress PTB warning about per_message handlers (we enforce correct behavior manually)
@@ -21556,6 +21556,9 @@ async def main():
             # В webhook режиме просто ждём (webhook handler настроен выше)
             while True:
                 await asyncio.sleep(60)  # Health check loop
+        except asyncio.CancelledError:
+            logger.info("🛑 Webhook mode cancelled; shutting down cleanly.")
+            return
         except Conflict as e:
             handle_conflict_gracefully(e, "webhook")
             return
@@ -21820,6 +21823,8 @@ async def main():
     # Advisory lock будет освобожден через atexit handler при завершении процесса
     try:
         await asyncio.Event().wait()  # Бесконечное ожидание
+    except asyncio.CancelledError:
+        logger.info("🛑 Bot main cancelled; shutting down cleanly.")
     except KeyboardInterrupt:
         logger.info("🛑 Shutting down bot (KeyboardInterrupt)...")
     finally:
@@ -21902,6 +21907,9 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("🛑 Bot stopped by user (KeyboardInterrupt)")
+        sys.exit(0)
+    except asyncio.CancelledError:
+        logger.info("🛑 Bot shutdown requested (CancelledError)")
         sys.exit(0)
     except Exception as e:
         logger.error(f"❌ Fatal error in main(): {e}", exc_info=True)
