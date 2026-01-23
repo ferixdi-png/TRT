@@ -9,7 +9,7 @@ import main_render
 
 
 async def test_webhook_handler_acknowledges_update(caplog, harness, monkeypatch):
-    monkeypatch.setattr(main_render, "_bot_ready", True)
+    main_render._app_ready_event.set()
     monkeypatch.setattr(main_render, "_handler_ready", True)
     handler = main_render.build_webhook_handler(harness.application, MagicMock())
 

@@ -18,7 +18,7 @@ def _build_request(payload):
 
 
 async def test_webhook_handler_deduplicates_update(harness, monkeypatch):
-    monkeypatch.setattr(main_render, "_bot_ready", True)
+    main_render._app_ready_event.set()
     monkeypatch.setattr(main_render, "_handler_ready", True)
 
     process_update = AsyncMock()

@@ -19,7 +19,7 @@ def _build_request(payload):
 
 
 async def test_webhook_handler_smoke_context(caplog, harness, monkeypatch):
-    monkeypatch.setattr(main_render, "_bot_ready", True)
+    main_render._app_ready_event.set()
     monkeypatch.setattr(main_render, "_handler_ready", True)
 
     async def process_update(update):
@@ -48,7 +48,7 @@ async def test_webhook_handler_smoke_context(caplog, harness, monkeypatch):
 
 
 async def test_webhook_handler_sends_fallback_on_error(harness, monkeypatch):
-    monkeypatch.setattr(main_render, "_bot_ready", True)
+    main_render._app_ready_event.set()
     monkeypatch.setattr(main_render, "_handler_ready", True)
 
     object.__setattr__(
