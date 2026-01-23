@@ -2241,6 +2241,8 @@ def calculate_price_rub(model_id: str, params: dict = None, is_admin: bool = Fal
     Returns:
         Цена в рублях
     """
+    if user_id is not None:
+        is_admin = get_is_admin(user_id)
     try:
         from app.pricing.price_resolver import resolve_price_quote
         from app.config import get_settings
@@ -2405,6 +2407,8 @@ def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = Fa
     """Get formatted price text for a model (from-price for menu cards)."""
     from app.pricing.price_ssot import get_min_price
 
+    if user_id is not None:
+        is_admin = get_is_admin(user_id)
     price = calculate_price_rub(model_id, params, is_admin, user_id)
     if price is None:
         min_price = get_min_price(model_id)
@@ -2953,13 +2957,26 @@ _last_save_time = {}
 
 # Storage paths - storage backend handles persistence (DB only).
 DATA_DIR = os.getenv("DATA_DIR", "").strip()
+BOT_INSTANCE_ID = os.getenv("BOT_INSTANCE_ID", "").strip()
+
+
+def _resolve_data_dir() -> str:
+    base_dir = DATA_DIR or "."
+    if BOT_INSTANCE_ID:
+        base_path = Path(base_dir)
+        if BOT_INSTANCE_ID not in base_path.parts:
+            base_path = base_path / BOT_INSTANCE_ID
+        return str(base_path)
+    logger.warning("BOT_INSTANCE_ID missing; data dir not tenant-scoped (dir=%s)", base_dir)
+    return base_dir
 
 
 def get_data_file_path(filename: str) -> str:
-    """Return logical filename for storage-backed JSON payloads."""
-    if not DATA_DIR:
-        return filename
-    return os.path.join(DATA_DIR, filename)
+    """Return logical filename scoped by BOT_INSTANCE_ID when possible."""
+    base_dir = _resolve_data_dir()
+    if not base_dir or base_dir == ".":
+        return os.path.join(base_dir, filename).lstrip("./")
+    return os.path.join(base_dir, filename)
 
 # Payment data files - all stored in DATA_DIR for persistence
 BALANCES_FILE = get_data_file_path("user_balances.json")

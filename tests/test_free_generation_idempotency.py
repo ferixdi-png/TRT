@@ -5,7 +5,7 @@ from app.storage.json_storage import JsonStorage
 
 @pytest.mark.asyncio
 async def test_consume_free_generation_once_idempotent(tmp_path):
-    storage = JsonStorage(data_dir=str(tmp_path))
+    storage = JsonStorage(data_dir=str(tmp_path), bot_instance_id="test-instance")
 
     result_first = await storage.consume_free_generation_once(
         1,
