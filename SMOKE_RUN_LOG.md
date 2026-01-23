@@ -156,6 +156,10 @@ Date: 2026-01-24
 ### Release evidence
 - BILLING_PREFLIGHT now reports numeric counts and `lat_ms` in db meta.
 - collected: 509
+
+### Release evidence
+- BILLING_PREFLIGHT now reports numeric counts and `lat_ms` in db meta.
+- collected: 507
 - result: exit code 0
 - New tests:
   - `tests/test_billing_preflight.py::test_billing_preflight_happy_path_meta_lat_ms`
