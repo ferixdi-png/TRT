@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -16,6 +17,22 @@ class AggregateResult:
     value: Any
     status: str
     note: str = ""
+    error_type: Optional[str] = None
+    sqlstate: Optional[str] = None
+    timeout: bool = False
+
+
+def _describe_exception(exc: Exception) -> dict[str, Any]:
+    info: dict[str, Any] = {"error_type": type(exc).__name__}
+    message = str(exc).strip()
+    if message:
+        info["error"] = message[:200]
+    sqlstate = getattr(exc, "sqlstate", None)
+    if sqlstate:
+        info["sqlstate"] = sqlstate
+    if isinstance(exc, asyncio.TimeoutError):
+        info["timeout"] = True
+    return info
 
 
 def _normalize_column_type(data_type: Optional[str], udt_name: Optional[str]) -> str:
@@ -52,8 +69,16 @@ async def run_scalar(conn, key: str, sql: str, *args: Any) -> AggregateResult:
         value = await conn.fetchval(sql, *args)
         return AggregateResult(value=value, status=STATUS_OK, note="")
     except Exception as exc:
+        error_meta = _describe_exception(exc)
         logger.debug("billing_preflight: %s failed: %s", key, exc, exc_info=True)
-        return AggregateResult(value=None, status=STATUS_ERROR, note=str(exc)[:120])
+        return AggregateResult(
+            value=None,
+            status=STATUS_ERROR,
+            note=str(exc)[:120],
+            error_type=error_meta.get("error_type"),
+            sqlstate=error_meta.get("sqlstate"),
+            timeout=bool(error_meta.get("timeout")),
+        )
 
 
 async def run_row(conn, key: str, sql: str, *args: Any) -> AggregateResult:
@@ -61,8 +86,16 @@ async def run_row(conn, key: str, sql: str, *args: Any) -> AggregateResult:
         value = await conn.fetchrow(sql, *args)
         return AggregateResult(value=value, status=STATUS_OK, note="")
     except Exception as exc:
+        error_meta = _describe_exception(exc)
         logger.debug("billing_preflight: %s failed: %s", key, exc, exc_info=True)
-        return AggregateResult(value=None, status=STATUS_ERROR, note=str(exc)[:120])
+        return AggregateResult(
+            value=None,
+            status=STATUS_ERROR,
+            note=str(exc)[:120],
+            error_type=error_meta.get("error_type"),
+            sqlstate=error_meta.get("sqlstate"),
+            timeout=bool(error_meta.get("timeout")),
+        )
 
 
 def _count_entries_sql(column_expr: str, key: str, *, json_typeof: str, json_each: str, json_array_len: str) -> str:
@@ -99,7 +132,14 @@ async def count_payload_entries(conn, filename: str, *, column_type: str, key: s
         )
         if fallback.status == STATUS_OK:
             return AggregateResult(value=fallback.value, status=STATUS_UNKNOWN, note="fallback=count_rows")
-        return AggregateResult(value=None, status=STATUS_ERROR, note=fallback.note)
+        return AggregateResult(
+            value=None,
+            status=STATUS_ERROR,
+            note=fallback.note,
+            error_type=fallback.error_type,
+            sqlstate=fallback.sqlstate,
+            timeout=fallback.timeout,
+        )
 
     if column_type == "jsonb":
         column_expr = "payload::jsonb"
@@ -132,7 +172,14 @@ async def count_payload_entries(conn, filename: str, *, column_type: str, key: s
     if fallback.status == STATUS_OK:
         note = "fallback=count_rows"
         return AggregateResult(value=fallback.value, status=STATUS_UNKNOWN, note=note)
-    return AggregateResult(value=None, status=STATUS_ERROR, note=result.note)
+    return AggregateResult(
+        value=None,
+        status=STATUS_ERROR,
+        note=result.note,
+        error_type=result.error_type,
+        sqlstate=result.sqlstate,
+        timeout=result.timeout,
+    )
 
 
 async def count_payload_nonempty(conn, filename: str, *, column_type: str, key: str) -> AggregateResult:
@@ -145,7 +192,14 @@ async def count_payload_nonempty(conn, filename: str, *, column_type: str, key: 
         )
         if fallback.status == STATUS_OK:
             return AggregateResult(value=fallback.value, status=STATUS_UNKNOWN, note="fallback=count_rows")
-        return AggregateResult(value=None, status=STATUS_ERROR, note=fallback.note)
+        return AggregateResult(
+            value=None,
+            status=STATUS_ERROR,
+            note=fallback.note,
+            error_type=fallback.error_type,
+            sqlstate=fallback.sqlstate,
+            timeout=fallback.timeout,
+        )
 
     if column_type == "jsonb":
         column_expr = "payload::jsonb"
@@ -178,7 +232,14 @@ async def count_payload_nonempty(conn, filename: str, *, column_type: str, key: 
     if fallback.status == STATUS_OK:
         note = "fallback=count_rows"
         return AggregateResult(value=fallback.value, status=STATUS_UNKNOWN, note=note)
-    return AggregateResult(value=None, status=STATUS_ERROR, note=result.note)
+    return AggregateResult(
+        value=None,
+        status=STATUS_ERROR,
+        note=result.note,
+        error_type=result.error_type,
+        sqlstate=result.sqlstate,
+        timeout=result.timeout,
+    )
 
 
 def merge_status(*results: AggregateResult) -> str:
