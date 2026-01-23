@@ -237,3 +237,31 @@ def build_param_combinations(model_id: str) -> Tuple[List[Dict[str, str]], List[
             for enum_val in enum_vals
         ]
     return combos, issues
+
+
+def validate_pricing_schema_consistency() -> Dict[str, List[str]]:
+    """Validate SKU params against model schema and generation types."""
+    from app.kie_catalog import get_model
+    from app.models.registry import get_generation_types
+
+    issues: Dict[str, List[str]] = {}
+    generation_types = set(get_generation_types())
+
+    for model_id in list_all_models():
+        spec = get_model(model_id)
+        if not spec:
+            issues.setdefault(model_id, []).append("Missing model spec for pricing model")
+            continue
+        model_gen_type = (spec.model_mode or spec.model_type or "").replace("_", "-")
+        if model_gen_type and model_gen_type not in generation_types:
+            issues.setdefault(model_id, []).append(
+                f"Unknown generation type '{model_gen_type}' for model spec"
+            )
+        schema_props = spec.schema_properties or {}
+        for sku in list_model_skus(model_id):
+            for param_key in (sku.params or {}).keys():
+                if param_key not in schema_props:
+                    issues.setdefault(model_id, []).append(
+                        f"SKU param '{param_key}' missing in schema"
+                    )
+    return issues
