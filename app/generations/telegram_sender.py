@@ -23,6 +23,8 @@ from app.pricing.price_resolver import format_price_rub
 from app.observability.trace import trace_event, url_summary
 from app.observability.request_logger import log_request_event
 from app.observability.structured_logs import log_structured_event
+from app.observability.delivery_metrics import record_delivery_attempt
+from app.observability.task_lifecycle import log_task_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +160,6 @@ async def deliver_result(
         outcome="start",
         param={"media_type": media_type, "urls_count": len(normalized_urls)},
     )
-
     invalid_urls = [url for url in normalized_urls if not is_valid_result_url(url)]
     if invalid_urls:
         log_structured_event(
@@ -363,6 +364,17 @@ async def send_result_file(
         outcome="success" if ok else "failed",
         param={"telegram_send_ok": ok, "error": error_msg},
     )
+    record_delivery_attempt(ok)
+    if ok:
+        log_task_lifecycle(
+            state="delivered",
+            user_id=chat_id,
+            task_id=None,
+            model_id=model_id,
+            correlation_id=correlation_id,
+            source="telegram_sender.send_result_file",
+            detail={"media_type": media_type},
+        )
     if request_id:
         log_request_event(
             request_id=request_id,

@@ -176,6 +176,15 @@ class BaseStorage(ABC):
     ) -> List[Dict[str, Any]]:
         """Получить список задач (с фильтрацией)"""
         pass
+
+    @abstractmethod
+    async def list_jobs_by_status(
+        self,
+        statuses: List[str],
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Получить список задач по нескольким статусам."""
+        pass
     
     @abstractmethod
     async def add_generation_to_history(
