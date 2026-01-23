@@ -98,11 +98,12 @@ def load_yaml_models() -> Dict[str, Dict[str, Any]]:
                 logger.warning(f"Model {model_id} missing or empty input, skipping")
                 continue
             
-            validated[model_id] = {
-                'model_type': model_data['model_type'],
-                'model_mode': model_data.get('model_mode'),
-                'input': model_data['input']
-            }
+        validated[model_id] = {
+            'model_type': model_data['model_type'],
+            'model_mode': model_data.get('model_mode'),
+            'kie_model': model_data.get('kie_model'),
+            'input': model_data['input'],
+        }
         
         _yaml_cache = validated
         logger.info(f"Loaded {len(validated)} models from YAML: {yaml_path}")
@@ -296,7 +297,8 @@ def normalize_yaml_model(
         'emoji': emoji,
         'model_type': model_type,
         'model_mode': model_mode,
-        'input_params': input_params
+        'kie_model': yaml_data.get('kie_model') or model_id,
+        'input_params': input_params,
     }
     
     if description:
