@@ -3811,6 +3811,37 @@ async def _charge_balance_once(
     from app.utils.distributed_lock import distributed_lock
 
     if not task_id:
+        if correlation_id:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CHARGE_COMMIT",
+                action_path="delivery",
+                model_id=model_id,
+                stage="CHARGE_COMMIT",
+                outcome="missing_task_id_fallback",
+                error_code="MISSING_TASK_ID",
+                fix_hint="Добавьте task_id для идемпотентности списаний.",
+                param={"amount": price},
+            )
+            lock_key = f"balance:{user_id}:{correlation_id}"
+            async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+                if not acquired:
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        action="CHARGE_COMMIT",
+                        action_path="delivery",
+                        model_id=model_id,
+                        stage="CHARGE_COMMIT",
+                        outcome="lock_failed",
+                        error_code="BALANCE_LOCK",
+                        fix_hint="Redis lock занят; повторите списание.",
+                        param={"amount": price},
+                    )
+                    return {"status": "lock_failed"}
         before_balance = await get_user_balance_async(user_id)
         if before_balance < price:
             return {"status": "insufficient", "balance_before": before_balance, "balance_after": before_balance}
@@ -3875,7 +3906,7 @@ async def _commit_post_delivery_charge(
     model_id: Optional[str],
 ) -> Dict[str, Any]:
     outcome: Dict[str, Any] = {"charged": False, "free_consumed": False}
-    task_key = task_id or "task-unknown"
+    task_key = task_id or correlation_id or f"task-unknown:{uuid.uuid4().hex[:8]}"
 
     if is_free:
         registry = _ensure_session_task_registry(session, "free_consumed_task_ids")
@@ -4016,6 +4047,19 @@ async def _commit_post_delivery_charge(
         return outcome
 
     if charge_result.get("status") == "lock_failed":
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="lock_failed",
+            error_code="BALANCE_LOCK",
+            fix_hint="Redis lock занят; повторите списание позже.",
+            param={"task_id": task_id, "amount": price, "delivered": True},
+        )
         return outcome
 
     if charge_result.get("status") == "charged":

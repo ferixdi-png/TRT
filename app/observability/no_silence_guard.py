@@ -128,6 +128,8 @@ class NoSilenceGuard:
         elif update.edited_message:
             chat_id = update.edited_message.chat_id
             user_id = update.edited_message.from_user.id if update.edited_message.from_user else None
+        if not chat_id and update.effective_chat:
+            chat_id = update.effective_chat.id
         
         if not chat_id:
             logger.error(f"❌ Cannot determine chat_id for update {update_id}, cannot send fallback")
