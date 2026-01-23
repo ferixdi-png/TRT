@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 from app.utils.logging_config import setup_logging as setup_structured_logging
 from app.utils.singleton_lock import is_lock_acquired, get_safe_mode
 from app.storage import get_storage
-from app.config_env import normalize_webhook_base_url
+from app.config_env import ConfigValidationError, normalize_webhook_base_url, validate_config
 from app.diagnostics.boot import log_boot_report, run_boot_diagnostics
 
 
@@ -228,6 +228,11 @@ async def main():
     setup_structured_logging()
     
     logger.info("Starting application...")
+    try:
+        validate_config(strict=True)
+    except ConfigValidationError as exc:
+        logger.error("CONFIG_VALIDATION_FAILED missing=%s invalid=%s", exc.missing, exc.invalid)
+        sys.exit(1)
     report = await run_boot_diagnostics(os.environ, storage=None, redis_client=None)
     log_boot_report(report)
     if report.get("result") == "FAIL":

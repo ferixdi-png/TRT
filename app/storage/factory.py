@@ -36,6 +36,12 @@ def _runtime_files() -> Set[str]:
     }
 
 
+def _resolve_tenant_dir(base_dir: Path, bot_instance_id: str) -> Path:
+    if bot_instance_id and bot_instance_id not in base_dir.parts:
+        return base_dir / bot_instance_id
+    return base_dir
+
+
 async def _migrate_runtime_files(
     primary: BaseStorage,
     runtime: JsonStorage,
@@ -92,7 +98,8 @@ def create_storage(
     if mode in {"github", "github_json", "hybrid"} or github_enabled:
         primary = GitHubStorage()
         runtime_dir = Path(os.getenv("RUNTIME_STORAGE_DIR", data_dir or "./runtime"))
-        runtime = JsonStorage(data_dir=str(runtime_dir))
+        runtime_dir = _resolve_tenant_dir(runtime_dir, partner_id)
+        runtime = JsonStorage(data_dir=str(runtime_dir), bot_instance_id=partner_id)
         storage = HybridStorage(primary, runtime, runtime_files=_runtime_files())
         _storage_instance = storage
         _schedule_runtime_migration(primary, runtime, runtime_dir)

@@ -1299,7 +1299,7 @@ class GitHubStorage(BaseStorage):
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         lock = self._get_write_lock(filename)
-        lock_key = f"{self.config.partner_id}:{filename}"
+        lock_key = f"{self.config.bot_instance_id}:{filename}"
         async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
             if not acquired:
                 logger.error("[GITHUB] distributed_lock failed for %s", lock_key)
@@ -1334,7 +1334,7 @@ class GitHubStorage(BaseStorage):
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        lock_key = f"{self.config.partner_id}:{filename}"
+        lock_key = f"{self.config.bot_instance_id}:{filename}"
         async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
             if not acquired:
                 logger.error("[GITHUB] distributed_lock failed for %s", lock_key)

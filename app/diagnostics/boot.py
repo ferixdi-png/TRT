@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 import asyncpg
 
-from app.config_env import normalize_webhook_base_url
+from app.config_env import is_valid_instance_slug, normalize_webhook_base_url
 from app.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,6 @@ RESULT_DEGRADED = "DEGRADED"
 RESULT_FAIL = "FAIL"
 
 _ALLOWED_BOT_MODES = {"polling", "webhook", "web", "worker", "bot", "auto", "smoke"}
-_INSTANCE_RE = re.compile(r"^[a-z0-9._/-]+$")
 _TOKEN_RE = re.compile(r"^\d+:[A-Za-z0-9_-]{20,}$")
 
 _BOOT_REPORT_KEY = "_diagnostics/boot.json"
@@ -84,9 +83,7 @@ def _is_valid_instance(value: str) -> bool:
         return False
     if " " in value:
         return False
-    if not _INSTANCE_RE.fullmatch(value):
-        return False
-    return 3 <= len(value) <= 64
+    return is_valid_instance_slug(value)
 
 
 def _safe_set_status(value: str) -> str:
@@ -350,12 +347,14 @@ async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = No
     config_checks: Dict[str, Dict[str, Any]] = {}
     if not admin_id:
         config_checks["ADMIN_ID"] = _status_entry(STATUS_FAIL, details="missing", hint="Set ADMIN_ID")
-        critical_failures["ADMIN_ID"] = "Set ADMIN_ID to numeric Telegram user id"
-    elif not admin_id.isdigit():
-        config_checks["ADMIN_ID"] = _status_entry(STATUS_FAIL, details="not numeric", hint="ADMIN_ID must be int")
-        critical_failures["ADMIN_ID"] = "Set ADMIN_ID to numeric Telegram user id"
+        critical_failures["ADMIN_ID"] = "Set ADMIN_ID to numeric Telegram user id(s)"
     else:
-        config_checks["ADMIN_ID"] = _status_entry(STATUS_OK, details="valid")
+        admin_parts = [p for p in re.split(r"[,\s]+", admin_id.strip()) if p]
+        if not admin_parts or any(not part.isdigit() for part in admin_parts):
+            config_checks["ADMIN_ID"] = _status_entry(STATUS_FAIL, details="not numeric", hint="ADMIN_ID must be int list")
+            critical_failures["ADMIN_ID"] = "Set ADMIN_ID to numeric Telegram user id(s)"
+        else:
+            config_checks["ADMIN_ID"] = _status_entry(STATUS_OK, details="valid")
 
     normalized_instance = bot_instance_id.lower()
     if not bot_instance_id:
@@ -365,9 +364,9 @@ async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = No
         config_checks["BOT_INSTANCE_ID"] = _status_entry(
             STATUS_FAIL,
             details="invalid format",
-            hint="Use lowercase letters, digits, . _ -",
+            hint="Use lowercase letters, digits, . _ - (slug)",
         )
-        critical_failures["BOT_INSTANCE_ID"] = "Use lowercase letters, digits, . _ - (3-64 chars)"
+        critical_failures["BOT_INSTANCE_ID"] = "Use lowercase letters, digits, . _ - (3-32 chars)"
     else:
         config_checks["BOT_INSTANCE_ID"] = _status_entry(STATUS_OK, details=f"normalized={normalized_instance}")
 

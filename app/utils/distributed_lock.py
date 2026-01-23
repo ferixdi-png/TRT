@@ -18,6 +18,18 @@ _redis_available: bool = False
 _redis_initialized: bool = False
 
 
+def build_tenant_lock_key(key: str) -> str:
+    bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
+    prefix = f"tenant:{bot_instance_id}:" if bot_instance_id else "tenant:unknown:"
+    if key.startswith(prefix):
+        return key
+    return f"{prefix}{key}"
+
+
+def build_redis_lock_key(key: str) -> str:
+    return f"lock:{build_tenant_lock_key(key)}"
+
+
 async def _init_redis() -> bool:
     """Initialize Redis client if REDIS_URL is set."""
     global _redis_client, _redis_available, _redis_initialized
@@ -92,7 +104,7 @@ async def distributed_lock(
         yield True
         return
     
-    lock_key = f"lock:{key}"
+    lock_key = build_redis_lock_key(key)
     lock_value = f"{os.getpid()}:{uuid.uuid4().hex[:8]}"
     acquired = False
     start_time = time.monotonic()

@@ -418,15 +418,9 @@ async def _acquire_postgres_lock(dsn: str) -> bool:
         conn = await asyncpg.connect(dsn)
         lock_key = _derive_pg_lock_key()
         correlation_id = get_correlation_id() or "corr-na"
-        logger.info(
-            "ADVISORY_LOCK_KEY lock_key_source=%s lock_key_raw=%s lock_key_hash=%s lock_key_pair_a=%s lock_key_pair_b=%s correlation_id=%s",
-            lock_key.source,
-            lock_key.payload,
-            lock_key.hash_hex,
-            lock_key.key_a,
-            lock_key.key_b,
-            correlation_id,
-        )
+        from app.utils.pg_advisory_lock import log_advisory_lock_key
+
+        log_advisory_lock_key(logger, lock_key, correlation_id=correlation_id, action="pg_try_advisory_lock")
         acquired = await conn.fetchval(
             "SELECT pg_try_advisory_lock($1, $2)",
             lock_key.key_a,

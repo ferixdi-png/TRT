@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 INT32_MIN = -(2**31)
 INT32_MAX = 2**31 - 1
@@ -48,3 +48,31 @@ def build_advisory_lock_key_pair(*, source: str, payload: str) -> AdvisoryLockKe
         source=source,
         payload=payload,
     )
+
+
+def log_advisory_lock_key(
+    logger: object,
+    lock_key: AdvisoryLockKeyPair,
+    *,
+    correlation_id: Optional[str] = None,
+    action: str = "pg_advisory_lock",
+) -> None:
+    if not hasattr(logger, "info"):
+        return
+    correlation = correlation_id or "corr-na"
+    logger.info(
+        "ADVISORY_LOCK_KEY action=%s lock_key_source=%s lock_key_raw=%s lock_key_hash=%s "
+        "lock_key_pair_a=%s lock_key_pair_b=%s correlation_id=%s",
+        action,
+        lock_key.source,
+        lock_key.payload,
+        lock_key.hash_hex,
+        lock_key.key_a,
+        lock_key.key_b,
+        correlation,
+    )
+
+
+async def acquire_advisory_xact_lock(conn: object, lock_key: AdvisoryLockKeyPair) -> None:
+    """Acquire pg_advisory_xact_lock(int4,int4) for a given key pair."""
+    await conn.execute("SELECT pg_advisory_xact_lock($1, $2)", lock_key.key_a, lock_key.key_b)

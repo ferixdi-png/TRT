@@ -6,7 +6,7 @@ from app.storage.json_storage import JsonStorage
 
 @pytest.mark.asyncio
 async def test_charge_balance_once_idempotent(tmp_path):
-    storage = JsonStorage(data_dir=str(tmp_path))
+    storage = JsonStorage(data_dir=str(tmp_path), bot_instance_id="test-instance")
     await storage.set_user_balance(1, 100.0)
 
     result_first = await storage.charge_balance_once(
@@ -32,7 +32,7 @@ async def test_charge_balance_once_idempotent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_charge_balance_once_rejects_non_positive_amount(tmp_path):
-    storage = JsonStorage(data_dir=str(tmp_path))
+    storage = JsonStorage(data_dir=str(tmp_path), bot_instance_id="test-instance")
     await storage.set_user_balance(1, 100.0)
 
     result = await storage.charge_balance_once(
@@ -50,7 +50,7 @@ async def test_charge_balance_once_rejects_non_positive_amount(tmp_path):
 
 @pytest.mark.asyncio
 async def test_charge_balance_once_rejects_non_finite_amount(tmp_path):
-    storage = JsonStorage(data_dir=str(tmp_path))
+    storage = JsonStorage(data_dir=str(tmp_path), bot_instance_id="test-instance")
     await storage.set_user_balance(1, 100.0)
 
     result_nan = await storage.charge_balance_once(

@@ -28,7 +28,7 @@ async def test_github_payment_idempotent_credit(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_json_payment_idempotent_credit(tmp_path):
-    storage = JsonStorage(str(tmp_path))
+    storage = JsonStorage(str(tmp_path), bot_instance_id="test-instance")
     payment_id = await storage.add_payment(7, 25.0, "manual", status="pending")
 
     await storage.mark_payment_status(payment_id, "approved")

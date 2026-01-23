@@ -8,7 +8,7 @@ from app.storage.json_storage import JsonStorage
 
 @pytest.mark.asyncio
 async def test_free_counter_snapshot_window(monkeypatch, tmp_path):
-    storage = JsonStorage(data_dir=tmp_path)
+    storage = JsonStorage(data_dir=tmp_path, bot_instance_id="test-instance")
     user_id = 123
     window_start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     await storage.set_hourly_free_usage(user_id, window_start.isoformat(), 3)
@@ -25,7 +25,7 @@ async def test_free_counter_snapshot_window(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_free_counter_snapshot_resets_after_hour(monkeypatch, tmp_path):
-    storage = JsonStorage(data_dir=tmp_path)
+    storage = JsonStorage(data_dir=tmp_path, bot_instance_id="test-instance")
     user_id = 456
     window_start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     await storage.set_hourly_free_usage(user_id, window_start.isoformat(), 5)
