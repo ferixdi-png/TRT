@@ -71,8 +71,9 @@ async def fallback_callback_handler(
                 logger.debug("❌ Не удалось восстановить меню: %s", restore_error, exc_info=True)
             # Пробуем отправить короткое сообщение с кнопкой меню
             try:
+                menu_label = "Главное меню" if user_lang == "ru" else "Main menu"
                 keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("Меню", callback_data="back_to_menu")]]
+                    [[InlineKeyboardButton(menu_label, callback_data="back_to_menu")]]
                 )
                 message_text = (
                     "Кнопка устарела, открой меню."
@@ -87,6 +88,5 @@ async def fallback_callback_handler(
 
     except Exception as e:
         logger.debug("❌ Ошибка в fallback handler: %s", e, exc_info=True)
-
 
 

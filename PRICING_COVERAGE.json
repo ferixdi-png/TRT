@@ -1,363 +1,887 @@
 {
   "summary": {
-    "READY": 49,
-    "MISSING_PRICE": 3,
-    "MISSING_PARAM_SCHEMA": 20,
+    "READY": 52,
+    "MISSING_PRICE": 2,
+    "MISSING_PARAM_SCHEMA": 21,
     "AMBIGUOUS_SKU": 0
   },
-  "total_models": 72,
+  "total_models": 75,
   "models": {
     "z-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "z-image::default"
+      ],
+      "found_skus": [
+        "z-image::default"
+      ],
+      "missing_skus": []
     },
     "nano-banana-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "nano-banana-pro::resolution=1K",
+        "nano-banana-pro::resolution=2K",
+        "nano-banana-pro::resolution=4K"
+      ],
+      "found_skus": [
+        "nano-banana-pro::resolution=1K",
+        "nano-banana-pro::resolution=2K",
+        "nano-banana-pro::resolution=4K"
+      ],
+      "missing_skus": []
     },
     "seedream/4.5-text-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "seedream/4.5-text-to-image::quality=basic",
+        "seedream/4.5-text-to-image::quality=high"
+      ],
+      "found_skus": [
+        "seedream/4.5-text-to-image::quality=basic",
+        "seedream/4.5-text-to-image::quality=high"
+      ],
+      "missing_skus": []
     },
     "seedream/4.5-edit": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "seedream/4.5-edit::quality=basic",
+        "seedream/4.5-edit::quality=high"
+      ],
+      "found_skus": [
+        "seedream/4.5-edit::quality=basic",
+        "seedream/4.5-edit::quality=high"
+      ],
+      "missing_skus": []
+    },
+    "sora-2-pro-text-to-video": {
+      "status": "MISSING_PRICE",
+      "issues": [
+        "No READY pricing SKUs in SSOT."
+      ],
+      "found_skus": []
+    },
+    "sora-2-image-to-video": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": [
+        "Missing schema for pricing param 'size'"
+      ],
+      "found_skus": [
+        "sora-2-image-to-video::n_frames=10|size=standard",
+        "sora-2-image-to-video::n_frames=15|size=standard"
+      ]
     },
     "sora-2-pro-image-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "sora-2-pro-image-to-video::n_frames=10|size=high",
+        "sora-2-pro-image-to-video::n_frames=10|size=standard",
+        "sora-2-pro-image-to-video::n_frames=15|size=high",
+        "sora-2-pro-image-to-video::n_frames=15|size=standard"
+      ],
+      "found_skus": [
+        "sora-2-pro-image-to-video::n_frames=10|size=high",
+        "sora-2-pro-image-to-video::n_frames=10|size=standard",
+        "sora-2-pro-image-to-video::n_frames=15|size=high",
+        "sora-2-pro-image-to-video::n_frames=15|size=standard"
+      ],
+      "missing_skus": []
     },
     "sora-watermark-remover": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "sora-watermark-remover::default"
+      ],
+      "found_skus": [
+        "sora-watermark-remover::default"
+      ],
+      "missing_skus": []
+    },
+    "sora-2-watermark-remover": {
+      "status": "READY",
+      "issues": [],
+      "expected_skus": [
+        "sora-2-watermark-remover::default"
+      ],
+      "found_skus": [
+        "sora-2-watermark-remover::default"
+      ],
+      "missing_skus": []
     },
     "sora-2-text-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "sora-2-text-to-video::n_frames=10",
+        "sora-2-text-to-video::n_frames=15"
+      ],
+      "found_skus": [
+        "sora-2-text-to-video::n_frames=10",
+        "sora-2-text-to-video::n_frames=15"
+      ],
+      "missing_skus": []
     },
     "kling-2.6/image-to-video": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "Missing enum values for pricing param 'sound'"
+      ],
+      "found_skus": [
+        "kling-2.6/image-to-video::duration=10|sound=false",
+        "kling-2.6/image-to-video::duration=5|sound=false",
+        "kling-2.6/image-to-video::duration=5|sound=true"
       ]
     },
     "kling-2.6/text-to-video": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "Missing enum values for pricing param 'sound'"
+      ],
+      "found_skus": [
+        "kling-2.6/text-to-video::duration=10|sound=false",
+        "kling-2.6/text-to-video::duration=5|sound=false"
       ]
     },
     "flux-2/pro-image-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "flux-2/pro-image-to-image::resolution=1K",
+        "flux-2/pro-image-to-image::resolution=2K"
+      ],
+      "found_skus": [
+        "flux-2/pro-image-to-image::resolution=1K",
+        "flux-2/pro-image-to-image::resolution=2K"
+      ],
+      "missing_skus": []
     },
     "flux-2/pro-text-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "flux-2/pro-text-to-image::resolution=1K",
+        "flux-2/pro-text-to-image::resolution=2K"
+      ],
+      "found_skus": [
+        "flux-2/pro-text-to-image::resolution=1K",
+        "flux-2/pro-text-to-image::resolution=2K"
+      ],
+      "missing_skus": []
     },
     "flux-2/flex-image-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "flux-2/flex-image-to-image::resolution=1K",
+        "flux-2/flex-image-to-image::resolution=2K"
+      ],
+      "found_skus": [
+        "flux-2/flex-image-to-image::resolution=1K",
+        "flux-2/flex-image-to-image::resolution=2K"
+      ],
+      "missing_skus": []
     },
     "flux-2/flex-text-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "flux-2/flex-text-to-image::resolution=1K",
+        "flux-2/flex-text-to-image::resolution=2K"
+      ],
+      "found_skus": [
+        "flux-2/flex-text-to-image::resolution=1K",
+        "flux-2/flex-text-to-image::resolution=2K"
+      ],
+      "missing_skus": []
     },
     "topaz/image-upscale": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "topaz/image-upscale::upscale_factor=1",
+        "topaz/image-upscale::upscale_factor=2",
+        "topaz/image-upscale::upscale_factor=4",
+        "topaz/image-upscale::upscale_factor=8"
+      ],
+      "found_skus": [
+        "topaz/image-upscale::upscale_factor=1",
+        "topaz/image-upscale::upscale_factor=2",
+        "topaz/image-upscale::upscale_factor=4",
+        "topaz/image-upscale::upscale_factor=8"
+      ],
+      "missing_skus": []
     },
     "kling/v2-5-turbo-text-to-video-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v2-5-turbo-text-to-video-pro::duration=10",
+        "kling/v2-5-turbo-text-to-video-pro::duration=5"
+      ],
+      "found_skus": [
+        "kling/v2-5-turbo-text-to-video-pro::duration=10",
+        "kling/v2-5-turbo-text-to-video-pro::duration=5"
+      ],
+      "missing_skus": []
     },
     "kling/v2-5-turbo-image-to-video-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v2-5-turbo-image-to-video-pro::duration=10",
+        "kling/v2-5-turbo-image-to-video-pro::duration=5"
+      ],
+      "found_skus": [
+        "kling/v2-5-turbo-image-to-video-pro::duration=10",
+        "kling/v2-5-turbo-image-to-video-pro::duration=5"
+      ],
+      "missing_skus": []
     },
     "wan/2-5-image-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "wan/2-5-image-to-video::duration=10|resolution=1080p",
+        "wan/2-5-image-to-video::duration=10|resolution=720p",
+        "wan/2-5-image-to-video::duration=5|resolution=1080p",
+        "wan/2-5-image-to-video::duration=5|resolution=720p"
+      ],
+      "found_skus": [
+        "wan/2-5-image-to-video::duration=10|resolution=1080p",
+        "wan/2-5-image-to-video::duration=10|resolution=720p",
+        "wan/2-5-image-to-video::duration=5|resolution=1080p",
+        "wan/2-5-image-to-video::duration=5|resolution=720p"
+      ],
+      "missing_skus": []
     },
     "wan/2-5-text-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "wan/2-5-text-to-video::duration=10|resolution=1080p",
+        "wan/2-5-text-to-video::duration=10|resolution=720p",
+        "wan/2-5-text-to-video::duration=5|resolution=1080p",
+        "wan/2-5-text-to-video::duration=5|resolution=720p"
+      ],
+      "found_skus": [
+        "wan/2-5-text-to-video::duration=10|resolution=1080p",
+        "wan/2-5-text-to-video::duration=10|resolution=720p",
+        "wan/2-5-text-to-video::duration=5|resolution=1080p",
+        "wan/2-5-text-to-video::duration=5|resolution=720p"
+      ],
+      "missing_skus": []
     },
     "wan/2-2-animate-move": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "wan/2-2-animate-move::resolution=480p",
+        "wan/2-2-animate-move::resolution=580p",
+        "wan/2-2-animate-move::resolution=720p"
+      ],
+      "found_skus": [
+        "wan/2-2-animate-move::resolution=480p",
+        "wan/2-2-animate-move::resolution=580p",
+        "wan/2-2-animate-move::resolution=720p"
+      ],
+      "missing_skus": []
     },
     "wan/2-2-animate-replace": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "wan/2-2-animate-replace::resolution=480p",
+        "wan/2-2-animate-replace::resolution=580p",
+        "wan/2-2-animate-replace::resolution=720p"
+      ],
+      "found_skus": [
+        "wan/2-2-animate-replace::resolution=480p",
+        "wan/2-2-animate-replace::resolution=580p",
+        "wan/2-2-animate-replace::resolution=720p"
+      ],
+      "missing_skus": []
     },
     "hailuo/02-text-to-video-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "hailuo/02-text-to-video-pro::default"
+      ],
+      "found_skus": [
+        "hailuo/02-text-to-video-pro::default"
+      ],
+      "missing_skus": []
     },
     "hailuo/02-image-to-video-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "hailuo/02-image-to-video-pro::default"
+      ],
+      "found_skus": [
+        "hailuo/02-image-to-video-pro::default"
+      ],
+      "missing_skus": []
     },
     "hailuo/02-image-to-video-standard": {
       "status": "MISSING_PRICE",
       "issues": [
         "At least one param combination has no price."
+      ],
+      "expected_skus": [
+        "hailuo/02-image-to-video-standard::duration=10|resolution=512P",
+        "hailuo/02-image-to-video-standard::duration=10|resolution=768P",
+        "hailuo/02-image-to-video-standard::duration=6|resolution=512P",
+        "hailuo/02-image-to-video-standard::duration=6|resolution=768P"
+      ],
+      "found_skus": [
+        "hailuo/02-image-to-video-standard::duration=10|resolution=512P",
+        "hailuo/02-image-to-video-standard::duration=10|resolution=768P",
+        "hailuo/02-image-to-video-standard::duration=6|resolution=512P"
+      ],
+      "missing_skus": [
+        "hailuo/02-image-to-video-standard::duration=6|resolution=768P"
       ]
     },
     "hailuo/02-text-to-video-standard": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "hailuo/02-text-to-video-standard::duration=10",
+        "hailuo/02-text-to-video-standard::duration=6"
+      ],
+      "found_skus": [
+        "hailuo/02-text-to-video-standard::duration=10",
+        "hailuo/02-text-to-video-standard::duration=6"
+      ],
+      "missing_skus": []
     },
     "topaz/video-upscale": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "topaz/video-upscale::upscale_factor=1",
+        "topaz/video-upscale::upscale_factor=2",
+        "topaz/video-upscale::upscale_factor=4"
+      ],
+      "found_skus": [
+        "topaz/video-upscale::upscale_factor=1",
+        "topaz/video-upscale::upscale_factor=2",
+        "topaz/video-upscale::upscale_factor=4"
+      ],
+      "missing_skus": []
     },
     "kling/v1-avatar-standard": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v1-avatar-standard::default"
+      ],
+      "found_skus": [
+        "kling/v1-avatar-standard::default"
+      ],
+      "missing_skus": []
     },
     "kling/ai-avatar-v1-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/ai-avatar-v1-pro::default"
+      ],
+      "found_skus": [
+        "kling/ai-avatar-v1-pro::default"
+      ],
+      "missing_skus": []
     },
     "bytedance/seedream-v4-text-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "bytedance/seedream-v4-text-to-image::default"
+      ],
+      "found_skus": [
+        "bytedance/seedream-v4-text-to-image::default"
+      ],
+      "missing_skus": []
     },
     "bytedance/seedream-v4-edit": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "bytedance/seedream-v4-edit::default"
+      ],
+      "found_skus": [
+        "bytedance/seedream-v4-edit::default"
+      ],
+      "missing_skus": []
     },
     "recraft/remove-background": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "recraft/remove-background::default"
+      ],
+      "found_skus": [
+        "recraft/remove-background::default"
+      ],
+      "missing_skus": []
     },
     "recraft/crisp-upscale": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "recraft/crisp-upscale::default"
+      ],
+      "found_skus": [
+        "recraft/crisp-upscale::default"
+      ],
+      "missing_skus": []
     },
     "ideogram/v3-reframe": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "ideogram/v3-reframe::rendering_speed=BALANCED",
+        "ideogram/v3-reframe::rendering_speed=QUALITY",
+        "ideogram/v3-reframe::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/v3-reframe::rendering_speed=BALANCED",
+        "ideogram/v3-reframe::rendering_speed=QUALITY",
+        "ideogram/v3-reframe::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "wan/2-2-a14b-speech-to-video-turbo": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "bytedance/seedream": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "bytedance/seedream::default"
+      ],
+      "found_skus": [
+        "bytedance/seedream::default"
+      ],
+      "missing_skus": []
     },
     "qwen/text-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "qwen/text-to-image::default"
+      ],
+      "found_skus": [
+        "qwen/text-to-image::default"
+      ],
+      "missing_skus": []
     },
     "qwen/image-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "qwen/image-to-image::default"
+      ],
+      "found_skus": [
+        "qwen/image-to-image::default"
+      ],
+      "missing_skus": []
     },
     "qwen/image-edit": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "ideogram/character-edit": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "ideogram/character-edit::rendering_speed=BALANCED",
+        "ideogram/character-edit::rendering_speed=QUALITY",
+        "ideogram/character-edit::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/character-edit::rendering_speed=BALANCED",
+        "ideogram/character-edit::rendering_speed=QUALITY",
+        "ideogram/character-edit::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "ideogram/character-remix": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "ideogram/character-remix::rendering_speed=BALANCED",
+        "ideogram/character-remix::rendering_speed=QUALITY",
+        "ideogram/character-remix::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/character-remix::rendering_speed=BALANCED",
+        "ideogram/character-remix::rendering_speed=QUALITY",
+        "ideogram/character-remix::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "ideogram/character": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "ideogram/character::rendering_speed=BALANCED",
+        "ideogram/character::rendering_speed=QUALITY",
+        "ideogram/character::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/character::rendering_speed=BALANCED",
+        "ideogram/character::rendering_speed=QUALITY",
+        "ideogram/character::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "bytedance/v1-pro-fast-image-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "bytedance/v1-pro-fast-image-to-video::duration=10|resolution=1080p",
+        "bytedance/v1-pro-fast-image-to-video::duration=10|resolution=720p",
+        "bytedance/v1-pro-fast-image-to-video::duration=5|resolution=1080p",
+        "bytedance/v1-pro-fast-image-to-video::duration=5|resolution=720p"
+      ],
+      "found_skus": [
+        "bytedance/v1-pro-fast-image-to-video::duration=10|resolution=1080p",
+        "bytedance/v1-pro-fast-image-to-video::duration=10|resolution=720p",
+        "bytedance/v1-pro-fast-image-to-video::duration=5|resolution=1080p",
+        "bytedance/v1-pro-fast-image-to-video::duration=5|resolution=720p"
+      ],
+      "missing_skus": []
     },
     "kling/v2-1-master-image-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v2-1-master-image-to-video::duration=10",
+        "kling/v2-1-master-image-to-video::duration=5"
+      ],
+      "found_skus": [
+        "kling/v2-1-master-image-to-video::duration=10",
+        "kling/v2-1-master-image-to-video::duration=5"
+      ],
+      "missing_skus": []
     },
     "kling/v2-1-standard": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v2-1-standard::duration=10",
+        "kling/v2-1-standard::duration=5"
+      ],
+      "found_skus": [
+        "kling/v2-1-standard::duration=10",
+        "kling/v2-1-standard::duration=5"
+      ],
+      "missing_skus": []
     },
     "kling/v2-1-pro": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v2-1-pro::duration=10",
+        "kling/v2-1-pro::duration=5"
+      ],
+      "found_skus": [
+        "kling/v2-1-pro::duration=10",
+        "kling/v2-1-pro::duration=5"
+      ],
+      "missing_skus": []
     },
     "kling/v2-1-master-text-to-video": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "kling/v2-1-master-text-to-video::duration=10",
+        "kling/v2-1-master-text-to-video::duration=5"
+      ],
+      "found_skus": [
+        "kling/v2-1-master-text-to-video::duration=10",
+        "kling/v2-1-master-text-to-video::duration=5"
+      ],
+      "missing_skus": []
     },
     "ideogram/v3-text-to-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "ideogram/v3-text-to-image::rendering_speed=BALANCED",
+        "ideogram/v3-text-to-image::rendering_speed=QUALITY",
+        "ideogram/v3-text-to-image::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/v3-text-to-image::rendering_speed=BALANCED",
+        "ideogram/v3-text-to-image::rendering_speed=QUALITY",
+        "ideogram/v3-text-to-image::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "ideogram/v3-edit": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "ideogram/v3-edit::rendering_speed=BALANCED",
+        "ideogram/v3-edit::rendering_speed=QUALITY",
+        "ideogram/v3-edit::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/v3-edit::rendering_speed=BALANCED",
+        "ideogram/v3-edit::rendering_speed=QUALITY",
+        "ideogram/v3-edit::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "ideogram/v3-remix": {
       "status": "READY",
-      "issues": []
-    },
-    "wan/2-2-a14b-text-to-video-turbo": {
-      "status": "MISSING_PRICE",
-      "issues": [
-        "No READY pricing SKUs in SSOT."
-      ]
-    },
-    "wan/2-2-a14b-image-to-video-turbo": {
-      "status": "MISSING_PRICE",
-      "issues": [
-        "No READY pricing SKUs in SSOT."
-      ]
+      "issues": [],
+      "expected_skus": [
+        "ideogram/v3-remix::rendering_speed=BALANCED",
+        "ideogram/v3-remix::rendering_speed=QUALITY",
+        "ideogram/v3-remix::rendering_speed=TURBO"
+      ],
+      "found_skus": [
+        "ideogram/v3-remix::rendering_speed=BALANCED",
+        "ideogram/v3-remix::rendering_speed=QUALITY",
+        "ideogram/v3-remix::rendering_speed=TURBO"
+      ],
+      "missing_skus": []
     },
     "google/imagen4-ultra": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "google/imagen4-ultra::default"
+      ],
+      "found_skus": [
+        "google/imagen4-ultra::default"
+      ],
+      "missing_skus": []
     },
     "google/imagen4-fast": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "google/imagen4-fast::default"
+      ],
+      "found_skus": [
+        "google/imagen4-fast::default"
+      ],
+      "missing_skus": []
     },
     "google/imagen4": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "google/imagen4::default"
+      ],
+      "found_skus": [
+        "google/imagen4::default"
+      ],
+      "missing_skus": []
     },
     "google/nano-banana": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "google/nano-banana::default"
+      ],
+      "found_skus": [
+        "google/nano-banana::default"
+      ],
+      "missing_skus": []
     },
     "google/nano-banana-edit": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "google/nano-banana-edit::default"
+      ],
+      "found_skus": [
+        "google/nano-banana-edit::default"
+      ],
+      "missing_skus": []
     },
     "elevenlabs/speech-to-text": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "grok/imagine": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
+    },
+    "grok-imagine/text-to-image": {
+      "status": "READY",
+      "issues": [],
+      "expected_skus": [
+        "grok-imagine/text-to-image::default"
+      ],
+      "found_skus": [
+        "grok-imagine/text-to-image::default"
+      ],
+      "missing_skus": []
+    },
+    "grok-imagine/text-to-video": {
+      "status": "READY",
+      "issues": [],
+      "expected_skus": [
+        "grok-imagine/text-to-video::default"
+      ],
+      "found_skus": [
+        "grok-imagine/text-to-video::default"
+      ],
+      "missing_skus": []
     },
     "openai/4o-image": {
       "status": "READY",
-      "issues": []
+      "issues": [],
+      "expected_skus": [
+        "openai/4o-image::default"
+      ],
+      "found_skus": [
+        "openai/4o-image::default"
+      ],
+      "missing_skus": []
     },
     "flux/kontext": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "google/veo-3": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "google/veo-3.1": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "sora-2-pro-storyboard": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "kling/v2-5-turbo": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "hailuo/2.3": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "infinitalk/from-audio": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "elevenlabs/audio-isolation": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "elevenlabs/sound-effect": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "elevenlabs/text-to-speech": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "google/nanobanana-gemini-2.5-flash": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "runway/gen-4": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "suno/v5": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     },
     "midjourney/api": {
       "status": "MISSING_PARAM_SCHEMA",
       "issues": [
         "No READY pricing SKUs in SSOT.",
         "SSOT has unmapped pricing entries (missing param schema)."
-      ]
+      ],
+      "found_skus": []
     }
   }
 }

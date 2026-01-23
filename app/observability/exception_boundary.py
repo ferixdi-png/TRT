@@ -44,6 +44,15 @@ def _guess_handler(error: BaseException) -> Optional[str]:
     return tb[-1].name
 
 
+def _compact_traceback(error: BaseException, limit: int = 6) -> str:
+    try:
+        entries = traceback.format_exception(type(error), error, error.__traceback__)
+    except Exception:
+        return ""
+    trimmed = entries[-limit:] if len(entries) > limit else entries
+    return "".join(trimmed).strip()
+
+
 def _update_type(update: Any) -> str:
     if isinstance(update, Update):
         if update.callback_query:
@@ -104,6 +113,7 @@ async def handle_update_exception(
         "error_class": type(error).__name__,
         "error": str(error)[:200],
         "trace": f"{type(error).__name__}: {str(error)[:120]}",
+        "stack": _compact_traceback(error),
     }
     logger.info("ROUTER_FAIL %s", json.dumps(payload, ensure_ascii=False, default=str))
     logger.debug("ROUTER_FAIL trace", exc_info=error)
@@ -119,11 +129,11 @@ async def handle_update_exception(
     )
 
     menu_keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Меню", callback_data="back_to_menu")]]
+        [[InlineKeyboardButton("Главное меню", callback_data="back_to_menu")]]
     )
     user_message = (
-        "⚠️ Техническая ошибка. Я уже записал лог: "
-        f"{correlation_id}. Нажми “Меню” и попробуй ещё раз."
+        "⚠️ Что-то пошло не так, вернул в меню."
+        f" Лог: {correlation_id}."
     )
 
     if isinstance(update, Update) and update.callback_query:
