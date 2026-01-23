@@ -982,6 +982,12 @@ from app.services.free_tools_service import (
     get_free_tools_config,
     get_free_tools_model_ids,
 )
+from app.services.referral_service import (
+    award_referral_bonus,
+    build_referral_link,
+    list_referrals_for_referrer,
+    parse_referral_param,
+)
 from app.pricing.ssot_catalog import format_pricing_blocked_message
 from app.session_store import (
     get_session_store,
@@ -2939,6 +2945,7 @@ _file_locks = {
     'balances': threading.Lock(),
     'generations_history': threading.Lock(),
     'referrals': threading.Lock(),
+    'referral_events': threading.Lock(),
     'promocodes': threading.Lock(),
     'free_generations': threading.Lock(),
     'languages': threading.Lock(),
@@ -3004,6 +3011,7 @@ FREE_GENERATIONS_FILE = get_data_file_path("daily_free_generations.json")  # Fil
 PROMOCODES_FILE = get_data_file_path("promocodes.json")  # File to store promo codes
 CURRENCY_RATE_FILE = get_data_file_path("currency_rate.json")  # File to store USD to RUB exchange rate
 REFERRALS_FILE = get_data_file_path("referrals.json")  # File to store referral data
+REFERRAL_EVENTS_FILE = get_data_file_path("referral_events.json")  # File to store referral events
 BROADCASTS_FILE = get_data_file_path("broadcasts.json")  # File to store broadcast statistics
 GENERATIONS_HISTORY_FILE = get_data_file_path("generations_history.json")  # File to store user generation history
 USER_REGISTRY_FILE = get_data_file_path("user_registry.json")
@@ -3057,7 +3065,8 @@ def get_cache_key(filename: str) -> str:
         BROADCASTS_FILE: 'broadcasts',
         ADMIN_LIMITS_FILE: 'admin_limits',
         BLOCKED_USERS_FILE: 'blocked_users',
-        USER_REGISTRY_FILE: 'user_registry'
+        USER_REGISTRY_FILE: 'user_registry',
+        REFERRAL_EVENTS_FILE: 'referral_events',
     }
     return cache_map.get(filename, filename)
 
@@ -4229,76 +4238,40 @@ async def get_free_counter_line(
 
 def get_referrals_data() -> dict:
     """Get referrals data."""
-    return load_json_file(REFERRALS_FILE, {})
+    return load_json_file(REFERRAL_EVENTS_FILE, {"events": {}})
 
 
 def save_referrals_data(data: dict):
     """Save referrals data."""
-    save_json_file(REFERRALS_FILE, data)
+    save_json_file(REFERRAL_EVENTS_FILE, data)
 
 
-def get_user_referrals(user_id: int) -> list:
+async def get_user_referrals(user_id: int) -> list:
     """Get list of users referred by this user."""
-    data = get_referrals_data()
-    user_key = str(user_id)
-    return data.get(user_key, {}).get('referred_users', [])
+    return await list_referrals_for_referrer(user_id)
 
 
-def get_referrer(user_id: int) -> int:
+async def get_referrer(user_id: int) -> Optional[int]:
     """Get the user who referred this user, or None if not referred."""
-    data = get_referrals_data()
-    user_key = str(user_id)
-    return data.get(user_key, {}).get('referred_by')
-
-
-def add_referral(referrer_id: int, referred_id: int):
-    """Add a referral relationship and give bonus to referrer."""
-    import time
-    data = get_referrals_data()
-    referrer_key = str(referrer_id)
-    referred_key = str(referred_id)
-    
-    # Check if already referred
-    if referred_key in data and data[referred_key].get('referred_by'):
-        # FIX #4: If already referred before, don't give bonus again (idempotent)
-        logger.warning(f"⚠️ Duplicate referral attempt: referred_id={referred_id}, already has referrer={data[referred_key].get('referred_by')}")
-        return
-    
-    # FIX #4: Check if bonus was already awarded in recent time (prevent double-award in same session)
-    if referred_key in data and data[referred_key].get('referred_at'):
-        last_referred_time = data[referred_key].get('referred_at', 0)
-        if time.time() - last_referred_time < 10:  # Within 10 seconds = same request replay
-            logger.warning(f"⚠️ Duplicate referral within 10s: referred_id={referred_id}, skipping bonus")
-            return
-    
-    # Add referral relationship
-    if referred_key not in data:
-        data[referred_key] = {}
-    data[referred_key]['referred_by'] = referrer_id
-    data[referred_key]['referred_at'] = int(time.time())
-    
-    # Add to referrer's list
-    if referrer_key not in data:
-        data[referrer_key] = {'referred_users': []}
-    if 'referred_users' not in data[referrer_key]:
-        data[referrer_key]['referred_users'] = []
-    
-    if referred_id not in data[referrer_key]['referred_users']:
-        data[referrer_key]['referred_users'].append(referred_id)
-    
-    save_referrals_data(data)
-    logger.info(f"🤝 Referral added: referrer={referrer_id}, referred={referred_id}")
-    
-    # Give bonus generations to referrer
     try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop and loop.is_running():
-        task = loop.create_task(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
-        _register_background_task(task, action="referral_bonus_referrer")
-    else:
-        asyncio.run(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
+        from app.storage.factory import get_storage
+
+        storage = get_storage()
+        return await storage.get_referrer(user_id)
+    except Exception as exc:
+        logger.warning("Failed to fetch referrer: user_id=%s error=%s", user_id, exc)
+        return None
+
+
+async def add_referral(referrer_id: int, referred_id: int, *, ref_param: Optional[str] = None) -> Dict[str, Any]:
+    """Add a referral relationship and give bonus to referrer (async)."""
+    return await award_referral_bonus(
+        referrer_id=referrer_id,
+        referred_user_id=referred_id,
+        ref_param=ref_param,
+        correlation_id=None,
+        bonus=REFERRAL_BONUS_GENERATIONS,
+    )
 
 
 def give_bonus_generations(user_id: int, bonus_count: int):
@@ -4317,8 +4290,8 @@ def give_bonus_generations(user_id: int, bonus_count: int):
 def get_user_referral_link(user_id: int, bot_username: str = None) -> str:
     """Get referral link for user."""
     if bot_username is None:
-        bot_username = "Ferixdi_bot_ai_bot"
-    return f"https://t.me/{bot_username}?start=ref_{user_id}"
+        bot_username = os.getenv("BOT_USERNAME") or "Ferixdi_bot_ai_bot"
+    return build_referral_link(user_id, bot_username)
 
 
 def get_fake_online_count() -> int:
@@ -4384,12 +4357,23 @@ def get_all_users() -> list:
     
     # From referrals
     referrals = get_referrals_data()
-    for user_key in referrals.keys():
-        if user_key.isdigit():
-            user_ids.add(int(user_key))
-        # Also get referred users
-        referred_users = referrals.get(user_key, {}).get('referred_users', [])
-        user_ids.update(referred_users)
+    events = referrals.get("events")
+    if isinstance(events, dict):
+        for event in events.values():
+            if not isinstance(event, dict):
+                continue
+            for key in ("referrer_id", "referred_user_id"):
+                value = event.get(key)
+                if isinstance(value, int):
+                    user_ids.add(value)
+                elif isinstance(value, str) and value.isdigit():
+                    user_ids.add(int(value))
+    else:
+        for user_key in referrals.keys():
+            if isinstance(user_key, str) and user_key.isdigit():
+                user_ids.add(int(user_key))
+            referred_users = referrals.get(user_key, {}).get('referred_users', [])
+            user_ids.update(referred_users)
     
     # From free generations
     free_gens = get_free_generations_data()
@@ -5898,7 +5882,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
 
     is_new = await is_new_user_async(user_id) if user_id else True
     referral_link = get_user_referral_link(user_id) if user_id else ""
-    referrals_count = len(get_user_referrals(user_id)) if user_id else 0
+    referrals_count = len(await get_user_referrals(user_id)) if user_id else 0
     online_count = get_fake_online_count()
 
     if user_lang == "en":
@@ -6567,6 +6551,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_path="command:/start",
             outcome="received",
         )
+        ref_param = context.args[0] if context.args else None
+        referral_parse = parse_referral_param(ref_param)
+        if ref_param is not None:
+            partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="REFERRAL_PARSED",
+                action_path="command:/start",
+                outcome="valid" if referral_parse.valid else "invalid",
+                param={
+                    "referrer_id": referral_parse.referrer_id,
+                    "referred_user_id": user_id,
+                    "partner_id": partner_id,
+                    "ref_param": ref_param,
+                    "valid": referral_parse.valid,
+                },
+            )
         if _should_dedupe_update(
             update,
             context,
@@ -6588,6 +6592,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                 )
             await show_main_menu(update, context, source="/start")
+            if referral_parse.valid and referral_parse.referrer_id and user_id:
+                await award_referral_bonus(
+                    referrer_id=referral_parse.referrer_id,
+                    referred_user_id=user_id,
+                    ref_param=ref_param,
+                    correlation_id=correlation_id,
+                    partner_id=(os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default"),
+                    bonus=REFERRAL_BONUS_GENERATIONS,
+                )
         except Exception as exc:
             logger.error("❌ /start handler failed: %s", exc, exc_info=True)
             log_structured_event(
@@ -11346,7 +11359,7 @@ async def _button_callback_impl(
             
             # Show referral information
             referral_link = get_user_referral_link(user_id)
-            referrals_count = len(get_user_referrals(user_id))
+            referrals_count = len(await get_user_referrals(user_id))
             remaining_free = await get_user_free_generations_remaining(user_id)
             
             user_lang = get_user_language(user_id)
