@@ -791,17 +791,11 @@ class PostgresStorage(BaseStorage):
         lock_key = self._advisory_lock_key_pair(filename)
         async with pool.acquire() as conn:
             async with conn.transaction():
+                from app.utils.pg_advisory_lock import acquire_advisory_xact_lock, log_advisory_lock_key
+
                 correlation_id = get_correlation_id() or "corr-na"
-                logger.info(
-                    "ADVISORY_LOCK_KEY lock_key_source=%s lock_key_raw=%s lock_key_hash=%s lock_key_pair_a=%s lock_key_pair_b=%s correlation_id=%s",
-                    lock_key.source,
-                    lock_key.payload,
-                    lock_key.hash_hex,
-                    lock_key.key_a,
-                    lock_key.key_b,
-                    correlation_id,
-                )
-                await conn.execute("SELECT pg_advisory_xact_lock($1, $2)", lock_key.key_a, lock_key.key_b)
+                log_advisory_lock_key(logger, lock_key, correlation_id=correlation_id, action="pg_advisory_xact_lock")
+                await acquire_advisory_xact_lock(conn, lock_key)
                 row = await conn.fetchrow(
                     "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
                     self.partner_id,

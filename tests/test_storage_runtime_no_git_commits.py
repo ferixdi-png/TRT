@@ -95,7 +95,7 @@ class DummyPrimaryStorage:
 
 @pytest.mark.asyncio
 async def test_storage_no_git_commits(tmp_path):
-    runtime_storage = JsonStorage(str(tmp_path))
+    runtime_storage = JsonStorage(str(tmp_path), bot_instance_id="test-instance")
     primary_storage = DummyPrimaryStorage()
     hybrid = HybridStorage(
         primary_storage,

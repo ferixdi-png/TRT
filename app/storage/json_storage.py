@@ -30,8 +30,15 @@ logger = logging.getLogger(__name__)
 class JsonStorage(BaseStorage):
     """JSON storage implementation"""
     
-    def __init__(self, data_dir: str = "./data"):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir: str = "./data", bot_instance_id: Optional[str] = None):
+        self.bot_instance_id = (bot_instance_id or os.getenv("BOT_INSTANCE_ID") or "").strip()
+        base_dir = Path(data_dir)
+        if self.bot_instance_id:
+            if self.bot_instance_id not in base_dir.parts:
+                base_dir = base_dir / self.bot_instance_id
+        else:
+            logger.warning("BOT_INSTANCE_ID missing; JSON storage not tenant-scoped (dir=%s)", base_dir)
+        self.data_dir = base_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
         # Файлы
