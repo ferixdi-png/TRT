@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 from app.buttons.registry import ButtonRegistry, CallbackRouter, CallbackType
 from app.buttons.router_config import CALLBACK_ROUTES
 from app.buttons.fallback import fallback_callback_handler
+from app.observability.exception_boundary import handle_update_exception
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,13 @@ async def route_callback(
     """
     if not _global_router:
         logger.error("❌ Роутер не инициализирован! Вызовите initialize_router() сначала.")
+        await handle_update_exception(
+            update,
+            context,
+            RuntimeError("router_not_initialized"),
+            stage="router",
+            handler="callback_router",
+        )
         return False
     
     return await _global_router.route(callback_data, update, context, user_id, user_lang)

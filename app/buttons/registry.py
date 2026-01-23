@@ -9,7 +9,22 @@ from typing import Dict, Callable, Optional, List, Set
 from dataclasses import dataclass
 from enum import Enum
 
+from app.observability.exception_boundary import handle_update_exception
+
 logger = logging.getLogger(__name__)
+
+
+async def _safe_router_failure(update, context, error: Exception, handler_name: str | None) -> None:
+    try:
+        await handle_update_exception(
+            update,
+            context,
+            error,
+            stage="router",
+            handler=handler_name,
+        )
+    except Exception:
+        logger.debug("Router failure handler failed", exc_info=True)
 
 
 class CallbackType(Enum):
@@ -154,12 +169,15 @@ class CallbackRouter:
                     self._stats["handled"] += 1
                     return True
                 except Exception as e:
-                    logger.error(f"❌ Ошибка в обработчике '{handler_info.handler_name}' для '{callback_data}': {e}", exc_info=True)
+                    logger.error(
+                        "❌ Ошибка в обработчике '%s' для '%s': %s",
+                        handler_info.handler_name,
+                        callback_data,
+                        e,
+                        exc_info=True,
+                    )
                     self._stats["errors"] += 1
-                    # Пробуем fallback
-                    if self._fallback_handler:
-                        await self._fallback_handler(callback_data, update, context, user_id, user_lang, error=str(e))
-                        self._stats["fallback"] += 1
+                    await _safe_router_failure(update, context, e, handler_info.handler_name)
                     return False
             else:
                 # Неизвестный callback - используем fallback
@@ -175,13 +193,12 @@ class CallbackRouter:
         except Exception as e:
             logger.error(f"❌ Критическая ошибка в роутере для '{callback_data}': {e}", exc_info=True)
             self._stats["errors"] += 1
+            await _safe_router_failure(update, context, e, "callback_router")
             return False
     
     def get_stats(self) -> Dict[str, int]:
         """Возвращает статистику обработки"""
         return self._stats.copy()
-
-
 
 
 

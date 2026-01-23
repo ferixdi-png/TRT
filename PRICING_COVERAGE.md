@@ -1,12 +1,12 @@
 # Pricing coverage report
 
-Total models: 72
+Total models: 75
 
 | Status | Count |
 | --- | ---: |
-| READY | 49 |
-| MISSING_PRICE | 3 |
-| MISSING_PARAM_SCHEMA | 20 |
+| READY | 52 |
+| MISSING_PRICE | 2 |
+| MISSING_PARAM_SCHEMA | 21 |
 | AMBIGUOUS_SKU | 0 |
 
 ## Models
@@ -30,12 +30,16 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-elevenlabs-sound-effect
 **elevenlabs/sound-effect** — `MISSING_PARAM_SCHEMA`
 
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-elevenlabs-speech-to-text
 **elevenlabs/speech-to-text** — `MISSING_PARAM_SCHEMA`
@@ -44,12 +48,16 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-elevenlabs-text-to-speech
 **elevenlabs/text-to-speech** — `MISSING_PARAM_SCHEMA`
 
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-flux-2-flex-image-to-image
 **flux-2/flex-image-to-image** — `READY`
@@ -69,6 +77,8 @@ Issues:
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-google-imagen4
 **google/imagen4** — `READY`
@@ -92,12 +102,16 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-google-veo-3
 **google/veo-3** — `MISSING_PARAM_SCHEMA`
 
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-google-veo-3.1
 **google/veo-3.1** — `MISSING_PARAM_SCHEMA`
@@ -106,12 +120,22 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
+### model-grok-imagine-text-to-image
+**grok-imagine/text-to-image** — `READY`
+
+### model-grok-imagine-text-to-video
+**grok-imagine/text-to-video** — `READY`
+
 ### model-grok-imagine
 **grok/imagine** — `MISSING_PARAM_SCHEMA`
 
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-hailuo-02-image-to-video-pro
 **hailuo/02-image-to-video-pro** — `READY`
@@ -121,6 +145,11 @@ Issues:
 
 Issues:
 - At least one param combination has no price.
+
+SKU diagnostics:
+- Expected: hailuo/02-image-to-video-standard::duration=10|resolution=512P, hailuo/02-image-to-video-standard::duration=10|resolution=768P, hailuo/02-image-to-video-standard::duration=6|resolution=512P, hailuo/02-image-to-video-standard::duration=6|resolution=768P
+- Found: hailuo/02-image-to-video-standard::duration=10|resolution=512P, hailuo/02-image-to-video-standard::duration=10|resolution=768P, hailuo/02-image-to-video-standard::duration=6|resolution=512P
+- Missing: hailuo/02-image-to-video-standard::duration=6|resolution=768P
 
 ### model-hailuo-02-text-to-video-pro
 **hailuo/02-text-to-video-pro** — `READY`
@@ -134,6 +163,8 @@ Issues:
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-ideogram-character
 **ideogram/character** — `READY`
@@ -163,17 +194,25 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-kling-2.6-image-to-video
 **kling-2.6/image-to-video** — `MISSING_PARAM_SCHEMA`
 
 Issues:
 - Missing enum values for pricing param 'sound'
 
+SKU diagnostics:
+- Found: kling-2.6/image-to-video::duration=10|sound=false, kling-2.6/image-to-video::duration=5|sound=false, kling-2.6/image-to-video::duration=5|sound=true
+
 ### model-kling-2.6-text-to-video
 **kling-2.6/text-to-video** — `MISSING_PARAM_SCHEMA`
 
 Issues:
 - Missing enum values for pricing param 'sound'
+
+SKU diagnostics:
+- Found: kling-2.6/text-to-video::duration=10|sound=false, kling-2.6/text-to-video::duration=5|sound=false
 
 ### model-kling-ai-avatar-v1-pro
 **kling/ai-avatar-v1-pro** — `READY`
@@ -200,6 +239,8 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-kling-v2-5-turbo-image-to-video-pro
 **kling/v2-5-turbo-image-to-video-pro** — `READY`
 
@@ -213,6 +254,8 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-nano-banana-pro
 **nano-banana-pro** — `READY`
 
@@ -225,6 +268,8 @@ Issues:
 Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
+
+SKU diagnostics:
 
 ### model-qwen-image-to-image
 **qwen/image-to-image** — `READY`
@@ -245,11 +290,22 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-seedream-4.5-edit
 **seedream/4.5-edit** — `READY`
 
 ### model-seedream-4.5-text-to-image
 **seedream/4.5-text-to-image** — `READY`
+
+### model-sora-2-image-to-video
+**sora-2-image-to-video** — `MISSING_PARAM_SCHEMA`
+
+Issues:
+- Missing schema for pricing param 'size'
+
+SKU diagnostics:
+- Found: sora-2-image-to-video::n_frames=10|size=standard, sora-2-image-to-video::n_frames=15|size=standard
 
 ### model-sora-2-pro-image-to-video
 **sora-2-pro-image-to-video** — `READY`
@@ -261,11 +317,25 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
-### model-sora-2-image-to-video
-**sora-2-image-to-video** — `READY`
+SKU diagnostics:
+
+### model-sora-2-pro-text-to-video
+**sora-2-pro-text-to-video** — `MISSING_PRICE`
+
+Issues:
+- No READY pricing SKUs in SSOT.
+
+SKU diagnostics:
 
 ### model-sora-2-text-to-video
 **sora-2-text-to-video** — `READY`
+
+SKU diagnostics:
+- Expected: sora-2-text-to-video::n_frames=10, sora-2-text-to-video::n_frames=15
+- Found: sora-2-text-to-video::n_frames=10, sora-2-text-to-video::n_frames=15
+
+### model-sora-2-watermark-remover
+**sora-2-watermark-remover** — `READY`
 
 ### model-sora-watermark-remover
 **sora-watermark-remover** — `READY`
@@ -277,17 +347,13 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
+SKU diagnostics:
+
 ### model-topaz-image-upscale
 **topaz/image-upscale** — `READY`
 
 ### model-topaz-video-upscale
 **topaz/video-upscale** — `READY`
-
-### model-wan-2-2-a14b-image-to-video-turbo
-**wan/2-2-a14b-image-to-video-turbo** — `MISSING_PRICE`
-
-Issues:
-- No READY pricing SKUs in SSOT.
 
 ### model-wan-2-2-a14b-speech-to-video-turbo
 **wan/2-2-a14b-speech-to-video-turbo** — `MISSING_PARAM_SCHEMA`
@@ -296,11 +362,7 @@ Issues:
 - No READY pricing SKUs in SSOT.
 - SSOT has unmapped pricing entries (missing param schema).
 
-### model-wan-2-2-a14b-text-to-video-turbo
-**wan/2-2-a14b-text-to-video-turbo** — `MISSING_PRICE`
-
-Issues:
-- No READY pricing SKUs in SSOT.
+SKU diagnostics:
 
 ### model-wan-2-2-animate-move
 **wan/2-2-animate-move** — `READY`
