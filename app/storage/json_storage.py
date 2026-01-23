@@ -35,6 +35,7 @@ class JsonStorage(BaseStorage):
         if not self.bot_instance_id:
             self.bot_instance_id = "default"
             logger.warning("BOT_INSTANCE_ID missing; JSON storage defaulting to tenant=%s", self.bot_instance_id)
+        self.partner_id = self.bot_instance_id
         base_dir = Path(data_dir)
         if self.bot_instance_id:
             if self.bot_instance_id not in base_dir.parts:

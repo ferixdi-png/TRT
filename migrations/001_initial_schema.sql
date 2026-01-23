@@ -94,12 +94,18 @@ CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments(created_at);
 
 -- Рефералы
 CREATE TABLE IF NOT EXISTS referrals (
-    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    referrer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    partner_id TEXT NOT NULL,
+    referred_user_id BIGINT NOT NULL,
+    referrer_id BIGINT NOT NULL,
+    ref_param TEXT,
+    bonus_amount INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bonus_granted_at TIMESTAMPTZ,
+    PRIMARY KEY (partner_id, referred_user_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(partner_id, referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_created_at ON referrals(partner_id, created_at DESC);
 
 -- Функция для обновления updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -130,4 +136,3 @@ CREATE TRIGGER update_generation_jobs_updated_at BEFORE UPDATE ON generation_job
 DROP TRIGGER IF EXISTS update_payments_updated_at ON payments;
 CREATE TRIGGER update_payments_updated_at BEFORE UPDATE ON payments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-

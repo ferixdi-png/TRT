@@ -38,6 +38,26 @@ def render_users(summary: Dict[str, Any]) -> Tuple[str, InlineKeyboardMarkup]:
     for u in summary.get("users", []):
         uname = u.get("username") or "—"
         lines.append(f"• {u['user_id']} (@{uname})")
+    referrals = summary.get("referrals", {})
+    totals = referrals.get("totals", {}) if isinstance(referrals, dict) else {}
+    recent = referrals.get("recent", []) if isinstance(referrals, dict) else []
+    lines.extend(
+        [
+            "",
+            "🎁 Рефералы",
+            f"Приглашено: {totals.get('invited', 0)}",
+            f"Начислено: {totals.get('granted', 0)}",
+            f"Бонусов всего: {totals.get('bonus_total', 0)}",
+        ]
+    )
+    if recent:
+        lines.append("")
+        lines.append("Последние приглашения:")
+        for event in recent:
+            referrer_id = event.get("referrer_id", "—")
+            referred_user_id = event.get("referred_user_id", "—")
+            created_at = event.get("created_at", "—")
+            lines.append(f"• {referrer_id} → {referred_user_id} ({created_at})")
     text = "\n".join(lines)
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="adm:root")]])
     return text, kb
