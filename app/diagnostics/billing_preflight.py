@@ -120,6 +120,7 @@ def format_billing_preflight_report(report: Dict[str, Any]) -> str:
     db_meta = sections.get("db", {}).get("meta", {})
     storage_meta = sections.get("storage_rw", {}).get("meta", {})
     tenants_meta = sections.get("tenants", {}).get("meta", {})
+    users_meta = sections.get("users", {}).get("meta", {})
     balances_meta = sections.get("balances", {}).get("meta", {})
     free_meta = sections.get("free_limits", {}).get("meta", {})
     attempts_meta = sections.get("attempts", {}).get("meta", {})
@@ -131,6 +132,12 @@ def format_billing_preflight_report(report: Dict[str, Any]) -> str:
             "PARTNERS: "
             f"found={tenants_meta.get('partners_found', 'n/a')} "
             f"(sample {tenants_meta.get('partners_sample', [])})"
+        ),
+        (
+            "USERS: "
+            f"records={users_meta.get('records', 'n/a')} "
+            f"status={sections.get('users', {}).get('status', STATUS_UNKNOWN)}"
+            f"{users_meta.get('note', '')}"
         ),
         (
             "BALANCES: "
@@ -432,6 +439,7 @@ async def run_billing_preflight(
                 )
 
             balances_file = getattr(storage, "balances_file", "user_balances.json")
+            languages_file = getattr(storage, "languages_file", "user_languages.json")
             free_file = getattr(storage, "free_generations_file", "daily_free_generations.json")
             payments_file = getattr(storage, "payments_file", "payments.json")
 
@@ -439,6 +447,9 @@ async def run_billing_preflight(
 
             total_balance_records = await count_payload_entries(
                 conn, balances_file, column_type=payload_type, key="balances_total"
+            )
+            total_user_records = await count_payload_entries(
+                conn, languages_file, column_type=payload_type, key="users_total"
             )
             partners_with_balances = await count_payload_nonempty(
                 conn, balances_file, column_type=payload_type, key="balances_partners"
@@ -576,17 +587,26 @@ async def run_billing_preflight(
         if balances_merge in {STATUS_ERROR, SQL_STATUS_UNKNOWN}:
             balances_status = STATUS_UNKNOWN
             balances_note = f" ({total_balance_records.note or 'aggregate_compat'})"
-        balances_details = (
-            f"records={total_balance_records.value if total_balance_records.value is not None else 'n/a'}, "
-            f"partners={partners_with_balances.value if partners_with_balances.value is not None else 'n/a'}, "
-            f"neg={negative_balances.value if negative_balances.value is not None else 'n/a'}, "
-            f"updated24h={balances_updated_24h.value if balances_updated_24h.value is not None else 'n/a'}"
-        )
-        if total_balance_records.value == 0:
-            balances_details += " (initialized=0)"
-        if negative_balances.status == SQL_STATUS_OK and negative_balances.value:
-            balances_status = STATUS_DEGRADED
-            balances_note = " (negative balances)"
+            balances_details = (
+                f"records={total_balance_records.value if total_balance_records.value is not None else 'n/a'}, "
+                f"partners={partners_with_balances.value if partners_with_balances.value is not None else 'n/a'}, "
+                f"neg={negative_balances.value if negative_balances.value is not None else 'n/a'}, "
+                f"updated24h={balances_updated_24h.value if balances_updated_24h.value is not None else 'n/a'}"
+            )
+            if total_balance_records.value == 0:
+                balances_details += " (initialized=0)"
+            if negative_balances.status == SQL_STATUS_OK and negative_balances.value:
+                balances_status = STATUS_DEGRADED
+                balances_note = " (negative balances)"
+
+        users_status = STATUS_OK
+        users_note = ""
+        if total_user_records.status != SQL_STATUS_OK:
+            users_status = STATUS_UNKNOWN
+            users_note = f" ({total_user_records.note or 'aggregate_compat'})"
+        users_details = f"records={total_user_records.value if total_user_records.value is not None else 'n/a'}"
+        if total_user_records.value == 0:
+            users_details += " (initialized=0)"
 
         free_status = STATUS_OK
         free_note = ""
@@ -639,6 +659,11 @@ async def run_billing_preflight(
         report["sections"] = {
             "db": {"status": db_section.status, "details": db_section.details, "meta": db_section.meta},
             "tenants": {"status": tenants_status, "details": tenants_details, "meta": tenant_meta},
+            "users": {
+                "status": users_status,
+                "details": users_details,
+                "meta": {"records": total_user_records.value, "note": users_note},
+            },
             "balances": {
                 "status": balances_status,
                 "details": balances_details,
@@ -654,6 +679,7 @@ async def run_billing_preflight(
                 "details": attempts_details,
                 "meta": {
                     "stale_minutes": stale_minutes,
+                    "total": total_attempts.value,
                     "last24h": attempts_last_24h.value,
                     "dup_request_id": duplicate_request_id.value,
                     "note": attempts_note,
@@ -670,6 +696,7 @@ async def run_billing_preflight(
             [
                 db_section,
                 _Section(tenants_status, tenants_details, {}),
+                _Section(users_status, users_details, {}),
                 _Section(balances_status, balances_details, {}),
                 _Section(free_status, free_details, {}),
                 _Section(attempts_status, attempts_details, {}),
