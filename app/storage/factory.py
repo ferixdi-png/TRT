@@ -88,6 +88,7 @@ def create_storage(
         return _storage_instance
 
     mode = _resolve_mode(storage_mode)
+    explicit_db_mode = mode in {"db", "postgres"}
     database_url = database_url or os.getenv("DATABASE_URL", "").strip() or None
     partner_id = os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or ""
 
@@ -95,19 +96,39 @@ def create_storage(
     if os.getenv("GITHUB_TOKEN") and os.getenv("GITHUB_REPO"):
         github_enabled = True
 
-    if mode in {"github", "github_json", "hybrid"} or github_enabled:
+    if explicit_db_mode and github_enabled:
+        logger.info(
+            "[STORAGE] github_backend_disabled=true reason=explicit_db_mode mode=%s",
+            mode,
+        )
+    if not explicit_db_mode and (mode in {"github", "github_json", "hybrid"} or github_enabled):
         primary = GitHubStorage()
         runtime_dir = Path(os.getenv("RUNTIME_STORAGE_DIR", data_dir or "./runtime"))
-        runtime_dir = _resolve_tenant_dir(runtime_dir, partner_id)
-        runtime = JsonStorage(data_dir=str(runtime_dir), bot_instance_id=partner_id)
+        runtime_dir = _resolve_tenant_dir(runtime_dir, partner_id or "default")
+        runtime = JsonStorage(data_dir=str(runtime_dir), bot_instance_id=partner_id or "default")
         storage = HybridStorage(primary, runtime, runtime_files=_runtime_files())
         _storage_instance = storage
         _schedule_runtime_migration(primary, runtime, runtime_dir)
-        logger.info("[STORAGE] backend=hybrid runtime_dir=%s", runtime_dir)
+        logger.info(
+            "[STORAGE] backend=hybrid runtime_dir=%s partner_id=%s",
+            runtime_dir,
+            partner_id or "default",
+        )
         return storage
 
     if not database_url:
-        raise RuntimeError("DATABASE_URL is required for PostgreSQL storage")
+        if explicit_db_mode:
+            raise RuntimeError("DATABASE_URL is required for PostgreSQL storage")
+        fallback_dir = Path(os.getenv("DATA_DIR", data_dir or "./data"))
+        fallback_partner = partner_id or "default"
+        fallback_dir = _resolve_tenant_dir(fallback_dir, fallback_partner)
+        _storage_instance = JsonStorage(data_dir=str(fallback_dir), bot_instance_id=fallback_partner)
+        logger.warning(
+            "[STORAGE] backend=json reason=missing_database_url partner_id=%s data_dir=%s",
+            fallback_partner,
+            fallback_dir,
+        )
+        return _storage_instance
     if not partner_id:
         raise RuntimeError("BOT_INSTANCE_ID is required for multi-tenant storage")
     storage = PostgresStorage(database_url, partner_id=partner_id)
