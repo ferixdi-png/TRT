@@ -5,13 +5,26 @@ from typing import List, Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def build_back_to_menu_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    """Кнопка 🏠 Главное меню"""
+def build_back_to_menu_keyboard(
+    lang: str = "ru",
+    back_callback: Optional[str] = None,
+) -> InlineKeyboardMarkup:
+    """Кнопки 🔙 Назад | 🏠 Главное меню (или только 🏠 при отсутствии back_callback)."""
     if lang == "en":
-        label = "🏠 Main Menu"
+        back_label = "🔙 Back"
+        home_label = "🏠 Main Menu"
     else:
-        label = "🏠 Главное меню"
-    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="back_to_menu")]])
+        back_label = "🔙 Назад"
+        home_label = "🏠 Главное меню"
+
+    if back_callback:
+        return InlineKeyboardMarkup(
+            [[
+                InlineKeyboardButton(back_label, callback_data=back_callback),
+                InlineKeyboardButton(home_label, callback_data="back_to_menu"),
+            ]]
+        )
+    return InlineKeyboardMarkup([[InlineKeyboardButton(home_label, callback_data="back_to_menu")]])
 
 
 def build_back_to_models_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
