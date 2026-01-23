@@ -115,6 +115,40 @@ def _read_int_env(name: str, default: int) -> int:
         return default
 
 
+def _describe_exception(exc: Exception) -> Dict[str, Any]:
+    info: Dict[str, Any] = {"error_type": type(exc).__name__}
+    message = str(exc).strip()
+    if message:
+        info["error"] = message[:200]
+    sqlstate = getattr(exc, "sqlstate", None)
+    if sqlstate:
+        info["sqlstate"] = sqlstate
+    if isinstance(exc, asyncio.TimeoutError):
+        info["timeout"] = True
+    return info
+
+
+def _format_latency_ms(value: Optional[Any]) -> str:
+    if value is None or value == "n/a":
+        return "lat_ms=n/a"
+    return f"lat_ms={value}ms"
+
+
+def _format_storage_reason(meta: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    if meta.get("error_code"):
+        parts.append(str(meta["error_code"]))
+    if meta.get("error_type"):
+        parts.append(str(meta["error_type"]))
+    if meta.get("sqlstate"):
+        parts.append(f"sqlstate={meta['sqlstate']}")
+    if meta.get("timeout"):
+        parts.append("timeout")
+    if meta.get("error"):
+        parts.append(str(meta["error"]))
+    return "; ".join(parts)
+
+
 def format_billing_preflight_report(report: Dict[str, Any]) -> str:
     sections = report.get("sections", {})
     db_meta = sections.get("db", {}).get("meta", {})
@@ -124,10 +158,12 @@ def format_billing_preflight_report(report: Dict[str, Any]) -> str:
     balances_meta = sections.get("balances", {}).get("meta", {})
     free_meta = sections.get("free_limits", {}).get("meta", {})
     attempts_meta = sections.get("attempts", {}).get("meta", {})
+    storage_reason = _format_storage_reason(storage_meta)
+    storage_reason_suffix = f" reason={storage_reason}" if storage_reason else ""
 
     lines = [
         "BILLING PREFLIGHT (db-only)",
-        f"DB: {sections.get('db', {}).get('status', STATUS_DEGRADED)} (lat={db_meta.get('latency_ms', 'n/a')}ms)",
+        f"DB: {sections.get('db', {}).get('status', STATUS_DEGRADED)} ({_format_latency_ms(db_meta.get('latency_ms', 'n/a'))})",
         (
             "PARTNERS: "
             f"found={tenants_meta.get('partners_found', 'n/a')} "
@@ -158,7 +194,11 @@ def format_billing_preflight_report(report: Dict[str, Any]) -> str:
             f"status={sections.get('attempts', {}).get('status', STATUS_UNKNOWN)}"
             f"{attempts_meta.get('note', '')}"
         ),
-        f"STORAGE_RW: {sections.get('storage_rw', {}).get('status', STATUS_DEGRADED)} (lat={storage_meta.get('latency_ms', 'n/a')}ms)",
+        (
+            "STORAGE_RW: "
+            f"{sections.get('storage_rw', {}).get('status', STATUS_DEGRADED)} "
+            f"({_format_latency_ms(storage_meta.get('latency_ms', 'n/a'))}{storage_reason_suffix})"
+        ),
         f"RESULT: {report.get('result', RESULT_DEGRADED)}",
     ]
     return "\n".join(lines)
@@ -232,8 +272,9 @@ async def _storage_rw_smoke(
     payload = {"nonce": os.urandom(6).hex(), "ts": int(time.time())}
     start = time.monotonic()
 
-    async def _attempt_rw(target_storage: Any) -> tuple[bool, Optional[str]]:
+    async def _attempt_rw(target_storage: Any) -> tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
         last_error: Optional[str] = None
+        last_error_meta: Optional[Dict[str, Any]] = None
         for attempt in range(1, retries + 1):
             try:
                 await asyncio.wait_for(target_storage.write_json_file(filename, payload), timeout=timeout_s)
@@ -253,17 +294,24 @@ async def _storage_rw_smoke(
                             type(loaded).__name__,
                         )
                         last_error = f"invalid_payload type={type(loaded).__name__}"
+                        last_error_meta = {
+                            "error_type": "InvalidPayload",
+                            "error": last_error,
+                        }
                         continue
                 if loaded.get("nonce") == payload["nonce"]:
-                    return True, None
+                    return True, None, None
                 last_error = "rw mismatch"
+                last_error_meta = {"error_type": "Mismatch", "error": last_error}
             except Exception as exc:
-                last_error = str(exc)[:120]
+                error_meta = _describe_exception(exc)
+                last_error = error_meta.get("error") or error_meta.get("error_type")
+                last_error_meta = error_meta
             if attempt < retries:
                 await asyncio.sleep(0.05)
-        return False, last_error
+        return False, last_error, last_error_meta
 
-    rw_ok, primary_error = await _attempt_rw(diagnostic_storage)
+    rw_ok, primary_error, primary_error_meta = await _attempt_rw(diagnostic_storage)
 
     delete_ok = False
     partner_for_delete = getattr(diagnostic_storage, "partner_id", "diagnostics")
@@ -301,7 +349,7 @@ async def _storage_rw_smoke(
             primary_error,
         )
         fallback_start = time.monotonic()
-        fallback_ok, fallback_error = await _attempt_rw(storage)
+        fallback_ok, fallback_error, fallback_error_meta = await _attempt_rw(storage)
         fallback_latency_ms = int((time.monotonic() - fallback_start) * 1000)
         if fallback_ok:
             fallback_partner = getattr(storage, "partner_id", bot_instance_id or "unknown")
@@ -326,6 +374,8 @@ async def _storage_rw_smoke(
                 "retries": retries,
                 "error_code": "BPF_STORAGE_RW_DIAGNOSTICS_FAILED",
             }
+            if primary_error_meta:
+                meta.update({k: v for k, v in primary_error_meta.items() if k in {"error", "error_type", "sqlstate", "timeout"}})
             return _Section(STATUS_DEGRADED, "rw ok on tenant fallback", meta)
         logger.error(
             "BILLING_PREFLIGHT storage_rw fallback failed code=BPF_STORAGE_RW_FALLBACK_FAILED error=%s",
@@ -346,6 +396,8 @@ async def _storage_rw_smoke(
             "retries": retries,
             "error_code": error_code,
         }
+        if fallback_error_meta:
+            meta.update({k: v for k, v in fallback_error_meta.items() if k in {"error", "error_type", "sqlstate", "timeout"}})
         return _Section(STATUS_FAIL, f"rw failed ({fallback_error or primary_error})", meta)
 
     details = "rw mismatch" if primary_error == "rw mismatch" else f"rw failed ({primary_error})"
@@ -361,6 +413,8 @@ async def _storage_rw_smoke(
         "retries": retries,
         "error_code": error_code,
     }
+    if primary_error_meta:
+        meta.update({k: v for k, v in primary_error_meta.items() if k in {"error", "error_type", "sqlstate", "timeout"}})
     if diagnostics_init_error:
         meta["diagnostics_init_error"] = diagnostics_init_error
     return _Section(STATUS_FAIL, details, meta)
@@ -400,164 +454,185 @@ async def run_billing_preflight(
         return report
 
     try:
-        async with pool.acquire() as conn:
-            db_start = time.monotonic()
-            await conn.execute("/* billing_preflight:db_ping */ SELECT 1")
-            db_latency_ms = int((time.monotonic() - db_start) * 1000)
+        query_retries = max(1, _read_int_env("BILLING_PREFLIGHT_QUERY_RETRIES", 2))
+        query_backoff_s = _read_float_env("BILLING_PREFLIGHT_QUERY_BACKOFF_S", 0.2)
 
-            partners_found = await conn.fetchval(
-                "/* billing_preflight:partners_count */ SELECT COUNT(DISTINCT partner_id) FROM storage_json"
-            )
-            partner_rows = await conn.fetch(
-                "/* billing_preflight:partners_sample */ "
-                "SELECT DISTINCT partner_id FROM storage_json ORDER BY partner_id LIMIT 3"
-            )
-            partners_sample = [_hash_sample(row["partner_id"]) for row in partner_rows if row["partner_id"]]
-            top_rows = await conn.fetch(
-                "/* billing_preflight:partners_top */ "
-                "SELECT partner_id, COUNT(*) AS file_count "
-                "FROM storage_json GROUP BY partner_id ORDER BY file_count DESC LIMIT $1",
-                max_partners,
-            )
-            partners_top = [
-                {"partner": _hash_sample(row["partner_id"]), "file_count": int(row["file_count"])}
-                for row in top_rows
-                if row["partner_id"]
-            ]
-            missing_partner_rows = await conn.fetchval(
-                "/* billing_preflight:partners_missing */ "
-                "SELECT COUNT(*) FROM storage_json WHERE partner_id IS NULL OR btrim(partner_id) = ''"
-            )
+        for attempt in range(1, query_retries + 1):
+            try:
+                async with pool.acquire() as conn:
+                    db_start = time.monotonic()
+                    await conn.execute("/* billing_preflight:db_ping */ SELECT 1")
+                    db_latency_ms = int((time.monotonic() - db_start) * 1000)
 
-            partner_id = (getattr(storage, "partner_id", "") or os.getenv("BOT_INSTANCE_ID", "")).strip()
-            partner_present = None
-            if partner_id:
-                partner_present = await conn.fetchval(
-                    "/* billing_preflight:partner_present */ "
-                    "SELECT 1 FROM storage_json WHERE partner_id=$1 LIMIT 1",
-                    partner_id,
+                    partners_found = await conn.fetchval(
+                        "/* billing_preflight:partners_count */ SELECT COUNT(DISTINCT partner_id) FROM storage_json"
+                    )
+                    partner_rows = await conn.fetch(
+                        "/* billing_preflight:partners_sample */ "
+                        "SELECT DISTINCT partner_id FROM storage_json ORDER BY partner_id LIMIT 3"
+                    )
+                    partners_sample = [_hash_sample(row["partner_id"]) for row in partner_rows if row["partner_id"]]
+                    top_rows = await conn.fetch(
+                        "/* billing_preflight:partners_top */ "
+                        "SELECT partner_id, COUNT(*) AS file_count "
+                        "FROM storage_json GROUP BY partner_id ORDER BY file_count DESC LIMIT $1",
+                        max_partners,
+                    )
+                    partners_top = [
+                        {"partner": _hash_sample(row["partner_id"]), "file_count": int(row["file_count"])}
+                        for row in top_rows
+                        if row["partner_id"]
+                    ]
+                    missing_partner_rows = await conn.fetchval(
+                        "/* billing_preflight:partners_missing */ "
+                        "SELECT COUNT(*) FROM storage_json WHERE partner_id IS NULL OR btrim(partner_id) = ''"
+                    )
+
+                    partner_id = (getattr(storage, "partner_id", "") or os.getenv("BOT_INSTANCE_ID", "")).strip()
+                    partner_present = None
+                    if partner_id:
+                        partner_present = await conn.fetchval(
+                            "/* billing_preflight:partner_present */ "
+                            "SELECT 1 FROM storage_json WHERE partner_id=$1 LIMIT 1",
+                            partner_id,
+                        )
+
+                    balances_file = getattr(storage, "balances_file", "user_balances.json")
+                    languages_file = getattr(storage, "languages_file", "user_languages.json")
+                    free_file = getattr(storage, "free_generations_file", "daily_free_generations.json")
+                    payments_file = getattr(storage, "payments_file", "payments.json")
+
+                    payload_type = await fetch_column_type(conn, "storage_json", "payload")
+
+                    total_balance_records = await count_payload_entries(
+                        conn, balances_file, column_type=payload_type, key="balances_total"
+                    )
+                    total_user_records = await count_payload_entries(
+                        conn, languages_file, column_type=payload_type, key="users_total"
+                    )
+                    partners_with_balances = await count_payload_nonempty(
+                        conn, balances_file, column_type=payload_type, key="balances_partners"
+                    )
+                    balances_updated_24h = await run_scalar(
+                        conn,
+                        "balances_updated_24h",
+                        "/* billing_preflight:balances_updated_24h */ "
+                        "SELECT COUNT(*) FROM storage_json "
+                        "WHERE filename=$1 AND updated_at >= now() - interval '24 hours'",
+                        balances_file,
+                    )
+                    negative_balances = await run_scalar(
+                        conn,
+                        "balances_negative",
+                        "/* billing_preflight:balances_negative */ "
+                        "SELECT COALESCE(SUM(CASE "
+                        "WHEN value ~ '^-?\\d+(\\.\\d+)?$' AND value::numeric < 0 THEN 1 ELSE 0 END),0) "
+                        "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
+                        "WHERE s.filename=$1",
+                        balances_file,
+                    )
+
+                    total_free_records = await count_payload_entries(
+                        conn, free_file, column_type=payload_type, key="free_total"
+                    )
+                    partners_with_free = await count_payload_nonempty(
+                        conn, free_file, column_type=payload_type, key="free_partners"
+                    )
+                    free_range = await run_row(
+                        conn,
+                        "free_range",
+                        "/* billing_preflight:free_range */ "
+                        "SELECT "
+                        "MIN(CASE WHEN value ~ '^\\d+$' THEN value::int END) AS min_used, "
+                        "MAX(CASE WHEN value ~ '^\\d+$' THEN value::int END) AS max_used "
+                        "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
+                        "WHERE s.filename=$1",
+                        free_file,
+                    )
+                    free_limit = get_free_daily_limit()
+                    free_violations = await run_scalar(
+                        conn,
+                        "free_violations",
+                        "/* billing_preflight:free_violations */ "
+                        "SELECT COALESCE(SUM(CASE "
+                        "WHEN value ~ '^\\d+$' AND value::int > $2 THEN 1 ELSE 0 END),0) "
+                        "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
+                        "WHERE s.filename=$1",
+                        free_file,
+                        free_limit,
+                    )
+
+                    total_attempts = await count_payload_entries(
+                        conn, payments_file, column_type=payload_type, key="attempts_total"
+                    )
+                    attempts_last_24h = await run_scalar(
+                        conn,
+                        "attempts_last_24h",
+                        "/* billing_preflight:attempts_last_24h */ "
+                        "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
+                        "WHERE s.filename=$1 "
+                        "AND (value->>'created_at') IS NOT NULL "
+                        "AND (value->>'created_at') <> '' "
+                        "AND (value->>'created_at')::timestamptz >= now() - interval '24 hours'",
+                        payments_file,
+                    )
+                    request_id_rows = await run_scalar(
+                        conn,
+                        "request_id_present",
+                        "/* billing_preflight:request_id_present */ "
+                        "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
+                        "WHERE s.filename=$1 AND value ? 'request_id'",
+                        payments_file,
+                    )
+                    duplicate_request_id = AggregateResult(value=0, status=SQL_STATUS_OK, note="")
+                    if request_id_rows.status == SQL_STATUS_OK and request_id_rows.value:
+                        duplicate_request_id = await run_scalar(
+                            conn,
+                            "request_id_duplicates",
+                            "/* billing_preflight:request_id_duplicates */ "
+                            "WITH reqs AS ("
+                            "SELECT value->>'request_id' AS request_id "
+                            "FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
+                            "WHERE s.filename=$1 AND value ? 'request_id'"
+                            ") "
+                            "SELECT COALESCE(SUM(cnt - 1),0) FROM ("
+                            "SELECT request_id, COUNT(*) AS cnt "
+                            "FROM reqs WHERE request_id IS NOT NULL AND request_id <> '' "
+                            "GROUP BY request_id HAVING COUNT(*) > 1"
+                            ") AS dup",
+                            payments_file,
+                        )
+
+                    stale_minutes = 30
+                    stale_pending = await run_scalar(
+                        conn,
+                        "stale_pending",
+                        "/* billing_preflight:stale_pending */ "
+                        "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
+                        "WHERE s.filename=$1 "
+                        "AND value->>'status' = 'pending' "
+                        "AND (value->>'created_at') IS NOT NULL "
+                        "AND (value->>'created_at') <> '' "
+                        "AND (value->>'created_at')::timestamptz < now() - ($2::int || ' minutes')::interval",
+                        payments_file,
+                        stale_minutes,
+                    )
+                break
+            except Exception as exc:
+                error_meta = _describe_exception(exc)
+                logger.warning(
+                    "BILLING_PREFLIGHT stats_read_retry attempt=%s/%s error_type=%s sqlstate=%s timeout=%s error=%s",
+                    attempt,
+                    query_retries,
+                    error_meta.get("error_type"),
+                    error_meta.get("sqlstate"),
+                    error_meta.get("timeout", False),
+                    error_meta.get("error"),
                 )
-
-            balances_file = getattr(storage, "balances_file", "user_balances.json")
-            languages_file = getattr(storage, "languages_file", "user_languages.json")
-            free_file = getattr(storage, "free_generations_file", "daily_free_generations.json")
-            payments_file = getattr(storage, "payments_file", "payments.json")
-
-            payload_type = await fetch_column_type(conn, "storage_json", "payload")
-
-            total_balance_records = await count_payload_entries(
-                conn, balances_file, column_type=payload_type, key="balances_total"
-            )
-            total_user_records = await count_payload_entries(
-                conn, languages_file, column_type=payload_type, key="users_total"
-            )
-            partners_with_balances = await count_payload_nonempty(
-                conn, balances_file, column_type=payload_type, key="balances_partners"
-            )
-            balances_updated_24h = await run_scalar(
-                conn,
-                "balances_updated_24h",
-                "/* billing_preflight:balances_updated_24h */ "
-                "SELECT COUNT(*) FROM storage_json "
-                "WHERE filename=$1 AND updated_at >= now() - interval '24 hours'",
-                balances_file,
-            )
-            negative_balances = await run_scalar(
-                conn,
-                "balances_negative",
-                "/* billing_preflight:balances_negative */ "
-                "SELECT COALESCE(SUM(CASE "
-                "WHEN value ~ '^-?\\d+(\\.\\d+)?$' AND value::numeric < 0 THEN 1 ELSE 0 END),0) "
-                "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
-                "WHERE s.filename=$1",
-                balances_file,
-            )
-
-            total_free_records = await count_payload_entries(
-                conn, free_file, column_type=payload_type, key="free_total"
-            )
-            partners_with_free = await count_payload_nonempty(
-                conn, free_file, column_type=payload_type, key="free_partners"
-            )
-            free_range = await run_row(
-                conn,
-                "free_range",
-                "/* billing_preflight:free_range */ "
-                "SELECT "
-                "MIN(CASE WHEN value ~ '^\\d+$' THEN value::int END) AS min_used, "
-                "MAX(CASE WHEN value ~ '^\\d+$' THEN value::int END) AS max_used "
-                "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
-                "WHERE s.filename=$1",
-                free_file,
-            )
-            free_limit = get_free_daily_limit()
-            free_violations = await run_scalar(
-                conn,
-                "free_violations",
-                "/* billing_preflight:free_violations */ "
-                "SELECT COALESCE(SUM(CASE "
-                "WHEN value ~ '^\\d+$' AND value::int > $2 THEN 1 ELSE 0 END),0) "
-                "FROM storage_json s, jsonb_each_text(s.payload::jsonb) "
-                "WHERE s.filename=$1",
-                free_file,
-                free_limit,
-            )
-
-            total_attempts = await count_payload_entries(
-                conn, payments_file, column_type=payload_type, key="attempts_total"
-            )
-            attempts_last_24h = await run_scalar(
-                conn,
-                "attempts_last_24h",
-                "/* billing_preflight:attempts_last_24h */ "
-                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
-                "WHERE s.filename=$1 "
-                "AND (value->>'created_at') IS NOT NULL "
-                "AND (value->>'created_at') <> '' "
-                "AND (value->>'created_at')::timestamptz >= now() - interval '24 hours'",
-                payments_file,
-            )
-            request_id_rows = await run_scalar(
-                conn,
-                "request_id_present",
-                "/* billing_preflight:request_id_present */ "
-                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
-                "WHERE s.filename=$1 AND value ? 'request_id'",
-                payments_file,
-            )
-            duplicate_request_id = AggregateResult(value=0, status=SQL_STATUS_OK, note="")
-            if request_id_rows.status == SQL_STATUS_OK and request_id_rows.value:
-                duplicate_request_id = await run_scalar(
-                    conn,
-                    "request_id_duplicates",
-                    "/* billing_preflight:request_id_duplicates */ "
-                    "WITH reqs AS ("
-                    "SELECT value->>'request_id' AS request_id "
-                    "FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
-                    "WHERE s.filename=$1 AND value ? 'request_id'"
-                    ") "
-                    "SELECT COALESCE(SUM(cnt - 1),0) FROM ("
-                    "SELECT request_id, COUNT(*) AS cnt "
-                    "FROM reqs WHERE request_id IS NOT NULL AND request_id <> '' "
-                    "GROUP BY request_id HAVING COUNT(*) > 1"
-                    ") AS dup",
-                    payments_file,
-                )
-
-            stale_minutes = 30
-            stale_pending = await run_scalar(
-                conn,
-                "stale_pending",
-                "/* billing_preflight:stale_pending */ "
-                "SELECT COUNT(*) FROM storage_json s, jsonb_each(s.payload::jsonb) AS e(key, value) "
-                "WHERE s.filename=$1 "
-                "AND value->>'status' = 'pending' "
-                "AND (value->>'created_at') IS NOT NULL "
-                "AND (value->>'created_at') <> '' "
-                "AND (value->>'created_at')::timestamptz < now() - ($2::int || ' minutes')::interval",
-                payments_file,
-                stale_minutes,
-            )
+                if attempt < query_retries:
+                    await asyncio.sleep(query_backoff_s * attempt)
+                else:
+                    raise
 
         db_section = _Section(STATUS_OK, "ok", {"latency_ms": db_latency_ms})
 
