@@ -50,6 +50,15 @@ class _Section:
     meta: Dict[str, Any]
 
 
+@dataclass
+class _TimedQuery:
+    value: Any
+    status: str
+    latency_ms: Optional[int]
+    error: Optional[Dict[str, Any]] = None
+    note: str = ""
+
+
 def _mask_partner_id(partner_id: str) -> str:
     if not partner_id:
         return "missing"
@@ -147,6 +156,61 @@ def _format_storage_reason(meta: Dict[str, Any]) -> str:
     if meta.get("error"):
         parts.append(str(meta["error"]))
     return "; ".join(parts)
+
+
+async def _timed_query(
+    func,
+    *args: Any,
+    default: Any = None,
+) -> _TimedQuery:
+    start = time.monotonic()
+    try:
+        value = await func(*args)
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return _TimedQuery(value=value, status=STATUS_OK, latency_ms=latency_ms)
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return _TimedQuery(
+            value=default,
+            status=STATUS_DEGRADED,
+            latency_ms=latency_ms,
+            error=_describe_exception(exc),
+        )
+
+
+async def _timed_aggregate(func, *args: Any, **kwargs: Any) -> tuple[AggregateResult, Dict[str, Any]]:
+    start = time.monotonic()
+    result = await func(*args, **kwargs)
+    latency_ms = int((time.monotonic() - start) * 1000)
+    status = STATUS_OK if result.status == SQL_STATUS_OK else STATUS_DEGRADED
+    meta: Dict[str, Any] = {"status": status, "latency_ms": latency_ms}
+    if result.note:
+        meta["note"] = result.note
+    return result, meta
+
+
+def _summarize_queries(named_meta: List[tuple[str, Dict[str, Any]]]) -> Dict[str, Any]:
+    status = STATUS_OK
+    latency_ms: Optional[int] = None
+    errors: List[Dict[str, Any]] = []
+    for name, meta in named_meta:
+        if not meta:
+            continue
+        if meta.get("status") != STATUS_OK:
+            status = STATUS_DEGRADED
+        meta_latency = meta.get("latency_ms")
+        if meta_latency is not None:
+            latency_ms = max(latency_ms or 0, int(meta_latency))
+        if meta.get("status") != STATUS_OK:
+            error = meta.get("error") or {}
+            if error:
+                errors.append({"query": name, **error})
+            elif meta.get("note"):
+                errors.append({"query": name, "note": meta["note"]})
+    summary: Dict[str, Any] = {"query_status": status, "query_latency_ms": latency_ms}
+    if errors:
+        summary["query_errors"] = errors
+    return summary
 
 
 def format_billing_preflight_report(report: Dict[str, Any]) -> str:
@@ -460,60 +524,83 @@ async def run_billing_preflight(
         for attempt in range(1, query_retries + 1):
             try:
                 async with pool.acquire() as conn:
-                    db_start = time.monotonic()
-                    await conn.execute("/* billing_preflight:db_ping */ SELECT 1")
-                    db_latency_ms = int((time.monotonic() - db_start) * 1000)
+                    db_ping = await _timed_query(
+                        conn.execute,
+                        "/* billing_preflight:db_ping */ SELECT 1",
+                    )
 
-                    partners_found = await conn.fetchval(
-                        "/* billing_preflight:partners_count */ SELECT COUNT(DISTINCT partner_id) FROM storage_json"
+                    partners_found_query = await _timed_query(
+                        conn.fetchval,
+                        "/* billing_preflight:partners_count */ SELECT COUNT(DISTINCT partner_id) FROM storage_json",
+                        default=0,
                     )
-                    partner_rows = await conn.fetch(
+                    partners_found = partners_found_query.value
+                    partners_sample_query = await _timed_query(
+                        conn.fetch,
                         "/* billing_preflight:partners_sample */ "
-                        "SELECT DISTINCT partner_id FROM storage_json ORDER BY partner_id LIMIT 3"
+                        "SELECT DISTINCT partner_id FROM storage_json ORDER BY partner_id LIMIT 3",
+                        default=[],
                     )
+                    partner_rows = partners_sample_query.value
                     partners_sample = [_hash_sample(row["partner_id"]) for row in partner_rows if row["partner_id"]]
-                    top_rows = await conn.fetch(
+                    partners_top_query = await _timed_query(
+                        conn.fetch,
                         "/* billing_preflight:partners_top */ "
                         "SELECT partner_id, COUNT(*) AS file_count "
                         "FROM storage_json GROUP BY partner_id ORDER BY file_count DESC LIMIT $1",
                         max_partners,
+                        default=[],
                     )
+                    top_rows = partners_top_query.value
                     partners_top = [
                         {"partner": _hash_sample(row["partner_id"]), "file_count": int(row["file_count"])}
                         for row in top_rows
                         if row["partner_id"]
                     ]
-                    missing_partner_rows = await conn.fetchval(
+                    missing_partner_query = await _timed_query(
+                        conn.fetchval,
                         "/* billing_preflight:partners_missing */ "
-                        "SELECT COUNT(*) FROM storage_json WHERE partner_id IS NULL OR btrim(partner_id) = ''"
+                        "SELECT COUNT(*) FROM storage_json WHERE partner_id IS NULL OR btrim(partner_id) = ''",
+                        default=0,
                     )
+                    missing_partner_rows = missing_partner_query.value
 
                     partner_id = (getattr(storage, "partner_id", "") or os.getenv("BOT_INSTANCE_ID", "")).strip()
                     partner_present = None
                     if partner_id:
-                        partner_present = await conn.fetchval(
+                        partner_present_query = await _timed_query(
+                            conn.fetchval,
                             "/* billing_preflight:partner_present */ "
                             "SELECT 1 FROM storage_json WHERE partner_id=$1 LIMIT 1",
                             partner_id,
+                            default=None,
                         )
+                        partner_present = partner_present_query.value
 
                     balances_file = getattr(storage, "balances_file", "user_balances.json")
                     languages_file = getattr(storage, "languages_file", "user_languages.json")
                     free_file = getattr(storage, "free_generations_file", "daily_free_generations.json")
                     payments_file = getattr(storage, "payments_file", "payments.json")
 
-                    payload_type = await fetch_column_type(conn, "storage_json", "payload")
+                    payload_query = await _timed_query(
+                        fetch_column_type,
+                        conn,
+                        "storage_json",
+                        "payload",
+                        default="unknown",
+                    )
+                    payload_type = payload_query.value
 
-                    total_balance_records = await count_payload_entries(
+                    total_balance_records, total_balance_meta = await _timed_aggregate(
                         conn, balances_file, column_type=payload_type, key="balances_total"
                     )
-                    total_user_records = await count_payload_entries(
+                    total_user_records, total_user_meta = await _timed_aggregate(
                         conn, languages_file, column_type=payload_type, key="users_total"
                     )
-                    partners_with_balances = await count_payload_nonempty(
+                    partners_with_balances, partners_with_balances_meta = await _timed_aggregate(
                         conn, balances_file, column_type=payload_type, key="balances_partners"
                     )
-                    balances_updated_24h = await run_scalar(
+                    balances_updated_24h, balances_updated_meta = await _timed_aggregate(
                         conn,
                         "balances_updated_24h",
                         "/* billing_preflight:balances_updated_24h */ "
@@ -521,7 +608,7 @@ async def run_billing_preflight(
                         "WHERE filename=$1 AND updated_at >= now() - interval '24 hours'",
                         balances_file,
                     )
-                    negative_balances = await run_scalar(
+                    negative_balances, negative_balances_meta = await _timed_aggregate(
                         conn,
                         "balances_negative",
                         "/* billing_preflight:balances_negative */ "
@@ -532,13 +619,13 @@ async def run_billing_preflight(
                         balances_file,
                     )
 
-                    total_free_records = await count_payload_entries(
+                    total_free_records, total_free_meta = await _timed_aggregate(
                         conn, free_file, column_type=payload_type, key="free_total"
                     )
-                    partners_with_free = await count_payload_nonempty(
+                    partners_with_free, partners_with_free_meta = await _timed_aggregate(
                         conn, free_file, column_type=payload_type, key="free_partners"
                     )
-                    free_range = await run_row(
+                    free_range, free_range_meta = await _timed_aggregate(
                         conn,
                         "free_range",
                         "/* billing_preflight:free_range */ "
@@ -550,7 +637,7 @@ async def run_billing_preflight(
                         free_file,
                     )
                     free_limit = get_free_daily_limit()
-                    free_violations = await run_scalar(
+                    free_violations, free_violations_meta = await _timed_aggregate(
                         conn,
                         "free_violations",
                         "/* billing_preflight:free_violations */ "
@@ -562,10 +649,10 @@ async def run_billing_preflight(
                         free_limit,
                     )
 
-                    total_attempts = await count_payload_entries(
+                    total_attempts, total_attempts_meta = await _timed_aggregate(
                         conn, payments_file, column_type=payload_type, key="attempts_total"
                     )
-                    attempts_last_24h = await run_scalar(
+                    attempts_last_24h, attempts_last_24h_meta = await _timed_aggregate(
                         conn,
                         "attempts_last_24h",
                         "/* billing_preflight:attempts_last_24h */ "
@@ -576,7 +663,7 @@ async def run_billing_preflight(
                         "AND (value->>'created_at')::timestamptz >= now() - interval '24 hours'",
                         payments_file,
                     )
-                    request_id_rows = await run_scalar(
+                    request_id_rows, request_id_rows_meta = await _timed_aggregate(
                         conn,
                         "request_id_present",
                         "/* billing_preflight:request_id_present */ "
@@ -585,8 +672,12 @@ async def run_billing_preflight(
                         payments_file,
                     )
                     duplicate_request_id = AggregateResult(value=0, status=SQL_STATUS_OK, note="")
+                    duplicate_request_id_meta = {
+                        "status": STATUS_OK,
+                        "latency_ms": 0,
+                    }
                     if request_id_rows.status == SQL_STATUS_OK and request_id_rows.value:
-                        duplicate_request_id = await run_scalar(
+                        duplicate_request_id, duplicate_request_id_meta = await _timed_aggregate(
                             conn,
                             "request_id_duplicates",
                             "/* billing_preflight:request_id_duplicates */ "
@@ -604,7 +695,7 @@ async def run_billing_preflight(
                         )
 
                     stale_minutes = 30
-                    stale_pending = await run_scalar(
+                    stale_pending, stale_pending_meta = await _timed_aggregate(
                         conn,
                         "stale_pending",
                         "/* billing_preflight:stale_pending */ "
@@ -634,7 +725,12 @@ async def run_billing_preflight(
                 else:
                     raise
 
-        db_section = _Section(STATUS_OK, "ok", {"latency_ms": db_latency_ms})
+        db_query_meta = _summarize_queries([("db_ping", db_ping.__dict__)])
+        db_section = _Section(
+            STATUS_OK if db_ping.status == STATUS_OK else STATUS_DEGRADED,
+            "ok" if db_ping.status == STATUS_OK else "ping degraded",
+            {"latency_ms": db_ping.latency_ms, **db_query_meta},
+        )
 
         tenants_status = STATUS_OK
         tenants_details = f"found={int(partners_found)}, sample={partners_sample}"
@@ -644,7 +740,29 @@ async def run_billing_preflight(
             "partners_top": partners_top[: min(3, len(partners_top))],
             "storage_partner": _mask_partner_id(partner_id),
         }
-        if missing_partner_rows:
+        tenant_queries = _summarize_queries(
+            [
+                ("partners_count", partners_found_query.__dict__),
+                ("partners_sample", partners_sample_query.__dict__),
+                ("partners_top", partners_top_query.__dict__),
+                ("partners_missing", missing_partner_query.__dict__),
+            ]
+        )
+        if partner_id:
+            tenant_queries = _summarize_queries(
+                [
+                    ("partners_count", partners_found_query.__dict__),
+                    ("partners_sample", partners_sample_query.__dict__),
+                    ("partners_top", partners_top_query.__dict__),
+                    ("partners_missing", missing_partner_query.__dict__),
+                    ("partner_present", partner_present_query.__dict__),
+                ]
+            )
+        tenant_meta.update(tenant_queries)
+        if tenant_meta.get("query_status") == STATUS_DEGRADED:
+            tenants_status = STATUS_DEGRADED
+            tenants_details = "query degraded"
+        elif missing_partner_rows:
             tenants_status = STATUS_DEGRADED
             tenants_details = f"missing_partner_id={int(missing_partner_rows)}"
         elif partner_id and not partner_present and partners_found:
@@ -653,6 +771,12 @@ async def run_billing_preflight(
 
         balances_status = STATUS_OK
         balances_note = ""
+        balances_details = (
+            f"records={total_balance_records.value if total_balance_records.value is not None else 'n/a'}, "
+            f"partners={partners_with_balances.value if partners_with_balances.value is not None else 'n/a'}, "
+            f"neg={negative_balances.value if negative_balances.value is not None else 'n/a'}, "
+            f"updated24h={balances_updated_24h.value if balances_updated_24h.value is not None else 'n/a'}"
+        )
         balances_merge = merge_status(
             total_balance_records,
             partners_with_balances,
@@ -662,17 +786,11 @@ async def run_billing_preflight(
         if balances_merge in {STATUS_ERROR, SQL_STATUS_UNKNOWN}:
             balances_status = STATUS_UNKNOWN
             balances_note = f" ({total_balance_records.note or 'aggregate_compat'})"
-            balances_details = (
-                f"records={total_balance_records.value if total_balance_records.value is not None else 'n/a'}, "
-                f"partners={partners_with_balances.value if partners_with_balances.value is not None else 'n/a'}, "
-                f"neg={negative_balances.value if negative_balances.value is not None else 'n/a'}, "
-                f"updated24h={balances_updated_24h.value if balances_updated_24h.value is not None else 'n/a'}"
-            )
-            if total_balance_records.value == 0:
-                balances_details += " (initialized=0)"
-            if negative_balances.status == SQL_STATUS_OK and negative_balances.value:
-                balances_status = STATUS_DEGRADED
-                balances_note = " (negative balances)"
+        if total_balance_records.value == 0:
+            balances_details += " (initialized=0)"
+        if negative_balances.status == SQL_STATUS_OK and negative_balances.value:
+            balances_status = STATUS_DEGRADED if balances_status != STATUS_UNKNOWN else balances_status
+            balances_note = " (negative balances)"
 
         users_status = STATUS_OK
         users_note = ""
@@ -731,23 +849,63 @@ async def run_billing_preflight(
 
         storage_rw_section = await _storage_rw_smoke(storage, pool, bot_instance_id=partner_id)
 
+        balances_meta_summary = _summarize_queries(
+            [
+                ("column_type", payload_query.__dict__),
+                ("balances_total", total_balance_meta),
+                ("balances_partners", partners_with_balances_meta),
+                ("balances_updated_24h", balances_updated_meta),
+                ("balances_negative", negative_balances_meta),
+            ]
+        )
+        users_meta_summary = _summarize_queries(
+            [
+                ("column_type", payload_query.__dict__),
+                ("users_total", total_user_meta),
+            ]
+        )
+        free_meta_summary = _summarize_queries(
+            [
+                ("column_type", payload_query.__dict__),
+                ("free_total", total_free_meta),
+                ("free_partners", partners_with_free_meta),
+                ("free_range", free_range_meta),
+                ("free_violations", free_violations_meta),
+            ]
+        )
+        attempts_meta_summary = _summarize_queries(
+            [
+                ("column_type", payload_query.__dict__),
+                ("attempts_total", total_attempts_meta),
+                ("attempts_last_24h", attempts_last_24h_meta),
+                ("request_id_present", request_id_rows_meta),
+                ("request_id_duplicates", duplicate_request_id_meta),
+                ("stale_pending", stale_pending_meta),
+            ]
+        )
+
         report["sections"] = {
             "db": {"status": db_section.status, "details": db_section.details, "meta": db_section.meta},
             "tenants": {"status": tenants_status, "details": tenants_details, "meta": tenant_meta},
             "users": {
                 "status": users_status,
                 "details": users_details,
-                "meta": {"records": total_user_records.value, "note": users_note},
+                "meta": {"records": total_user_records.value, "note": users_note, **users_meta_summary},
             },
             "balances": {
                 "status": balances_status,
                 "details": balances_details,
-                "meta": {"records": total_balance_records.value, "note": balances_note},
+                "meta": {"records": total_balance_records.value, "note": balances_note, **balances_meta_summary},
             },
             "free_limits": {
                 "status": free_status,
                 "details": free_details,
-                "meta": {"daily_limit": free_limit, "records": total_free_records.value, "note": free_note},
+                "meta": {
+                    "daily_limit": free_limit,
+                    "records": total_free_records.value,
+                    "note": free_note,
+                    **free_meta_summary,
+                },
             },
             "attempts": {
                 "status": attempts_status,
@@ -758,6 +916,7 @@ async def run_billing_preflight(
                     "last24h": attempts_last_24h.value,
                     "dup_request_id": duplicate_request_id.value,
                     "note": attempts_note,
+                    **attempts_meta_summary,
                 },
             },
             "storage_rw": {
