@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 import math
+import time
 from datetime import datetime, date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -795,7 +796,27 @@ class PostgresStorage(BaseStorage):
 
                 correlation_id = get_correlation_id() or "corr-na"
                 log_advisory_lock_key(logger, lock_key, correlation_id=correlation_id, action="pg_advisory_xact_lock")
-                await acquire_advisory_xact_lock(conn, lock_key)
+                lock_start = time.monotonic()
+                try:
+                    await acquire_advisory_xact_lock(conn, lock_key)
+                except Exception as exc:
+                    lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
+                    logger.error(
+                        "PG_ADVISORY_XACT_LOCK_FAILED filename=%s duration_ms=%s correlation_id=%s error=%s",
+                        filename,
+                        lock_duration_ms,
+                        correlation_id,
+                        exc,
+                        exc_info=True,
+                    )
+                    raise
+                lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
+                logger.info(
+                    "PG_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
+                    filename,
+                    lock_duration_ms,
+                    correlation_id,
+                )
                 row = await conn.fetchrow(
                     "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
                     self.partner_id,
