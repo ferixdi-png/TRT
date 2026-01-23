@@ -35,6 +35,7 @@ class WebhookHarness:
         self.application = await create_bot_application(settings)
         await self.application.initialize()
 
+        main_render._app_ready_event.set()
         object.__setattr__(self.application.bot, "_initialized", True)
         object.__setattr__(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
 
@@ -96,6 +97,7 @@ class WebhookHarness:
         if self.application:
             await self.application.shutdown()
         self.outbox = WebhookOutbox()
+        main_render._app_ready_event.clear()
         self.application = None
         self.handler = None
 

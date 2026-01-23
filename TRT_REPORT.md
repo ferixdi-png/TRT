@@ -1,5 +1,18 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-05 TRT: Webhook startup race fix (PTB init gating)
+
+### Что изменено
+* Введён state machine готовности webhook (asyncio.Event/Lock), чтобы апдейты не обрабатывались до полной инициализации.
+* Ранние апдейты теперь получают 503 + Retry-After и структурный лог `WEBHOOK_EARLY_UPDATE`.
+* Готовность webhook фиксируется логом `WEBHOOK_APP_READY` после `Application.initialize` и подтверждения webhook.
+
+### Тесты
+* `pytest -q tests/test_webhook_handler_ack.py tests/test_webhook_handler_smoke.py tests/test_webhook_handler_dedup.py tests/test_webhook_ready_state.py` — ✅
+
+### Итог
+**STOP** — прогнаны только целевые тесты; полный `pytest -q` и `python scripts/behavioral_e2e.py` ещё не запускались, нет подтверждения холодного старта без RuntimeError в реальном webhook-режиме.
+
 ## ✅ 2026-01-23 TRT: Referral bonus +10 (UI + логика + тесты)
 
 ### Что изменено
