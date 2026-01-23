@@ -156,9 +156,92 @@ _kie_credits_cache: Dict[str, Any] = {"timestamp": 0.0, "value": None}
 _background_tasks: Set[asyncio.Task] = set()
 
 
-def _register_background_task(task: asyncio.Task) -> None:
+def _log_background_task_result(task: asyncio.Task, *, action: str) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        logger.info("TASK_CANCELLED action=%s", action)
+    except Exception:
+        logger.error("TASK_FAILED action=%s", action, exc_info=True)
+
+
+def _register_background_task(task: asyncio.Task, *, action: str = "background") -> None:
     _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+
+    def _on_done(done_task: asyncio.Task) -> None:
+        _background_tasks.discard(done_task)
+        _log_background_task_result(done_task, action=action)
+
+    task.add_done_callback(_on_done)
+
+
+def _create_background_task(coro: Any, *, action: str) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _register_background_task(task, action=action)
+    return task
+
+
+LONG_CALLBACK_PREFIXES = (
+    "gen_type:",
+    "category:",
+    "select_model:",
+    "model:",
+    "modelk:",
+    "gen_view:",
+    "gen_repeat:",
+    "gen_history:",
+    "retry_generate:",
+    "retry_delivery:",
+    "admin_gen_nav:",
+    "admin_gen_view:",
+    "payment_screenshot_nav:",
+)
+
+LONG_CALLBACK_EXACT = {
+    "show_models",
+    "show_all_models_list",
+    "other_models",
+    "all_models",
+    "free_tools",
+    "check_balance",
+    "confirm_generate",
+    "back_to_menu",
+    "my_generations",
+    "generate_again",
+    "topup_balance",
+    "topup_custom",
+    "view_payment_screenshots",
+}
+
+
+def _get_callback_wait_text(callback_data: Optional[str], user_lang: str) -> Optional[str]:
+    if not callback_data:
+        return None
+    if callback_data in LONG_CALLBACK_EXACT or any(
+        callback_data.startswith(prefix) for prefix in LONG_CALLBACK_PREFIXES
+    ):
+        if user_lang == "en":
+            return "⏳ Please wait…"
+        return "⏳ Пожалуйста, подождите…"
+    return None
+
+
+async def _answer_callback_early(
+    query: Optional[CallbackQuery],
+    *,
+    user_lang: str,
+    callback_data: Optional[str],
+) -> None:
+    if not query:
+        return
+    text = _get_callback_wait_text(callback_data, user_lang)
+    try:
+        if text:
+            await query.answer(text=text, show_alert=False)
+        else:
+            await query.answer()
+    except Exception:
+        return
 
 
 def is_known_callback_data(callback_data: Optional[str]) -> bool:
@@ -406,8 +489,14 @@ async def user_action_audit_callback(update: Update, context: ContextTypes.DEFAU
     if not update.callback_query:
         return
     query = update.callback_query
-    correlation_id = ensure_correlation_id(update, context)
     user_id = query.from_user.id if query.from_user else None
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    await _answer_callback_early(
+        query,
+        user_lang=user_lang,
+        callback_data=query.data,
+    )
+    correlation_id = ensure_correlation_id(update, context)
     chat_id = query.message.chat_id if query.message else None
     update_id = getattr(update, "update_id", None)
     session_snapshot = _extract_session_snapshot(context, user_id, update_id)
@@ -475,7 +564,6 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
     """Deduplicate updates and apply per-user rate limits before handlers."""
     from telegram.ext import ApplicationHandlerStop
     from app.observability.no_silence_guard import track_outgoing_action
-    from app.ux.navigation import build_back_to_menu_keyboard
 
     user_id = update.effective_user.id if update.effective_user else None
     if not user_id:
@@ -899,6 +987,7 @@ from app.session_store import (
     ensure_session_cached,
     get_session_get_count,
 )
+from app.ux.navigation import build_back_to_menu_keyboard
 
 
 def ensure_source_of_truth() -> bool:
@@ -962,6 +1051,17 @@ def ensure_source_of_truth() -> bool:
     )
 
     validate_registry_consistency()
+    from app.pricing.ssot_catalog import validate_pricing_schema_consistency
+
+    pricing_issues = validate_pricing_schema_consistency()
+    if pricing_issues:
+        logger.warning("PRICING_SCHEMA_ISSUES count=%s", len(pricing_issues))
+        for model_id, model_issues in pricing_issues.items():
+            logger.warning(
+                "PRICING_SCHEMA_ISSUE model_id=%s issues=%s",
+                model_id,
+                "; ".join(model_issues),
+            )
     return True
 
 
@@ -976,6 +1076,11 @@ def get_model_by_id_from_registry(model_id: str) -> Optional[Dict[str, Any]]:
 
 
 _VISIBLE_MODEL_IDS_CACHE: Optional[Set[str]] = None
+_GEN_TYPE_MODELS_CACHE: Dict[str, Dict[str, Any]] = {}
+GEN_TYPE_MODELS_CACHE_TTL_SECONDS = float(os.getenv("GEN_TYPE_MODELS_CACHE_TTL_SECONDS", "30"))
+GEN_TYPE_MODELS_CACHE_STALE_TTL_SECONDS = float(
+    os.getenv("GEN_TYPE_MODELS_CACHE_STALE_TTL_SECONDS", "180")
+)
 
 
 def _get_visible_model_ids() -> Set[str]:
@@ -996,8 +1101,45 @@ def filter_visible_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [model for model in models if model.get("id") in visible_ids]
 
 
-def get_visible_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]:
+def _get_visible_models_by_generation_type_raw(gen_type: str) -> List[Dict[str, Any]]:
     return filter_visible_models(get_models_by_generation_type(gen_type))
+
+
+def _get_cached_gen_type_models(gen_type: str, *, allow_stale: bool) -> Optional[List[Dict[str, Any]]]:
+    entry = _GEN_TYPE_MODELS_CACHE.get(gen_type)
+    if not entry:
+        return None
+    age = time.monotonic() - entry["timestamp"]
+    if age <= GEN_TYPE_MODELS_CACHE_TTL_SECONDS:
+        return entry["models"]
+    if allow_stale and age <= GEN_TYPE_MODELS_CACHE_STALE_TTL_SECONDS:
+        return entry["models"]
+    return None
+
+
+def _store_gen_type_models_cache(gen_type: str, models: List[Dict[str, Any]]) -> None:
+    _GEN_TYPE_MODELS_CACHE[gen_type] = {
+        "timestamp": time.monotonic(),
+        "models": models,
+    }
+
+
+def get_visible_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]:
+    cached = _get_cached_gen_type_models(gen_type, allow_stale=False)
+    if cached is not None:
+        return cached
+    try:
+        models = _get_visible_models_by_generation_type_raw(gen_type)
+    except Exception as exc:
+        logger.warning(
+            "GEN_TYPE_MODELS_LOAD_FAILED gen_type=%s error=%s",
+            gen_type,
+            exc,
+        )
+        cached = _get_cached_gen_type_models(gen_type, allow_stale=True)
+        return cached or []
+    _store_gen_type_models_cache(gen_type, models)
+    return models
 
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
@@ -1130,7 +1272,7 @@ async def _render_gen_type_menu(
             if user_lang == "ru"
             else "⚠️ <b>Menu is taking longer than usual</b>\n\nPlease try again in a moment."
         )
-        reply_markup = build_back_to_menu_keyboard(user_lang)
+        reply_markup = build_back_to_menu_keyboard(user_lang, back_callback="show_models")
         await _safe_edit_or_reply(query, error_text, reply_markup=reply_markup)
         return ConversationHandler.END
     except Exception:
@@ -1139,13 +1281,14 @@ async def _render_gen_type_menu(
             if user_lang == "ru"
             else "❌ <b>Failed to load menu</b>\n\nPlease try again or return to the main menu."
         )
-        reply_markup = build_back_to_menu_keyboard(user_lang)
+        reply_markup = build_back_to_menu_keyboard(user_lang, back_callback="show_models")
         await _safe_edit_or_reply(query, error_text, reply_markup=reply_markup)
         return ConversationHandler.END
 
     if not models:
         error_text = t('msg_gen_type_no_models', lang=user_lang)
-        await _safe_edit_or_reply(query, error_text, parse_mode="HTML")
+        reply_markup = build_back_to_menu_keyboard(user_lang, back_callback="show_models")
+        await _safe_edit_or_reply(query, error_text, reply_markup=reply_markup, parse_mode="HTML")
         return ConversationHandler.END
 
     try:
@@ -1871,7 +2014,10 @@ async def register_active_generation_task(user_id: int) -> None:
         active_generation_tasks[user_id] = task
 
     def _cleanup(_task: asyncio.Task) -> None:
-        asyncio.create_task(_remove_active_generation_task(user_id))
+        _create_background_task(
+            _remove_active_generation_task(user_id),
+            action="active_generation_cleanup",
+        )
 
     task.add_done_callback(_cleanup)
 
@@ -3998,7 +4144,8 @@ def add_referral(referrer_id: int, referred_id: int):
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        loop.create_task(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
+        task = loop.create_task(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
+        _register_background_task(task, action="referral_bonus_referrer")
     else:
         asyncio.run(add_referral_free_bonus(referrer_id, REFERRAL_BONUS_GENERATIONS))
 
@@ -4010,7 +4157,8 @@ def give_bonus_generations(user_id: int, bonus_count: int):
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        loop.create_task(add_referral_free_bonus(user_id, bonus_count))
+        task = loop.create_task(add_referral_free_bonus(user_id, bonus_count))
+        _register_background_task(task, action="referral_bonus_legacy")
     else:
         asyncio.run(add_referral_free_bonus(user_id, bonus_count))
 
@@ -6258,6 +6406,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
         try:
+            if user_id:
+                reset_session_context(
+                    user_id,
+                    reason="command:/start",
+                    clear_gen_type=True,
+                    correlation_id=correlation_id,
+                    update_id=update.update_id,
+                    chat_id=chat_id,
+                )
             await show_main_menu(update, context, source="/start")
         except Exception as exc:
             logger.error("❌ /start handler failed: %s", exc, exc_info=True)
@@ -6406,8 +6563,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_answered = False
     try:
         if query:
+            user_id = query.from_user.id if query.from_user else None
+            user_lang = get_user_language(user_id) if user_id else "ru"
             try:
-                await query.answer()
+                await _answer_callback_early(
+                    query,
+                    user_lang=user_lang,
+                    callback_data=query.data,
+                )
                 callback_answered = True
                 if update_id is not None:
                     track_outgoing_action(update_id, action_type="answerCallbackQuery")
@@ -8055,16 +8218,16 @@ async def _button_callback_impl(
                 else "⏳ <b>Loading menu...</b>\n\nPlease wait a moment."
             )
             await _safe_edit_or_reply(query, loading_text, parse_mode="HTML")
-            task = asyncio.create_task(
+            _create_background_task(
                 _render_gen_type_menu(
                     query=query,
                     user_id=user_id,
                     gen_type=gen_type,
                     correlation_id=correlation_id,
                     update_id=update_id,
-                )
+                ),
+                action="render_gen_type_menu",
             )
-            _register_background_task(task)
             return SELECTING_MODEL
         
         if data.startswith("category:"):
@@ -8577,7 +8740,8 @@ async def _button_callback_impl(
                                 pass
                 
                 if context and getattr(context, "application", None):
-                    context.application.create_task(_render_all_models_list())
+                    task = context.application.create_task(_render_all_models_list())
+                    _register_background_task(task, action="render_all_models_list")
                 else:
                     await _render_all_models_list()
                 return SELECTING_MODEL
@@ -12471,7 +12635,7 @@ async def _button_callback_impl(
                 )
                 await _safe_edit_or_reply(query, loading_text, parse_mode="HTML")
                 if gen_type_hint:
-                    task = asyncio.create_task(
+                    _create_background_task(
                         _render_gen_type_menu(
                             query=query,
                             user_id=user_id,
@@ -12479,9 +12643,9 @@ async def _button_callback_impl(
                             correlation_id=correlation_id,
                             update_id=update_id,
                             notice_text=notice_text,
-                        )
+                        ),
+                        action="render_gen_type_menu_refresh",
                     )
-                    _register_background_task(task)
                 else:
                     reply_markup = build_back_to_menu_keyboard(user_lang)
                     await _safe_edit_or_reply(query, notice_text, reply_markup=reply_markup)
@@ -14913,7 +15077,10 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             del user_sessions[user_id]['waiting_for']
         
         # Start broadcast in background
-        asyncio.create_task(send_broadcast(context, broadcast_id, all_users, message_text, message_photo))
+        _create_background_task(
+            send_broadcast(context, broadcast_id, all_users, message_text, message_photo),
+            action="send_broadcast",
+        )
         
         return ConversationHandler.END
     
@@ -16844,6 +17011,10 @@ async def active_session_router(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = update.effective_user.id if update.effective_user else None
     if not user_id:
         return
+    if update.message.text:
+        command_text = update.message.text.split()[0]
+        if command_text in {"/start", "/admin"}:
+            return
     session_store = get_session_store(context)
     session = session_store.get(user_id)
     waiting_for = session.get("waiting_for") if isinstance(session, dict) else None
@@ -17309,6 +17480,12 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     start_time = time.time()
     query = update.callback_query
     user_id = update.effective_user.id
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    await _answer_callback_early(
+        query,
+        user_lang=user_lang,
+        callback_data=query.data if query else None,
+    )
     logger.debug(f"🔥🔥🔥 CONFIRM_GENERATION ENTRY: user_id={user_id}, query_id={query.id if query else 'None'}, data={query.data if query else 'None'}")
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
@@ -17423,7 +17600,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if user_lang == "ru"
             else "⏳ <b>Generation already starting</b>\n\nPlease wait a few seconds and try again."
         )
-        from app.ux.navigation import build_back_to_menu_keyboard
 
         await send_or_edit_message(
             throttle_text,
@@ -17601,7 +17777,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"{chr(10).join('• ' + err for err in validation_errors[:5])}\n\n"
             f"Please check parameters and try again."
         )
-        from app.ux.navigation import build_back_to_menu_keyboard
 
         await send_or_edit_message(
             error_text,
@@ -17922,7 +18097,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             KIERequestFailed,
         )
         from app.kie_catalog import get_model
-        from app.ux.navigation import build_back_to_menu_keyboard
 
         model_spec = get_model(model_id)
         if not model_spec:
@@ -19143,6 +19317,12 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current operation."""
     user_id = update.effective_user.id
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    await _answer_callback_early(
+        update.callback_query,
+        user_lang=user_lang,
+        callback_data=update.callback_query.data if update.callback_query else None,
+    )
 
     # If a generation is in-flight, cancel it first
     generation_cancelled = await cancel_active_generation(user_id)
@@ -19858,6 +20038,13 @@ async def _register_all_handlers_internal(application: Application):
     async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fallback handler for unknown callbacks - ensures no silence"""
         query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        await _answer_callback_early(
+            query,
+            user_lang=user_lang,
+            callback_data=query.data if query else None,
+        )
         if context and getattr(context, "user_data", None) is not None:
             if context.user_data.get("last_callback_handled_update_id") == update.update_id:
                 return
@@ -19865,7 +20052,6 @@ async def _register_all_handlers_internal(application: Application):
             logger.debug(f"Skipping unknown_callback_handler for known callback: {query.data}")
             return
         correlation_id = ensure_correlation_id(update, context)
-        user_id = query.from_user.id if query and query.from_user else None
         chat_id = query.message.chat_id if query and query.message else None
         from app.observability.no_silence_guard import get_no_silence_guard
         guard = get_no_silence_guard()
@@ -20654,6 +20840,14 @@ async def main():
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
         upsert_user_registry_entry(update.effective_user)
+        reset_session_context(
+            user_id,
+            reason="command:/admin",
+            clear_gen_type=True,
+            correlation_id=ensure_correlation_id(update, context),
+            update_id=update.update_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+        )
         
         # If "info" argument, show instance diagnostics
         if context.args and context.args[0].lower() == "info":
