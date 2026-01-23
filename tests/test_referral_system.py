@@ -45,6 +45,7 @@ async def test_referral_award_flow(monkeypatch, tmp_path):
 
     assert result["awarded"] is True
     assert await storage.get_referral_free_bank(101) == 10
+    assert await storage.get_referral_free_bank(202) == 10
 
     status = await get_free_generation_status(101)
     assert status["total_remaining"] >= 10
@@ -80,6 +81,7 @@ async def test_referral_idempotency(monkeypatch, tmp_path):
     assert second["awarded"] is False
     assert second["reason"] == "duplicate"
     assert await storage.get_referral_free_bank(111) == 10
+    assert await storage.get_referral_free_bank(222) == 10
 
 
 @pytest.mark.asyncio
