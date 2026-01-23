@@ -1,5 +1,68 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-07 TRT: Release-manager end-to-end audit (webhook/polling + abuse + resiliency)
+
+### Checklist “проверено”
+- **Webhook startup / readiness gate**: ранние апдейты 503 + Retry-After, готовность фиксируется `WEBHOOK_APP_READY`. (main_render.py, bot_kie.py, tests/test_webhook_ready_state.py)
+- **Webhook dedup + idempotency**: `update_id` dedup + request-id dedup, безопасный 200 на повторы. (main_render.py, bot_kie.py, tests/test_webhook_handler_dedup.py)
+- **Webhook abuse protection**: IP rate-limit (429 + Retry-After), payload size limit (413), backpressure (503 + Retry-After), processing timeout. (main_render.py, bot_kie.py, tests/test_webhook_abuse_protection.py)
+- **Polling mode safety**: preflight removal of webhook before polling. (bot_kie.py, tests/test_webhook_handler_ack.py)
+- **Routing commands/callbacks**: registered handlers and unknown-callback fallback without silence. (bot_kie.py, tests/test_callbacks_routing.py, tests/test_unknown_callback_fallback.py, tests/test_no_silence_all_callbacks.py)
+- **States/returns**: wizard/menu reset, back-to-menu anchors, step navigation. (tests/test_navigation_resets_session.py, tests/test_menu_anchor.py, tests/test_navigation_ux.py)
+- **Generation flows**: prompt flow, parameter flow, media requirements, no-silence responses. (tests/test_step1_prompt_flow.py, tests/test_input_parameters_wizard_flow.py, tests/test_required_media_flow.py)
+- **Payments/balance/limits/history**: idempotent charging + ledger, free limits/History checks. (tests/test_balance_idempotency.py, tests/test_payments_ledger.py, tests/test_free_limits_and_history_e2e.py)
+- **Postgres storage**: schema integrity, runtime migrations, pool checks. (tests/test_storage_runtime_migration.py, tests/test_postgres_storage_loop_pools.py)
+- **Redis locks / degraded mode**: singleton lock renewal + fallback. (tests/test_singleton_lock_redis_renewal.py, tests/test_singleton_lock_fallback.py)
+- **Structured logs / redaction**: structured logs, token redaction, trace correlation. (app/observability/structured_logs.py, app/observability/redaction.py, tests/test_recordinfo_redaction.py)
+
+### Матрица рисков
+| Severity | Риск | Статус | Доказательство |
+| --- | --- | --- | --- |
+| Critical | — | ✅ empty | n/a |
+| High | Реальные production ENV ключи не прогонялись в этом окружении | ⚠️ OPEN | требует ручного прогона `pytest -q` и e2e с реальными ключами |
+| Medium | e2e нагрузочный мини-прогон (флуд-симуляция) не выполнен | ⚠️ OPEN | добавить/запустить `python scripts/behavioral_e2e.py` |
+| Low | Нет отдельного IP-based rate-limit теста для webhook в bot_kie handler | 🟡 accepted | coverage есть через main_render handler tests |
+
+### Доказательства для critical-пунктов
+Critical-пункты отсутствуют (см. таблицу рисков).
+
+### Abuse/Spam (лимиты и расположение)
+- **Webhook IP rate-limit**: `WEBHOOK_IP_RATE_LIMIT_PER_SEC/BURST` → `main_render.py` / `bot_kie.py` (429 + Retry-After).
+- **Payload size limit**: `WEBHOOK_MAX_PAYLOAD_BYTES` → `main_render.py` / `bot_kie.py` (413).
+- **Request dedup**: `WEBHOOK_REQUEST_DEDUP_TTL_SECONDS` → `main_render.py` / `bot_kie.py`.
+- **Update/callback dedup + per-user rate limit**: `bot_kie.py` (`_update_deduper`, `_callback_deduper`, `_message_rate_limiter`, `_callback_rate_limiter`).
+- **Callback anti-flood**: `_callback_data_rate_limiter` + no-silence responses (bot_kie.py).
+- **Backpressure**: `WEBHOOK_CONCURRENCY_LIMIT/WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS` → webhook handlers.
+
+### Runbook (20 строк: как диагностировать инцидент по логам)
+1. Ищи `STRUCTURED_LOG` с `action=TG_RATE_LIMIT` — user-level throttle.
+2. Ищи `action=WEBHOOK_ABUSE` — webhook abuse (payload/rate limit).
+3. Ищи `action=WEBHOOK_BACKPRESSURE` — concurrency limit (Retry-After).
+4. Ищи `action=WEBHOOK_TIMEOUT` — update processing timeout.
+5. Ищи `action=WEBHOOK_EARLY_UPDATE` — апдейты до готовности.
+6. Ищи `action=WEBHOOK_APP_READY` — факт готовности.
+7. Ищи `ROUTER_FAIL` — исключения внутри router boundary.
+8. Ищи `UNKNOWN_CALLBACK` — неизвестные callback’и.
+9. Ищи `CONFIG_VALIDATION_FAILED` — ошибка ENV на старте.
+10. Ищи `BOOT DIAGNOSTICS failed` — fail-fast диагностика.
+11. Ищи `DB connection failed` — потеря DB.
+12. Ищи `STORAGE_JSON_SANITIZED` — non-JSON payloads.
+13. Ищи `[LOCK] Passive mode` — не взят singleton lock.
+14. Ищи `WEBHOOK correlation_id=... forward_failed=true` — обработка update failed.
+15. Ищи `KIE`/`GATEWAY` ошибки — внешние вызовы.
+16. Ищи `PRICE`/`BILLING` — billing preflight.
+17. Ищи `CALLBACK_DEDUP` — повторные клики.
+18. Ищи `TG_UPDATE_IN ... outcome=deduped` — повтор update_id.
+19. Ищи `ERROR_ID` поля в STRUCTURED_LOG для fix_hint.
+20. Сравни `correlation_id` сквозных логов для трассировки.
+
+### Тесты (локальные прогоны)
+- `pytest -q` — ✅ (локально, без реальных production ключей)
+- `pytest -q tests/test_all_scenarios_e2e.py` — ✅ (локально, без реальных production ключей)
+
+### Итог
+**STOP** — требования по реальным ENV ключам и обязательным e2e/pytest прогонам не выполнены; high-риски не пустые.
+
 ## ✅ 2026-02-05 TRT: Webhook startup race fix (PTB init gating)
 
 ### Что изменено
