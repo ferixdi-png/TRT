@@ -36,6 +36,7 @@ def _ensure_test_dependencies() -> None:
 _ensure_test_dependencies()
 
 from tests.ptb_harness import PTBHarness
+from tests.webhook_harness import WebhookHarness
 
 
 @pytest.fixture(scope="function")
@@ -101,6 +102,45 @@ def test_env():
 def harness(test_env):
     """Создает и возвращает PTBHarness для тестов."""
     h = PTBHarness()
+    asyncio.run(h.setup())
+    yield h
+    asyncio.run(h.teardown())
+
+
+@pytest.fixture(scope="function")
+def webhook_harness(monkeypatch, tmp_path):
+    """Webhook harness с PTB application и mocked bot transport."""
+    env_vars = {
+        "TEST_MODE": "1",
+        "DRY_RUN": "0",
+        "ALLOW_REAL_GENERATION": "1",
+        "KIE_STUB": "1",
+        "TELEGRAM_BOT_TOKEN": "test_token_12345",
+        "ADMIN_ID": "12345",
+        "BOT_INSTANCE_ID": "test-instance",
+        "BOT_MODE": "webhook",
+        "GITHUB_STORAGE_STUB": "1",
+        "GITHUB_TOKEN": "stub-token",
+        "GITHUB_REPO": "owner/repo",
+        "STORAGE_BRANCH": "storage",
+        "GITHUB_BRANCH": "main",
+        "RUNTIME_STORAGE_DIR": str(tmp_path / "runtime"),
+        "WEBHOOK_BASE_URL": "http://127.0.0.1:8000",
+    }
+    for key, value in env_vars.items():
+        monkeypatch.setenv(key, value)
+    try:
+        from app.config import reset_settings
+        reset_settings()
+    except Exception:
+        pass
+    try:
+        from app.storage.factory import reset_storage
+        reset_storage()
+    except Exception:
+        pass
+
+    h = WebhookHarness()
     asyncio.run(h.setup())
     yield h
     asyncio.run(h.teardown())

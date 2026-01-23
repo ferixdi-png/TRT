@@ -41,6 +41,7 @@ class JsonStorage(BaseStorage):
         self.hourly_free_usage_file = self.data_dir / "hourly_free_usage.json"
         self.referral_free_bank_file = self.data_dir / "referral_free_bank.json"
         self.admin_limits_file = self.data_dir / "admin_limits.json"
+        self.balance_deductions_file = self.data_dir / "balance_deductions.json"
         self.generations_history_file = self.data_dir / "generations_history.json"
         self.payments_file = self.data_dir / "payments.json"
         self.referrals_file = self.data_dir / "referrals.json"
@@ -59,6 +60,7 @@ class JsonStorage(BaseStorage):
             self.hourly_free_usage_file,
             self.referral_free_bank_file,
             self.admin_limits_file,
+            self.balance_deductions_file,
             self.generations_history_file,
             self.payments_file,
             self.referrals_file,
@@ -229,6 +231,58 @@ class JsonStorage(BaseStorage):
             new_balance,
         )
         return True
+
+    async def charge_balance_once(
+        self,
+        user_id: int,
+        amount: float,
+        *,
+        task_id: str,
+        sku_id: str = "",
+        model_id: str = "",
+    ) -> Dict[str, Any]:
+        """Идемпотентное списание по task_id."""
+        if not task_id:
+            return {"status": "missing_task_id"}
+
+        deductions = await self._load_json(self.balance_deductions_file)
+        if task_id in deductions:
+            balance_before = await self.get_user_balance(user_id)
+            return {
+                "status": "duplicate",
+                "balance_before": balance_before,
+                "balance_after": balance_before,
+            }
+
+        balance_before = await self.get_user_balance(user_id)
+        if balance_before < amount:
+            return {
+                "status": "insufficient",
+                "balance_before": balance_before,
+                "balance_after": balance_before,
+            }
+        balance_after = balance_before - amount
+        if balance_after < 0:
+            return {
+                "status": "negative_blocked",
+                "balance_before": balance_before,
+                "balance_after": balance_before,
+            }
+
+        await self.set_user_balance(user_id, balance_after)
+        deductions[task_id] = {
+            "user_id": user_id,
+            "model_id": model_id,
+            "sku_id": sku_id,
+            "amount": amount,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        await self._save_json(self.balance_deductions_file, deductions)
+        return {
+            "status": "charged",
+            "balance_before": balance_before,
+            "balance_after": balance_after,
+        }
     
     async def get_user_language(self, user_id: int) -> str:
         """Получить язык пользователя"""

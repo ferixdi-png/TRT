@@ -1,0 +1,45 @@
+import asyncio
+import json
+from unittest.mock import AsyncMock, MagicMock
+
+from aiohttp import web
+
+import main_render
+
+
+def _build_request(payload):
+    request = MagicMock(spec=web.Request)
+    request.headers = {"X-Request-ID": "corr-webhook-dedup"}
+    request.method = "POST"
+    request.path = "/webhook"
+    request.content_length = len(json.dumps(payload))
+    request.json = AsyncMock(return_value=payload)
+    return request
+
+
+async def test_webhook_handler_deduplicates_update(harness, monkeypatch):
+    monkeypatch.setattr(main_render, "_bot_ready", True)
+    monkeypatch.setattr(main_render, "_handler_ready", True)
+
+    process_update = AsyncMock()
+    object.__setattr__(harness.application, "process_update", process_update)
+    handler = main_render.build_webhook_handler(harness.application, MagicMock())
+
+    payload = {
+        "update_id": 10,
+        "message": {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 100, "type": "private"},
+            "from": {"id": 100, "is_bot": False, "first_name": "Tester"},
+            "text": "/start",
+        },
+    }
+
+    response_first = await handler(_build_request(payload))
+    response_second = await handler(_build_request(payload))
+    await asyncio.sleep(0)
+
+    assert response_first.status == 200
+    assert response_second.status == 200
+    assert process_update.call_count == 1
