@@ -117,7 +117,14 @@ class KIEStub:
             self._tasks[task_id]['resultText'] = result_text
             logger.debug(f"[STUB] Task {task_id} -> success")
     
-    async def get_task_status(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def get_task_status(
+        self,
+        task_id: str,
+        correlation_id: Optional[str] = None,
+        poll_attempt: Optional[int] = None,
+        total_wait_ms: Optional[int] = None,
+        retry_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Получить статус задачи (симуляция)
         
@@ -205,6 +212,19 @@ class KIEStub:
                 return status
             
             await asyncio.sleep(poll_interval)
+
+    async def cancel_task(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+        if task_id not in self._tasks:
+            return {"ok": False, "status": 404, "error": "Task not found", "correlation_id": correlation_id}
+        self._tasks[task_id]["state"] = "canceled"
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="KIE_TASK_CANCEL",
+            action_path="kie_stub.cancel_task",
+            outcome="stub_canceled",
+            param={"task_id": task_id},
+        )
+        return {"ok": True, "taskId": task_id, "correlation_id": correlation_id}
 
 
 def get_kie_client_or_stub():

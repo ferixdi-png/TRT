@@ -19026,17 +19026,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             job_id=job_id,
             outcome="started",
         )
-    cancel_keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    t('btn_cancel', lang=user_lang),
-                    callback_data=_build_cancel_callback(job_id),
-                )
-            ]
-        ]
-    )
-    status_message = await send_or_edit_message(loading_msg, reply_markup=cancel_keyboard)
+    status_keyboard = _build_generation_status_keyboard(user_lang, job_id)
+    status_message = await send_or_edit_message(loading_msg, reply_markup=status_keyboard)
 
     # Progress tracking state
     last_progress_ts = 0.0
@@ -19048,12 +19039,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
         
         stage = event.get("stage")
-        if stage == last_stage:
+        if not stage:
             return
-        
+
         # Limit updates to avoid flood limits
         now = time.monotonic()
-        if stage == last_stage and now - last_progress_ts < 3:
+        min_interval = float(event.get("min_interval") or 3)
+        if stage == last_stage and now - last_progress_ts < min_interval:
             return
         
         last_progress_ts = now
@@ -19075,18 +19067,28 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
         elif stage == "KIE_POLL":
             elapsed = int(event.get("elapsed") or 0)
+            state_raw = event.get("state") or ""
+            retry_count = int(event.get("retry_count") or 0)
+            status_line = ""
+            retry_line = ""
+            if state_raw:
+                status_label = "📊 Статус" if user_lang == "ru" else "📊 Status"
+                status_line = f"\n{status_label}: {state_raw}"
+            if retry_count:
+                retry_label = "🔁 Повтор" if user_lang == "ru" else "🔁 Retry"
+                retry_line = f"\n{retry_label}: {retry_count}"
             if user_lang == "ru":
                 progress_msg = (
                     "⚙️ <b>Готовлю результат…</b>\n\n"
                     f"🤖 <b>Модель:</b> {model_name}\n"
-                    f"⏱️ Прошло: {elapsed} сек\n"
+                    f"⏱️ Прошло: {elapsed} сек{status_line}{retry_line}\n"
                     "💡 Обрабатываю ваш запрос..."
                 )
             else:
                 progress_msg = (
                     "⚙️ <b>Preparing result…</b>\n\n"
                     f"🤖 <b>Model:</b> {model_name}\n"
-                    f"⏱️ Elapsed: {elapsed}s\n"
+                    f"⏱️ Elapsed: {elapsed}s{status_line}{retry_line}\n"
                     "💡 Processing your request..."
                 )
         elif stage == "KIE_COMPLETE":
@@ -19119,7 +19121,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 outcome="attempt",
                 param={"stage": stage, "tg_method": "edit_message_text"},
             )
-            await status_message.edit_text(progress_msg, parse_mode="HTML")
+            await status_message.edit_text(progress_msg, parse_mode="HTML", reply_markup=status_keyboard)
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -19218,6 +19220,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         task_id = job_result.task_id
         session["task_id"] = task_id
+        if job_id:
+            _update_job_record(job_id, task_id=task_id, updated_ts_ms=_now_ms())
         if request_key:
             _request_tracker.update_task_id(request_key, task_id)
             if prompt_hash:
