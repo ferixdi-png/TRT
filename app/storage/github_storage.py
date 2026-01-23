@@ -1058,23 +1058,35 @@ class GitHubStorage(BaseStorage):
         price: float,
         task_id: Optional[str] = None,
         status: str = "pending",
+        *,
+        job_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        prompt_hash: Optional[str] = None,
+        result_url: Optional[str] = None,
+        error_code: Optional[str] = None,
     ) -> str:
         from uuid import uuid4
 
-        job_id = task_id or str(uuid4())
+        job_id = job_id or task_id or str(uuid4())
 
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
             data[job_id] = {
                 "job_id": job_id,
+                "request_id": request_id,
                 "user_id": user_id,
                 "model_id": model_id,
                 "model_name": model_name,
+                "prompt": prompt,
+                "prompt_hash": prompt_hash,
                 "params": params,
                 "price": price,
                 "task_id": task_id,
                 "status": status,
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
+                "result_url": result_url,
+                "error_code": error_code,
             }
             return data
 
@@ -1087,6 +1099,8 @@ class GitHubStorage(BaseStorage):
         status: str,
         result_urls: Optional[List[str]] = None,
         error_message: Optional[str] = None,
+        error_code: Optional[str] = None,
+        result_url: Optional[str] = None,
     ) -> None:
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
             job = data.get(job_id)
@@ -1096,8 +1110,14 @@ class GitHubStorage(BaseStorage):
             job["updated_at"] = datetime.now().isoformat()
             if result_urls is not None:
                 job["result_urls"] = result_urls
+                if result_urls:
+                    job["result_url"] = result_urls[0]
             if error_message:
                 job["error_message"] = error_message
+            if error_code:
+                job["error_code"] = error_code
+            if result_url:
+                job["result_url"] = result_url
             data[job_id] = job
             return data
 

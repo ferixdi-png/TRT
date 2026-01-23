@@ -41,8 +41,10 @@ from app.observability.trace import (
     trace_event,
 )
 from app.observability.error_catalog import ERROR_CATALOG
+from app.observability.request_logger import log_request_event
 from app.middleware.rate_limit import PerKeyRateLimiter, PerUserRateLimiter, TTLCache
 from app.session_store import get_session_store, get_session_cached
+from app.generations.request_tracker import RequestTracker, build_request_key
 
 logger = logging.getLogger(__name__)
 DEBUG_VERBOSE_LOGS = os.getenv("DEBUG_VERBOSE_LOGS", "0").lower() in ("1", "true", "yes")
@@ -2168,6 +2170,9 @@ pending_deliveries_lock = asyncio.Lock()
 # Generation submit locks to prevent double confirm clicks
 generation_submit_locks: dict[int, float] = {}
 GENERATION_SUBMIT_LOCK_TTL_SECONDS = 20
+REQUEST_DEDUPE_WINDOW_SECONDS = int(os.getenv("GENERATION_DEDUPE_WINDOW_SECONDS", "15"))
+_request_tracker = RequestTracker(ttl_seconds=REQUEST_DEDUPE_WINDOW_SECONDS)
+_pending_result_checks: Dict[int, float] = {}
 
 # Store saved generation data for "generate again" feature
 saved_generations = {}
@@ -3341,6 +3346,9 @@ def _create_job_record(
     correlation_id: Optional[str],
     state: str,
     start_ts_ms: int,
+    request_id: Optional[str] = None,
+    prompt: Optional[str] = None,
+    prompt_hash: Optional[str] = None,
 ) -> dict:
     data = _load_jobs_registry()
     record = {
@@ -3350,6 +3358,9 @@ def _create_job_record(
         "message_id": message_id,
         "model_id": model_id,
         "correlation_id": correlation_id,
+        "request_id": request_id,
+        "prompt": prompt,
+        "prompt_hash": prompt_hash,
         "state": state,
         "start_ts_ms": start_ts_ms,
         "updated_ts_ms": start_ts_ms,
@@ -3472,6 +3483,103 @@ def _recover_jobs_on_startup() -> None:
         )
     if updated:
         _save_jobs_registry(data)
+
+
+async def _check_and_deliver_pending_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Check for timed-out/running jobs and attempt late delivery."""
+    user_id = update.effective_user.id if update and update.effective_user else None
+    if not user_id:
+        return
+    now = time.monotonic()
+    last_check = _pending_result_checks.get(user_id, 0.0)
+    if now - last_check < 8:
+        return
+    _pending_result_checks[user_id] = now
+    try:
+        from app.storage import get_storage
+        from app.integrations.kie_stub import get_kie_client_or_stub
+        from app.generations.universal_engine import parse_record_info
+        from app.kie_catalog import get_model
+        from app.generations.telegram_sender import send_result_file
+        from app.config import get_settings
+    except Exception as exc:
+        logger.debug("Pending result check skipped: %s", exc)
+        return
+
+    storage = get_storage()
+    jobs = await storage.list_jobs(user_id=user_id, limit=10)
+    pending_jobs = [
+        job for job in jobs
+        if job.get("status") in {"timeout", "queued", "running", "pending"}
+    ]
+    if not pending_jobs:
+        return
+    client = get_kie_client_or_stub()
+    for job in pending_jobs:
+        task_id = job.get("task_id") or job.get("external_task_id")
+        model_id = job.get("model_id")
+        if not task_id or not model_id:
+            continue
+        try:
+            status = await client.get_task_status(task_id)
+        except Exception:
+            continue
+        state_raw = status.get("state") or ""
+        state = state_raw.lower()
+        if state in {"success", "completed", "succeeded"}:
+            status["taskId"] = task_id
+            model_spec = get_model(model_id)
+            if not model_spec:
+                continue
+            base_url = get_settings().kie_result_cdn_base_url
+            try:
+                job_result = parse_record_info(
+                    status,
+                    model_spec.output_media_type,
+                    model_id,
+                    correlation_id=job.get("request_id"),
+                    base_url=base_url,
+                )
+            except Exception:
+                continue
+            delivered = await send_result_file(
+                context.bot,
+                user_id,
+                job_result.media_type,
+                job_result.urls,
+                job_result.text,
+                model_id=model_id,
+                gen_type=model_spec.model_mode,
+                correlation_id=None,
+                request_id=job.get("request_id"),
+                prompt_hash=job.get("prompt_hash"),
+                params={"prompt": job.get("prompt")} if job.get("prompt") else None,
+                model_label=model_spec.name or model_id,
+            )
+            if delivered:
+                await storage.update_job_status(
+                    job.get("job_id"),
+                    "completed",
+                    result_urls=job_result.urls,
+                )
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="✅ <b>Готово</b>",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [InlineKeyboardButton("🔁 Повторить", callback_data="retry_generate:")],
+                            [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
+                        ]
+                    ),
+                )
+        elif state in {"failed", "fail", "error", "canceled", "cancelled", "canceled"}:
+            await storage.update_job_status(
+                job.get("job_id"),
+                "failed",
+                error_message=status.get("failMsg"),
+                error_code=status.get("failCode") or "KIE_FAIL_STATE",
+            )
 
 
 async def build_admin_user_overview(target_user_id: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -6971,6 +7079,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     update_id = getattr(update, "update_id", None)
     callback_answered = False
     try:
+        _create_background_task(
+            _check_and_deliver_pending_results(update, context),
+            action="pending_result_check",
+        )
         if query:
             user_id = query.from_user.id if query.from_user else None
             user_lang = get_user_language(user_id) if user_id else "ru"
@@ -7219,6 +7331,10 @@ async def _button_callback_impl(
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
+    _create_background_task(
+        _check_and_deliver_pending_results(update, context),
+        action="pending_result_check",
+    )
     update_id = update.update_id
     correlation_id = ensure_correlation_id(update, context)
     # ==================== END NO-SILENCE GUARD ====================
@@ -8542,12 +8658,12 @@ async def _button_callback_impl(
                 )
                 return ConversationHandler.END
 
-            from app.generations.telegram_sender import deliver_result
+            from app.generations.telegram_sender import send_result_file
 
             delivered = False
             try:
                 delivered = bool(
-                    await deliver_result(
+                    await send_result_file(
                         context.bot,
                         payload["chat_id"],
                         payload["media_type"],
@@ -8556,6 +8672,8 @@ async def _button_callback_impl(
                         model_id=payload.get("model_id"),
                         gen_type=payload.get("gen_type"),
                         correlation_id=payload.get("correlation_id"),
+                        request_id=payload.get("request_id"),
+                        prompt_hash=payload.get("prompt_hash"),
                         params=payload.get("params"),
                         model_label=payload.get("model_label"),
                     )
@@ -15074,6 +15192,10 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
+    _create_background_task(
+        _check_and_deliver_pending_results(update, context),
+        action="pending_result_check",
+    )
     update_id = update.update_id
     # ==================== END NO-SILENCE GUARD ====================
 
@@ -17561,6 +17683,10 @@ async def active_session_router(update: Update, context: ContextTypes.DEFAULT_TY
     from telegram.ext import ApplicationHandlerStop
     from app.observability.no_silence_guard import get_no_silence_guard
 
+    _create_background_task(
+        _check_and_deliver_pending_results(update, context),
+        action="pending_result_check",
+    )
     if not update.message:
         return
     user_id = update.effective_user.id if update.effective_user else None
@@ -17618,6 +17744,10 @@ async def _global_text_router_impl(update: Update, context: ContextTypes.DEFAULT
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
 
     guard = get_no_silence_guard()
+    _create_background_task(
+        _check_and_deliver_pending_results(update, context),
+        action="pending_result_check",
+    )
     update_id = update.update_id
     user_id = update.effective_user.id if update.effective_user else None
     if _should_dedupe_update(
@@ -17693,6 +17823,10 @@ async def _global_photo_router_impl(update: Update, context: ContextTypes.DEFAUL
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
 
     guard = get_no_silence_guard()
+    _create_background_task(
+        _check_and_deliver_pending_results(update, context),
+        action="pending_result_check",
+    )
     update_id = update.update_id
     user_id = update.effective_user.id if update.effective_user else None
     if _should_dedupe_update(
@@ -18353,6 +18487,25 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Параметры нормализованы, используем api_params вместо params
     params = api_params
+
+    prompt_value = params.get("prompt") or params.get("text") or params.get("caption")
+    prompt_hash = prompt_summary(prompt_value).get("prompt_hash")
+    request_id = session.get("request_id") or str(uuid.uuid4())
+    session["request_id"] = request_id
+    session["prompt_hash"] = prompt_hash
+    log_request_event(
+        request_id=request_id,
+        user_id=user_id,
+        model=model_id,
+        prompt_hash=prompt_hash,
+        task_id=None,
+        job_id=job_id,
+        status="ui_received",
+        latency_ms=0,
+        attempt=0,
+        error_code=None,
+        error_msg=None,
+    )
     
     logger.info(
         "✅ Input normalized from SSOT: model_id=%s keys=%s",
@@ -18560,6 +18713,55 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "💡 Usually takes a few seconds..."
     ).format(model_name=model_name)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
+    request_key = None
+    if prompt_hash:
+        from app.utils.distributed_lock import distributed_lock
+
+        request_key = build_request_key(user_id, model_id, prompt_hash)
+        existing = _request_tracker.get(request_key)
+        if existing:
+            log_request_event(
+                request_id=request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=existing.task_id,
+                job_id=existing.job_id,
+                status="deduped",
+                latency_ms=0,
+                attempt=0,
+                error_code="DUPLICATE_REQUEST",
+                error_msg="duplicate_within_window",
+            )
+            await send_or_edit_message(
+                (
+                    "⚠️ <b>Генерация уже запущена</b>\n\n"
+                    f"Текущий Task ID: <code>{existing.task_id or 'pending'}</code>\n"
+                    "Жду результат текущей задачи."
+                    if user_lang == "ru"
+                    else (
+                        "⚠️ <b>Generation already running</b>\n\n"
+                        f"Current Task ID: <code>{existing.task_id or 'pending'}</code>\n"
+                        "Waiting for the current result."
+                    )
+                ),
+                parse_mode="HTML",
+                reply_markup=build_back_to_menu_keyboard(user_lang),
+            )
+            return ConversationHandler.END
+        lock_key = f"gen:{user_id}:{model_id}:{prompt_hash}"
+        async with distributed_lock(lock_key, ttl_seconds=REQUEST_DEDUPE_WINDOW_SECONDS, wait_seconds=0) as acquired:
+            if not acquired:
+                await send_or_edit_message(
+                    (
+                        "⚠️ <b>Генерация уже запускается</b>\n\nПодождите несколько секунд."
+                        if user_lang == "ru"
+                        else "⚠️ <b>Generation is starting</b>\n\nPlease wait a few seconds."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=build_back_to_menu_keyboard(user_lang),
+                )
+                return ConversationHandler.END
     if not job_id:
         job_id = f"job-{uuid.uuid4().hex[:12]}"
         session["job_id"] = job_id
@@ -18574,6 +18776,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             correlation_id=correlation_id,
             state="queued",
             start_ts_ms=session["job_start_ts_ms"],
+            request_id=request_id,
+            prompt=prompt_value,
+            prompt_hash=prompt_hash,
         )
         _log_job_state_update(
             correlation_id=correlation_id,
@@ -18587,6 +18792,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             state_before=None,
             state_after="queued",
         )
+        if request_key:
+            _request_tracker.set(request_key, job_id)
     cancel_keyboard = InlineKeyboardMarkup(
         [
             [
@@ -18696,7 +18903,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             logger.warning("Progress update failed: %s", send_exc)
 
     try:
-        from app.generations.telegram_sender import deliver_result
+        from app.generations.telegram_sender import send_result_file
         from app.generations.universal_engine import (
             run_generation,
             KIEJobFailed,
@@ -18762,8 +18969,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             progress_callback=progress_callback,
             timeout=timeout_seconds,
             poll_interval=poll_interval,
+            request_id=request_id,
+            prompt_hash=prompt_hash,
+            prompt=prompt_value,
+            job_id=job_id,
         )
         task_id = job_result.task_id
+        session["task_id"] = task_id
+        if request_key:
+            _request_tracker.update_task_id(request_key, task_id)
 
         if user_id not in saved_generations:
             saved_generations[user_id] = {}
@@ -18773,6 +18987,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "params": params.copy(),
             "properties": session.get("properties", {}).copy(),
             "required": session.get("required", []).copy(),
+            "request_id": request_id,
+            "prompt_hash": prompt_hash,
         }
 
         delivered = False
@@ -18786,6 +19002,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "model_id": model_id,
                 "gen_type": session.get("gen_type"),
                 "correlation_id": correlation_id,
+                "request_id": request_id,
+                "prompt_hash": prompt_hash,
                 "params": params,
                 "model_label": model_name_display,
                 "task_id": job_result.task_id,
@@ -18799,7 +19017,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 pending_deliveries[(user_id, job_result.task_id)] = pending_payload
             try:
                 delivered = bool(
-                    await deliver_result(
+                    await send_result_file(
                         context.bot,
                         user_id,
                         job_result.media_type,
@@ -18808,6 +19026,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         model_id=model_id,
                         gen_type=session.get("gen_type"),
                         correlation_id=correlation_id,
+                        request_id=request_id,
+                        prompt_hash=prompt_hash,
                         params=params,
                         model_label=model_name_display,
                     )
@@ -18831,6 +19051,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if delivered:
                 async with pending_deliveries_lock:
                     pending_deliveries.pop((user_id, job_result.task_id), None)
+                try:
+                    from app.storage import get_storage
+
+                    await get_storage().update_job_status(
+                        job_id,
+                        "completed",
+                        result_urls=job_result.urls,
+                    )
+                except Exception as storage_exc:
+                    logger.warning("Failed to update storage job completion: %s", storage_exc)
                 if not dry_run:
                     await _commit_post_delivery_charge(
                         session=session,
@@ -19012,6 +19242,30 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 state_before=state_before,
                 state_after="failed",
             )
+            try:
+                from app.storage import get_storage
+
+                await get_storage().update_job_status(
+                    job_id,
+                    "failed",
+                    error_message=exc.user_message or str(exc),
+                    error_code=exc.error_code or "KIE_REQUEST_FAILED",
+                )
+            except Exception as storage_exc:
+                logger.warning("Failed to update storage job failure: %s", storage_exc)
+        log_request_event(
+            request_id=session.get("request_id", request_id),
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=session.get("prompt_hash"),
+            task_id=session.get("task_id"),
+            job_id=job_id,
+            status="request_failed",
+            latency_ms=int((time.time() - start_time) * 1000),
+            attempt=None,
+            error_code=exc.error_code or "KIE_REQUEST_FAILED",
+            error_msg=exc.user_message or str(exc),
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -19137,6 +19391,30 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 state_before=state_before,
                 state_after="timed_out",
             )
+            try:
+                from app.storage import get_storage
+
+                await get_storage().update_job_status(
+                    job_id,
+                    "timeout",
+                    error_message="timeout",
+                    error_code="ERR_KIE_TIMEOUT",
+                )
+            except Exception as storage_exc:
+                logger.warning("Failed to update storage job timeout: %s", storage_exc)
+        log_request_event(
+            request_id=session.get("request_id", request_id),
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=session.get("prompt_hash"),
+            task_id=session.get("task_id"),
+            job_id=job_id,
+            status="timeout",
+            latency_ms=int((time.time() - start_time) * 1000),
+            attempt=None,
+            error_code="ERR_KIE_TIMEOUT",
+            error_msg=str(exc),
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -19172,13 +19450,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         timeout_text = (
             "⏳ <b>Генерация заняла слишком много времени</b>\n\n"
-            "Что случилось: превышен таймаут ожидания.\n"
-            "Что сделать: попробуйте снова чуть позже.\n"
+            "Мы всё ещё считаем результат. Можно повторить попытку.\n"
             "Код: <code>ERR_KIE_TIMEOUT</code>"
+        )
+        timeout_keyboard = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🔁 Повторить", callback_data="retry_generate:")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
+            ]
         )
         await send_or_edit_message(
             _append_free_counter_text(timeout_text, free_counter_line),
             parse_mode="HTML",
+            reply_markup=timeout_keyboard,
         )
         return ConversationHandler.END
     except KIEJobFailed as exc:
@@ -19200,6 +19484,30 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 state_before=state_before,
                 state_after="failed",
             )
+            try:
+                from app.storage import get_storage
+
+                await get_storage().update_job_status(
+                    job_id,
+                    "failed",
+                    error_message=exc.fail_msg or str(exc),
+                    error_code=exc.fail_code or "KIE_FAIL_STATE",
+                )
+            except Exception as storage_exc:
+                logger.warning("Failed to update storage job failure: %s", storage_exc)
+        log_request_event(
+            request_id=session.get("request_id", request_id),
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=session.get("prompt_hash"),
+            task_id=session.get("task_id"),
+            job_id=job_id,
+            status="failed",
+            latency_ms=int((time.time() - start_time) * 1000),
+            attempt=None,
+            error_code=exc.fail_code or "KIE_FAIL_STATE",
+            error_msg=exc.fail_msg or str(exc),
+        )
         redacted_record = redact_payload(exc.record_info or {})
         log_structured_event(
             correlation_id=correlation_id,
@@ -19255,6 +19563,30 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 state_before=state_before,
                 state_after="failed",
             )
+            try:
+                from app.storage import get_storage
+
+                await get_storage().update_job_status(
+                    job_id,
+                    "failed",
+                    error_message=error_text,
+                    error_code=getattr(exc, "error_code", "KIE_RESULT_ERROR"),
+                )
+            except Exception as storage_exc:
+                logger.warning("Failed to update storage job parse failure: %s", storage_exc)
+        log_request_event(
+            request_id=session.get("request_id", request_id),
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=session.get("prompt_hash"),
+            task_id=session.get("task_id"),
+            job_id=job_id,
+            status="result_error",
+            latency_ms=int((time.time() - start_time) * 1000),
+            attempt=None,
+            error_code=getattr(exc, "error_code", "KIE_RESULT_ERROR"),
+            error_msg=error_text,
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -19696,9 +20028,11 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     if result_urls:
-                        from app.generations.telegram_sender import deliver_result
+                        from app.generations.telegram_sender import send_result_file
                         model_info = saved_session_data.get('model_info', {}) if saved_session_data else {}
                         model_name_display = model_name if model_name else model_id
+                        request_id = (saved_session_data or {}).get("request_id")
+                        prompt_hash = (saved_session_data or {}).get("prompt_hash")
                         pending_payload = {
                             "chat_id": chat_id,
                             "media_type": (model_info.get("output_media_type") if model_info else None) or "document",
@@ -19707,6 +20041,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             "model_id": model_id,
                             "gen_type": model_info.get('model_mode') if model_info else None,
                             "correlation_id": ensure_correlation_id(update, context),
+                            "request_id": request_id,
+                            "prompt_hash": prompt_hash,
                             "params": params,
                             "model_label": model_name_display,
                             "task_id": task_id,
@@ -19721,7 +20057,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         delivered = False
                         try:
                             delivered = bool(
-                                await deliver_result(
+                                await send_result_file(
                                     context.bot,
                                     chat_id,
                                     (model_info.get("output_media_type") if model_info else None) or "document",
@@ -19730,6 +20066,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                     model_id=model_id,
                                     gen_type=model_info.get('model_mode') if model_info else None,
                                     correlation_id=ensure_correlation_id(update, context),
+                                    request_id=request_id,
+                                    prompt_hash=prompt_hash,
                                     params=params,
                                     model_label=model_name_display,
                                 )
@@ -19779,6 +20117,19 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                 "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
                                 if user_lang == 'ru'
                                 else "✅ <b>Generation Completed!</b>\n\nResult is ready."
+                            )
+                            log_request_event(
+                                request_id=request_id or "unknown",
+                                user_id=user_id,
+                                model=model_id,
+                                prompt_hash=prompt_hash,
+                                task_id=task_id,
+                                job_id=(saved_session_data or {}).get("job_id"),
+                                status="delivered",
+                                latency_ms=None,
+                                attempt=None,
+                                error_code=None,
+                                error_msg=None,
                             )
                             last_message = await _send_with_log(
                                 "send_message",
