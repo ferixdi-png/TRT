@@ -439,7 +439,14 @@ class KIEClient:
         )
         return {"ok": True, "taskId": task_id, "correlation_id": result["correlation_id"]}
 
-    async def get_task_status(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def get_task_status(
+        self,
+        task_id: str,
+        correlation_id: Optional[str] = None,
+        poll_attempt: Optional[int] = None,
+        total_wait_ms: Optional[int] = None,
+        retry_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
         log_structured_event(
             correlation_id=correlation_id,
             action="KIE_TASK_POLL",
@@ -447,6 +454,9 @@ class KIEClient:
             outcome="request",
             error_code="KIE_TASK_POLL_REQUEST",
             fix_hint="Запрос статуса задачи KIE.",
+            poll_attempt=poll_attempt,
+            total_wait_ms=total_wait_ms,
+            retry_count=retry_count,
             param={"task_id": task_id},
         )
         result = await self._request_json(
@@ -537,6 +547,11 @@ class KIEClient:
                 "attempt": result.get("meta", {}).get("attempt"),
                 "latency_ms": result.get("meta", {}).get("latency_ms"),
             },
+            poll_attempt=poll_attempt,
+            poll_latency_ms=result.get("meta", {}).get("latency_ms"),
+            total_wait_ms=total_wait_ms,
+            task_state=response_payload.get("state"),
+            retry_count=retry_count,
             outcome=response_payload.get("state"),
         )
         return response_payload
@@ -578,6 +593,65 @@ class KIEClient:
             if state in ("success", "completed", "failed"):
                 return status
             await asyncio.sleep(poll_interval)
+
+    async def cancel_task(self, task_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="KIE_TASK_CANCEL",
+            action_path="kie_client.cancel_task",
+            outcome="request",
+            error_code="KIE_TASK_CANCEL_REQUEST",
+            fix_hint="Запрос отмены задачи KIE.",
+            param={"task_id": task_id},
+        )
+        result = await self._request_json(
+            "POST",
+            "/api/v1/jobs/cancelTask",
+            json={"taskId": task_id},
+            correlation_id=correlation_id,
+        )
+        if not result.get("ok"):
+            log_structured_event(
+                correlation_id=result.get("correlation_id"),
+                action="KIE_TASK_CANCEL",
+                action_path="kie_client.cancel_task",
+                outcome="failed",
+                error_code=result.get("error_code") or "KIE_TASK_CANCEL_FAILED",
+                fix_hint="Проверьте endpoint cancelTask и доступность KIE API.",
+                param={"status": result.get("status"), "error": result.get("error"), "task_id": task_id},
+            )
+            return result
+        data = result.get("data", {})
+        if isinstance(data, dict) and data.get("code") not in (None, 200):
+            message = data.get("msg", "Unknown error")
+            error = self._classify_error(status=422, message=message, correlation_id=result["correlation_id"])
+            log_structured_event(
+                correlation_id=error.correlation_id,
+                action="KIE_TASK_CANCEL",
+                action_path="kie_client.cancel_task",
+                outcome="failed",
+                error_code=error.code,
+                fix_hint="KIE вернул ошибку при отмене задачи.",
+                param={"status": 422, "message": message, "task_id": task_id},
+            )
+            return {
+                "ok": False,
+                "status": 422,
+                "error": error.message,
+                "user_message": error.user_message,
+                "correlation_id": error.correlation_id,
+                "error_code": error.code,
+            }
+        log_structured_event(
+            correlation_id=result.get("correlation_id"),
+            action="KIE_TASK_CANCEL",
+            action_path="kie_client.cancel_task",
+            outcome="success",
+            error_code="KIE_TASK_CANCEL_OK",
+            fix_hint="Отмена задачи отправлена.",
+            param={"task_id": task_id},
+        )
+        return {"ok": True, "taskId": task_id, "correlation_id": result.get("correlation_id")}
 
     async def submit_and_wait(
         self,
