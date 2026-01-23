@@ -49,6 +49,16 @@ _model_timestamp: Optional[datetime] = None
 _kie_models_import_cache: Optional[List[Dict[str, Any]]] = None
 
 
+def _strict_yaml_registry_enabled() -> bool:
+    """Return True when runtime models not present in YAML should be ignored."""
+    return os.getenv("STRICT_YAML_REGISTRY", "1").strip().lower() not in {"0", "false", "no"}
+
+
+def get_models_cached_only() -> Optional[List[Dict[str, Any]]]:
+    """Return cached models without IO. None if cache is empty."""
+    return _model_cache
+
+
 async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """
     Load models from API or static fallback.
@@ -325,6 +335,8 @@ def _normalize_api_models_with_yaml(api_models: List[Dict[str, Any]]) -> List[Di
         except Exception as e:
             logger.warning(f"Failed to load YAML for enrichment: {e}")
     
+    strict_yaml = _strict_yaml_registry_enabled()
+    skipped_non_yaml: List[str] = []
     for model in api_models:
         try:
             model_id = model.get('id') or model.get('model_id') or model.get('name', '')
@@ -344,6 +356,9 @@ def _normalize_api_models_with_yaml(api_models: List[Dict[str, Any]]) -> List[Di
                 # API данные используем для обогащения (name, category, emoji, pricing)
                 normalized_model = normalize_yaml_model(model_id, yaml_data, enrich_from=model)
             else:
+                if strict_yaml:
+                    skipped_non_yaml.append(model_id)
+                    continue
                 # Модели нет в YAML - используем API данные с автодетерминацией
                 logger.debug(f"Model {model_id} not found in YAML, using API data")
                 normalized_model = _normalize_model(model)
@@ -352,6 +367,13 @@ def _normalize_api_models_with_yaml(api_models: List[Dict[str, Any]]) -> List[Di
         except Exception as e:
             logger.warning(f"⚠️ Failed to normalize model: {e}, skipping")
             continue
+
+    if skipped_non_yaml:
+        logger.warning(
+            "REGISTRY_STRICT_YAML drop_count=%s example_ids=%s",
+            len(skipped_non_yaml),
+            skipped_non_yaml[:5],
+        )
     
     return normalized
 

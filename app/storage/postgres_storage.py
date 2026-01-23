@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import uuid
+import hashlib
 from datetime import datetime, date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -169,6 +170,11 @@ class PostgresStorage(BaseStorage):
             updated = update_fn(dict(current))
             await self._save_json_unlocked(filename, updated)
             return updated
+
+    def _advisory_lock_key(self, filename: str) -> int:
+        payload = f"{self.partner_id}:{filename}".encode("utf-8")
+        digest = hashlib.sha256(payload).digest()
+        return int.from_bytes(digest[:8], "big", signed=False)
 
     # ==================== USER OPERATIONS ====================
 
@@ -731,7 +737,7 @@ class PostgresStorage(BaseStorage):
             data[str(user_id)] = referrer_id
             return data
 
-        await self._update_json(self.referrals_file, updater)
+        await self.update_json_file(self.referrals_file, updater)
 
     async def get_referrer(self, user_id: int) -> Optional[int]:
         data = await self._load_json(self.referrals_file)
@@ -748,7 +754,7 @@ class PostgresStorage(BaseStorage):
             data[key] = float(data.get(key, 0.0)) + bonus
             return data
 
-        await self._update_json(self.free_generations_file, updater)
+        await self.update_json_file(self.free_generations_file, updater)
 
     # ==================== GENERIC JSON FILES ====================
 
@@ -766,7 +772,41 @@ class PostgresStorage(BaseStorage):
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        return await self._update_json(filename, update_fn)
+        pool = await self._get_pool()
+        lock_key = self._advisory_lock_key(filename)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+                row = await conn.fetchrow(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    filename,
+                )
+                current: Dict[str, Any] = {}
+                if row:
+                    payload = row[0]
+                    if isinstance(payload, dict):
+                        current = dict(payload)
+                    elif isinstance(payload, str):
+                        try:
+                            parsed = json.loads(payload)
+                        except json.JSONDecodeError:
+                            parsed = None
+                        if isinstance(parsed, dict):
+                            current = parsed
+                updated = update_fn(dict(current))
+                await conn.execute(
+                    """
+                    INSERT INTO storage_json (partner_id, filename, payload)
+                    VALUES ($1, $2, $3::jsonb)
+                    ON CONFLICT (partner_id, filename)
+                    DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                    """,
+                    self.partner_id,
+                    filename,
+                    json.dumps(updated) if updated else "{}",
+                )
+                return updated
 
     # ==================== UTILITY ====================
 
