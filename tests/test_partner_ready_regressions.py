@@ -58,6 +58,9 @@ def test_menu_build_no_io(monkeypatch):
     models, cache_status = bot_kie.get_visible_models_by_generation_type_cached("text-to-image")
     assert cache_status in {"hit", "miss"}
     assert [model["id"] for model in models] == ["demo-model"]
+    models_second, cache_status_second = bot_kie.get_visible_models_by_generation_type_cached("text-to-image")
+    assert cache_status_second == "hit"
+    assert [model["id"] for model in models_second] == ["demo-model"]
 
 
 def test_db_storage_no_file_fallback(monkeypatch):
@@ -133,6 +136,40 @@ def test_idempotent_payments(monkeypatch):
 
     assert first.get("id") == second.get("id")
     assert len(balance_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_free_charge_skips_balance(monkeypatch):
+    import bot_kie
+
+    calls = {"charge": 0, "free": 0}
+
+    async def _charge_balance_once(**_kwargs):
+        calls["charge"] += 1
+        return {"status": "charged"}
+
+    async def _consume_free_generation(*_args, **_kwargs):
+        calls["free"] += 1
+        return {"status": "ok"}
+
+    monkeypatch.setattr(bot_kie, "_charge_balance_once", _charge_balance_once)
+    monkeypatch.setattr(bot_kie, "consume_free_generation", _consume_free_generation)
+
+    result = await bot_kie._commit_post_delivery_charge(
+        session={},
+        user_id=123,
+        chat_id=456,
+        task_id="task-123",
+        sku_id="sku-123",
+        price=10.0,
+        is_free=False,
+        is_admin_user=True,
+        correlation_id="corr-123",
+        model_id="model-123",
+    )
+
+    assert result == {"charged": False, "free_consumed": False}
+    assert calls == {"charge": 0, "free": 0}
 
 
 def test_state_machine_paths():
