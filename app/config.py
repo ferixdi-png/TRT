@@ -83,7 +83,6 @@ class Settings:
         self.allow_real_generation = os.getenv('ALLOW_REAL_GENERATION', '1') != '0'
         
         # Storage configuration (DB-only)
-        self.github_only_storage = False
         self.storage_mode = "db"
         logger.debug("STORAGE_MODE from env (ignored): '%s'", os.getenv("STORAGE_MODE", "").strip())
         self.data_dir = os.getenv('DATA_DIR', '/app/data')

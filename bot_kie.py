@@ -1979,6 +1979,39 @@ def _update_price_quote(
     from app.pricing.price_resolver import resolve_price_quote
     from app.config import get_settings
 
+    def _log_model_blocked(reason: str) -> None:
+        try:
+            from app.pricing.ssot_catalog import get_pricing_coverage_entry
+
+            entry = get_pricing_coverage_entry(model_id) or {}
+            status = entry.get("status") or reason or "PRICING_COVERAGE"
+            issues = entry.get("issues")
+            if not isinstance(issues, list):
+                issues = []
+        except Exception:
+            status = reason or "PRICING_COVERAGE"
+            issues = []
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="MODEL_BLOCKED",
+            action_path=action_path,
+            model_id=model_id,
+            gen_type=gen_type,
+            stage="PRICE_RESOLVE",
+            outcome="blocked",
+            error_code=status,
+            fix_hint="Проверьте PRICING_COVERAGE и параметры модели.",
+            param={
+                "issues": issues,
+                "reason": status,
+                "mode_index": mode_index,
+                "params": params or {},
+            },
+        )
+
     def _resolve_free_tool_sku_id() -> Optional[str]:
         for free_sku in FREE_TOOL_SKU_IDS:
             if free_sku.split("::", 1)[0] == model_id:
@@ -2044,6 +2077,7 @@ def _update_price_quote(
                 expected_sku,
                 PRICING_SSOT_PATH,
             )
+            _log_model_blocked("MISSING_PRICE")
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -2367,27 +2401,6 @@ WAITING_CURRENCY_RATE = 7
 
 # Helper functions for balance management
 
-# Data directory - use environment variable or default to ./data
-# This allows mounting a volume for persistent storage
-DATA_DIR = os.getenv('DATA_DIR', './data')
-if not os.path.exists(DATA_DIR):
-    try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        logger.info(f"✅ Created local data directory (cache/fallback): {DATA_DIR}")
-    except Exception as e:
-        logger.error(f"❌ Failed to create data directory {DATA_DIR}: {e}")
-        # Fallback to current directory if data dir creation fails
-        DATA_DIR = '.'
-        logger.warning(f"⚠️ Using current directory for data storage")
-
-
-def get_data_file_path(filename: str) -> str:
-    """Get full path to data file, ensuring directory exists."""
-    data_dir = Path(__file__).parent / "data"
-    data_dir.mkdir(exist_ok=True)
-    return str(data_dir / filename)
-
-
 # NOTE: active_generations already declared above (line 358), this is a duplicate - removed
 
 # File operation locks to prevent race conditions (using threading.Lock for sync operations)
@@ -2420,22 +2433,13 @@ _data_cache = {
 CACHE_TTL = 300
 _last_save_time = {}
 
-# Data directory - use environment variable or default to ./data
-# This allows mounting a volume for persistent storage
-DATA_DIR = os.getenv('DATA_DIR', './data')
-if not os.path.exists(DATA_DIR):
-    try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        logger.info(f"✅ Created local data directory (cache/fallback): {DATA_DIR}")
-    except Exception as e:
-        logger.error(f"❌ Failed to create data directory {DATA_DIR}: {e}")
-        # Fallback to current directory if data dir creation fails
-        DATA_DIR = '.'
-        logger.warning(f"⚠️ Using current directory for data storage")
+# Storage paths - storage backend handles persistence (DB only).
+DATA_DIR = os.getenv("DATA_DIR", "").strip()
+
 
 def get_data_file_path(filename: str) -> str:
-    """Get full path to data file, ensuring directory exists."""
-    if DATA_DIR == '.':
+    """Return logical filename for storage-backed JSON payloads."""
+    if not DATA_DIR:
         return filename
     return os.path.join(DATA_DIR, filename)
 
@@ -2549,8 +2553,7 @@ def _normalize_storage_payload(
     return default.copy()
 
 def load_json_file(filename: str, default: dict = None) -> dict:
-    """Load JSON file with caching and locking for performance (optimized for 1000+ users).
-    Automatically creates file if it doesn't exist (for critical files)."""
+    """Load JSON payload via storage with caching and locking."""
     if default is None:
         default = {}
     
@@ -2579,87 +2582,34 @@ def load_json_file(filename: str, default: dict = None) -> dict:
     lock_key = cache_key if cache_key in _file_locks else 'balances'  # Default to balances lock
     lock = _file_locks.get(lock_key, _file_locks['balances'])
     
-    # Load from file with lock to prevent race conditions
+    # Load from storage with lock to prevent race conditions
     with lock:
         try:
-            try:
-                from app.storage.factory import get_storage
+            from app.storage.factory import get_storage
 
-                storage = get_storage()
-                storage_filename = os.path.basename(filename)
-                data = _run_storage_coro_sync(
-                    storage.read_json_file(storage_filename, default),
-                    label=f"read:{storage_filename}",
-                )
-                data = _normalize_storage_payload(
-                    data,
-                    filename=filename,
-                    source="storage",
-                    default=default,
-                )
-                if cache_key != filename and isinstance(data, dict):
-                    _data_cache[cache_key] = data.copy()
-                    _data_cache['cache_timestamps'][cache_key] = current_time
-                return data
-            except Exception as storage_error:
-                logger.warning(
-                    "Storage read failed for %s, falling back to local cache: %s",
-                    filename,
-                    storage_error,
-                )
-
-            if os.path.exists(filename):
-                with open(filename, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    data = _normalize_storage_payload(
-                        data,
-                        filename=filename,
-                        source="local_file",
-                        default=default,
-                    )
-                    # Update cache (thread-safe)
-                    if cache_key != filename and isinstance(data, dict):
-                        _data_cache[cache_key] = data.copy()
-                        _data_cache['cache_timestamps'][cache_key] = current_time
-                    return data
-            else:
-                # For critical files, create empty file if it doesn't exist
-                critical_files = [BALANCES_FILE, GENERATIONS_HISTORY_FILE, PAYMENTS_FILE]
-                if filename in critical_files:
-                    try:
-                        # Ensure directory exists
-                        dir_path = os.path.dirname(filename)
-                        if dir_path and not os.path.exists(dir_path):
-                            os.makedirs(dir_path, exist_ok=True)
-                        
-                        # Create empty file
-                        with open(filename, 'w', encoding='utf-8') as f:
-                            json.dump(default, f, ensure_ascii=False, indent=2)
-                        logger.info(f"✅ Auto-created missing critical file: {filename}")
-                        return default
-                    except Exception as e:
-                        logger.error(f"Error auto-creating critical file {filename}: {e}")
-                        return default
-                return default
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ JSON decode error in {filename}: {e}. File may be corrupted. Returning default.")
-            # Try to backup corrupted file
-            try:
-                backup_name = filename + '.corrupted.' + str(int(time.time()))
-                if os.path.exists(filename):
-                    os.rename(filename, backup_name)
-                    logger.warning(f"Backed up corrupted file to {backup_name}")
-            except:
-                pass
-            return default
+            storage = get_storage()
+            storage_filename = os.path.basename(filename)
+            data = _run_storage_coro_sync(
+                storage.read_json_file(storage_filename, default),
+                label=f"read:{storage_filename}",
+            )
+            data = _normalize_storage_payload(
+                data,
+                filename=filename,
+                source="storage",
+                default=default,
+            )
+            if cache_key != filename and isinstance(data, dict):
+                _data_cache[cache_key] = data.copy()
+                _data_cache['cache_timestamps'][cache_key] = current_time
+            return data
         except Exception as e:
-            logger.error(f"Error loading {filename}: {e}", exc_info=True)
-            return default
+            logger.error("Storage read failed for %s: %s", filename, e, exc_info=True)
+            return default.copy()
 
 
 def save_json_file(filename: str, data: dict, use_cache: bool = True):
-    """Save data to JSON file with batched writes (optimized for 1000+ users).
-    Guarantees data persistence for critical files."""
+    """Save data to storage with cached writes."""
     try:
         cache_key = get_cache_key(filename)
         current_time = time.time()
@@ -2669,17 +2619,6 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
             _data_cache[cache_key] = data.copy()
             _data_cache['cache_timestamps'][cache_key] = current_time
         
-        # Batch writes: only save if enough time passed (reduce I/O)
-        # For critical files (balances, generations history, payments, gift claims), save immediately always
-        critical_files = [BALANCES_FILE, GENERATIONS_HISTORY_FILE, PAYMENTS_FILE, GIFT_CLAIMED_FILE]
-        is_critical = filename in critical_files
-        
-        if not is_critical and filename in _last_save_time:
-            time_since_last_save = current_time - _last_save_time[filename]
-            # For non-critical files, batch every 2 seconds max
-            if time_since_last_save < 2.0:
-                return  # Skip write, will be saved later or by batch save
-
         try:
             from app.storage.factory import get_storage
 
@@ -2689,72 +2628,16 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
                 storage.write_json_file(storage_filename, data),
                 label=f"write:{storage_filename}",
             )
+            _last_save_time[filename] = current_time
         except Exception as storage_error:
             logger.error(
-                "Storage write failed for %s, falling back to local cache: %s",
+                "Storage write failed for %s: %s",
                 filename,
                 storage_error,
                 exc_info=True,
             )
-        
-        # Ensure directory exists (for subdirectories like knowledge_store)
-        dir_path = os.path.dirname(filename)
-        if dir_path and not os.path.exists(dir_path):
-            try:
-                os.makedirs(dir_path, exist_ok=True)
-            except Exception as e:
-                logger.error(f"Error creating directory {dir_path}: {e}")
-        
-        # Perform actual write with atomic operation (write to temp file, then rename)
-        temp_filename = filename + '.tmp'
-        try:
-            # Write to temporary file first
-            with open(temp_filename, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-                f.flush()  # Force write to disk immediately
-                if hasattr(os, 'fsync'):
-                    os.fsync(f.fileno())  # Force sync to disk (Unix/Linux)
-            
-            # Atomic rename (works on Unix/Linux/Windows)
-            if os.path.exists(filename):
-                os.replace(temp_filename, filename)
-            else:
-                os.rename(temp_filename, filename)
-            
-            # Verify file was written correctly
-            if os.path.exists(filename):
-                file_size = os.path.getsize(filename)
-                if file_size == 0:
-                    logger.error(f"❌ CRITICAL: {filename} was written but is empty!")
-                else:
-                    logger.debug(f"✅ Saved {filename} ({file_size} bytes)")
-            else:
-                logger.error(f"❌ CRITICAL: {filename} does not exist after save!")
-            
-        except Exception as e:
-            # Clean up temp file on error
-            if os.path.exists(temp_filename):
-                try:
-                    os.remove(temp_filename)
-                except:
-                    pass
-            raise e
-        
-        _last_save_time[filename] = current_time
     except Exception as e:
         logger.error(f"❌ CRITICAL ERROR saving {filename}: {e}", exc_info=True)
-        # For critical files, try one more time
-        if filename in critical_files:
-            try:
-                logger.warning(f"Retrying save for critical file {filename}...")
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                    f.flush()
-                    if hasattr(os, 'fsync'):
-                        os.fsync(f.fileno())
-                logger.info(f"✅ Retry successful for {filename}")
-            except Exception as retry_error:
-                logger.error(f"❌ Retry failed for {filename}: {retry_error}", exc_info=True)
 
 
 def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
@@ -3397,6 +3280,70 @@ def _ensure_session_task_registry(session: Dict[str, Any], key: str) -> Set[str]
     return registry
 
 
+async def _charge_balance_once(
+    *,
+    user_id: int,
+    task_id: Optional[str],
+    sku_id: str,
+    model_id: Optional[str],
+    price: float,
+    correlation_id: Optional[str],
+    chat_id: Optional[int],
+) -> Dict[str, Any]:
+    from app.storage.factory import get_storage
+    from app.utils.distributed_lock import distributed_lock
+
+    if not task_id:
+        before_balance = await get_user_balance_async(user_id)
+        if before_balance < price:
+            return {"status": "insufficient", "balance_before": before_balance, "balance_after": before_balance}
+        success = await subtract_user_balance_async(user_id, price)
+        after_balance = await get_user_balance_async(user_id) if success else before_balance
+        return {
+            "status": "charged" if success else "failed",
+            "balance_before": before_balance,
+            "balance_after": after_balance,
+        }
+
+    storage = get_storage()
+    if hasattr(storage, "charge_balance_once"):
+        lock_key = f"balance:{user_id}:{task_id}"
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+            if not acquired:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="CHARGE_COMMIT",
+                    action_path="delivery",
+                    model_id=model_id,
+                    stage="CHARGE_COMMIT",
+                    outcome="lock_failed",
+                    error_code="BALANCE_LOCK",
+                    fix_hint="Redis lock занят; повторите списание.",
+                    param={"task_id": task_id, "sku_id": sku_id, "amount": price},
+                )
+                return {"status": "lock_failed"}
+            return await storage.charge_balance_once(
+                user_id,
+                price,
+                task_id=task_id,
+                sku_id=sku_id,
+                model_id=model_id or "",
+            )
+
+    before_balance = await get_user_balance_async(user_id)
+    if before_balance < price:
+        return {"status": "insufficient", "balance_before": before_balance, "balance_after": before_balance}
+    success = await subtract_user_balance_async(user_id, price)
+    after_balance = await get_user_balance_async(user_id) if success else before_balance
+    return {
+        "status": "charged" if success else "failed",
+        "balance_before": before_balance,
+        "balance_after": after_balance,
+    }
+
+
 async def _commit_post_delivery_charge(
     *,
     session: Dict[str, Any],
@@ -3432,6 +3379,7 @@ async def _commit_post_delivery_charge(
             user_id,
             sku_id,
             correlation_id=correlation_id,
+            task_id=task_id,
             source="delivery",
         )
         registry.add(task_key)
@@ -3499,9 +3447,16 @@ async def _commit_post_delivery_charge(
         )
         return outcome
 
-    before_balance = await get_user_balance_async(user_id)
-    # FIX #2: Strict check - verify balance is sufficient before subtracting
-    if before_balance < price:
+    charge_result = await _charge_balance_once(
+        user_id=user_id,
+        task_id=task_id,
+        sku_id=sku_id,
+        model_id=model_id,
+        price=price,
+        correlation_id=correlation_id,
+        chat_id=chat_id,
+    )
+    if charge_result.get("status") == "insufficient":
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -3514,15 +3469,41 @@ async def _commit_post_delivery_charge(
             param={
                 "task_id": task_id,
                 "required": price,
-                "available": before_balance,
+                "available": charge_result.get("balance_before"),
             },
         )
-        logger.error(f"❌ Insufficient balance: user={user_id}, required={price}, available={before_balance}")
+        logger.error(
+            "❌ Insufficient balance: user=%s required=%.2f available=%.2f",
+            user_id,
+            price,
+            charge_result.get("balance_before", 0.0),
+        )
         return outcome
-    
-    success = await subtract_user_balance_async(user_id, price)
-    after_balance = await get_user_balance_async(user_id) if success else before_balance
-    if success:
+
+    if charge_result.get("status") == "duplicate":
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CHARGE_COMMIT",
+            action_path="delivery",
+            model_id=model_id,
+            stage="CHARGE_COMMIT",
+            outcome="duplicate_skip",
+            param={
+                "task_id": task_id,
+                "amount": price,
+                "delivered": True,
+            },
+        )
+        return outcome
+
+    if charge_result.get("status") == "lock_failed":
+        return outcome
+
+    if charge_result.get("status") == "charged":
+        before_balance = charge_result.get("balance_before")
+        after_balance = charge_result.get("balance_after")
         session["balance_charged"] = True
         registry.add(task_key)
         outcome["charged"] = True
@@ -3546,6 +3527,8 @@ async def _commit_post_delivery_charge(
             },
         )
     else:
+        before_balance = charge_result.get("balance_before")
+        after_balance = charge_result.get("balance_after")
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,

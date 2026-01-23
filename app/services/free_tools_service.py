@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from pricing.engine import load_config
 from app.pricing.free_policy import get_free_daily_limit, is_sku_free_daily, list_free_skus
 from app.storage import get_storage
+from app.utils.distributed_lock import distributed_lock
 from app.observability.structured_logs import log_structured_event
 
 
@@ -113,12 +114,77 @@ async def check_and_consume_free_generation(
     sku_id: str,
     *,
     correlation_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
     if not is_sku_free_daily(sku_id):
         return {"status": "not_free_sku"}
 
     storage = get_storage()
+    if task_id and hasattr(storage, "consume_free_generation_once"):
+        lock_key = f"free:{user_id}:{task_id}"
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+            if not acquired:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    action="FREE_QUOTA_UPDATE",
+                    action_path="free_tools_service.check_and_consume_free_generation",
+                    stage="FREE_QUOTA",
+                    outcome="lock_failed",
+                    error_code="FREE_QUOTA_LOCK",
+                    fix_hint="Повторите списание позже; Redis lock занят.",
+                    param={"sku_id": sku_id, "task_id": task_id},
+                )
+                return {"status": "lock_failed"}
+            result = await storage.consume_free_generation_once(user_id, task_id=task_id, sku_id=sku_id)
+        if result.get("status") == "duplicate":
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="FREE_QUOTA_UPDATE",
+                action_path="free_tools_service.check_and_consume_free_generation",
+                stage="FREE_QUOTA",
+                outcome="duplicate_skip",
+                error_code="FREE_QUOTA_DUPLICATE",
+                fix_hint="Списание уже было выполнено для этой генерации.",
+                param={"sku_id": sku_id, "task_id": task_id},
+            )
+            return result
+        if result.get("status") == "ok":
+            date_key = _now().strftime("%Y-%m-%d")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="FREE_QUOTA_UPDATE",
+                action_path="free_tools_service.check_and_consume_free_generation",
+                stage="FREE_QUOTA",
+                outcome="consumed",
+                param={
+                    "sku_id": sku_id,
+                    "task_id": task_id,
+                    "used_today": result.get("used_today"),
+                    "remaining": result.get("remaining"),
+                    "limit_per_day": result.get("limit_per_day"),
+                    "date_key": date_key,
+                },
+            )
+            return result
+        if result.get("status") == "deny":
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="FREE_QUOTA_UPDATE",
+                action_path="free_tools_service.check_and_consume_free_generation",
+                stage="FREE_QUOTA",
+                outcome="deny",
+                error_code="FREE_QUOTA_EMPTY",
+                fix_hint="Пользователь исчерпал бесплатные генерации.",
+                param={"sku_id": sku_id, "task_id": task_id},
+            )
+            return result
+        return result
+
     used_count = int(await storage.get_user_free_generations_today(user_id))
     base_remaining = cfg.base_per_day - used_count
     if base_remaining > 0:
@@ -204,6 +270,7 @@ async def consume_free_generation(
     sku_id: str,
     *,
     correlation_id: Optional[str] = None,
+    task_id: Optional[str] = None,
     source: str = "delivery",
 ) -> Dict[str, object]:
     cfg = get_free_tools_config()
@@ -211,6 +278,76 @@ async def consume_free_generation(
         return {"status": "not_free_sku"}
 
     storage = get_storage()
+    if task_id and hasattr(storage, "consume_free_generation_once"):
+        lock_key = f"free:{user_id}:{task_id}"
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+            if not acquired:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    action="FREE_QUOTA_UPDATE",
+                    action_path="free_tools_service.consume_free_generation",
+                    stage="FREE_QUOTA",
+                    outcome="lock_failed",
+                    error_code="FREE_QUOTA_LOCK",
+                    fix_hint="Повторите списание позже; Redis lock занят.",
+                    param={"sku_id": sku_id, "task_id": task_id, "source": source},
+                )
+                return {"status": "lock_failed"}
+            result = await storage.consume_free_generation_once(
+                user_id,
+                task_id=task_id,
+                sku_id=sku_id,
+                source=source,
+            )
+        if result.get("status") == "duplicate":
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="FREE_QUOTA_UPDATE",
+                action_path="free_tools_service.consume_free_generation",
+                stage="FREE_QUOTA",
+                outcome="duplicate_skip",
+                error_code="FREE_QUOTA_DUPLICATE",
+                fix_hint="Списание уже было выполнено для этой генерации.",
+                param={"sku_id": sku_id, "task_id": task_id, "source": source},
+            )
+            return result
+        if result.get("status") == "ok":
+            date_key = _now().strftime("%Y-%m-%d")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="FREE_QUOTA_UPDATE",
+                action_path="free_tools_service.consume_free_generation",
+                stage="FREE_QUOTA",
+                outcome="consumed",
+                param={
+                    "sku_id": sku_id,
+                    "task_id": task_id,
+                    "source": source,
+                    "used_today": result.get("used_today"),
+                    "remaining": result.get("remaining"),
+                    "limit_per_day": result.get("limit_per_day"),
+                    "date_key": date_key,
+                },
+            )
+            return result
+        if result.get("status") == "deny":
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="FREE_QUOTA_UPDATE",
+                action_path="free_tools_service.consume_free_generation",
+                stage="FREE_QUOTA",
+                outcome="deny",
+                error_code="FREE_QUOTA_EMPTY",
+                fix_hint="Пользователь исчерпал бесплатные генерации.",
+                param={"sku_id": sku_id, "task_id": task_id, "source": source},
+            )
+            return result
+        return result
+
     used_count = int(await storage.get_user_free_generations_today(user_id))
     base_remaining = cfg.base_per_day - used_count
     if base_remaining > 0:

@@ -6,10 +6,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 from typing import Any, Dict, Optional
 
 from app.config import Settings, get_settings
 from app.pricing.price_ssot import resolve_sku_for_params
+
+logger = logging.getLogger(__name__)
+_pricing_ok_logged: set[str] = set()
 
 
 PRICE_QUANT = Decimal("0.01")
@@ -51,7 +55,11 @@ def resolve_price_quote(
     Returns None when price rules are missing.
     """
     settings = settings or get_settings()
-    sku = resolve_sku_for_params(model_id, selected_params or {})
+    canonical_model_id = {
+        "sora-2/t2v": "sora-2-text-to-video",
+        "openai/sora-2-text-to-video": "sora-2-text-to-video",
+    }.get(model_id, model_id)
+    sku = resolve_sku_for_params(canonical_model_id, selected_params or {})
     if not sku:
         return None
 
@@ -59,8 +67,16 @@ def resolve_price_quote(
         price_rub = Decimal("0")
     else:
         price_rub = _quantize_price(_to_decimal(sku.price_rub))
+    if sku.sku_key not in _pricing_ok_logged:
+        _pricing_ok_logged.add(sku.sku_key)
+        logger.info(
+            "PRICING_COVERAGE_OK model_id=%s sku_id=%s price_rub=%s",
+            canonical_model_id,
+            sku.sku_key,
+            price_rub,
+        )
     breakdown = {
-        "model_id": model_id,
+        "model_id": canonical_model_id,
         "mode_index": mode_index,
         "gen_type": gen_type,
         "params": dict(selected_params or {}),
