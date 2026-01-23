@@ -1,0 +1,494 @@
+bytedance/seedream:
+  model_short: Генерация изображений по текстовому описанию (Seedream 3.0).
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+bytedance/seedream-v4-edit:
+  model_short: 'Редактирование готового изображения: замени детали или стиль без пересоздания
+    с нуля.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+bytedance/seedream-v4-text-to-image:
+  model_short: 'Версия 4.0: точнее понимает промпт, детальнее прорисовывает. Качество
+    стоит своих денег.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+bytedance/v1-pro-fast-image-to-video:
+  model_short: Оживи фото в короткое видео за секунды. Длительность и разрешение влияют
+    на списание.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+elevenlabs/audio-isolation:
+  model_short: Вырезает голос из аудио, убирая фон и шумы. Чистый звук для подкастов
+    и записей.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+elevenlabs/sound-effect:
+  model_short: Создание звуковых эффектов по текстовому описанию. Для видео, игр,
+    контента.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+elevenlabs/speech-to-text:
+  model_short: Распознавание речи в текст с высокой точностью. Поддержка разных языков
+    и акцентов.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+elevenlabs/text-to-speech:
+  model_short: Озвучка текста естественным голосом. Эмоции, интонации — как живой
+    человек.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+flux-2/flex-image-to-image:
+  model_short: Трансформация фото в новый стиль с сохранением композиции. Режим влияет
+    на разрешение и цену.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+flux-2/flex-text-to-image:
+  model_short: Создание картинок из текста с гибкими настройками. Два режима разрешения
+    — выбор за тобой.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+flux-2/pro-image-to-image:
+  model_short: 'Профессиональная переработка изображений: меняй стиль, сохраняя суть.
+    Быстро и точно.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+flux-2/pro-text-to-image:
+  model_short: Генерация фотореалистичных изображений из промпта. Разрешение определяет
+    итоговую цену.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+flux/kontext:
+  model_short: Создаёт картинки с учётом контекста и деталей. Pro или Max — твой выбор
+    качества.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/imagen4:
+  model_short: 'Imagen 4: качественная генерация изображений от Google. Стабильный
+    результат, точный промпт.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/imagen4-fast:
+  model_short: Быстрая версия Imagen 4 — жертвуй деталями ради скорости. Для набросков
+    и тестов.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/imagen4-ultra:
+  model_short: 'Максимальное качество Imagen 4: детализация и точность. Дороже, но
+    результат того стоит.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/nano-banana:
+  model_short: Компактная модель для простых задач генерации. Быстро, недорого, без
+    излишеств.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/nano-banana-edit:
+  model_short: Редактирование изображений через Nano Banana. Лёгкие правки без тяжёлых
+    моделей.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/nanobanana-gemini-2.5-flash:
+  model_short: 'Nano Banana + Gemini 2.5: быстрая генерация с AI-подсказками. Удобно
+    для экспериментов.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/veo-3:
+  model_short: 'Veo 3: видеогенерация от Google. Создаёт короткие ролики из текста
+    или фото.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+google/veo-3.1:
+  model_short: 'Обновлённая Veo 3.1: лучше физика движений, реалистичнее анимация.
+    Дороже, но круче.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+grok-imagine/text-to-image:
+  model_short: Текст в картинку через Grok Imagine. Креативный подход к интерпретации
+    запросов.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+grok-imagine/text-to-video:
+  model_short: Создаёт короткие видео из текста. Быстрая генерация для соцсетей и
+    мемов.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+grok/imagine:
+  model_short: Генерация изображений от Grok. Понимает сарказм и нестандартные промпты.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+hailuo/02-image-to-video-pro:
+  model_short: Превращает фото в видео с Pro-качеством. Плавная анимация и детали.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+hailuo/02-image-to-video-standard:
+  model_short: Фото в видео, стандартное качество. Базовый режим для простых задач.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+hailuo/02-text-to-video-pro:
+  model_short: Профессиональная генерация видео из текста. Выше качество, дольше просчёт,
+    больше цена.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+hailuo/02-text-to-video-standard:
+  model_short: Текст в видео, стандарт. Создаёт короткие ролики без лишних затрат.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+hailuo/2.3:
+  model_short: 'Версия 2.3: улучшенная стабильность и скорость генерации. Универсальный
+    вариант.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/character:
+  model_short: Генерация персонажей с уникальными чертами. Для игр, комиксов, иллюстраций.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/character-edit:
+  model_short: 'Редактирование готовых персонажей: меняй одежду, позы, детали внешности.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/character-remix:
+  model_short: 'Вариации персонажей: создавай альтернативные версии одного героя.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/v3-edit:
+  model_short: 'Редактирование элементов картинки: меняй цвета, объекты, детали. Точечная
+    коррекция.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/v3-reframe:
+  model_short: Изменение композиции и кадрирования готового изображения. Переформатирование
+    без потери качества.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/v3-remix:
+  model_short: Создание вариаций существующего изображения. Экспериментируй со стилями
+    и деталями.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+ideogram/v3-text-to-image:
+  model_short: 'Ideogram v3: генерация с акцентом на текст и надписи в изображении.
+    Логотипы, баннеры.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+infinitalk/from-audio:
+  model_short: Генерация говорящего видео из аудиозаписи. Синхронизация губ и мимика
+    автоматом.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling-2.6/image-to-video:
+  model_short: 'Kling 2.6: оживление фото с улучшенной плавностью. Свежая версия модели.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling-2.6/text-to-video:
+  model_short: Создание видео из текста через Kling 2.6. Стабильный результат, точный
+    промпт.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/ai-avatar-v1-pro:
+  model_short: 'Профессиональные AI-аватары: точная мимика, естественные движения.
+    Для презентаций.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v1-avatar-standard:
+  model_short: Создание говорящих аватаров, стандарт. Синхронизация губ с аудио.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-1-master-image-to-video:
+  model_short: 'Мастер-режим Kling 2.1: фото в видео с максимальной детализацией.
+    Дорого, но эффектно.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-1-master-text-to-video:
+  model_short: Текст в видео, мастер-режим. Максимальное качество рендера от Kling.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-1-pro:
+  model_short: 'Pro-режим Kling 2.1: улучшенная физика движений и освещение. Для профи.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-1-standard:
+  model_short: Стандартная генерация видео Kling 2.1. Баланс цены и качества.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-5-turbo:
+  model_short: 'Турбо-режим Kling 2.5: быстрая генерация видео. Скорость в приоритете.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-5-turbo-image-to-video-pro:
+  model_short: Фото в видео, турбо + про. Скорость и качество одновременно.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+kling/v2-5-turbo-text-to-video-pro:
+  model_short: Текст в видео, турбо-про. Быстрый просчёт с высоким качеством.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+midjourney/api:
+  model_short: Доступ к Midjourney через API. Генерация художественных изображений
+    по промпту.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+nano-banana-pro:
+  model_short: 'Профессиональная версия Nano Banana: больше деталей, выше точность.
+    Для серьёзных задач.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+openai/4o-image:
+  model_short: 'GPT-4o с визуальным пониманием: генерация и анализ изображений. Умный
+    AI-помощник.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+qwen/image-edit:
+  model_short: 'Редактирование фото: убери, добавь, измени элементы. Точечная правка.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+qwen/image-to-image:
+  model_short: Трансформация изображений через Qwen. Меняй стиль, сохраняя композицию.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+qwen/text-to-image:
+  model_short: Создание картинок из текста. Qwen понимает контекст и детали.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+recraft/crisp-upscale:
+  model_short: Увеличение разрешения изображений без потери чёткости. Для печати и
+    больших экранов.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+recraft/remove-background:
+  model_short: Удаление фона с фото. Чистый результат, прозрачный PNG за секунды.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+runway/gen-4:
+  model_short: 'Runway Gen-4: профессиональная видеогенерация. Для креативных проектов
+    и рекламы.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+seedream/4.5-edit:
+  model_short: 'Правь готовые картинки: меняй элементы, сохраняя общий образ. Быстрая
+    коррекция.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+seedream/4.5-text-to-image:
+  model_short: Свежая версия 4.5 с улучшенной точностью деталей. Цена зависит от качества
+    рендера.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+sora-2-image-to-video:
+  model_short: 'Sora 2: оживление изображений в видео. Базовая версия для быстрого
+    результата.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+sora-2-pro-image-to-video:
+  model_short: 'Pro-режим Sora 2: фото в видео с высокой детализацией. Для серьёзных
+    проектов.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+sora-2-pro-storyboard:
+  model_short: Создание раскадровки и анимации по сценарию. Для режиссёров и сценаристов.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+sora-2-pro-text-to-video:
+  model_short: 'Sora 2 Pro: создание видео из текста с максимальным качеством. High
+    режим для профессионального использования.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+sora-2-text-to-video:
+  model_short: 'Sora 2: создание видео из текста с киношным качеством. Длительность
+    влияет на цену.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+sora-watermark-remover:
+  model_short: Убирает водяной знак OpenAI с видео Sora. Профессиональная очистка
+    готовых роликов для публикации.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+suno/v5:
+  model_short: 'Suno v5: генерация музыки по текстовому описанию. Жанр, настроение,
+    инструменты — всё настраивается.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+topaz/image-upscale:
+  model_short: Увеличение фото с AI-апскейлом от Topaz. Детали восстанавливаются,
+    шумы убираются.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+topaz/video-upscale:
+  model_short: Апскейл видео до 4K и выше. Topaz восстанавливает детали и убирает
+    артефакты.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+wan/2-2-a14b-speech-to-video-turbo:
+  model_short: Голос в видео с говорящим персонажем. Автоматическая синхронизация
+    губ.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+wan/2-2-animate-move:
+  model_short: Анимация движений объектов на фото. Заставь статику двигаться.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+wan/2-2-animate-replace:
+  model_short: Замена элементов с анимацией. Меняй объекты, сохраняя движение и логику.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+wan/2-5-image-to-video:
+  model_short: 'Wan 2.5: улучшенная физика движений. Фото в видео с реалистичной анимацией.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+wan/2-5-text-to-video:
+  model_short: Текст в видео через Wan 2.5. Стабильный результат, понятная логика
+    генерации.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}
+z-image:
+  model_short: 'Z-Image: экспериментальная модель генерации. Нестандартные стили и
+    подходы.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
+      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
+    by_sku_key: {}

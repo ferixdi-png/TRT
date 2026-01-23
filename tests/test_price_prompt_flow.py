@@ -24,7 +24,11 @@ async def test_price_shown_on_prompt_flow(harness):
     await button_callback(update_model, context)
 
     texts = [m["text"] for m in harness.outbox.messages + harness.outbox.edited_messages]
-    assert any(re.search(r"Текущая цена: \d+\.\d{2} ₽", text) for text in texts)
+    assert any("📝 Шаг 1/3: Введите prompt:" in text for text in texts)
+    assert any(
+        re.search(r"Цена по прайсу: \\d+\\.\\d{2} ₽", text) or "🎁 Бесплатно" in text
+        for text in texts
+    )
 
     message = harness.create_mock_message("A calm lake at sunrise", user_id=user_id)
     update_message = Update(update_id=103, message=message)
@@ -32,4 +36,8 @@ async def test_price_shown_on_prompt_flow(harness):
     await input_parameters(update_message, context)
 
     texts = [m["text"] for m in harness.outbox.messages + harness.outbox.edited_messages]
-    assert any(re.search(r"Текущая цена: \d+\.\d{2} ₽", text) for text in texts)
+    assert any("📝 Шаг 1/3: Введите prompt:" in text for text in texts)
+    assert any(
+        re.search(r"Цена по прайсу: \\d+\\.\\d{2} ₽", text) or "🎁 Бесплатно" in text
+        for text in texts
+    )
