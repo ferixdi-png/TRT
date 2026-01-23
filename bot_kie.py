@@ -16,6 +16,7 @@ import math
 import uuid
 import hashlib
 import warnings
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Set
@@ -141,6 +142,7 @@ CALLBACK_DEDUP_TTL_SECONDS = float(os.getenv("TG_CALLBACK_DEDUP_TTL_SECONDS", "3
 CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "8"))
 CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "2.0"))
 STORAGE_IO_TIMEOUT_SECONDS = float(os.getenv("STORAGE_IO_TIMEOUT_SECONDS", "2.5"))
+GEN_TYPE_MENU_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_TIMEOUT_SECONDS", "6.0"))
 
 _message_rate_limiter = PerUserRateLimiter(MESSAGE_RATE_LIMIT_PER_SEC, MESSAGE_RATE_LIMIT_BURST)
 _callback_rate_limiter = PerUserRateLimiter(CALLBACK_RATE_LIMIT_PER_SEC, CALLBACK_RATE_LIMIT_BURST)
@@ -151,6 +153,12 @@ _callback_semaphore = asyncio.Semaphore(CALLBACK_CONCURRENCY_LIMIT) if CALLBACK_
 KIE_CREDITS_CACHE_TTL_SECONDS = float(os.getenv("KIE_CREDITS_CACHE_TTL_SECONDS", "120"))
 KIE_CREDITS_TIMEOUT_SECONDS = float(os.getenv("KIE_CREDITS_TIMEOUT_SECONDS", "2.0"))
 _kie_credits_cache: Dict[str, Any] = {"timestamp": 0.0, "value": None}
+_background_tasks: Set[asyncio.Task] = set()
+
+
+def _register_background_task(task: asyncio.Task) -> None:
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 def is_known_callback_data(callback_data: Optional[str]) -> bool:
@@ -998,6 +1006,300 @@ def get_categories_from_registry() -> List[str]:
         if cat:
             categories.add(cat)
     return sorted(list(categories))
+
+
+async def _safe_edit_or_reply(
+    query: Optional[CallbackQuery],
+    text: str,
+    *,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    parse_mode: str = "HTML",
+) -> bool:
+    if not query or not query.message:
+        return False
+    try:
+        await query.edit_message_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+        return True
+    except BadRequest as exc:
+        if "Message is not modified" in str(exc):
+            return True
+        logger.debug("Failed to edit message: %s", exc)
+    except Exception as exc:
+        logger.debug("Failed to edit message: %s", exc)
+    try:
+        await query.message.reply_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+        return True
+    except Exception as exc:
+        logger.debug("Failed to reply with message: %s", exc)
+        return False
+
+
+async def _load_with_timeout(
+    label: str,
+    *,
+    correlation_id: Optional[str],
+    user_id: Optional[int],
+    gen_type: Optional[str],
+    func: Any,
+    timeout_seconds: float = GEN_TYPE_MENU_TIMEOUT_SECONDS,
+) -> Any:
+    start_ts = time.monotonic()
+    try:
+        result = await asyncio.wait_for(asyncio.to_thread(func), timeout=timeout_seconds)
+        duration_ms = int((time.monotonic() - start_ts) * 1000)
+        logger.info(
+            "GEN_TYPE_MENU step=%s status=ok duration_ms=%s corr_id=%s user_id=%s gen_type=%s",
+            label,
+            duration_ms,
+            correlation_id,
+            user_id,
+            gen_type,
+        )
+        return result
+    except asyncio.TimeoutError:
+        duration_ms = int((time.monotonic() - start_ts) * 1000)
+        logger.warning(
+            "GEN_TYPE_MENU step=%s status=timeout duration_ms=%s corr_id=%s user_id=%s gen_type=%s",
+            label,
+            duration_ms,
+            correlation_id,
+            user_id,
+            gen_type,
+        )
+        raise
+    except Exception as exc:
+        duration_ms = int((time.monotonic() - start_ts) * 1000)
+        logger.warning(
+            "GEN_TYPE_MENU step=%s status=error duration_ms=%s corr_id=%s user_id=%s gen_type=%s error=%s",
+            label,
+            duration_ms,
+            correlation_id,
+            user_id,
+            gen_type,
+            exc,
+        )
+        raise
+
+
+async def _render_gen_type_menu(
+    *,
+    query: Optional[CallbackQuery],
+    user_id: Optional[int],
+    gen_type: str,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    notice_text: Optional[str] = None,
+) -> int:
+    if not query or not query.message:
+        return ConversationHandler.END
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    try:
+        gen_info = await _load_with_timeout(
+            "get_info",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            gen_type=gen_type,
+            func=lambda: get_generation_type_info(gen_type),
+        )
+        models = await _load_with_timeout(
+            "get_models",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            gen_type=gen_type,
+            func=lambda: get_visible_models_by_generation_type(gen_type),
+        )
+    except asyncio.TimeoutError:
+        error_text = (
+            "⚠️ <b>Меню загружается дольше обычного</b>\n\n"
+            "Попробуйте снова или откройте меню позже."
+            if user_lang == "ru"
+            else "⚠️ <b>Menu is taking longer than usual</b>\n\nPlease try again in a moment."
+        )
+        reply_markup = build_back_to_menu_keyboard(user_lang)
+        await _safe_edit_or_reply(query, error_text, reply_markup=reply_markup)
+        return ConversationHandler.END
+    except Exception:
+        error_text = (
+            "❌ <b>Ошибка загрузки меню</b>\n\nПопробуйте ещё раз или вернитесь в главное меню."
+            if user_lang == "ru"
+            else "❌ <b>Failed to load menu</b>\n\nPlease try again or return to the main menu."
+        )
+        reply_markup = build_back_to_menu_keyboard(user_lang)
+        await _safe_edit_or_reply(query, error_text, reply_markup=reply_markup)
+        return ConversationHandler.END
+
+    if not models:
+        error_text = t('msg_gen_type_no_models', lang=user_lang)
+        await _safe_edit_or_reply(query, error_text, parse_mode="HTML")
+        return ConversationHandler.END
+
+    try:
+        is_admin = await _load_with_timeout(
+            "get_admin",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            gen_type=gen_type,
+            func=lambda: get_is_admin(user_id),
+        )
+    except Exception:
+        is_admin = False
+
+    remaining_free = await get_user_free_generations_remaining(user_id)
+    free_counter_line = ""
+    try:
+        free_counter_line = await get_free_counter_line(
+            user_id,
+            user_lang=user_lang,
+            correlation_id=correlation_id,
+            action_path="gen_type_menu",
+        )
+    except Exception as exc:
+        logger.warning("Failed to resolve free counter line: %s", exc)
+
+    gen_type_key = f'gen_type_{gen_type.replace("-", "_")}'
+    gen_type_name = t(gen_type_key, lang=user_lang, default=gen_info.get('name', gen_type))
+    gen_desc_key = f'gen_type_desc_{gen_type.replace("-", "_")}'
+    gen_type_description = t(gen_desc_key, lang=user_lang, default=gen_info.get('description', ''))
+
+    gen_type_text = (
+        f"{t('msg_gen_type_title', lang=user_lang, name=gen_type_name)}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{t('msg_gen_type_description', lang=user_lang, description=gen_type_description)}\n\n"
+    )
+
+    if remaining_free > 0 and gen_type == "text-to-image":
+        gen_type_text += (
+            f"{t('msg_gen_type_free', lang=user_lang, remaining=remaining_free)}\n"
+            f"💡 {t('btn_invite_friend', lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}\n\n"
+        )
+
+    gen_type_text += (
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{t('msg_gen_type_models_available', lang=user_lang, count=len(models))}\n\n"
+        f"{t('msg_gen_type_select_model', lang=user_lang)}"
+    )
+    gen_type_text = _append_free_counter_text(gen_type_text, free_counter_line)
+
+    if notice_text:
+        gen_type_text = f"{notice_text}\n\n{gen_type_text}"
+
+    keyboard: List[List[InlineKeyboardButton]] = []
+    if gen_type == "text-to-image":
+        button_text = (
+            f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
+            if user_lang == "ru"
+            else f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
+        )
+        keyboard.append([InlineKeyboardButton(button_text, callback_data="free_tools")])
+        keyboard.append([])
+
+    model_rows = []
+    for i, model in enumerate(models):
+        model_name = model.get('name', model.get('id', 'Unknown'))
+        model_emoji = model.get('emoji', '🤖')
+        model_id = model.get('id')
+
+        from app.pricing.price_ssot import get_min_price
+        min_price = get_min_price(model_id)
+
+        if min_price is not None:
+            price_formatted = format_rub_amount(float(min_price))
+            button_text = f"{model_emoji} {model_name} • {price_formatted}"
+        else:
+            button_text = f"{model_emoji} {model_name}"
+
+        if len(button_text.encode("utf-8")) > 60:
+            max_name_length = 25 if min_price else 40
+            truncated = model_name[:max_name_length].rstrip()
+            if min_price is not None:
+                button_text = f"{model_emoji} {truncated}... • {price_formatted}"
+            else:
+                button_text = f"{model_emoji} {truncated}..."
+
+        callback_data = f"select_model:{model_id}"
+        if len(callback_data.encode('utf-8')) > 64:
+            logger.error(
+                "Callback data too long for model %s: %s bytes",
+                model_id,
+                len(callback_data.encode('utf-8')),
+            )
+            callback_data = f"sel:{model_id[:50]}"
+
+        if i % 2 == 0:
+            model_rows.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+        else:
+            if model_rows:
+                model_rows[-1].append(InlineKeyboardButton(button_text, callback_data=callback_data))
+            else:
+                model_rows.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+    keyboard.extend(model_rows)
+    keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
+
+    try:
+        await query.edit_message_text(
+            gen_type_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML',
+        )
+    except BadRequest as exc:
+        if "Message is not modified" in str(exc):
+            await query.answer()
+            return SELECTING_MODEL
+        logger.error("Error editing message in gen_type: %s", exc, exc_info=True)
+        try:
+            await query.message.reply_text(
+                gen_type_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML',
+            )
+        except Exception as e2:
+            logger.error("Error sending new message in gen_type: %s", e2, exc_info=True)
+            await query.answer("❌ Ошибка. Попробуйте еще раз", show_alert=True)
+
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=query.message.chat_id if query and query.message else None,
+        update_id=update_id,
+        action="GEN_TYPE_MENU_RENDERED",
+        action_path="gen_type_menu",
+        gen_type=gen_type,
+        outcome="success",
+        param={
+            "model_count": len(models),
+            "is_admin": is_admin,
+        },
+    )
+    return SELECTING_MODEL
+
+
+async def _get_registry_model_entry(
+    model_id: str,
+    *,
+    correlation_id: Optional[str],
+    user_id: Optional[int],
+    gen_type: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    try:
+        models = await _load_with_timeout(
+            "registry_lookup",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            gen_type=gen_type,
+            func=get_models_sync,
+        )
+    except Exception:
+        return None
+    return next((model for model in models if model.get("id") == model_id), None)
 
 
 def _determine_primary_input(
@@ -7732,171 +8034,23 @@ async def _button_callback_impl(
                 update_id=update_id,
                 chat_id=query.message.chat_id if query.message else None,
             )
-            
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_info", user_id, gen_type)
-            gen_info = get_generation_type_info(gen_type)
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_models", user_id, gen_type)
-            models = get_visible_models_by_generation_type(gen_type)
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=got_models count=%s", user_id, gen_type, len(models) if models else 0)
-            
-            if not models:
-                user_lang = get_user_language(user_id)
-                error_text = t('msg_gen_type_no_models', lang=user_lang)
-                try:
-                    await query.edit_message_text(
-                        error_text,
-                        parse_mode='HTML'
-                    )
-                except:
-                    try:
-                        await query.message.reply_text(
-                            error_text,
-                            parse_mode='HTML'
-                        )
-                    except:
-                        pass
-                return ConversationHandler.END
-            
-            # Get admin status for price calculations
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_admin", user_id, gen_type)
-            is_admin = get_is_admin(user_id)
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=after_get_admin is_admin=%s", user_id, gen_type, is_admin)
-            
-            # Show generation type info and models with marketing text
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=before_get_free_remaining", user_id, gen_type)
-            remaining_free = await get_user_free_generations_remaining(user_id)
-            logger.info("GEN_TYPE_HANDLER user_id=%s gen_type=%s step=got_free_remaining remaining=%s", user_id, gen_type, remaining_free)
             user_lang = get_user_language(user_id)
-            free_counter_line = ""
-            try:
-                free_counter_line = await get_free_counter_line(
-                    user_id,
-                    user_lang=user_lang,
+            loading_text = (
+                "⏳ <b>Загружаю меню...</b>\n\nПожалуйста, подождите пару секунд."
+                if user_lang == "ru"
+                else "⏳ <b>Loading menu...</b>\n\nPlease wait a moment."
+            )
+            await _safe_edit_or_reply(query, loading_text, parse_mode="HTML")
+            task = asyncio.create_task(
+                _render_gen_type_menu(
+                    query=query,
+                    user_id=user_id,
+                    gen_type=gen_type,
                     correlation_id=correlation_id,
-                    action_path="gen_type_menu",
+                    update_id=update_id,
                 )
-            except Exception as exc:
-                logger.warning("Failed to resolve free counter line: %s", exc)
-            
-            # Get translated name and description
-            gen_type_key = f'gen_type_{gen_type.replace("-", "_")}'
-            gen_type_name = t(gen_type_key, lang=user_lang, default=gen_info.get('name', gen_type))
-            gen_desc_key = f'gen_type_desc_{gen_type.replace("-", "_")}'
-            gen_type_description = t(gen_desc_key, lang=user_lang, default=gen_info.get('description', ''))
-            
-            gen_type_text = (
-                f"{t('msg_gen_type_title', lang=user_lang, name=gen_type_name)}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{t('msg_gen_type_description', lang=user_lang, description=gen_type_description)}\n\n"
             )
-            
-            if remaining_free > 0 and gen_type == "text-to-image":
-                gen_type_text += (
-                    f"{t('msg_gen_type_free', lang=user_lang, remaining=remaining_free)}\n"
-                    f"💡 {t('btn_invite_friend', lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}\n\n"
-                )
-            
-            gen_type_text += (
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{t('msg_gen_type_models_available', lang=user_lang, count=len(models))}\n\n"
-                f"{t('msg_gen_type_select_model', lang=user_lang)}"
-            )
-            gen_type_text = _append_free_counter_text(gen_type_text, free_counter_line)
-            
-            # Create keyboard with models (2 per row for compact display)
-            keyboard = []
-            
-            if gen_type == "text-to-image":
-                user_lang = get_user_language(user_id)
-                if user_lang == 'ru':
-                    button_text = f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
-                else:
-                    button_text = f"🆓 FAST TOOLS ({remaining_free}/{FREE_GENERATIONS_PER_DAY})"
-                keyboard.append([
-                    InlineKeyboardButton(button_text, callback_data="free_tools")
-                ])
-                
-                keyboard.append([])  # Empty row
-            
-            # Show models in compact format with prices (2 per row)
-            model_rows = []
-            for i, model in enumerate(models):
-                model_name = model.get('name', model.get('id', 'Unknown'))
-                model_emoji = model.get('emoji', '🤖')
-                model_id = model.get('id')
-
-                # Get price for the model (show price in gen_type menus)
-                from app.pricing.price_ssot import get_min_price
-                min_price = get_min_price(model_id)
-                
-                if min_price is not None:
-                    # Format price with RUB symbol
-                    price_formatted = format_rub_amount(float(min_price))
-                    button_text = f"{model_emoji} {model_name} • {price_formatted}"
-                else:
-                    button_text = f"{model_emoji} {model_name}"
-                
-                if len(button_text.encode("utf-8")) > 60:
-                    # Truncate name to fit price
-                    max_name_length = 25 if min_price else 40
-                    truncated = model_name[:max_name_length].rstrip()
-                    if min_price is not None:
-                        button_text = f"{model_emoji} {truncated}... • {price_formatted}"
-                    else:
-                        button_text = f"{model_emoji} {truncated}..."
-                
-                # Ensure callback_data is not too long (Telegram limit: 64 bytes)
-                callback_data = f"select_model:{model_id}"
-                if len(callback_data.encode('utf-8')) > 64:
-                    logger.error(f"Callback data too long for model {model_id}: {len(callback_data.encode('utf-8'))} bytes")
-                    # Use shorter model_id if possible
-                    callback_data = f"sel:{model_id[:50]}"
-                
-                if i % 2 == 0:
-                    # First button in row
-                    model_rows.append([InlineKeyboardButton(
-                        button_text,
-                        callback_data=callback_data
-                    )])
-                else:
-                    # Second button in row - add to last row
-                    if model_rows:
-                        model_rows[-1].append(InlineKeyboardButton(
-                            button_text,
-                            callback_data=callback_data
-                        ))
-                    else:
-                        model_rows.append([InlineKeyboardButton(
-                            button_text,
-                            callback_data=callback_data
-                        )])
-            
-            keyboard.extend(model_rows)
-            keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
-            
-            try:
-                await query.edit_message_text(
-                    gen_type_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except BadRequest as exc:
-                if "Message is not modified" in str(exc):
-                    await query.answer()
-                    return SELECTING_MODEL
-                logger.error(f"Error editing message in gen_type: {exc}", exc_info=True)
-                try:
-                    await query.message.reply_text(
-                        gen_type_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                except Exception as e2:
-                    logger.error(f"Error sending new message in gen_type: {e2}", exc_info=True)
-                    await query.answer("❌ Ошибка. Попробуйте еще раз", show_alert=True)
-            
-            # IMPORTANT: Return SELECTING_MODEL state so that select_model: buttons work
-            # If we return END, the buttons won't be clickable
+            _register_background_task(task)
             return SELECTING_MODEL
         
         if data.startswith("category:"):
@@ -12275,6 +12429,51 @@ async def _button_callback_impl(
                 return ConversationHandler.END
 
             session = ensure_session_cached(context, session_store, user_id, update_id)
+            registry_entry = await _get_registry_model_entry(
+                model_id,
+                correlation_id=correlation_id,
+                user_id=user_id,
+                gen_type=session.get("gen_type"),
+            )
+            registry_kie_model = registry_entry.get("kie_model") if registry_entry else None
+            if not registry_entry or (
+                registry_kie_model and registry_kie_model != model_spec.kie_model
+            ):
+                user_lang = get_user_language(user_id)
+                notice_text = (
+                    "🔄 <b>Модель обновилась или недоступна</b>\n\n"
+                    "Пожалуйста, выберите модель из актуального списка."
+                    if user_lang == "ru"
+                    else "🔄 <b>Model updated or unavailable</b>\n\nPlease choose from the current list."
+                )
+                gen_type_hint = (
+                    session.get("active_gen_type")
+                    or session.get("gen_type")
+                    or _derive_model_gen_type(model_spec)
+                )
+                loading_text = (
+                    f"{notice_text}\n\n⏳ <b>Обновляю меню...</b>"
+                    if user_lang == "ru"
+                    else f"{notice_text}\n\n⏳ <b>Refreshing menu...</b>"
+                )
+                await _safe_edit_or_reply(query, loading_text, parse_mode="HTML")
+                if gen_type_hint:
+                    task = asyncio.create_task(
+                        _render_gen_type_menu(
+                            query=query,
+                            user_id=user_id,
+                            gen_type=_normalize_gen_type(gen_type_hint) or gen_type_hint,
+                            correlation_id=correlation_id,
+                            update_id=update_id,
+                            notice_text=notice_text,
+                        )
+                    )
+                    _register_background_task(task)
+                else:
+                    reply_markup = build_back_to_menu_keyboard(user_lang)
+                    await _safe_edit_or_reply(query, notice_text, reply_markup=reply_markup)
+                return ConversationHandler.END
+
             session_gen_type = _resolve_session_gen_type(session, None)
             model_gen_type = _derive_model_gen_type(model_spec)
             if session_gen_type and model_gen_type and session_gen_type != model_gen_type:
