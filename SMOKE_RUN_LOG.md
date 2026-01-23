@@ -142,3 +142,28 @@ E) Reliability/observability/CI artifacts
 - `python - <<'PY' ...` (pytest subprocess capture for evidence)
 
 Final status: STOP
+
+---
+
+Date: 2026-01-24
+
+### Scope requested
+- BILLING_PREFLIGHT regression fix (PoolConnectionProxy callable)
+- `pytest` billing preflight coverage
+- No Real API policy enforcement
+
+### Release evidence
+- BILLING_PREFLIGHT now reports numeric counts and `lat_ms` in db meta.
+- collected: 507
+- result: exit code 0
+- New tests:
+  - `tests/test_billing_preflight.py::test_billing_preflight_happy_path_meta_lat_ms`
+  - `tests/test_billing_preflight.py::test_billing_preflight_section_error_isolated`
+- Command: `pytest`
+
+NETWORK: disabled (socket guard + `tests/test_no_network_calls.py`)
+
+### Notes
+- pytest workflow `pytest.yml` uses env/secrets keys with stubbed defaults; no real keys required.
+
+Final status: CONTINUE
