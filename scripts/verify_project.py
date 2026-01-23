@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -58,13 +59,34 @@ def ensure_dependencies() -> None:
 
 
 def run_secrets_scan() -> bool:
-    print("\n$ rg -n \"BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}\" -g '!node_modules' -g '!.git' -g '!scripts/verify_project.py'")
-    result = subprocess.run(
-        "rg -n \"BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}\" -g '!node_modules' -g '!.git' -g '!scripts/verify_project.py'",
-        shell=True,
-        capture_output=True,
-        text=True,
-    )
+    pattern = "BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}"
+    rg_cmd = f"rg -n \"{pattern}\" -g '!node_modules' -g '!.git' -g '!scripts/verify_project.py'"
+    if shutil.which("rg"):
+        print(f"\n$ {rg_cmd}")
+        result = subprocess.run(
+            rg_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        engine = "rg"
+    else:
+        grep_cmd = (
+            f"grep -R -nE \"{pattern}\" "
+            "--exclude-dir=node_modules --exclude-dir=.git "
+            "--exclude=scripts/verify_project.py ."
+        )
+        print(f"\n$ {grep_cmd}")
+        result = subprocess.run(
+            grep_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        engine = "grep"
+    print(f"ℹ️ Secrets scan engine: {engine}")
     if result.returncode == 0:
         print("❌ Secret patterns found:")
         print(result.stdout)
