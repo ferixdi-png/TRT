@@ -141,6 +141,41 @@ async def test_billing_preflight_counts_two_partners():
 
 
 @pytest.mark.asyncio
+async def test_billing_preflight_query_meta_success():
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["sections"]["db"]["meta"]["query_status"] == "OK"
+    assert report["sections"]["db"]["meta"]["query_latency_ms"] is not None
+    assert report["sections"]["tenants"]["meta"]["query_status"] == "OK"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_query_exception_degraded():
+    responses = _base_responses()
+
+    class ErroringConn(FakeConn):
+        async def fetchval(self, query, *args):
+            key = _query_key(query)
+            if key == "partners_count":
+                raise RuntimeError("db down")
+            return self.responses[key]
+
+    fake_conn = ErroringConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["sections"]["tenants"]["status"] == "DEGRADED"
+    assert report["sections"]["tenants"]["meta"]["query_status"] == "DEGRADED"
+
+
+@pytest.mark.asyncio
 async def test_billing_preflight_detects_violations():
     responses = _base_responses()
     responses.update(
