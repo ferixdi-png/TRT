@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from typing import Any, Optional
 
@@ -37,6 +38,7 @@ def log_structured_event(**fields: Any) -> None:
     context_fields = get_context_fields()
     payload = {
         "correlation_id": correlation_id,
+        "timestamp_ms": int(time.time() * 1000),
         "user_id": fields.get("user_id") or context_fields.get("user_id"),
         "chat_id": fields.get("chat_id") or context_fields.get("chat_id"),
         "update_id": fields.get("update_id") or context_fields.get("update_id"),

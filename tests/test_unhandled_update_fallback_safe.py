@@ -1,5 +1,5 @@
 import pytest
-from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, filters
+from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, filters, ContextTypes
 
 from bot_kie import (
     active_session_router,
@@ -37,6 +37,37 @@ async def test_unhandled_update_fallback_no_session_safe_menu(harness, monkeypat
         and event.get("outcome") == "menu_shown"
         for event in events
     )
+
+
+@pytest.mark.asyncio
+async def test_unhandled_update_fallback_non_text_shows_menu(harness):
+    user_id = 88004
+
+    user_sessions.set(
+        user_id,
+        {
+            "waiting_for": "prompt",
+            "current_param": "prompt",
+            "params": {},
+            "properties": {},
+            "required": [],
+            "model_info": {},
+        },
+    )
+
+    update = harness.create_mock_update_message(text=None, user_id=user_id)
+    harness._attach_bot(update)
+    context = ContextTypes.DEFAULT_TYPE.from_update(update, harness.application)
+
+    await unhandled_update_fallback(update, context)
+
+    assert harness.outbox.messages
+    last = harness.outbox.messages[-1]
+    reply_markup = last.get("reply_markup")
+    assert reply_markup is not None
+    keyboard = getattr(reply_markup, "inline_keyboard", [])
+    labels = [button.text for row in keyboard for button in row]
+    assert any("Главное меню" in label for label in labels)
 
 
 @pytest.mark.asyncio

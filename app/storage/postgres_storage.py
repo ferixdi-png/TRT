@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 import hashlib
+import math
 from datetime import datetime, date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -259,6 +260,19 @@ class PostgresStorage(BaseStorage):
     ) -> Dict[str, Any]:
         if not task_id:
             return {"status": "missing_task_id"}
+        if not math.isfinite(amount) or amount <= 0:
+            balance_before = await self.get_user_balance(user_id)
+            logger.warning(
+                "INVALID_CHARGE_AMOUNT user_id=%s amount=%.4f task_id=%s",
+                user_id,
+                amount,
+                task_id,
+            )
+            return {
+                "status": "invalid_amount",
+                "balance_before": balance_before,
+                "balance_after": balance_before,
+            }
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
