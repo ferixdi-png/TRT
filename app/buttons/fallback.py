@@ -32,6 +32,7 @@ async def fallback_callback_handler(
         error: Ошибка, если была (опционально)
     """
     query = update.callback_query
+    fallback_chat_id = update.effective_chat.id if update.effective_chat else None
     
     if error:
         logger.debug("Fallback callback error detail: %s", error, exc_info=True)
@@ -79,14 +80,30 @@ async def fallback_callback_handler(
                     "Кнопка устарела, открой меню."
                     f" Лог: {correlation_id or 'corr-na'}"
                 )
-                await query.message.reply_text(
-                    message_text,
-                    reply_markup=keyboard,
-                )
+                if query.message:
+                    await query.message.reply_text(
+                        message_text,
+                        reply_markup=keyboard,
+                    )
+                elif fallback_chat_id:
+                    await context.bot.send_message(
+                        chat_id=fallback_chat_id,
+                        text=message_text,
+                        reply_markup=keyboard,
+                    )
             except Exception:
                 pass
+        elif fallback_chat_id:
+            menu_label = "Главное меню" if user_lang == "ru" else "Main menu"
+            keyboard = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(menu_label, callback_data="back_to_menu")]]
+            )
+            await context.bot.send_message(
+                chat_id=fallback_chat_id,
+                text="Кнопка устарела, открой меню." if user_lang == "ru" else "Button outdated, open the menu.",
+                reply_markup=keyboard,
+            )
 
     except Exception as e:
         logger.debug("❌ Ошибка в fallback handler: %s", e, exc_info=True)
-
 
