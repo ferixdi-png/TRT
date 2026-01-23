@@ -62,6 +62,10 @@ def build_webhook_handler(
 
         if not _bot_ready:
             _early_update_count += 1
+            logger.warning(
+                "WEBHOOK early_update_dropped=true early_update_count=%s",
+                _early_update_count,
+            )
             return web.json_response({"ok": True}, status=200)
 
         correlation_id = _resolve_correlation_id(request)
