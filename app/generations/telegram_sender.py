@@ -362,6 +362,7 @@ async def send_job_result(
             snapshot.get("limit_per_day", 0),
             snapshot.get("next_refill_in", 0),
             user_lang=user_lang,
+            is_admin=bool(snapshot.get("is_admin")),
         )
     except Exception:
         free_counter_line = ""

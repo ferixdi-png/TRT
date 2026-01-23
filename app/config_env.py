@@ -218,8 +218,10 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
         if not webhook_base_url:
             missing_required.append("WEBHOOK_BASE_URL")
 
-    if admin_id and not admin_id.isdigit():
-        invalid_required.append("ADMIN_ID (must be number)")
+    if admin_id:
+        admin_parts = [p for p in re.split(r"[,\s]+", admin_id.strip()) if p]
+        if not admin_parts or any(not part.isdigit() for part in admin_parts):
+            invalid_required.append("ADMIN_ID (must be number or list of numbers)")
     if bot_instance_id:
         if " " in bot_instance_id or not _is_valid_instance(bot_instance_id):
             invalid_required.append("BOT_INSTANCE_ID (lowercase letters/numbers/._/- only)")

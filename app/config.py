@@ -4,6 +4,7 @@ Loads configuration from environment variables with validation
 """
 
 import os
+import re
 from urllib.parse import urlsplit, urlunsplit
 import sys
 import logging
@@ -62,7 +63,8 @@ class Settings:
         # Опциональные переменные с дефолтами
         admin_id_str = os.getenv('ADMIN_ID', '0')
         try:
-            self.admin_id = int(admin_id_str) if admin_id_str else 0
+            admin_id_parts = [p for p in re.split(r"[,\s]+", admin_id_str.strip()) if p]
+            self.admin_id = int(admin_id_parts[0]) if admin_id_parts else 0
         except ValueError:
             self.admin_id = 0
             logger.warning(f"Invalid ADMIN_ID: {admin_id_str}, using 0")
