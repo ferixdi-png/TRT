@@ -1,5 +1,32 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-24 UX/SSOT audit: gen_type menu resilience & callback routing
+
+### Найденные проблемы
+* Timeout при загрузке моделей для `gen_type:text-to-video` приводил к падению `_render_gen_type_menu` из-за `NameError: build_back_to_menu_keyboard`.
+* "Task exception was never retrieved" из-за фоновый `asyncio.create_task` без обработчика ошибок.
+* "Ignoring expired callback answer" из-за позднего `answerCallbackQuery`.
+* `/start` и `/admin` не прерывали активную сессию (`waiting_for/current_param`), что отправляло команды в `input_parameters`.
+* Загрузка списка моделей не имела TTL-кэша и деградации при сбоях.
+
+### Что исправлено
+* Унифицирована навигация "Назад/Главное меню" через `build_back_to_menu_keyboard(back_callback=...)` и добавлена обработка в фоллбеках.
+* `_render_gen_type_menu` теперь возвращает корректный fallback-экран при timeout/ошибке/пустом списке моделей.
+* Добавлен безопасный реестр фоновых задач с логированием исключений.
+* Мгновенный `answerCallbackQuery` во всех callback-хендлерах + UX "⏳ Пожалуйста, подождите…".
+* `/start` и `/admin` сбрасывают активную сессию, а router пропускает команды.
+* Введён TTL-кэш списка моделей по gen_type + использование устаревшего кэша при сбоях.
+* Добавлена валидация SSOT (SKU ↔ schema ↔ gen_type) на старте и тест.
+
+### Изменённые файлы
+* `app/ux/navigation.py`
+* `app/pricing/ssot_catalog.py`
+* `bot_kie.py`
+* `tests/test_pricing_schema_consistency.py`
+
+### Тесты
+* `pytest -q tests/test_pricing_schema_consistency.py`
+
 ## ✅ 2026-01-23 SSOT: Sora 2/Pro + canonical model IDs
 
 ### Ключевые обновления
