@@ -19144,18 +19144,12 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     logger.info(f"Successful Stars payment for user {user_id}: {amount_rubles} RUB ({amount_stars} stars)")
 
 
-def initialize_data_files():
-    """Initialize all data files if they don't exist."""
-    # Log GitHub storage status
-    try:
-        from app.storage.factory import get_storage
+def initialize_data_files(storage_mode: str) -> None:
+    """Initialize all data files if they don't exist (legacy JSON storage only)."""
+    if storage_mode == "db":
+        logger.info("🗃️ DB storage active - skipping local JSON data files init")
+        return
 
-        storage_instance = get_storage()
-        storage_ok = storage_instance.test_connection()
-        logger.info(f"📁 GitHub storage status: {'ok' if storage_ok else 'degraded'}")
-    except Exception as e:
-        logger.error(f"📁 GitHub storage status: error ({e})")
-    
     data_files = [
         BALANCES_FILE,
         USER_LANGUAGES_FILE,
@@ -19213,7 +19207,7 @@ def initialize_data_files():
     except Exception as e:
         logger.error(f"❌ Failed to initialize knowledge store: {e}")
 
-
+def acquire_single_instance_lock_or_exit() -> None:
     # ==================== SINGLE INSTANCE LOCK ====================
     # Используем единый модуль блокировки для предотвращения 409 Conflict
     from app.locking.single_instance import (
@@ -19222,14 +19216,14 @@ def initialize_data_files():
         is_lock_held,
     )
     from app.utils.singleton_lock import get_lock_mode, is_lock_degraded
-    
+
     logger.info("🔒 Acquiring single instance lock...")
     if not acquire_single_instance_lock():
         logger.error("❌❌❌ Failed to acquire single instance lock!")
         logger.error("   Another bot instance is already running")
         logger.error("   Exiting gracefully (exit code 0) to prevent restart loop")
         sys.exit(0)
-    
+
     logger.info("✅ Single instance lock acquired - this is the leader instance")
     lock_mode = get_lock_mode()
     lock_degraded = is_lock_degraded()
@@ -19238,14 +19232,16 @@ def initialize_data_files():
         logger.warning("⚠️  DEGRADED LOCK MODE: For multi-instance scaling on Render, set DATABASE_URL + REDIS_URL")
     else:
         logger.info("✅ Distributed lock healthy (postgres advisory or redis)")
-    
+
     # Регистрируем освобождение lock при выходе
     import atexit
+
     def release_lock_on_exit():
         try:
             release_single_instance_lock()
         except Exception as e:
             logger.error(f"Error releasing lock on exit: {e}")
+
     atexit.register(release_lock_on_exit)
 
 
@@ -19315,15 +19311,6 @@ async def create_bot_application(settings) -> Application:
     storage = deps.get_storage()
     kie = deps.get_kie_client()
 
-    # ==================== BILLING PREFLIGHT (DB-ONLY) ====================
-    from app.diagnostics.billing_preflight import format_billing_preflight_report, run_billing_preflight
-
-    try:
-        preflight_report = await run_billing_preflight(storage, db_pool=None)
-        logger.info("%s", format_billing_preflight_report(preflight_report))
-    except Exception:
-        logger.debug("Billing preflight failed to run", exc_info=True)
-    
     # ==================== NO-SILENCE GUARD ====================
     from app.observability.no_silence_guard import get_no_silence_guard
     no_silence_guard = get_no_silence_guard()
@@ -19750,35 +19737,26 @@ async def main():
     # Проверяем обязательные переменные ПЕРЕД любой инициализацией
     validation_errors = []
     
-    storage_mode_raw = os.getenv("STORAGE_MODE", "auto").strip().lower()
-    storage_mode_effective = "postgres" if storage_mode_raw == "auto" and os.getenv("DATABASE_URL") else storage_mode_raw
+    storage_mode_raw = os.getenv("STORAGE_MODE", "").strip().lower()
+    storage_mode_effective = "db"
     telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     kie_api_key = os.getenv("KIE_API_KEY", "").strip()
-    github_token = os.getenv("GITHUB_TOKEN", "").strip()
-    github_storage_repo = os.getenv("GITHUB_STORAGE_REPO", "").strip()
     database_url = os.getenv("DATABASE_URL", "").strip()
     redis_url = os.getenv("REDIS_URL", "").strip()
 
     if not telegram_bot_token:
         validation_errors.append("TELEGRAM_BOT_TOKEN is required")
 
-    if storage_mode_effective in ("postgres", "db"):
-        if not database_url:
-            validation_errors.append("DATABASE_URL is required for STORAGE_MODE=postgres/db")
-    else:
-        if not github_token:
-            validation_errors.append("GITHUB_TOKEN is required for GitHub storage")
-        if not github_storage_repo:
-            validation_errors.append("GITHUB_STORAGE_REPO is required for GitHub storage")
+    if not database_url:
+        validation_errors.append("DATABASE_URL is required for DB storage")
 
     logger.info(f"🔑 TELEGRAM_BOT_TOKEN: {'✅ Set' if telegram_bot_token else '❌ NOT SET'}")
     logger.info(f"🔑 KIE_API_KEY: {'✅ Set' if kie_api_key else '⚠️ NOT SET (degraded mode)'}")
-    logger.info(f"🗄️ STORAGE_MODE: {storage_mode_raw} (effective={storage_mode_effective})")
+    if storage_mode_raw and storage_mode_raw not in {"db", "postgres"}:
+        logger.warning("⚠️ STORAGE_MODE=%s ignored (db-only runtime)", storage_mode_raw)
+    logger.info("🗄️ STORAGE_MODE: %s (effective=%s)", storage_mode_raw or "db", storage_mode_effective)
     logger.info(f"🗃️ DATABASE_URL: {'✅ Set' if database_url else '❌ NOT SET'}")
     logger.info(f"🔗 REDIS_URL: {'✅ Set' if redis_url else '❌ NOT SET'}")
-    if storage_mode_effective != "postgres":
-        logger.info(f"🔑 GITHUB_TOKEN: {'✅ Set' if github_token else '❌ NOT SET'}")
-        logger.info(f"📦 GITHUB_STORAGE_REPO: {'✅ Set' if github_storage_repo else '❌ NOT SET'}")
 
     # Проверка режима распределенной блокировки
     redis_url = os.getenv("REDIS_URL", "").strip()
@@ -19823,6 +19801,7 @@ async def main():
     
     # CRITICAL: Ensure storage is reachable before anything else
     logger.info("🔒 Ensuring storage persistence...")
+    storage_instance = None
     try:
         from app.storage.factory import get_storage
 
@@ -19835,13 +19814,39 @@ async def main():
     except Exception as e:
         logger.error(f"❌ CRITICAL: Storage health check failed: {e}")
         logger.error("❌ Persistence may be unavailable!")
-    
+
+    # DB-only storage preflight with counts (users/balances/payments/free_limits)
+    if storage_instance is not None:
+        try:
+            from app.diagnostics.billing_preflight import run_billing_preflight
+
+            preflight_report = await run_billing_preflight(storage_instance, db_pool=None)
+            sections = preflight_report.get("sections", {})
+            users_count = sections.get("users", {}).get("meta", {}).get("records")
+            balances_count = sections.get("balances", {}).get("meta", {}).get("records")
+            payments_count = sections.get("attempts", {}).get("meta", {}).get("total")
+            free_limits_count = sections.get("free_limits", {}).get("meta", {}).get("records")
+            logger.info(
+                "BOOT_STATUS db_storage=active users=%s balances=%s payments=%s free_limits=%s",
+                users_count if users_count is not None else "n/a",
+                balances_count if balances_count is not None else "n/a",
+                payments_count if payments_count is not None else "n/a",
+                free_limits_count if free_limits_count is not None else "n/a",
+            )
+        except Exception:
+            logger.warning("BOOT_STATUS db_storage=unavailable preflight_failed=true", exc_info=True)
+    else:
+        logger.warning("BOOT_STATUS db_storage=unavailable storage_instance=false")
+
     # Initialize all data files first (legacy JSON fallback)
     logger.info("🔧 Initializing data files...")
-    initialize_data_files()
+    initialize_data_files(storage_mode_effective)
 
     # ==================== SINGLE INSTANCE LOCK ====================
-    # Lock is acquired during initialize_data_files; verify it is held.
+    acquire_single_instance_lock_or_exit()
+
+    # ==================== SINGLE INSTANCE LOCK ====================
+    # Lock is acquired during startup; verify it is held.
     from app.locking.single_instance import is_lock_held
     if not is_lock_held():
         logger.error("❌❌❌ CRITICAL: Single instance lock is not held!")
@@ -19851,26 +19856,26 @@ async def main():
     
     logger.info("✅ Single instance lock verified - proceeding with bot initialization")
     
-    # Final verification of critical files (for JSON fallback)
-    logger.info("🔒 Verifying critical data files...")
-    critical_files = [BALANCES_FILE, GENERATIONS_HISTORY_FILE, PAYMENTS_FILE, GIFT_CLAIMED_FILE]
-    all_critical_ok = True
-    for critical_file in critical_files:
-        if os.path.exists(critical_file):
-            file_size = os.path.getsize(critical_file)
-            if file_size > 0:
-                logger.info(f"✅ Critical file OK: {critical_file} ({file_size} bytes)")
+    # Final verification of critical files (legacy JSON fallback)
+    if storage_mode_effective != "db":
+        logger.info("🔒 Verifying critical data files...")
+        critical_files = [BALANCES_FILE, GENERATIONS_HISTORY_FILE, PAYMENTS_FILE, GIFT_CLAIMED_FILE]
+        all_critical_ok = True
+        for critical_file in critical_files:
+            if os.path.exists(critical_file):
+                file_size = os.path.getsize(critical_file)
+                if file_size > 0:
+                    logger.info(f"✅ Critical file OK: {critical_file} ({file_size} bytes)")
+                else:
+                    logger.warning(f"⚠️ Critical file is empty: {critical_file}")
+                    all_critical_ok = False
             else:
-                logger.warning(f"⚠️ Critical file is empty: {critical_file}")
+                logger.warning(f"⚠️ Critical file missing: {critical_file}")
                 all_critical_ok = False
+        if all_critical_ok:
+            logger.info("✅ All critical data files verified and ready (legacy JSON storage)")
         else:
-            logger.warning(f"⚠️ Critical file missing: {critical_file}")
-            all_critical_ok = False
-    
-    if all_critical_ok:
-        logger.info("✅ All critical data files verified and ready (GitHub storage)")
-    else:
-        logger.warning("⚠️ Some critical files need attention, but bot will continue")
+            logger.warning("⚠️ Some critical files need attention, but bot will continue")
     
     # NOTE: Health check server для Render
     # Если нужен health check endpoint, раскомментируйте код ниже
@@ -19920,7 +19925,7 @@ async def main():
     if not settings.telegram_bot_token:
         logger.error("No TELEGRAM_BOT_TOKEN found in environment variables!")
         return
-    logger.info("✅ STORAGE_MODE=GITHUB_JSON (DB_DISABLED=true)")
+    logger.info("✅ STORAGE_MODE=DB (postgres storage active)")
     
     ensure_source_of_truth()
 
