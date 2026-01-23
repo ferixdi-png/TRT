@@ -16,11 +16,18 @@ logger = logging.getLogger(__name__)
 _redis_client: Optional[any] = None
 _redis_available: bool = False
 _redis_initialized: bool = False
+_tenant_default_warned: bool = False
 
 
 def build_tenant_lock_key(key: str) -> str:
     bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip() or os.getenv("PARTNER_ID", "").strip()
-    prefix = f"tenant:{bot_instance_id}:" if bot_instance_id else "tenant:unknown:"
+    if not bot_instance_id:
+        bot_instance_id = "default"
+        global _tenant_default_warned
+        if not _tenant_default_warned:
+            _tenant_default_warned = True
+            logger.warning("[DISTRIBUTED_LOCK] tenant_defaulted=true tenant=%s", bot_instance_id)
+    prefix = f"tenant:{bot_instance_id}:"
     if key.startswith(prefix):
         return key
     return f"{prefix}{key}"
