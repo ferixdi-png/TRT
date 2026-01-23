@@ -176,3 +176,39 @@ NETWORK: disabled (socket guard + `tests/test_no_network_calls.py`)
 - pytest workflow `pytest.yml` uses env/secrets keys with stubbed defaults; no real keys required.
 
 Final status: CONTINUE
+
+---
+
+Date: 2026-01-23
+
+### Scope requested
+- `pytest -q`
+- Billing preflight runtime log evidence (`BILLING_PREFLIGHT_RUNTIME`)
+- Webhook early-update guard logging
+
+### Release evidence
+- python: 3.10.19
+- pytest: 9.0.2, pluggy: 1.6.0
+- collected: 509
+- result: exit code 0
+- key green assertions:
+  - `tests/test_no_network_calls.py`
+  - `tests/test_confirm_generation_20clicks_single_charge.py`
+  - `tests/test_free_limits_and_history_e2e.py`
+  - `tests/test_integration_smoke_stub_pipeline.py`
+  - `tests/test_webhook_parallel_updates_stress.py`
+
+NETWORK: disabled (socket guard + `tests/test_no_network_calls.py`)
+
+### Runtime diagnostics evidence
+- BILLING_PREFLIGHT_RUNTIME log line:
+  - `BILLING_PREFLIGHT_RUNTIME {"sections":{"db":{"status":"OK","details":"ok","meta":{"latency_ms":0,"lat_ms":0,"query_status":"OK","query_latency_ms":0}},"tenants":{"status":"OK","details":"found=0, sample=[]","meta":{"partners_found":0,"partners_sample":[],"partners_top":[],"storage_partner":"p***01","query_status":"OK","query_latency_ms":0}},"users":{"status":"OK","details":"records=0 (initialized=0)","meta":{"records":0,"note":"","query_status":"OK","query_latency_ms":0}},"balances":{"status":"OK","details":"records=0, partners=0, neg=0, updated24h=0 (initialized=0)","meta":{"records":0,"note":"","query_status":"OK","query_latency_ms":0}},"free_limits":{"status":"OK","details":"records=0, partners=0, violations=0, used_today_range=None-None (initialized=0)","meta":{"daily_limit":5,"records":0,"note":"","query_status":"OK","query_latency_ms":0}},"attempts":{"status":"OK","details":"total=0, last24h=0, dup_request_id=0, stale_pending=0 (request_id=not_tracked)","meta":{"stale_minutes":30,"total":0,"last24h":0,"dup_request_id":0,"note":"","query_status":"OK","query_latency_ms":0}},"storage_rw":{"status":"OK","details":"ok","meta":{"rw_ok":true,"delete_ok":true,"latency_ms":0,"diagnostics_source":"custom","timeout_s":2.0,"retries":2}}},"result":"READY","how_to_fix":[]}`
+
+### Notes / blockers
+- Local billing preflight log captured via FakeStorage/FakePool harness (Render runtime not available in this environment).
+
+### Commands
+- `pytest -q`
+- `python - <<'PY' ...` (run_billing_preflight with FakeStorage/FakePool + users_total=0)
+
+Final status: STOP
