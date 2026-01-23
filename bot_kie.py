@@ -31,6 +31,7 @@ from app.observability.structured_logs import (
     get_correlation_id,
     log_structured_event,
 )
+from app.observability.task_lifecycle import log_task_lifecycle
 from app.observability.exception_boundary import handle_update_exception, handle_unknown_callback
 from app.observability.no_silence_guard import track_outgoing_action
 from app.observability.cancel_metrics import increment as increment_metric
@@ -186,6 +187,29 @@ def _create_background_task(coro: Any, *, action: str) -> asyncio.Task:
     task = asyncio.create_task(coro)
     _register_background_task(task, action=action)
     return task
+
+
+def start_delivery_reconciler(bot) -> None:
+    global _delivery_reconciler_task
+    if _delivery_reconciler_task and not _delivery_reconciler_task.done():
+        return
+    from app.storage import get_storage
+    from app.integrations.kie_stub import get_kie_client_or_stub
+    from app.delivery.reconciler import run_reconciler_loop
+    storage_instance = get_storage()
+    kie_client = get_kie_client_or_stub()
+    _delivery_reconciler_task = _create_background_task(
+        run_reconciler_loop(
+            bot,
+            storage_instance,
+            kie_client,
+            interval_seconds=DELIVERY_RECONCILE_INTERVAL_SECONDS,
+            batch_limit=DELIVERY_RECONCILE_BATCH_LIMIT,
+            pending_age_alert_seconds=DELIVERY_PENDING_AGE_ALERT_SECONDS,
+            queue_tail_alert_threshold=DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD,
+        ),
+        action="delivery_reconciler",
+    )
 
 
 LONG_CALLBACK_PREFIXES = (
@@ -2166,6 +2190,11 @@ async def cancel_active_generation(user_id: int) -> bool:
 # Pending result deliveries for retry (user_id, task_id) -> payload
 pending_deliveries: Dict[tuple[int, str], Dict[str, Any]] = {}
 pending_deliveries_lock = asyncio.Lock()
+_delivery_reconciler_task: Optional[asyncio.Task] = None
+DELIVERY_RECONCILE_INTERVAL_SECONDS = int(os.getenv("DELIVERY_RECONCILE_INTERVAL_SECONDS", "15"))
+DELIVERY_RECONCILE_BATCH_LIMIT = int(os.getenv("DELIVERY_RECONCILE_BATCH_LIMIT", "200"))
+DELIVERY_PENDING_AGE_ALERT_SECONDS = int(os.getenv("DELIVERY_PENDING_AGE_ALERT_SECONDS", "600"))
+DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD = int(os.getenv("DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD", "200"))
 
 # Generation submit locks to prevent double confirm clicks
 generation_submit_locks: dict[int, float] = {}
@@ -3495,16 +3524,9 @@ async def _check_and_deliver_pending_results(update: Update, context: ContextTyp
     if now - last_check < 8:
         return
     _pending_result_checks[user_id] = now
-    try:
-        from app.storage import get_storage
-        from app.integrations.kie_stub import get_kie_client_or_stub
-        from app.generations.universal_engine import parse_record_info
-        from app.kie_catalog import get_model
-        from app.generations.telegram_sender import send_result_file
-        from app.config import get_settings
-    except Exception as exc:
-        logger.debug("Pending result check skipped: %s", exc)
-        return
+    from app.storage import get_storage
+    from app.integrations.kie_stub import get_kie_client_or_stub
+    from app.delivery.reconciler import deliver_job_result
 
     storage = get_storage()
     jobs = await storage.list_jobs(user_id=user_id, limit=10)
@@ -3517,8 +3539,7 @@ async def _check_and_deliver_pending_results(update: Update, context: ContextTyp
     client = get_kie_client_or_stub()
     for job in pending_jobs:
         task_id = job.get("task_id") or job.get("external_task_id")
-        model_id = job.get("model_id")
-        if not task_id or not model_id:
+        if not task_id:
             continue
         try:
             status = await client.get_task_status(task_id)
@@ -3528,40 +3549,15 @@ async def _check_and_deliver_pending_results(update: Update, context: ContextTyp
         state = state_raw.lower()
         if state in {"success", "completed", "succeeded"}:
             status["taskId"] = task_id
-            model_spec = get_model(model_id)
-            if not model_spec:
-                continue
-            base_url = get_settings().kie_result_cdn_base_url
-            try:
-                job_result = parse_record_info(
-                    status,
-                    model_spec.output_media_type,
-                    model_id,
-                    correlation_id=job.get("request_id"),
-                    base_url=base_url,
-                )
-            except Exception:
-                continue
-            delivered = await send_result_file(
+            delivered = await deliver_job_result(
                 context.bot,
-                user_id,
-                job_result.media_type,
-                job_result.urls,
-                job_result.text,
-                model_id=model_id,
-                gen_type=model_spec.model_mode,
-                correlation_id=None,
-                request_id=job.get("request_id"),
-                prompt_hash=job.get("prompt_hash"),
-                params={"prompt": job.get("prompt")} if job.get("prompt") else None,
-                model_label=model_spec.name or model_id,
+                storage,
+                job=job,
+                status_record=status,
+                notify_user=True,
+                source="pending_result_check",
             )
             if delivered:
-                await storage.update_job_status(
-                    job.get("job_id"),
-                    "completed",
-                    result_urls=job_result.urls,
-                )
                 await context.bot.send_message(
                     chat_id=user_id,
                     text="✅ <b>Готово</b>",
@@ -8659,6 +8655,8 @@ async def _button_callback_impl(
                 return ConversationHandler.END
 
             from app.generations.telegram_sender import send_result_file
+            from app.storage import get_storage
+            storage_instance = get_storage()
 
             delivered = False
             try:
@@ -8696,6 +8694,30 @@ async def _button_callback_impl(
             if delivered:
                 async with pending_deliveries_lock:
                     pending_deliveries.pop((user_id, task_id), None)
+                try:
+                    await storage_instance.update_json_file(
+                        "delivery_records.json",
+                        lambda data: {
+                            **data,
+                            f"{user_id}:{task_id}": {
+                                **data.get(f"{user_id}:{task_id}", {}),
+                                "status": "delivered",
+                                "updated_at": datetime.now().isoformat(),
+                                "delivered_at": datetime.now().isoformat(),
+                            },
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to persist delivery record: %s", exc)
+                log_task_lifecycle(
+                    state="delivered",
+                    user_id=user_id,
+                    task_id=task_id,
+                    job_id=payload.get("job_id"),
+                    model_id=payload.get("model_id"),
+                    correlation_id=payload.get("correlation_id"),
+                    source="retry_delivery",
+                )
                 dry_run = is_dry_run() or not allow_real_generation()
                 if not dry_run:
                     await _commit_post_delivery_charge(
@@ -18179,6 +18201,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     user_id = update.effective_user.id
     user_lang = get_user_language(user_id) if user_id else "ru"
+    from app.storage import get_storage
+    storage_instance = get_storage()
     await _answer_callback_early(
         query,
         user_lang=user_lang,
@@ -19189,6 +19213,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             stage="GEN_START",
             outcome="start",
         )
+        log_task_lifecycle(
+            state="running",
+            user_id=user_id,
+            task_id=session.get("task_id"),
+            job_id=job_id,
+            model_id=model_id,
+            correlation_id=correlation_id,
+            source="confirm_generate",
+        )
         if job_id:
             state_before = session.get("job_state")
             session["job_state"] = "running"
@@ -19270,6 +19303,29 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             async with pending_deliveries_lock:
                 pending_deliveries[(user_id, job_result.task_id)] = pending_payload
             try:
+                await storage_instance.update_json_file(
+                    "delivery_records.json",
+                    lambda data: {
+                        **data,
+                        f"{user_id}:{job_result.task_id}": {
+                            **data.get(f"{user_id}:{job_result.task_id}", {}),
+                            "user_id": user_id,
+                            "task_id": job_result.task_id,
+                            "job_id": job_id,
+                            "model_id": model_id,
+                            "request_id": request_id,
+                            "status": "pending",
+                            "updated_at": datetime.now().isoformat(),
+                            "created_at": data.get(f"{user_id}:{job_result.task_id}", {}).get(
+                                "created_at",
+                                datetime.now().isoformat(),
+                            ),
+                        },
+                    },
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist delivery record: %s", exc)
+            try:
                 delivered = bool(
                     await send_result_file(
                         context.bot,
@@ -19306,9 +19362,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 async with pending_deliveries_lock:
                     pending_deliveries.pop((user_id, job_result.task_id), None)
                 try:
-                    from app.storage import get_storage
-
-                    await get_storage().update_job_status(
+                    await storage_instance.update_job_status(
                         job_id,
                         "completed",
                         result_urls=job_result.urls,
@@ -19326,6 +19380,31 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         result_urls=job_result.urls,
                         result_text=job_result.text,
                     )
+                try:
+                    await storage_instance.update_json_file(
+                        "delivery_records.json",
+                        lambda data: {
+                            **data,
+                            f"{user_id}:{job_result.task_id}": {
+                                **data.get(f"{user_id}:{job_result.task_id}", {}),
+                                "status": "delivered",
+                                "updated_at": datetime.now().isoformat(),
+                                "delivered_at": datetime.now().isoformat(),
+                                "result_urls": job_result.urls,
+                            },
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to persist delivery record: %s", exc)
+                log_task_lifecycle(
+                    state="delivered",
+                    user_id=user_id,
+                    task_id=job_result.task_id,
+                    job_id=job_id,
+                    model_id=model_id,
+                    correlation_id=correlation_id,
+                    source="confirm_generate",
+                )
                 if not dry_run:
                     await _commit_post_delivery_charge(
                         session=session,
@@ -19389,6 +19468,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     fix_hint="Проверьте доставку и повторите отправку.",
                     param={"task_id": job_result.task_id},
                 )
+                try:
+                    await storage_instance.update_json_file(
+                        "delivery_records.json",
+                        lambda data: {
+                            **data,
+                            f"{user_id}:{job_result.task_id}": {
+                                **data.get(f"{user_id}:{job_result.task_id}", {}),
+                                "status": "failed",
+                                "updated_at": datetime.now().isoformat(),
+                            },
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to persist delivery record: %s", exc)
                 retry_keyboard = InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton("🔁 Повторить доставку", callback_data=f"retry_delivery:{job_result.task_id}")],
@@ -20774,6 +20867,83 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _find_job_by_task_id(storage, task_id: str) -> Optional[Dict[str, Any]]:
+    job = await storage.get_job(task_id)
+    if job:
+        return job
+    jobs = await storage.list_jobs(limit=500)
+    for entry in jobs:
+        if task_id in {entry.get("task_id"), entry.get("external_task_id")}:
+            return entry
+    return None
+
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Return generation status by task_id."""
+    if not context.args:
+        await update.message.reply_text("Использование: /status <task_id>")
+        return
+    task_id = context.args[0].strip()
+    from app.storage import get_storage
+    from app.integrations.kie_stub import get_kie_client_or_stub
+    from app.delivery.reconciler import deliver_job_result, SUCCESS_STATES, FAILED_STATES
+
+    storage = get_storage()
+    job = await _find_job_by_task_id(storage, task_id)
+    if not job:
+        await update.message.reply_text("Не нашёл задачу с таким task_id.")
+        return
+    user_id = job.get("user_id")
+    if update.effective_user.id != user_id and not is_admin(update.effective_user.id):
+        await update.message.reply_text("Нет доступа к этой задаче.")
+        return
+
+    provider_state = "unknown"
+    status_record = {}
+    try:
+        status_record = await get_kie_client_or_stub().get_task_status(task_id)
+        provider_state = (status_record.get("state") or "unknown").lower()
+    except Exception:
+        provider_state = "unknown"
+
+    delivery_records = await storage.read_json_file("delivery_records.json", default={})
+    delivered = False
+    delivery_key = f"{user_id}:{task_id}"
+    if delivery_key in delivery_records:
+        delivered = delivery_records[delivery_key].get("status") == "delivered"
+
+    storage_state = job.get("status") or "unknown"
+    response_lines = [
+        "📦 <b>Статус задачи</b>",
+        f"Task ID: <code>{task_id}</code>",
+        f"Storage: <b>{storage_state}</b>",
+        f"Provider: <b>{provider_state}</b>",
+        f"Delivery: <b>{'delivered' if delivered else 'pending'}</b>",
+    ]
+
+    if provider_state in SUCCESS_STATES and not delivered:
+        status_record["taskId"] = task_id
+        await deliver_job_result(
+            context.bot,
+            storage,
+            job=job,
+            status_record=status_record,
+            notify_user=True,
+            source="status_command",
+        )
+        response_lines.append("✅ Результат готов, запускаю повторную доставку.")
+    elif provider_state in FAILED_STATES:
+        await storage.update_job_status(
+            job.get("job_id") or task_id,
+            "failed",
+            error_message=status_record.get("failMsg"),
+            error_code=status_record.get("failCode") or "KIE_FAIL_STATE",
+        )
+        response_lines.append("❌ Провайдер сообщил об ошибке.")
+
+    await update.message.reply_text("\n".join(response_lines), parse_mode="HTML")
+
+
 async def _request_job_cancel(
     *,
     update: Update,
@@ -21606,6 +21776,7 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CommandHandler("reset", reset_wizard_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("balance", check_balance))
+    application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
@@ -21935,6 +22106,7 @@ async def _run_webhook_initialization(
     init_started = time.monotonic()
     await application.initialize()
     logger.info("✅ Application initialized for webhook mode")
+    start_delivery_reconciler(application.bot)
 
     # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
     try:
@@ -23056,6 +23228,7 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("balance", check_balance))
+    application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("search", search))
     application.add_handler(CommandHandler("ask", ask))
     application.add_handler(CommandHandler("add", add_knowledge))
@@ -23338,6 +23511,7 @@ async def main():
         logger.info("🚀 Initializing application...")
         await application.initialize()
         await application.start()
+        start_delivery_reconciler(application.bot)
         
         # Регистрируем команды в меню Telegram
         logger.info("📋 Setting up bot commands menu...")
@@ -23347,6 +23521,7 @@ async def main():
                 BotCommand("start", "Главное меню"),
                 BotCommand("help", "Помощь"),
                 BotCommand("balance", "Проверить баланс"),
+                BotCommand("status", "Статус генерации"),
                 BotCommand("cancel", "Отменить текущее действие"),
             ]
             

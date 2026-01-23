@@ -1142,6 +1142,20 @@ class GitHubStorage(BaseStorage):
         jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return jobs[:limit]
 
+    async def list_jobs_by_status(
+        self,
+        statuses: List[str],
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        data, _ = await self._read_json(self.jobs_file)
+        wanted = {status.lower() for status in statuses}
+        jobs = [
+            job for job in data.values()
+            if (job.get("status") or "").lower() in wanted
+        ]
+        jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return jobs[:limit]
+
     async def add_generation_to_history(
         self,
         user_id: int,
