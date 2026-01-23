@@ -136,6 +136,7 @@ class SessionStore:
 _SESSION_STORE = SessionStore(_DEFAULT_SESSION_DATA)
 
 _SESSION_CACHE_KEY = "_session_cache"
+_SESSION_LAST_UPDATE_ID = "_session_last_update_id"
 
 
 def get_session_store(context: Any | None = None, application: Any | None = None) -> SessionStore:
@@ -160,6 +161,15 @@ def get_session_cached(
     """Fetch session once per update and cache in context.user_data."""
     if context is None or getattr(context, "user_data", None) is None or update_id is None:
         return store.get(user_id, default)
+    last_update_id = context.user_data.get(_SESSION_LAST_UPDATE_ID)
+    if isinstance(last_update_id, int) and update_id < last_update_id:
+        logger.warning(
+            "SESSION_OUT_OF_ORDER user_id=%s update_id=%s last_update_id=%s",
+            user_id,
+            update_id,
+            last_update_id,
+        )
+        return store.get(user_id, default)
     cache = context.user_data.get(_SESSION_CACHE_KEY)
     if cache and cache.get("update_id") == update_id and cache.get("user_id") == user_id:
         return cache.get("session", default)
@@ -175,6 +185,7 @@ def get_session_cached(
         "store_gets": 1,
         "from_store": from_store,
     }
+    context.user_data[_SESSION_LAST_UPDATE_ID] = update_id
     return session
 
 
@@ -186,6 +197,15 @@ def ensure_session_cached(
 ) -> Dict[str, Any]:
     """Ensure session exists, reusing per-update cache."""
     if context is None or getattr(context, "user_data", None) is None or update_id is None:
+        return store.ensure(user_id)
+    last_update_id = context.user_data.get(_SESSION_LAST_UPDATE_ID)
+    if isinstance(last_update_id, int) and update_id < last_update_id:
+        logger.warning(
+            "SESSION_OUT_OF_ORDER user_id=%s update_id=%s last_update_id=%s",
+            user_id,
+            update_id,
+            last_update_id,
+        )
         return store.ensure(user_id)
     cache = context.user_data.get(_SESSION_CACHE_KEY)
     if cache and cache.get("update_id") == update_id and cache.get("user_id") == user_id:
@@ -201,6 +221,7 @@ def ensure_session_cached(
         "store_gets": store_gets,
         "from_store": True,
     }
+    context.user_data[_SESSION_LAST_UPDATE_ID] = update_id
     return session
 
 

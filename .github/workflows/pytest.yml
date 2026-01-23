@@ -1,0 +1,50 @@
+name: pytest
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUNBUFFERED: "1"
+      TEST_MODE: "1"
+      DRY_RUN: "1"
+      ALLOW_REAL_GENERATION: "0"
+      KIE_STUB: "1"
+      NETWORK_DISABLED: "1"
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
+      ADMIN_ID: ${{ secrets.ADMIN_ID }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPO: ${{ secrets.GITHUB_REPO }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest
+        run: |
+          pytest
+
+      - name: Upload smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-run-log
+          path: SMOKE_RUN_LOG.md
+          retention-days: 14

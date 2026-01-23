@@ -148,7 +148,7 @@ class PTBHarness:
             type=chat_type
         )
     
-    def create_mock_message(self, text: str = "/start", user_id: int = 12345, chat_id: int = 12345) -> Message:
+    def create_mock_message(self, text: Optional[str] = "/start", user_id: int = 12345, chat_id: int = 12345) -> Message:
         """Создает моковое сообщение."""
         user = self.create_mock_user(user_id)
         chat = self.create_mock_chat(chat_id)
@@ -188,22 +188,42 @@ class PTBHarness:
             message=message
         )
     
-    def create_mock_update_command(self, command: str = "/start", user_id: int = 12345) -> Update:
+    def create_mock_update_command(
+        self,
+        command: str = "/start",
+        user_id: int = 12345,
+        update_id: int = 1,
+    ) -> Update:
         """Создает моковый Update для команды."""
         message = self.create_mock_message(text=command, user_id=user_id)
-        return Update(update_id=1, message=message)
+        return Update(update_id=update_id, message=message)
     
-    def create_mock_update_callback(self, callback_data: str, user_id: int = 12345) -> Update:
+    def create_mock_update_callback(
+        self,
+        callback_data: str,
+        user_id: int = 12345,
+        update_id: int = 1,
+    ) -> Update:
         """Создает моковый Update для callback."""
         callback_query = self.create_mock_callback_query(callback_data, user_id=user_id)
-        return Update(update_id=1, callback_query=callback_query)
+        return Update(update_id=update_id, callback_query=callback_query)
 
-    def create_mock_update_message(self, text: str, user_id: int = 12345) -> Update:
+    def create_mock_update_message(
+        self,
+        text: Optional[str],
+        user_id: int = 12345,
+        update_id: int = 1,
+    ) -> Update:
         """Создает моковый Update для текстового сообщения."""
         message = self.create_mock_message(text=text, user_id=user_id)
-        return Update(update_id=1, message=message)
+        return Update(update_id=update_id, message=message)
     
-    async def process_command(self, command: str, user_id: int = 12345) -> Dict[str, Any]:
+    async def process_command(
+        self,
+        command: str,
+        user_id: int = 12345,
+        update_id: int = 1,
+    ) -> Dict[str, Any]:
         """
         Обрабатывает команду и возвращает результат.
         """
@@ -212,7 +232,7 @@ class PTBHarness:
         
         self.outbox.clear()
         
-        update = self.create_mock_update_command(command, user_id)
+        update = self.create_mock_update_command(command, user_id, update_id=update_id)
         self._attach_bot(update)
         
         try:
@@ -239,7 +259,12 @@ class PTBHarness:
                 }
             }
     
-    async def process_callback(self, callback_data: str, user_id: int = 12345) -> Dict[str, Any]:
+    async def process_callback(
+        self,
+        callback_data: str,
+        user_id: int = 12345,
+        update_id: int = 1,
+    ) -> Dict[str, Any]:
         """
         Обрабатывает callback и возвращает результат.
         """
@@ -248,7 +273,7 @@ class PTBHarness:
         
         self.outbox.clear()
         
-        update = self.create_mock_update_callback(callback_data, user_id)
+        update = self.create_mock_update_callback(callback_data, user_id, update_id=update_id)
         self._attach_bot(update)
         
         try:
@@ -275,7 +300,12 @@ class PTBHarness:
                 }
             }
 
-    async def process_message(self, text: str, user_id: int = 12345) -> Dict[str, Any]:
+    async def process_message(
+        self,
+        text: Optional[str],
+        user_id: int = 12345,
+        update_id: int = 1,
+    ) -> Dict[str, Any]:
         """
         Обрабатывает текстовое сообщение и возвращает результат.
         """
@@ -284,7 +314,7 @@ class PTBHarness:
 
         self.outbox.clear()
 
-        update = self.create_mock_update_message(text, user_id=user_id)
+        update = self.create_mock_update_message(text, user_id=user_id, update_id=update_id)
         self._attach_bot(update)
 
         try:
