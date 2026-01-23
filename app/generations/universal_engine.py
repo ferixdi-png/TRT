@@ -7,17 +7,22 @@ import time
 import inspect
 import asyncio
 import os
+import random
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from app.kie.kie_client import KIEClient
-from app.observability.trace import trace_event, url_summary
+from app.observability.trace import trace_event, url_summary, prompt_summary
 from app.observability.structured_logs import log_structured_event
+from app.observability.request_logger import log_request_event
 from app.observability.error_catalog import ERROR_CATALOG
 from app.kie_catalog import get_model_map, ModelSpec
 from app.kie_contract.payload_builder import build_kie_payload, PayloadBuildError
 from app.utils.url_normalizer import normalize_result_urls, ResultUrlNormalizationError
 from app.config import get_settings
+from app.storage import get_storage
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +315,276 @@ def parse_record_info(
     return job_result
 
 
+def _normalize_kie_state(raw_state: Optional[str]) -> str:
+    if not raw_state:
+        return "unknown"
+    state = raw_state.lower()
+    if state in {"success", "completed", "succeeded"}:
+        return "succeeded"
+    if state in {"failed", "fail", "error"}:
+        return "failed"
+    if state in {"cancel", "cancelled", "canceled"}:
+        return "canceled"
+    if state in {"pending", "queued", "waiting", "queuing"}:
+        return "queued"
+    if state in {"processing", "running", "generating"}:
+        return "running"
+    return "unknown"
+
+
+def _guess_media_type_from_url(url: str) -> Optional[str]:
+    lower = url.lower()
+    if any(lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+        return "image"
+    if any(lower.endswith(ext) for ext in (".mp4", ".mov", ".webm", ".mkv")):
+        return "video"
+    if any(lower.endswith(ext) for ext in (".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac")):
+        return "audio"
+    return None
+
+
+def _content_type_matches(media_type: Optional[str], content_type: str) -> bool:
+    if not content_type:
+        return True
+    if content_type.startswith("text/html"):
+        return False
+    if not media_type:
+        return True
+    if media_type == "image":
+        return content_type.startswith("image/")
+    if media_type == "video":
+        return content_type.startswith("video/")
+    if media_type == "audio":
+        return content_type.startswith("audio/")
+    if media_type == "text":
+        return content_type.startswith("text/")
+    return True
+
+
+async def _validate_result_urls(
+    urls: List[str],
+    *,
+    media_type: Optional[str],
+    request_id: str,
+    user_id: Optional[int],
+    model_id: Optional[str],
+    prompt_hash: Optional[str],
+    task_id: Optional[str],
+    job_id: Optional[str],
+    timeout_s: float = 12.0,
+) -> None:
+    if not urls:
+        raise KIEResultError(
+            "KIE_RESULT_EMPTY",
+            error_code="KIE_RESULT_EMPTY",
+            fix_hint=ERROR_CATALOG.get("KIE_RESULT_EMPTY", "Empty result URL list."),
+        )
+    timeout = aiohttp.ClientTimeout(total=timeout_s)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        last_error: Optional[str] = None
+        for url in urls:
+            try:
+                async with session.get(url, allow_redirects=True) as response:
+                    content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                    content_length = response.content_length
+                    sample = await response.content.read(1024)
+                    size_ok = (content_length or len(sample)) > 0
+                    if not size_ok:
+                        last_error = "empty_payload"
+                        continue
+                    inferred_media = _guess_media_type_from_url(url)
+                    if not _content_type_matches(media_type or inferred_media, content_type):
+                        last_error = f"unexpected_content_type:{content_type}"
+                        continue
+                    log_request_event(
+                        request_id=request_id,
+                        user_id=user_id,
+                        model=model_id,
+                        prompt_hash=prompt_hash,
+                        task_id=task_id,
+                        job_id=job_id,
+                        status="result_validated",
+                        latency_ms=None,
+                        attempt=None,
+                        error_code=None,
+                        error_msg=None,
+                    )
+                    return
+            except Exception as exc:
+                last_error = str(exc)
+                continue
+        raise KIEResultError(
+            "KIE_RESULT_INVALID_CONTENT",
+            error_code="KIE_RESULT_INVALID_CONTENT",
+            fix_hint=last_error or "Result URL validation failed.",
+        )
+
+
+async def wait_job_result(
+    task_id: str,
+    model_id: str,
+    *,
+    client: Any,
+    timeout: int,
+    max_attempts: int,
+    base_delay: float,
+    max_delay: float,
+    correlation_id: Optional[str],
+    request_id: str,
+    user_id: Optional[int],
+    prompt_hash: Optional[str],
+    job_id: Optional[str],
+    progress_callback: Optional[Any] = None,
+    validate_result_fn: Optional[Any] = None,
+    storage: Optional[Any] = None,
+    on_timeout: Optional[Any] = None,
+) -> Dict[str, Any]:
+    start = time.monotonic()
+    delay = base_delay
+    attempt = 0
+    validate_result_fn = validate_result_fn or _validate_result_urls
+    while True:
+        elapsed = time.monotonic() - start
+        if elapsed >= timeout or attempt >= max_attempts:
+            log_request_event(
+                request_id=request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=task_id,
+                job_id=job_id,
+                status="timeout",
+                latency_ms=int(elapsed * 1000),
+                attempt=attempt,
+                error_code="ERR_KIE_TIMEOUT",
+                error_msg="timeout",
+            )
+            if storage and job_id:
+                await storage.update_job_status(
+                    job_id,
+                    "timeout",
+                    error_message="timeout",
+                    error_code="ERR_KIE_TIMEOUT",
+                )
+            if on_timeout:
+                await on_timeout()
+            raise TimeoutError("ERR_KIE_TIMEOUT")
+
+        attempt += 1
+        try:
+            if "correlation_id" in inspect.signature(client.get_task_status).parameters:
+                record = await client.get_task_status(task_id, correlation_id=correlation_id)
+            else:
+                record = await client.get_task_status(task_id)
+        except Exception as exc:
+            log_request_event(
+                request_id=request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=task_id,
+                job_id=job_id,
+                status="retry",
+                latency_ms=int(elapsed * 1000),
+                attempt=attempt,
+                error_code="KIE_POLL_EXCEPTION",
+                error_msg=str(exc),
+            )
+            await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
+            delay = min(max_delay, delay * 2)
+            continue
+
+        record["taskId"] = task_id
+        record["elapsed"] = elapsed
+        raw_state = record.get("state")
+        state = _normalize_kie_state(raw_state)
+        log_request_event(
+            request_id=request_id,
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=prompt_hash,
+            task_id=task_id,
+            job_id=job_id,
+            status=state,
+            latency_ms=int(elapsed * 1000),
+            attempt=attempt,
+            error_code=None,
+            error_msg=None,
+        )
+
+        if progress_callback and attempt == 1:
+            await progress_callback({"stage": "KIE_POLL", "task_id": task_id, "state": raw_state, "elapsed": elapsed})
+
+        if record.get("ok") is False:
+            status = record.get("status")
+            if status and status >= 500 or status in {408, 429}:
+                await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
+                delay = min(max_delay, delay * 2)
+                continue
+            raise KIERequestFailed(
+                record.get("error", "KIE request failed"),
+                status=status,
+                user_message=record.get("user_message"),
+                error_code=record.get("error_code"),
+                correlation_id=record.get("correlation_id") or correlation_id,
+            )
+
+        if state in {"queued", "running"}:
+            if storage and job_id:
+                await storage.update_job_status(job_id, state)
+            await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
+            delay = min(max_delay, delay * 2)
+            continue
+
+        if state == "succeeded":
+            urls = _extract_urls(record, _parse_result_json(record.get("resultJson")))
+            await validate_result_fn(
+                urls,
+                media_type=None,
+                request_id=request_id,
+                user_id=user_id,
+                model_id=model_id,
+                prompt_hash=prompt_hash,
+                task_id=task_id,
+                job_id=job_id,
+            )
+            if storage and job_id:
+                await storage.update_job_status(job_id, "succeeded", result_urls=urls)
+            return record
+
+        if state == "failed":
+            fail_code = record.get("failCode")
+            fail_msg = record.get("failMsg") or record.get("errorMessage")
+            if storage and job_id:
+                await storage.update_job_status(
+                    job_id,
+                    "failed",
+                    error_message=fail_msg,
+                    error_code=fail_code or "KIE_FAIL_STATE",
+                )
+            raise KIEJobFailed(
+                fail_msg or "Task failed",
+                fail_code=fail_code,
+                fail_msg=fail_msg,
+                correlation_id=correlation_id,
+                record_info=record,
+            )
+
+        if state == "canceled":
+            if storage and job_id:
+                await storage.update_job_status(job_id, "canceled", error_message="canceled", error_code="KIE_CANCELED")
+            raise KIEJobFailed(
+                "Task canceled",
+                fail_code="KIE_CANCELED",
+                fail_msg="Task canceled",
+                correlation_id=correlation_id,
+                record_info=record,
+            )
+
+        await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
+        delay = min(max_delay, delay * 2)
+
+
 async def run_generation(
     user_id: int,
     model_id: str,
@@ -319,12 +594,20 @@ async def run_generation(
     poll_interval: int = 3,
     correlation_id: Optional[str] = None,
     progress_callback: Optional[Any] = None,
+    request_id: Optional[str] = None,
+    prompt_hash: Optional[str] = None,
+    prompt: Optional[str] = None,
+    job_id: Optional[str] = None,
 ) -> JobResult:
     """Execute the full generation pipeline for any model."""
     catalog = get_model_map()
     spec = catalog.get(model_id)
     if not spec:
         raise ValueError(f"Model '{model_id}' not found in catalog")
+
+    request_id = request_id or str(uuid.uuid4())
+    if prompt_hash is None:
+        prompt_hash = prompt_summary(prompt or session_params.get("prompt") or session_params.get("text")).get("prompt_hash")
 
     try:
         payload = build_kie_payload(spec, session_params)
@@ -340,6 +623,19 @@ async def run_generation(
 
         client = get_kie_client()
     create_start = time.monotonic()
+    log_request_event(
+        request_id=request_id,
+        user_id=user_id,
+        model=model_id,
+        prompt_hash=prompt_hash,
+        task_id=None,
+        job_id=job_id,
+        status="create_start",
+        latency_ms=0,
+        attempt=0,
+        error_code=None,
+        error_msg=None,
+    )
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
@@ -368,6 +664,19 @@ async def run_generation(
         created = await client.create_task(spec.kie_model, payload["input"])
     create_duration_ms = int((time.monotonic() - create_start) * 1000)
     if not created.get("ok"):
+        log_request_event(
+            request_id=request_id,
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=prompt_hash,
+            task_id=None,
+            job_id=job_id,
+            status="create_failed",
+            latency_ms=create_duration_ms,
+            attempt=0,
+            error_code=created.get("error_code") or "KIE_CREATE_FAILED",
+            error_msg=created.get("error"),
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -401,6 +710,34 @@ async def run_generation(
             correlation_id=created.get("correlation_id") or correlation_id,
         )
     task_id = created.get("taskId")
+    log_request_event(
+        request_id=request_id,
+        user_id=user_id,
+        model=model_id,
+        prompt_hash=prompt_hash,
+        task_id=task_id,
+        job_id=job_id,
+        status="task_created",
+        latency_ms=create_duration_ms,
+        attempt=0,
+        error_code=None,
+        error_msg=None,
+    )
+    storage = get_storage()
+    if storage:
+        await storage.add_generation_job(
+            user_id=user_id,
+            model_id=model_id,
+            model_name=spec.name or model_id,
+            params=session_params,
+            price=0.0,
+            task_id=task_id,
+            status="queued",
+            job_id=job_id,
+            request_id=request_id,
+            prompt=prompt or session_params.get("prompt") or session_params.get("text"),
+            prompt_hash=prompt_hash,
+        )
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
@@ -441,127 +778,24 @@ async def run_generation(
         await progress_callback({"stage": "KIE_CREATE", "task_id": task_id})
 
     poll_start = time.monotonic()
-    attempt = 0
-    poll_delay = poll_interval
-    max_poll_delay = max(poll_interval, 12)
-    error_attempts = 0
-    error_retry_limit = int(os.getenv("KIE_POLL_ERROR_RETRIES", "3"))
-    progress_interval = 25
-    next_progress_at = poll_start + progress_interval
-    get_status_fn = getattr(client, "get_task_status", None)
-    record: Dict[str, Any] = {}
-    state = None
-    while True:
-        elapsed = time.monotonic() - poll_start
-        if elapsed > timeout:
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                action="KIE_POLL",
-                action_path="universal_engine.run_generation",
-                model_id=model_id,
-                gen_type=spec.model_mode,
-                task_id=task_id,
-                stage="KIE_POLL",
-                outcome="timeout",
-                duration_ms=int(elapsed * 1000),
-                error_code="ERR_KIE_TIMEOUT",
-                fix_hint=ERROR_CATALOG.get("KIE_TIMEOUT"),
-                param={"task_id": task_id, "attempt": attempt, "elapsed": round(elapsed, 3)},
-            )
-            raise TimeoutError("ERR_KIE_TIMEOUT")
-
-        attempt += 1
-        if get_status_fn:
-            if "correlation_id" in inspect.signature(get_status_fn).parameters:
-                record = await client.get_task_status(task_id, correlation_id=correlation_id)
-            else:
-                record = await client.get_task_status(task_id)
-        else:
-            wait_fn = getattr(client, "wait_for_task", None)
-            if wait_fn and "correlation_id" in inspect.signature(wait_fn).parameters:
-                record = await client.wait_for_task(
-                    task_id,
-                    timeout=timeout,
-                    poll_interval=poll_interval,
-                    correlation_id=correlation_id,
-                )
-            else:
-                record = await client.wait_for_task(task_id, timeout=timeout, poll_interval=poll_interval)
-
-        record["taskId"] = task_id
-        record["elapsed"] = elapsed
-        state = record.get("state")
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            action="KIE_POLL",
-            action_path="universal_engine.run_generation",
-            model_id=model_id,
-            gen_type=spec.model_mode,
-            task_id=task_id,
-            stage="KIE_POLL",
-            outcome=state,
-            duration_ms=int(elapsed * 1000),
-            param={"task_id": task_id, "attempt": attempt, "elapsed": round(elapsed, 3), "poll_delay": poll_delay},
-        )
-        if progress_callback and elapsed >= next_progress_at:
-            await progress_callback(
-                {"stage": "KIE_POLL", "task_id": task_id, "state": state, "attempt": attempt, "elapsed": elapsed}
-            )
-            next_progress_at = time.monotonic() + progress_interval
-
-        if record.get("ok") is False:
-            status = record.get("status")
-            if status in {401, 402, 422}:
-                raise KIERequestFailed(
-                    record.get("error", "KIE request failed"),
-                    status=status,
-                    user_message=record.get("user_message"),
-                    error_code=record.get("error_code"),
-                    correlation_id=record.get("correlation_id") or correlation_id,
-                )
-            if status in {429, 500}:
-                error_attempts += 1
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    action="KIE_POLL",
-                    action_path="universal_engine.run_generation",
-                    model_id=model_id,
-                    gen_type=spec.model_mode,
-                    task_id=task_id,
-                    stage="KIE_POLL",
-                    outcome="retry",
-                    error_code=record.get("error_code") or f"KIE_POLL_{status}",
-                    fix_hint=record.get("user_message"),
-                    param={
-                        "status": status,
-                        "attempt": error_attempts,
-                        "retry_limit": error_retry_limit,
-                    },
-                )
-                if error_attempts > error_retry_limit:
-                    raise KIERequestFailed(
-                        record.get("error", "KIE request failed"),
-                        status=status,
-                        user_message=record.get("user_message"),
-                        error_code=record.get("error_code"),
-                        correlation_id=record.get("correlation_id") or correlation_id,
-                    )
-                await asyncio.sleep(poll_delay)
-                poll_delay = min(max_poll_delay, poll_delay * 1.5)
-                continue
-            await asyncio.sleep(poll_delay)
-            poll_delay = min(max_poll_delay, poll_delay * 1.5)
-            continue
-        if state in {"success", "completed", "failed"}:
-            break
-
-        await asyncio.sleep(poll_delay)
-        poll_delay = min(max_poll_delay, poll_delay * 1.5)
-
+    record = await wait_job_result(
+        task_id,
+        model_id,
+        client=client,
+        timeout=timeout,
+        max_attempts=int(os.getenv("KIE_POLL_MAX_ATTEMPTS", "80")),
+        base_delay=max(1.0, float(poll_interval)),
+        max_delay=max(poll_interval, 12),
+        correlation_id=correlation_id,
+        request_id=request_id,
+        user_id=user_id,
+        prompt_hash=prompt_hash,
+        job_id=job_id,
+        progress_callback=progress_callback,
+        storage=storage,
+    )
     poll_duration_ms = int((time.monotonic() - poll_start) * 1000)
+    state = record.get("state")
     if correlation_id:
         trace_event(
             "info",
@@ -630,6 +864,16 @@ async def run_generation(
             model_id,
             correlation_id=correlation_id,
             base_url=base_url,
+        )
+        await _validate_result_urls(
+            result.urls,
+            media_type=result.media_type,
+            request_id=request_id,
+            user_id=user_id,
+            model_id=model_id,
+            prompt_hash=prompt_hash,
+            task_id=task_id,
+            job_id=job_id,
         )
         log_structured_event(
             correlation_id=correlation_id,

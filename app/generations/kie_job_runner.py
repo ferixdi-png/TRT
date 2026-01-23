@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from app.generations.telegram_sender import deliver_result
+from app.generations.telegram_sender import send_result_file
 from app.generations.universal_engine import JobResult, parse_record_info
 from app.kie.kie_client import KIEClient, get_kie_client
 from app.kie_catalog import ModelSpec
@@ -86,12 +86,11 @@ async def send_result_to_user(
     chat_id = update.effective_chat.id if getattr(update, "effective_chat", None) else None
     if chat_id is None:
         raise RuntimeError("chat_id_missing")
-    await deliver_result(
+    await send_result_file(
         context.bot,
         chat_id,
         parsed_result.media_type,
         parsed_result.urls,
         parsed_result.text,
         correlation_id=correlation_id,
-        kie_client=get_kie_client(),
     )

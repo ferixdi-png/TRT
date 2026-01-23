@@ -132,7 +132,14 @@ class BaseStorage(ABC):
         params: Dict[str, Any],
         price: float,
         task_id: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
+        *,
+        job_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        prompt_hash: Optional[str] = None,
+        result_url: Optional[str] = None,
+        error_code: Optional[str] = None,
     ) -> str:
         """
         Добавить задачу генерации
@@ -148,7 +155,9 @@ class BaseStorage(ABC):
         job_id: str,
         status: str,
         result_urls: Optional[List[str]] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        error_code: Optional[str] = None,
+        result_url: Optional[str] = None,
     ) -> None:
         """Обновить статус задачи генерации"""
         pass

@@ -5,14 +5,12 @@ import logging
 import re
 import time
 from datetime import datetime
-from types import SimpleNamespace
 from typing import List, Optional, Dict, Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.kie_catalog import ModelSpec
 from app.generations.universal_engine import JobResult
-from app.delivery.result_delivery import deliver_generation_result
 from app.generations.media_pipeline import resolve_and_prepare_telegram_payload
 from app.utils.url_normalizer import (
     is_valid_result_url,
@@ -23,6 +21,7 @@ import aiohttp
 from app.services.free_tools_service import format_free_counter_block, get_free_counter_snapshot
 from app.pricing.price_resolver import format_price_rub
 from app.observability.trace import trace_event, url_summary
+from app.observability.request_logger import log_request_event
 from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
@@ -111,6 +110,8 @@ async def deliver_result(
     kie_client: Optional[object] = None,
     params: Optional[Dict[str, Any]] = None,
     model_label: Optional[str] = None,
+    request_id: Optional[str] = None,
+    prompt_hash: Optional[str] = None,
 ) -> bool:
     """Deliver generation result to Telegram with unified delivery."""
     media_type = (media_type or "").lower()
@@ -312,6 +313,73 @@ async def deliver_result(
     return True
 
 
+async def send_result_file(
+    bot,
+    chat_id: int,
+    media_type: str,
+    urls: List[str],
+    text: Optional[str],
+    *,
+    model_id: Optional[str] = None,
+    gen_type: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    prompt_hash: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+    model_label: Optional[str] = None,
+) -> bool:
+    """Download and send generation results with request-scoped logging."""
+    ok = False
+    error_msg = None
+    try:
+        ok = bool(
+            await deliver_result(
+                bot,
+                chat_id,
+                media_type,
+                urls,
+                text,
+                model_id=model_id,
+                gen_type=gen_type,
+                correlation_id=correlation_id,
+                params=params,
+                model_label=model_label,
+                request_id=request_id,
+                prompt_hash=prompt_hash,
+            )
+        )
+    except Exception as exc:
+        error_msg = str(exc)
+        ok = False
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=chat_id,
+        chat_id=chat_id,
+        model_id=model_id,
+        gen_type=gen_type or media_type,
+        action="TG_DELIVER",
+        action_path="telegram_sender.send_result_file",
+        stage="TG_DELIVER",
+        outcome="success" if ok else "failed",
+        param={"telegram_send_ok": ok, "error": error_msg},
+    )
+    if request_id:
+        log_request_event(
+            request_id=request_id,
+            user_id=chat_id,
+            model=model_id,
+            prompt_hash=prompt_hash,
+            task_id=None,
+            job_id=None,
+            status="telegram_send_ok" if ok else "telegram_send_failed",
+            latency_ms=None,
+            attempt=None,
+            error_code=None if ok else "TG_DELIVER_FAILED",
+            error_msg=error_msg,
+        )
+    return ok
+
+
 async def send_job_result(
     bot,
     chat_id: int,
@@ -333,16 +401,17 @@ async def send_job_result(
     if urls:
         caption_text = build_result_caption(spec.name or spec.id, extra_text=job_result.text)
         filename_prefix = build_result_filename_prefix(spec.name or spec.id)
-    await deliver_generation_result(
-        SimpleNamespace(bot=bot),
+    await send_result_file(
+        bot,
         chat_id,
-        correlation_id,
-        spec.id,
-        spec.model_mode,
+        media_type,
         urls,
         caption_text or f"✅ Готово. ID: {correlation_id or 'corr-na-na'}",
-        prefer_upload=True,
-        filename_prefix=filename_prefix,
+        model_id=spec.id,
+        gen_type=spec.model_mode,
+        correlation_id=correlation_id,
+        params=None,
+        model_label=spec.name or spec.id,
     )
 
     price_text = ""

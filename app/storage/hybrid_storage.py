@@ -167,6 +167,13 @@ class HybridStorage(BaseStorage):
         price: float,
         task_id: Optional[str] = None,
         status: str = "pending",
+        *,
+        job_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        prompt_hash: Optional[str] = None,
+        result_url: Optional[str] = None,
+        error_code: Optional[str] = None,
     ) -> str:
         return await self._primary.add_generation_job(
             user_id,
@@ -176,6 +183,12 @@ class HybridStorage(BaseStorage):
             price,
             task_id=task_id,
             status=status,
+            job_id=job_id,
+            request_id=request_id,
+            prompt=prompt,
+            prompt_hash=prompt_hash,
+            result_url=result_url,
+            error_code=error_code,
         )
 
     async def update_job_status(
@@ -184,8 +197,17 @@ class HybridStorage(BaseStorage):
         status: str,
         result_urls: Optional[List[str]] = None,
         error_message: Optional[str] = None,
+        error_code: Optional[str] = None,
+        result_url: Optional[str] = None,
     ) -> None:
-        await self._primary.update_job_status(job_id, status, result_urls=result_urls, error_message=error_message)
+        await self._primary.update_job_status(
+            job_id,
+            status,
+            result_urls=result_urls,
+            error_message=error_message,
+            error_code=error_code,
+            result_url=result_url,
+        )
 
     async def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         return await self._primary.get_job(job_id)
