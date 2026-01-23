@@ -985,6 +985,7 @@ from app.services.free_tools_service import (
 from app.services.referral_service import (
     award_referral_bonus,
     build_referral_link,
+    get_referral_stats,
     list_referrals_for_referrer,
     parse_referral_param,
 )
@@ -10972,7 +10973,7 @@ async def _button_callback_impl(
                     '💰 <b>Как это работает:</b>\n\n'
                     '🎁 <b>Бесплатно:</b>\n'
                     f'• {remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY} бесплатных генераций в день\n'
-                    f'• Пригласите друга - получите +{REFERRAL_BONUS_GENERATIONS} генераций!\n\n'
+                    f'• Пригласите друга - получите оба +{REFERRAL_BONUS_GENERATIONS} генераций в free tools!\n\n'
                     '💳 <b>Пополнение баланса:</b>\n'
                     '• Минимальная сумма: 50 ₽\n'
                     '• Быстрый выбор: 50, 100, 150 ₽\n'
@@ -11359,17 +11360,25 @@ async def _button_callback_impl(
             
             # Show referral information
             referral_link = get_user_referral_link(user_id)
-            referrals_count = len(await get_user_referrals(user_id))
+            stats = await get_referral_stats(user_id)
             remaining_free = await get_user_free_generations_remaining(user_id)
             
             user_lang = get_user_language(user_id)
+
+            def _format_stat(value: int) -> str:
+                return str(value) if value > 0 else "—"
+
+            invited_count = int(stats.get("invited", 0))
+            activated_count = int(stats.get("activated", 0))
+            bonus_total = int(stats.get("bonus_total", 0))
+            bonus_total_display = _format_stat(bonus_total)
             
             referral_text = (
                 f'{t("msg_referral_title", lang=user_lang)}\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'{t("msg_referral_how_it_works", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'{t("msg_referral_stats", lang=user_lang, count=referrals_count, bonus_total=referrals_count * REFERRAL_BONUS_GENERATIONS, remaining=remaining_free)}\n\n'
+                f'{t("msg_referral_stats", lang=user_lang, invited=_format_stat(invited_count), activated=_format_stat(activated_count), bonus_total=bonus_total_display, remaining=remaining_free)}\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'{t("msg_referral_important", lang=user_lang)}\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -11381,6 +11390,21 @@ async def _button_callback_impl(
             keyboard = [
                 [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
             ]
+
+            log_structured_event(
+                correlation_id=get_correlation_id(),
+                user_id=user_id,
+                action="REFERRAL_LINK_SHOWN",
+                action_path="ui:referral_info",
+                outcome="shown",
+                param={
+                    "referrer_id": user_id,
+                    "invited": invited_count,
+                    "activated": activated_count,
+                    "bonus_total": bonus_total,
+                    "bonus_value": REFERRAL_BONUS_GENERATIONS,
+                },
+            )
             
             try:
                 await query.edit_message_text(

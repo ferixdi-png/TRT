@@ -58,6 +58,7 @@ class GitHubStorage(BaseStorage):
 
     def __init__(self):
         self.config = self._load_config()
+        self.partner_id = self.config.bot_instance_id
         self._semaphore = asyncio.Semaphore(self.config.max_parallel)
         self._implicit_dirs_logged = False
         self._sessions: Dict[int, aiohttp.ClientSession] = {}

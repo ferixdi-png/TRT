@@ -97,6 +97,20 @@ class PostgresStorage(BaseStorage):
                     key TEXT PRIMARY KEY,
                     completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 );
+                CREATE TABLE IF NOT EXISTS referrals (
+                    partner_id TEXT NOT NULL,
+                    referred_user_id BIGINT NOT NULL,
+                    referrer_id BIGINT NOT NULL,
+                    ref_param TEXT,
+                    bonus_amount INTEGER,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    bonus_granted_at TIMESTAMPTZ,
+                    PRIMARY KEY (partner_id, referred_user_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id
+                    ON referrals(partner_id, referrer_id);
+                CREATE INDEX IF NOT EXISTS idx_referrals_created_at
+                    ON referrals(partner_id, created_at DESC);
                 """
             )
         self._schema_ready_loops.add(loop_id)
@@ -749,20 +763,40 @@ class PostgresStorage(BaseStorage):
     # ==================== REFERRALS ====================
 
     async def set_referrer(self, user_id: int, referrer_id: int) -> None:
-        def updater(data: Dict[str, Any]) -> Dict[str, Any]:
-            data[str(user_id)] = referrer_id
-            return data
-
-        await self.update_json_file(self.referrals_file, updater)
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO referrals (partner_id, referred_user_id, referrer_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (partner_id, referred_user_id) DO NOTHING
+                """,
+                self.partner_id,
+                int(user_id),
+                int(referrer_id),
+            )
 
     async def get_referrer(self, user_id: int) -> Optional[int]:
-        data = await self._load_json(self.referrals_file)
-        referrer = data.get(str(user_id))
-        return int(referrer) if referrer is not None else None
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT referrer_id FROM referrals WHERE partner_id=$1 AND referred_user_id=$2",
+                self.partner_id,
+                int(user_id),
+            )
+            if row:
+                return int(row["referrer_id"])
+        return None
 
     async def get_referrals(self, referrer_id: int) -> List[int]:
-        data = await self._load_json(self.referrals_file)
-        return [int(uid) for uid, ref in data.items() if str(uid) != "referrals" and int(ref) == referrer_id]
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT referred_user_id FROM referrals WHERE partner_id=$1 AND referrer_id=$2",
+                self.partner_id,
+                int(referrer_id),
+            )
+            return [int(row["referred_user_id"]) for row in rows]
 
     async def add_referral_bonus(self, referrer_id: int, bonus: float = 5) -> None:
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -771,6 +805,130 @@ class PostgresStorage(BaseStorage):
             return data
 
         await self.update_json_file(self.free_generations_file, updater)
+
+    async def create_referral_record(
+        self,
+        *,
+        referrer_id: int,
+        referred_user_id: int,
+        partner_id: str,
+        ref_param: Optional[str],
+        bonus_amount: int,
+    ) -> bool:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                INSERT INTO referrals (
+                    partner_id,
+                    referred_user_id,
+                    referrer_id,
+                    ref_param,
+                    bonus_amount,
+                    bonus_granted_at
+                )
+                VALUES ($1, $2, $3, $4, $5, now())
+                ON CONFLICT (partner_id, referred_user_id) DO NOTHING
+                """,
+                partner_id,
+                int(referred_user_id),
+                int(referrer_id),
+                ref_param,
+                int(bonus_amount),
+            )
+            return result.startswith("INSERT")
+
+    async def get_referral_stats(self, referrer_id: int, partner_id: str) -> Dict[str, Any]:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) AS invited,
+                    COUNT(created_at) AS activated,
+                    COUNT(bonus_granted_at) AS granted,
+                    COALESCE(SUM(bonus_amount), 0) AS bonus_total
+                FROM referrals
+                WHERE partner_id=$1 AND referrer_id=$2
+                """,
+                partner_id,
+                int(referrer_id),
+            )
+            if not row:
+                return {"invited": 0, "activated": 0, "granted": 0, "bonus_total": 0}
+            return {
+                "invited": int(row["invited"] or 0),
+                "activated": int(row["activated"] or 0),
+                "granted": int(row["granted"] or 0),
+                "bonus_total": int(row["bonus_total"] or 0),
+            }
+
+    async def list_recent_referrals(self, *, partner_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT referrer_id, referred_user_id, created_at, bonus_granted_at, bonus_amount
+                FROM referrals
+                WHERE partner_id=$1
+                ORDER BY created_at DESC
+                LIMIT $2
+                """,
+                partner_id,
+                int(limit),
+            )
+            return [
+                {
+                    "referrer_id": int(row["referrer_id"]),
+                    "referred_user_id": int(row["referred_user_id"]),
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "bonus_granted_at": row["bonus_granted_at"].isoformat() if row["bonus_granted_at"] else None,
+                    "bonus_amount": int(row["bonus_amount"] or 0),
+                }
+                for row in rows
+            ]
+
+    async def get_referral_admin_summary(self, *, partner_id: str, limit: int = 5) -> Dict[str, Any]:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            totals_row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) AS invited,
+                    COUNT(bonus_granted_at) AS granted,
+                    COALESCE(SUM(bonus_amount), 0) AS bonus_total
+                FROM referrals
+                WHERE partner_id=$1
+                """,
+                partner_id,
+            )
+            recent_rows = await conn.fetch(
+                """
+                SELECT referrer_id, referred_user_id, created_at, bonus_granted_at, bonus_amount
+                FROM referrals
+                WHERE partner_id=$1
+                ORDER BY created_at DESC
+                LIMIT $2
+                """,
+                partner_id,
+                int(limit),
+            )
+        totals = {
+            "invited": int(totals_row["invited"] or 0) if totals_row else 0,
+            "granted": int(totals_row["granted"] or 0) if totals_row else 0,
+            "bonus_total": int(totals_row["bonus_total"] or 0) if totals_row else 0,
+        }
+        recent = [
+            {
+                "referrer_id": int(row["referrer_id"]),
+                "referred_user_id": int(row["referred_user_id"]),
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "bonus_granted_at": row["bonus_granted_at"].isoformat() if row["bonus_granted_at"] else None,
+                "bonus_amount": int(row["bonus_amount"] or 0),
+            }
+            for row in recent_rows
+        ]
+        return {"totals": totals, "recent": recent}
 
     # ==================== GENERIC JSON FILES ====================
 
