@@ -1,5 +1,25 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-03 TRT: Шаг 1/3 prompt copy + SKU summary
+
+### Что добавлено
+* Новый источник истины для коротких описаний моделей и SKU: `app/models/model_copy.yaml`.
+* Хелперы `app/helpers/copy.py` для `get_model_short`, `get_sku_short`, `build_step1_prompt_text`.
+* Единый текст шага 1/3 для prompt (заголовок → модель → SKU → сервисный блок → цена).
+* Логи: структурный `STEP1_PROMPT_BUILT` + fallback `MODEL_COPY_FALLBACK`.
+
+### Как расширять при добавлении моделей
+1) Добавить модель в реестр (`models/kie_models.yaml`) и каталог (pricing/SSOT).
+2) Добавить `model_short` и при необходимости `sku_templates.by_sku_key` в `app/models/model_copy.yaml`.
+3) Прогнать тесты: `pytest -q` и `python scripts/behavioral_e2e.py`.
+
+### Результаты тестов
+* `pytest -q` — ✅
+* `python scripts/behavioral_e2e.py` — ✅
+
+### Итог
+**GO** — шаг 1/3 унифицирован, примеры удалены, admin всегда бесплатно.
+
 ## ✅ 2026-02-02 TRT GO-аудит (storage/tenant/admin/behavioral)
 
 ### Факты / прогоны

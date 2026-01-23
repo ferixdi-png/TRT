@@ -13647,6 +13647,59 @@ async def prompt_for_specific_param(
         logger.error("Cannot determine chat_id in prompt_for_specific_param")
         return None
 
+    if param_name in {"prompt", "text"} and user_lang == "ru":
+        from app.helpers.copy import build_step1_prompt_text
+        from app.pricing.ssot_catalog import get_sku_by_id, resolve_sku_for_params
+
+        sku = None
+        sku_id = session.get("sku_id")
+        if sku_id:
+            sku = get_sku_by_id(sku_id)
+        if not sku:
+            sku = resolve_sku_for_params(model_id, session.get("params", {}))
+        price_quote = session.get("price_quote") or {}
+        breakdown = price_quote.get("breakdown", {}) if isinstance(price_quote, dict) else {}
+        price_rub = price_quote.get("price_rub") if isinstance(price_quote, dict) else None
+        is_free = bool(breakdown.get("free_sku")) or str(price_rub) in {"0", "0.0", "0.00"}
+        billing_ctx = {
+            "price_text": price_line,
+            "price_rub": price_rub,
+            "is_free": is_free,
+        }
+        prompt_text = build_step1_prompt_text(
+            model_id,
+            sku,
+            billing_ctx,
+            get_is_admin(user_id),
+            correlation_id=correlation_id,
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
+                InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
+            ],
+            [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")],
+        ]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=prompt_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="PARAM_PROMPTED",
+            action_path="prompt_for_specific_param",
+            model_id=session.get("model_id"),
+            outcome="shown",
+            param={"param_name": param_name, "type": param_type},
+        )
+        session['waiting_for'] = param_name
+        session['current_param'] = param_name
+        return INPUTTING_PARAMS
+
     if param_name in ['image_input', 'image_urls', 'image', 'mask_input', 'reference_image_input']:
         old_waiting_for = session.get("waiting_for")
         session['current_param'] = param_name
@@ -14580,45 +14633,71 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         ])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
-        default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
-        optional_text = "\n\n(Этот параметр опциональный)" if is_optional else ""
-        param_display_name = param_name.replace('_', ' ').title()
-        step_info = _get_step_info(session, param_name, user_lang)
-        step_prefix = f"{step_info}: " if step_info else ""
-        if default_value:
-            action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
-        elif is_optional:
-            action_hint = "• Или используйте кнопку «⏭️ Пропустить (auto)» ниже"
-        else:
-            action_hint = "• Отправьте значение текстом"
-        if user_lang != 'ru':
-            if default_value:
-                action_hint = "• Or use the “⏭️ Use default” button below"
-            elif is_optional:
-                action_hint = "• Or use the “⏭️ Skip (auto)” button below"
-            else:
-                action_hint = "• Send the value as text"
+        if param_name in {"prompt", "text"} and user_lang == "ru":
+            from app.helpers.copy import build_step1_prompt_text
+            from app.pricing.ssot_catalog import get_sku_by_id, resolve_sku_for_params
 
-        free_counter_line = await _resolve_free_counter_line(
-            user_id,
-            user_lang,
-            correlation_id,
-            action_path=f"param_prompt:{param_name}",
-            sku_id=sku_id,
-        )
-        message_text = _append_free_counter_text(
-            (
-                f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
-                f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
-                f"💡 {format_hint}\n"
-                f"{example_line}\n"
-                f"💡 <b>Что делать:</b>\n"
-                f"• Введите значение в текстовом сообщении\n"
-                f"{action_hint}\n\n"
-                f"{price_line}"
-            ),
-            free_counter_line,
-        )
+            sku = None
+            if sku_id:
+                sku = get_sku_by_id(sku_id)
+            if not sku:
+                sku = resolve_sku_for_params(model_id, params)
+            price_quote = session.get("price_quote") or {}
+            breakdown = price_quote.get("breakdown", {}) if isinstance(price_quote, dict) else {}
+            price_rub = price_quote.get("price_rub") if isinstance(price_quote, dict) else None
+            is_free = bool(breakdown.get("free_sku")) or str(price_rub) in {"0", "0.0", "0.00"}
+            billing_ctx = {
+                "price_text": price_line,
+                "price_rub": price_rub,
+                "is_free": is_free,
+            }
+            message_text = build_step1_prompt_text(
+                model_id,
+                sku,
+                billing_ctx,
+                get_is_admin(user_id),
+                correlation_id=correlation_id,
+            )
+        else:
+            default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
+            optional_text = "\n\n(Этот параметр опциональный)" if is_optional else ""
+            param_display_name = param_name.replace('_', ' ').title()
+            step_info = _get_step_info(session, param_name, user_lang)
+            step_prefix = f"{step_info}: " if step_info else ""
+            if default_value:
+                action_hint = "• Или используйте кнопку «⏭️ Использовать по умолчанию» ниже"
+            elif is_optional:
+                action_hint = "• Или используйте кнопку «⏭️ Пропустить (auto)» ниже"
+            else:
+                action_hint = "• Отправьте значение текстом"
+            if user_lang != 'ru':
+                if default_value:
+                    action_hint = "• Or use the “⏭️ Use default” button below"
+                elif is_optional:
+                    action_hint = "• Or use the “⏭️ Skip (auto)” button below"
+                else:
+                    action_hint = "• Send the value as text"
+
+            free_counter_line = await _resolve_free_counter_line(
+                user_id,
+                user_lang,
+                correlation_id,
+                action_path=f"param_prompt:{param_name}",
+                sku_id=sku_id,
+            )
+            message_text = _append_free_counter_text(
+                (
+                    f"📝 <b>{step_prefix}Введите {param_display_name.lower()}:</b>\n\n"
+                    f"{param_desc}{max_text}{default_info}{optional_text}\n\n"
+                    f"💡 {format_hint}\n"
+                    f"{example_line}\n"
+                    f"💡 <b>Что делать:</b>\n"
+                    f"• Введите значение в текстовом сообщении\n"
+                    f"{action_hint}\n\n"
+                    f"{price_line}"
+                ),
+                free_counter_line,
+            )
 
         await context.bot.send_message(
             chat_id=chat_id,
