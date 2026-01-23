@@ -6,8 +6,10 @@ Falls back to single-instance mode if Redis is not available.
 import asyncio
 import logging
 import os
+import random
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Optional
 import uuid
 
@@ -17,6 +19,18 @@ _redis_client: Optional[any] = None
 _redis_available: bool = False
 _redis_initialized: bool = False
 _tenant_default_warned: bool = False
+
+
+@dataclass(frozen=True)
+class LockResult:
+    acquired: bool
+    wait_ms_total: int
+    attempts: int
+    ttl_seconds: int
+    key: str
+
+    def __bool__(self) -> bool:
+        return self.acquired
 
 
 def build_tenant_lock_key(key: str) -> str:
@@ -76,12 +90,23 @@ async def _init_redis() -> bool:
         return False
 
 
+async def get_redis_client() -> Optional[any]:
+    await _init_redis()
+    if not _redis_available:
+        return None
+    return _redis_client
+
+
 @asynccontextmanager
 async def distributed_lock(
     key: str,
     ttl_seconds: int = 10,
     wait_seconds: float = 2.0,
     retry_interval: float = 0.1,
+    max_attempts: int = 3,
+    backoff_base: float = 0.2,
+    backoff_cap: float = 2.0,
+    jitter: float = 0.15,
 ):
     """
     Distributed lock using Redis SET NX EX.
@@ -108,17 +133,25 @@ async def distributed_lock(
     
     # Fallback mode: single-instance (no Redis)
     if not _redis_available or _redis_client is None:
-        yield True
+        yield LockResult(
+            acquired=True,
+            wait_ms_total=0,
+            attempts=1,
+            ttl_seconds=ttl_seconds,
+            key=key,
+        )
         return
     
     lock_key = build_redis_lock_key(key)
     lock_value = f"{os.getpid()}:{uuid.uuid4().hex[:8]}"
     acquired = False
     start_time = time.monotonic()
+    attempts = 0
     
     try:
         # Try to acquire lock with retries
-        while time.monotonic() - start_time < wait_seconds:
+        while attempts < max_attempts and time.monotonic() - start_time < wait_seconds:
+            attempts += 1
             try:
                 # SET NX EX: set if not exists with expiration
                 result = await _redis_client.set(
@@ -135,14 +168,35 @@ async def distributed_lock(
                 logger.warning("[LOCK_ACQUIRE_ERROR] key=%s error=%s", key, exc)
                 break
             
-            # Wait before retry
-            await asyncio.sleep(retry_interval)
+            remaining = wait_seconds - (time.monotonic() - start_time)
+            if remaining <= 0:
+                break
+            # Wait before retry with backoff + jitter
+            if attempts >= max_attempts:
+                break
+            backoff = min(backoff_base * (2 ** (attempts - 1)), backoff_cap)
+            sleep_for = min(
+                remaining,
+                max(retry_interval, backoff + random.uniform(0, jitter)),
+            )
+            await asyncio.sleep(sleep_for)
         
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
         if not acquired:
-            elapsed_ms = int((time.monotonic() - start_time) * 1000)
-            logger.warning("[LOCK_TIMEOUT] key=%s wait_ms=%s", key, elapsed_ms)
-        
-        yield acquired
+            logger.warning(
+                "[LOCK_TIMEOUT] key=%s wait_ms=%s attempts=%s ttl_s=%s",
+                key,
+                elapsed_ms,
+                attempts,
+                ttl_seconds,
+            )
+        yield LockResult(
+            acquired=acquired,
+            wait_ms_total=elapsed_ms,
+            attempts=max(attempts, 1),
+            ttl_seconds=ttl_seconds,
+            key=key,
+        )
         
     finally:
         # Release lock only if we acquired it
