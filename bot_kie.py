@@ -17938,7 +17938,10 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "💳 Top up to keep using the tools."
             )
         )
-        await send_or_edit_message(deny_text)
+        await send_or_edit_message(
+            deny_text,
+            reply_markup=build_back_to_menu_keyboard(user_lang),
+        )
         return ConversationHandler.END
     is_free = free_result.get("status") == "ok"
     
