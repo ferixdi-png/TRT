@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from typing import Awaitable, Callable, Optional
 
 from aiohttp import web
@@ -24,7 +25,9 @@ from app.utils.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
-_bot_ready: bool = False
+_app_ready_event = asyncio.Event()
+_app_init_lock = asyncio.Lock()
+_app_init_task: Optional[asyncio.Task] = None
 _handler_ready: bool = False
 _seen_update_ids: set[int] = set()
 _early_update_count: int = 0
@@ -59,16 +62,37 @@ def build_webhook_handler(
 
     async def _handler(request: web.Request) -> web.StreamResponse:
         global _early_update_count
-
-        if not _bot_ready:
-            _early_update_count += 1
-            logger.warning(
-                "WEBHOOK early_update_dropped=true early_update_count=%s",
-                _early_update_count,
-            )
-            return web.json_response({"ok": True}, status=200)
-
         correlation_id = _resolve_correlation_id(request)
+
+        if not _app_ready_event.is_set():
+            _early_update_count += 1
+            update_id = None
+            try:
+                payload = await request.json()
+                if isinstance(payload, dict):
+                    update_id = payload.get("update_id")
+            except Exception as exc:
+                logger.warning(
+                    "action=WEBHOOK_EARLY_UPDATE correlation_id=%s ready=false outcome=reject_503 "
+                    "dropped=true parse_error=%s",
+                    correlation_id,
+                    exc,
+                )
+            retry_after = 2
+            logger.warning(
+                "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
+                "outcome=reject_503 dropped=true early_update_count=%s retry_after=%s",
+                correlation_id,
+                update_id,
+                _early_update_count,
+                retry_after,
+            )
+            return web.json_response(
+                {"ok": False, "retry_after": retry_after},
+                status=503,
+                headers={"Retry-After": str(retry_after)},
+            )
+
         logger.info("WEBHOOK correlation_id=%s update_received=true", correlation_id)
 
         try:
@@ -102,10 +126,26 @@ def build_webhook_handler(
     return _handler
 
 
+async def _initialize_application(settings):
+    init_started = time.monotonic()
+    application = await create_application(settings)
+    await application.initialize()
+    init_ms = int((time.monotonic() - init_started) * 1000)
+    _app_ready_event.set()
+    logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
+    return application
+
+
+async def _get_initialized_application(settings):
+    global _app_init_task
+    async with _app_init_lock:
+        if _app_init_task is None:
+            _app_init_task = asyncio.create_task(_initialize_application(settings))
+    return await _app_init_task
+
+
 async def main() -> None:
     """Start webhook-mode PTB application and healthcheck server."""
-    global _bot_ready
-
     setup_logging()
     settings = None
     try:
@@ -115,8 +155,7 @@ async def main() -> None:
     except Exception:
         settings = None
 
-    application = await create_application(settings)
-    _bot_ready = True
+    application = await _get_initialized_application(settings)
     if _early_update_count:
         logger.warning("WEBHOOK early_updates=%s gate=ready", _early_update_count)
 

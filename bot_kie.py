@@ -20417,6 +20417,16 @@ async def _register_all_handlers_internal(application: Application):
 
 # Global webhook handler for aiohttp (webhook mode)
 _application_for_webhook: Optional[Application] = None
+_webhook_app_ready_event = asyncio.Event()
+_webhook_init_lock = asyncio.Lock()
+_webhook_init_task: Optional[asyncio.Task] = None
+
+
+async def _register_webhook_application(application: Application) -> None:
+    global _application_for_webhook
+    async with _webhook_init_lock:
+        if _application_for_webhook is None:
+            _application_for_webhook = application
 
 
 async def create_webhook_handler():
@@ -20427,12 +20437,40 @@ async def create_webhook_handler():
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
         """Handle incoming Telegram webhook updates."""
         try:
-            correlation_id = str(uuid.uuid4())[:8]
+            correlation_id = (
+                request.headers.get("X-Request-ID")
+                or request.headers.get("X-Correlation-ID")
+                or request.headers.get("X-Trace-ID")
+                or str(uuid.uuid4())[:8]
+            )
             logger.debug(f"[WEBHOOK] {correlation_id} handler_invoked")
-            
-            if _application_for_webhook is None:
-                logger.warning(f"[WEBHOOK] {correlation_id} bot_not_ready")
-                return web.Response(status=503, text="Bot not ready")
+
+            if not _webhook_app_ready_event.is_set() or _application_for_webhook is None:
+                update_id = None
+                try:
+                    payload = await request.json()
+                    if isinstance(payload, dict):
+                        update_id = payload.get("update_id")
+                except Exception as exc:
+                    logger.warning(
+                        "action=WEBHOOK_EARLY_UPDATE correlation_id=%s ready=false outcome=reject_503 "
+                        "dropped=true parse_error=%s",
+                        correlation_id,
+                        exc,
+                    )
+                retry_after = random.randint(1, 3)
+                logger.warning(
+                    "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
+                    "outcome=reject_503 dropped=true retry_after=%s",
+                    correlation_id,
+                    update_id,
+                    retry_after,
+                )
+                return web.Response(
+                    status=503,
+                    text="Bot not ready",
+                    headers={"Retry-After": str(retry_after)},
+                )
             
             try:
                 data = await request.json()
@@ -20459,6 +20497,62 @@ async def create_webhook_handler():
             return web.Response(status=500, text="Internal error")
     
     return webhook_handler
+
+
+async def _ensure_webhook_initialized(
+    application: Application,
+    webhook_url: str,
+) -> None:
+    global _webhook_init_task
+    async with _webhook_init_lock:
+        if _webhook_init_task is None:
+            _webhook_init_task = asyncio.create_task(
+                _run_webhook_initialization(application, webhook_url)
+            )
+    await _webhook_init_task
+
+
+async def _run_webhook_initialization(
+    application: Application,
+    webhook_url: str,
+) -> None:
+    init_started = time.monotonic()
+    await application.initialize()
+    logger.info("✅ Application initialized for webhook mode")
+
+    # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
+    try:
+        from app.utils.healthcheck import start_health_server
+
+        port_str = os.getenv("PORT", "10000").strip()
+        try:
+            port = int(port_str)
+        except ValueError:
+            port = 10000
+        webhook_handler = await create_webhook_handler()
+        started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
+        logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
+    except Exception as health_exc:
+        logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
+
+    # Устанавливаем webhook
+    try:
+        from telegram import Bot
+
+        temp_bot = Bot(token=BOT_TOKEN)
+        if not await ensure_webhook_mode(temp_bot, webhook_url):
+            logger.error("❌ Failed to set webhook")
+            return
+    except Conflict as e:
+        handle_conflict_gracefully(e, "webhook")
+        return
+    except Exception as e:
+        logger.error(f"❌ Error in webhook mode: {e}")
+        return
+
+    init_ms = int((time.monotonic() - init_started) * 1000)
+    _webhook_app_ready_event.set()
+    logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
 
 
 async def main():
@@ -21649,7 +21743,7 @@ async def main():
     # Если webhook режим - НЕ запускаем polling
     if bot_mode == "webhook":
         global _application_for_webhook
-        _application_for_webhook = application  # Register app for webhook handler
+        await _register_webhook_application(application)  # Register app for webhook handler
         
         webhook_url = WEBHOOK_URL or os.getenv("WEBHOOK_URL")
         if not webhook_url:
@@ -21659,47 +21753,20 @@ async def main():
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
         
-        # КРИТИЧНО: Инициализируем application для webhook режима
-        await application.initialize()
-        logger.info("✅ Application initialized for webhook mode")
-
-        # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
         try:
-            from app.utils.healthcheck import start_health_server
-
-            port_str = os.getenv("PORT", "10000").strip()
-            try:
-                port = int(port_str)
-            except ValueError:
-                port = 10000
-            webhook_handler = await create_webhook_handler()
-            started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
-            logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
-        except Exception as health_exc:
-            logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
-        
-        # Устанавливаем webhook
-        try:
-            from telegram import Bot
-            temp_bot = Bot(token=BOT_TOKEN)
-            if not await ensure_webhook_mode(temp_bot, webhook_url):
-                logger.error("❌ Failed to set webhook")
+            await _ensure_webhook_initialized(application, webhook_url)
+            if not _webhook_app_ready_event.is_set():
+                logger.error("❌ Webhook initialization incomplete; aborting webhook mode")
                 return
-            
+
             logger.info("✅ Webhook mode ready - waiting for updates via webhook")
             logger.info("   Bot will receive updates at: %s", webhook_url)
-            
+
             # В webhook режиме просто ждём (webhook handler настроен выше)
             while True:
                 await asyncio.sleep(60)  # Health check loop
         except asyncio.CancelledError:
             logger.info("🛑 Webhook mode cancelled; shutting down cleanly.")
-            return
-        except Conflict as e:
-            handle_conflict_gracefully(e, "webhook")
-            return
-        except Exception as e:
-            logger.error(f"❌ Error in webhook mode: {e}")
             return
         finally:
             await cleanup_storage()
