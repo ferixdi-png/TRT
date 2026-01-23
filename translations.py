@@ -111,9 +111,9 @@ TRANSLATIONS = {
         'msg_referral_title': '🎁 <b>РЕФЕРАЛЬНАЯ СИСТЕМА</b> 🎁',
         'msg_referral_how_it_works': (
             '💡 <b>КАК ЭТО РАБОТАЕТ:</b>\n\n'
-            '1️⃣ Пригласи друга по вашей ссылке\n'
-            '2️⃣ Он зарегистрируется через бота\n'
-            '3️⃣ Вы получите <b>+{bonus} бесплатных генераций в free tools</b>!'
+            '1) Пригласи друга по своей ссылке\n'
+            '2) Друг нажимает /start по ссылке и доходит до главного меню (считаем активацией)\n'
+            '3) Ты получаешь <b>+{bonus} бесплатных генераций</b>'
         ),
         'msg_referral_stats': (
             '📊 <b>ВАША СТАТИСТИКА:</b>\n\n'
@@ -122,10 +122,7 @@ TRANSLATIONS = {
             '• Доступно бесплатно: <b>{remaining}</b> генераций в free tools'
         ),
         'msg_referral_important': (
-            '⚠️ <b>ВАЖНО:</b>\n\n'
-            '• Бесплатные генерации доступны для всех моделей free tools\n'
-            '• Бонусы начисляются автоматически после регистрации друга\n'
-            '• Чем больше друзей пригласите, тем больше бесплатных генераций получите!'
+            'Начисление приходит автоматически после первой активации друга.'
         ),
         'msg_referral_link_title': '🔗 <b>ВАША РЕФЕРАЛЬНАЯ ССЫЛКА:</b>',
         'msg_referral_send': (
@@ -384,9 +381,9 @@ TRANSLATIONS = {
         'msg_referral_title': '🎁 <b>REFERRAL SYSTEM</b> 🎁',
         'msg_referral_how_it_works': (
             '💡 <b>HOW IT WORKS:</b>\n\n'
-            '1️⃣ Invite a friend using your link\n'
-            '2️⃣ They register through the bot\n'
-            '3️⃣ You get <b>+{bonus} free tools generations</b>!'
+            '1) Invite a friend using your link\n'
+            '2) They tap /start from the link and reach the main menu (activation)\n'
+            '3) You receive <b>+{bonus} free generations</b>'
         ),
         'msg_referral_stats': (
             '📊 <b>YOUR STATISTICS:</b>\n\n'
@@ -395,10 +392,7 @@ TRANSLATIONS = {
             '• Available free: <b>{remaining}</b> free tools generations'
         ),
         'msg_referral_important': (
-            '⚠️ <b>IMPORTANT:</b>\n\n'
-            '• Free generations are available for all free tools models\n'
-            '• Bonuses are added automatically after friend registration\n'
-            '• The more friends you invite, the more free generations you get!'
+            'Bonus is credited automatically after your friend’s first activation.'
         ),
         'msg_referral_link_title': '🔗 <b>YOUR REFERRAL LINK:</b>',
         'msg_referral_send': (

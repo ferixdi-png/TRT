@@ -26,7 +26,7 @@ def get_free_tools_config() -> FreeToolsConfig:
     sku_ids = list_free_skus()
     _ = free_tools  # config kept for future expansion
     base_per_day = get_free_daily_limit()
-    referral_bonus = 0
+    referral_bonus = int(free_tools.get("referral_bonus", 10))
     return FreeToolsConfig(
         sku_ids=list(sku_ids),
         base_per_day=base_per_day,
@@ -59,10 +59,11 @@ async def get_free_generation_status(user_id: int) -> Dict[str, int]:
     storage = get_storage()
     used_count = int(await storage.get_user_free_generations_today(user_id))
     base_remaining = max(0, cfg.base_per_day - used_count)
+    referral_remaining = int(await storage.get_referral_free_bank(user_id))
     return {
         "base_remaining": base_remaining,
-        "referral_remaining": 0,
-        "total_remaining": base_remaining,
+        "referral_remaining": referral_remaining,
+        "total_remaining": base_remaining + referral_remaining,
         "is_admin": False,
     }
 
@@ -80,7 +81,8 @@ async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None
         }
     storage = get_storage()
     used_count = int(await storage.get_user_free_generations_today(user_id))
-    limit_per_day = int(cfg.base_per_day)
+    referral_remaining = int(await storage.get_referral_free_bank(user_id))
+    limit_per_day = int(cfg.base_per_day + referral_remaining)
     remaining = max(0, limit_per_day - used_count)
     next_refill_at = _start_of_next_day(current_time)
     next_refill_in = max(0, int((next_refill_at - current_time).total_seconds()))
@@ -89,6 +91,7 @@ async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None
         "used_today": used_count,
         "remaining": remaining,
         "next_refill_in": next_refill_in,
+        "referral_remaining": referral_remaining,
         "is_admin": False,
     }
 
@@ -212,6 +215,7 @@ async def check_and_consume_free_generation(
 
     used_count = int(await storage.get_user_free_generations_today(user_id))
     base_remaining = cfg.base_per_day - used_count
+    referral_remaining = int(await storage.get_referral_free_bank(user_id))
     if base_remaining > 0:
         await storage.increment_free_generations(user_id)
         used_count += 1
@@ -235,8 +239,50 @@ async def check_and_consume_free_generation(
         return {
             "status": "ok",
             "used_today": used_count,
-            "remaining": remaining,
-            "limit_per_day": cfg.base_per_day,
+            "remaining": remaining + referral_remaining,
+            "limit_per_day": cfg.base_per_day + referral_remaining,
+        }
+    if referral_remaining > 0:
+        lock_key = f"free-referral:{user_id}"
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
+            if not acquired:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    action="FREE_QUOTA_UPDATE",
+                    action_path="free_tools_service.check_and_consume_free_generation",
+                    stage="FREE_QUOTA",
+                    outcome="lock_failed",
+                    error_code="FREE_QUOTA_LOCK",
+                    fix_hint="Повторите списание позже; Redis lock занят.",
+                    param={"sku_id": sku_id, "source": "referral_bank"},
+                )
+                return {"status": "lock_failed"}
+            refreshed = int(await storage.get_referral_free_bank(user_id))
+            if refreshed <= 0:
+                referral_remaining = 0
+            else:
+                await storage.set_referral_free_bank(user_id, max(0, refreshed - 1))
+                referral_remaining = refreshed - 1
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="FREE_QUOTA_UPDATE",
+            action_path="free_tools_service.check_and_consume_free_generation",
+            stage="FREE_QUOTA",
+            outcome="consumed_referral",
+            param={
+                "sku_id": sku_id,
+                "used_today": used_count,
+                "remaining": max(0, referral_remaining),
+                "limit_per_day": cfg.base_per_day + max(0, referral_remaining),
+            },
+        )
+        return {
+            "status": "ok",
+            "used_today": used_count,
+            "remaining": max(0, referral_remaining),
+            "limit_per_day": cfg.base_per_day + max(0, referral_remaining),
         }
 
     now = _now()
@@ -435,4 +481,15 @@ async def add_referral_free_bonus(user_id: int, bonus_count: Optional[int] = Non
     current = await storage.get_referral_free_bank(user_id)
     new_total = current + bonus
     await storage.set_referral_free_bank(user_id, new_total)
+    log_structured_event(
+        user_id=user_id,
+        action="REFERRAL_QUOTA_APPLIED",
+        action_path="free_tools_service.add_referral_free_bonus",
+        outcome="applied",
+        param={
+            "before": current,
+            "after": new_total,
+            "bonus": bonus,
+        },
+    )
     return new_total
