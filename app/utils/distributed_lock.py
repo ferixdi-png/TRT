@@ -19,7 +19,7 @@ _redis_initialized: bool = False
 
 
 def build_tenant_lock_key(key: str) -> str:
-    bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip()
+    bot_instance_id = os.getenv("BOT_INSTANCE_ID", "").strip() or os.getenv("PARTNER_ID", "").strip()
     prefix = f"tenant:{bot_instance_id}:" if bot_instance_id else "tenant:unknown:"
     if key.startswith(prefix):
         return key
