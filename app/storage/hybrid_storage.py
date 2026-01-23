@@ -220,6 +220,13 @@ class HybridStorage(BaseStorage):
     ) -> List[Dict[str, Any]]:
         return await self._primary.list_jobs(user_id=user_id, status=status, limit=limit)
 
+    async def list_jobs_by_status(
+        self,
+        statuses: List[str],
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        return await self._primary.list_jobs_by_status(statuses=statuses, limit=limit)
+
     async def add_generation_to_history(
         self,
         user_id: int,
