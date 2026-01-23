@@ -18291,6 +18291,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 pass
         return result_message
 
+    def _build_generation_status_keyboard(user_lang: str, job_id: Optional[str]) -> InlineKeyboardMarkup:
+        status_label = "📊 Статус" if user_lang == "ru" else "📊 Status"
+        cancel_label = t("btn_cancel", lang=user_lang)
+        cancel_callback = _build_cancel_callback(job_id) if job_id else "cancel"
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(status_label, callback_data="my_generations")],
+                [
+                    InlineKeyboardButton(cancel_label, callback_data=cancel_callback),
+                    InlineKeyboardButton(t("btn_home", lang=user_lang), callback_data="back_to_menu"),
+                ],
+            ]
+        )
+
     if not _acquire_generation_submit_lock(user_id):
         user_lang = get_user_language(user_id) if user_id else "ru"
         throttle_text = (
@@ -18715,11 +18729,119 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
     request_key = None
     if prompt_hash:
+        from app.generations.request_dedupe_store import (
+            DedupeEntry,
+            get_dedupe_entry,
+            set_dedupe_entry,
+            update_dedupe_entry,
+        )
         from app.utils.distributed_lock import distributed_lock
 
         request_key = build_request_key(user_id, model_id, prompt_hash)
+        dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
+        if dedupe_entry:
+            existing_task_id = dedupe_entry.task_id
+            log_request_event(
+                request_id=request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=dedupe_entry.task_id,
+                job_id=dedupe_entry.job_id,
+                status="deduped",
+                latency_ms=0,
+                attempt=0,
+                error_code="DUPLICATE_REQUEST",
+                error_msg="dedupe_store_hit",
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CONFIRM_GENERATE",
+                action_path="confirm_generate",
+                model_id=model_id,
+                outcome="dedup_joined",
+                dedup_hit=True,
+                existing_task_id=existing_task_id,
+                job_id=dedupe_entry.job_id,
+            )
+            if dedupe_entry.status in {"completed", "finished"} and (
+                dedupe_entry.result_urls or dedupe_entry.result_text
+            ):
+                try:
+                    from app.generations.telegram_sender import send_result_file
+
+                    delivered = False
+                    if dedupe_entry.media_type and dedupe_entry.result_urls:
+                        delivered = bool(
+                            await send_result_file(
+                                context.bot,
+                                user_id,
+                                dedupe_entry.media_type,
+                                dedupe_entry.result_urls,
+                                dedupe_entry.result_text,
+                                model_id=model_id,
+                                gen_type=session.get("gen_type"),
+                                correlation_id=correlation_id,
+                                request_id=request_id,
+                                prompt_hash=prompt_hash,
+                                params=params,
+                                model_label=model_name,
+                            )
+                        )
+                    if not delivered:
+                        result_text = dedupe_entry.result_text or ""
+                        urls_text = "\n".join(dedupe_entry.result_urls or [])
+                        await send_or_edit_message(
+                            (
+                                "✅ <b>Готовый результат</b>\n\n"
+                                f"{result_text}\n{urls_text}"
+                                if user_lang == "ru"
+                                else f"✅ <b>Result</b>\n\n{result_text}\n{urls_text}"
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                        )
+                except Exception as exc:
+                    logger.warning("Failed to re-send deduped result: %s", exc)
+                    await send_or_edit_message(
+                        (
+                            "✅ <b>Результат готов</b>\n\n"
+                            "Нажмите «Статус», чтобы открыть список генераций."
+                            if user_lang == "ru"
+                            else "✅ <b>Result ready</b>\n\nTap Status to view your generations."
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                    )
+            else:
+                await send_or_edit_message(
+                    (
+                        "⏳ <b>Генерация уже идёт</b>\n\n"
+                        f"Task ID: <code>{existing_task_id or 'pending'}</code>\n"
+                        "Нажмите «Статус», чтобы посмотреть прогресс."
+                        if user_lang == "ru"
+                        else (
+                            "⏳ <b>Generation already running</b>\n\n"
+                            f"Task ID: <code>{existing_task_id or 'pending'}</code>\n"
+                            "Tap Status to view progress."
+                        )
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                )
+            return ConversationHandler.END
         existing = _request_tracker.get(request_key)
         if existing:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                job_id=existing.job_id,
+                task_id=existing.task_id,
+                status="running",
+            )
             log_request_event(
                 request_id=request_id,
                 user_id=user_id,
@@ -18732,6 +18854,18 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 attempt=0,
                 error_code="DUPLICATE_REQUEST",
                 error_msg="duplicate_within_window",
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CONFIRM_GENERATE",
+                action_path="confirm_generate",
+                model_id=model_id,
+                outcome="dedup_joined",
+                dedup_hit=True,
+                existing_task_id=existing.task_id,
+                job_id=existing.job_id,
             )
             await send_or_edit_message(
                 (
@@ -18746,22 +18880,102 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     )
                 ),
                 parse_mode="HTML",
-                reply_markup=build_back_to_menu_keyboard(user_lang),
+                reply_markup=_build_generation_status_keyboard(user_lang, existing.job_id),
             )
             return ConversationHandler.END
         lock_key = f"gen:{user_id}:{model_id}:{prompt_hash}"
-        async with distributed_lock(lock_key, ttl_seconds=REQUEST_DEDUPE_WINDOW_SECONDS, wait_seconds=0) as acquired:
-            if not acquired:
+        async with distributed_lock(
+            lock_key,
+            ttl_seconds=180,
+            wait_seconds=12,
+            max_attempts=4,
+            backoff_base=0.5,
+            backoff_cap=2.0,
+            jitter=0.25,
+        ) as lock_result:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CONFIRM_GENERATE",
+                action_path="confirm_generate",
+                model_id=model_id,
+                lock_key=lock_key,
+                lock_wait_ms_total=lock_result.wait_ms_total,
+                lock_attempts=lock_result.attempts,
+                lock_ttl_s=lock_result.ttl_seconds,
+                lock_acquired=bool(lock_result),
+                dedup_hit=False,
+                existing_task_id=None,
+                outcome="locked_wait" if lock_result.wait_ms_total > 0 else "started",
+            )
+            if not lock_result:
+                dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
+                if dedupe_entry:
+                    await send_or_edit_message(
+                        (
+                            "⏳ <b>Генерация уже идёт</b>\n\n"
+                            f"Task ID: <code>{dedupe_entry.task_id or 'pending'}</code>\n"
+                            "Нажмите «Статус», чтобы посмотреть прогресс."
+                            if user_lang == "ru"
+                            else (
+                                "⏳ <b>Generation already running</b>\n\n"
+                                f"Task ID: <code>{dedupe_entry.task_id or 'pending'}</code>\n"
+                                "Tap Status to view progress."
+                            )
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                    )
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        action="CONFIRM_GENERATE",
+                        action_path="confirm_generate",
+                        model_id=model_id,
+                        outcome="dedup_joined",
+                        dedup_hit=True,
+                        existing_task_id=dedupe_entry.task_id,
+                        job_id=dedupe_entry.job_id,
+                    )
+                    return ConversationHandler.END
                 await send_or_edit_message(
                     (
-                        "⚠️ <b>Генерация уже запускается</b>\n\nПодождите несколько секунд."
+                        "⏳ <b>Идёт параллельная генерация</b>\n\n"
+                        "Подождите немного или нажмите «Статус»."
                         if user_lang == "ru"
-                        else "⚠️ <b>Generation is starting</b>\n\nPlease wait a few seconds."
+                        else "⏳ <b>Parallel generation in progress</b>\n\nPlease wait or tap Status."
                     ),
                     parse_mode="HTML",
-                    reply_markup=build_back_to_menu_keyboard(user_lang),
+                    reply_markup=_build_generation_status_keyboard(user_lang, None),
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="CONFIRM_GENERATE",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    outcome="locked_timeout",
+                    lock_key=lock_key,
+                    lock_wait_ms_total=lock_result.wait_ms_total,
+                    lock_attempts=lock_result.attempts,
+                    lock_ttl_s=lock_result.ttl_seconds,
+                    lock_acquired=False,
+                    fix_hint="Идёт параллельная генерация, дождись или нажми Статус.",
                 )
                 return ConversationHandler.END
+            await set_dedupe_entry(
+                DedupeEntry(
+                    user_id=user_id,
+                    model_id=model_id,
+                    prompt_hash=prompt_hash,
+                    job_id=None,
+                    task_id=None,
+                    status="queued",
+                )
+            )
     if not job_id:
         job_id = f"job-{uuid.uuid4().hex[:12]}"
         session["job_id"] = job_id
@@ -18794,6 +19008,24 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         if request_key:
             _request_tracker.set(request_key, job_id)
+            if prompt_hash:
+                await update_dedupe_entry(
+                    user_id,
+                    model_id,
+                    prompt_hash,
+                    job_id=job_id,
+                    status="queued",
+                )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            job_id=job_id,
+            outcome="started",
+        )
     cancel_keyboard = InlineKeyboardMarkup(
         [
             [
@@ -18932,6 +19164,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 else f"✅ <b>DRY-RUN: generation simulated</b>\n\n🔗 {mock_url}"
             )
             await status_message.edit_text(message_text, parse_mode="HTML")
+            if prompt_hash:
+                await update_dedupe_entry(
+                    user_id,
+                    model_id,
+                    prompt_hash,
+                    task_id=task_id,
+                    status="completed",
+                    media_type="video" if is_video else "image",
+                    result_urls=[mock_url],
+                )
             return ConversationHandler.END
 
         log_structured_event(
@@ -18978,6 +19220,14 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         session["task_id"] = task_id
         if request_key:
             _request_tracker.update_task_id(request_key, task_id)
+            if prompt_hash:
+                await update_dedupe_entry(
+                    user_id,
+                    model_id,
+                    prompt_hash,
+                    task_id=task_id,
+                    status="running",
+                )
 
         if user_id not in saved_generations:
             saved_generations[user_id] = {}
@@ -19061,6 +19311,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     )
                 except Exception as storage_exc:
                     logger.warning("Failed to update storage job completion: %s", storage_exc)
+                if prompt_hash:
+                    await update_dedupe_entry(
+                        user_id,
+                        model_id,
+                        prompt_hash,
+                        task_id=job_result.task_id,
+                        status="completed",
+                        media_type=job_result.media_type,
+                        result_urls=job_result.urls,
+                        result_text=job_result.text,
+                    )
                 if not dry_run:
                     await _commit_post_delivery_charge(
                         session=session,
@@ -19227,6 +19488,25 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
     except KIERequestFailed as exc:
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="failed",
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code=exc.error_code or "KIE_REQUEST_FAILED",
+        )
         if job_id:
             state_before = session.get("job_state") if "session" in locals() else None
             _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
@@ -19375,6 +19655,25 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except TimeoutError as exc:
         logger.error("❌ Generation timeout: %s", exc, exc_info=True)
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="timed_out",
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code="ERR_KIE_TIMEOUT",
+        )
         if job_id:
             state_before = session.get("job_state") if "session" in locals() else None
             _update_job_record(job_id, state="timed_out", timed_out_ts_ms=_now_ms())
@@ -19469,6 +19768,25 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from app.observability.redaction import redact_payload
 
         logger.error(f"❌ Generation failed: {exc}", exc_info=True)
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="failed",
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code=exc.fail_code or "KIE_FAIL_STATE",
+        )
         if job_id:
             state_before = session.get("job_state") if "session" in locals() else None
             _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
@@ -19548,6 +19866,25 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except (KIEResultError, ValueError) as exc:
         error_text = str(exc)
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="failed",
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code=getattr(exc, "error_code", "KIE_RESULT_ERROR"),
+        )
         if job_id:
             state_before = session.get("job_state") if "session" in locals() else None
             _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
@@ -19637,6 +19974,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except asyncio.CancelledError:
         logger.info("Generation cancelled by user_id=%s", user_id)
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="cancelled",
+            )
         now_ms = _now_ms()
         job_record = _get_job_record(job_id)
         state_before = job_record.get("state") if job_record else None
@@ -19674,6 +20020,25 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="failed",
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code="ERR_GEN_UNKNOWN",
+        )
         if job_id:
             state_before = session.get("job_state") if "session" in locals() else None
             _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
