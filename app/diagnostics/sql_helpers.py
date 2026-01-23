@@ -65,25 +65,25 @@ async def run_row(conn, key: str, sql: str, *args: Any) -> AggregateResult:
         return AggregateResult(value=None, status=STATUS_ERROR, note=str(exc)[:120])
 
 
-def _count_entries_sql(column_expr: str, key: str) -> str:
+def _count_entries_sql(column_expr: str, key: str, *, json_typeof: str, json_each: str, json_array_len: str) -> str:
     return (
         f"/* billing_preflight:{key} */ "
         "SELECT COALESCE(SUM(CASE "
-        f"WHEN jsonb_typeof({column_expr}) = 'object' THEN "
-        f"(SELECT COUNT(*) FROM jsonb_each({column_expr})) "
-        f"WHEN jsonb_typeof({column_expr}) = 'array' THEN jsonb_array_length({column_expr}) "
+        f"WHEN {json_typeof}({column_expr}) = 'object' THEN "
+        f"(SELECT COUNT(*) FROM {json_each}({column_expr})) "
+        f"WHEN {json_typeof}({column_expr}) = 'array' THEN {json_array_len}({column_expr}) "
         "ELSE 0 END),0) "
         f"FROM storage_json WHERE filename=$1"
     )
 
 
-def _count_nonempty_sql(column_expr: str, key: str) -> str:
+def _count_nonempty_sql(column_expr: str, key: str, *, json_typeof: str, json_each: str, json_array_len: str) -> str:
     return (
         f"/* billing_preflight:{key} */ "
         "SELECT COUNT(*) FROM storage_json WHERE filename=$1 AND ("
-        f"CASE WHEN jsonb_typeof({column_expr}) = 'object' THEN "
-        f"(SELECT COUNT(*) FROM jsonb_each({column_expr})) "
-        f"WHEN jsonb_typeof({column_expr}) = 'array' THEN jsonb_array_length({column_expr}) "
+        f"CASE WHEN {json_typeof}({column_expr}) = 'object' THEN "
+        f"(SELECT COUNT(*) FROM {json_each}({column_expr})) "
+        f"WHEN {json_typeof}({column_expr}) = 'array' THEN {json_array_len}({column_expr}) "
         "ELSE 0 END"
         ") > 0"
     )
@@ -101,12 +101,25 @@ async def count_payload_entries(conn, filename: str, *, column_type: str, key: s
             return AggregateResult(value=fallback.value, status=STATUS_UNKNOWN, note="fallback=count_rows")
         return AggregateResult(value=None, status=STATUS_ERROR, note=fallback.note)
 
-    column_expr = "payload::jsonb"
-    if column_type in {"json", "jsonb"}:
+    if column_type == "jsonb":
         column_expr = "payload::jsonb"
-    elif column_type == "text":
-        column_expr = "NULLIF(payload, '')::jsonb"
-    sql = _count_entries_sql(column_expr, key)
+        json_typeof = "jsonb_typeof"
+        json_each = "jsonb_each"
+        json_array_len = "jsonb_array_length"
+    else:
+        column_expr = "payload::json"
+        if column_type == "text":
+            column_expr = "NULLIF(payload, '')::json"
+        json_typeof = "json_typeof"
+        json_each = "json_each"
+        json_array_len = "json_array_length"
+    sql = _count_entries_sql(
+        column_expr,
+        key,
+        json_typeof=json_typeof,
+        json_each=json_each,
+        json_array_len=json_array_len,
+    )
     result = await run_scalar(conn, key, sql, filename)
     if result.status == STATUS_OK:
         return result
@@ -134,12 +147,25 @@ async def count_payload_nonempty(conn, filename: str, *, column_type: str, key: 
             return AggregateResult(value=fallback.value, status=STATUS_UNKNOWN, note="fallback=count_rows")
         return AggregateResult(value=None, status=STATUS_ERROR, note=fallback.note)
 
-    column_expr = "payload::jsonb"
-    if column_type in {"json", "jsonb"}:
+    if column_type == "jsonb":
         column_expr = "payload::jsonb"
-    elif column_type == "text":
-        column_expr = "NULLIF(payload, '')::jsonb"
-    sql = _count_nonempty_sql(column_expr, key)
+        json_typeof = "jsonb_typeof"
+        json_each = "jsonb_each"
+        json_array_len = "jsonb_array_length"
+    else:
+        column_expr = "payload::json"
+        if column_type == "text":
+            column_expr = "NULLIF(payload, '')::json"
+        json_typeof = "json_typeof"
+        json_each = "json_each"
+        json_array_len = "json_array_length"
+    sql = _count_nonempty_sql(
+        column_expr,
+        key,
+        json_typeof=json_typeof,
+        json_each=json_each,
+        json_array_len=json_array_len,
+    )
     result = await run_scalar(conn, key, sql, filename)
     if result.status == STATUS_OK:
         return result
