@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Callable
 from app.kie.kie_client import KIEClient
 from app.observability.trace import trace_event, url_summary, prompt_summary
 from app.observability.structured_logs import log_structured_event
+from app.observability.task_lifecycle import log_task_lifecycle
 from app.observability.request_logger import log_request_event
 from app.observability.error_catalog import ERROR_CATALOG
 from app.kie_catalog import get_model_map, ModelSpec
@@ -726,6 +727,15 @@ async def wait_job_result(
             )
             if storage and job_id:
                 await storage.update_job_status(job_id, "succeeded", result_urls=urls)
+            log_task_lifecycle(
+                state="done",
+                user_id=user_id,
+                task_id=task_id,
+                job_id=job_id,
+                model_id=model_id,
+                correlation_id=correlation_id,
+                source="universal_engine.wait_job_result",
+            )
             return record
 
         if state == "failed":
@@ -738,6 +748,15 @@ async def wait_job_result(
                     error_message=fail_msg,
                     error_code=fail_code or "KIE_FAIL_STATE",
                 )
+            log_task_lifecycle(
+                state="failed",
+                user_id=user_id,
+                task_id=task_id,
+                job_id=job_id,
+                model_id=model_id,
+                correlation_id=correlation_id,
+                source="universal_engine.wait_job_result",
+            )
             raise KIEJobFailed(
                 fail_msg or "Task failed",
                 fail_code=fail_code,
@@ -916,6 +935,15 @@ async def run_generation(
             error_code=None,
             error_msg=None,
         )
+        log_task_lifecycle(
+            state="created",
+            user_id=user_id,
+            task_id=task_id,
+            job_id=job_id,
+            model_id=model_id,
+            correlation_id=correlation_id,
+            source="universal_engine.run_generation",
+        )
         await _watchdog_store(
             storage,
             prompt_hash,
@@ -940,6 +968,15 @@ async def run_generation(
                 prompt=prompt or session_params.get("prompt") or session_params.get("text"),
                 prompt_hash=prompt_hash,
             )
+        log_task_lifecycle(
+            state="queued",
+            user_id=user_id,
+            task_id=task_id,
+            job_id=job_id,
+            model_id=model_id,
+            correlation_id=correlation_id,
+            source="universal_engine.run_generation",
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
