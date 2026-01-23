@@ -1,5 +1,67 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-02 TRT GO-аудит (storage/tenant/admin/behavioral)
+
+### Факты / прогоны
+* `pytest -q` (полный набор, 538 тестов) — ✅
+* `python scripts/behavioral_e2e.py` — ✅ (warn только про отсутствующие ENV в локальном прогоне).
+
+### ТОП-5 проблем → фиксы → тесты → логи
+1) **Storage backend игнорировал явный DB-режим при включённых GitHub ENV**
+   * **Риск:** партнёрский прод может неожиданно уйти в hybrid/GitHub storage.
+   * **Fix:** `create_storage` уважает `STORAGE_MODE=db/postgres`, пишет log о GitHub disable.
+   * **Tests:** `tests/test_storage_factory_fallbacks.py::test_storage_factory_db_mode_ignores_github`
+   * **Logs:** `[STORAGE] github_backend_disabled=true reason=explicit_db_mode ...`
+
+2) **Отсутствующий DATABASE_URL падал в runtime и валил storage read/write**
+   * **Риск:** ошибки в логах на старте/меню/истории при локальном/партнёрском прогоне.
+   * **Fix:** авто-fallback на JsonStorage при пустом `DATABASE_URL` и не-DB режиме.
+   * **Tests:** `tests/test_storage_factory_fallbacks.py::test_storage_factory_fallbacks_to_json_when_db_missing`,
+     `tests/test_partner_minimal_env_startup.py::test_bot_starts_with_minimal_partner_env`
+   * **Logs:** `[STORAGE] backend=json reason=missing_database_url ...`
+
+3) **History/registry запись падала на не-JSON payload (MagicMock)**
+   * **Риск:** критические исключения в логах storage write (user_registry/history).
+   * **Fix:** sanitize payload через `json.dumps(..., default=str)` с предупреждением.
+   * **Tests:** `tests/test_storage_payload_sanitization.py::test_save_json_file_sanitizes_non_serializable`
+   * **Logs:** `STORAGE_JSON_SANITIZED filename=... reason=non_serializable_payload`
+
+4) **Tenant-scoping для fallback путей был неполным**
+   * **Риск:** lock-ключи и JSON data dir без BOT_INSTANCE_ID смешивали партнёров.
+   * **Fix:** default tenant=default для JSON storage + distributed lock + data dir resolver.
+   * **Tests:** `tests/test_json_storage_defaults.py::test_json_storage_defaults_to_tenant`,
+     `tests/test_distributed_lock_tenant_default.py::test_distributed_lock_defaults_to_tenant_default`
+   * **Logs:** `BOT_INSTANCE_ID missing; JSON storage defaulting to tenant=default`,
+     `[DISTRIBUTED_LOCK] tenant_defaulted=true tenant=default`
+
+5) **Админ-бесплатно не выводил требуемый текст**
+   * **Риск:** нарушение требования UX/биллинга (админ = free).
+   * **Fix:** единый текст `"🎁 Админ: безлимитные генерации (квота не расходуется)."` в price line.
+   * **Tests:** `tests/test_admin_price_text.py::test_admin_price_text_includes_unlimited_message`
+   * **Logs:** `ADMIN_PRICE_TEXT applied=true message=admin_unlimited_free_generations`
+
+### Какие тесты добавлены и как запускать
+* `pytest -q tests/test_storage_factory_fallbacks.py`
+* `pytest -q tests/test_json_storage_defaults.py`
+* `pytest -q tests/test_distributed_lock_tenant_default.py`
+* `pytest -q tests/test_admin_price_text.py`
+* `pytest -q tests/test_storage_payload_sanitization.py`
+* `pytest -q tests/test_partner_minimal_env_startup.py`
+
+### Какие сценарии проверены
+* `behavioral_e2e.py`: меню → модель → шаги → подтверждение → запись history.
+* Free limits + history restart: `tests/test_free_limits_and_history_e2e.py`.
+* Partner isolation (Postgres): `tests/test_partner_quickstart_integration.py`.
+* Callback fallback/NO-SILENCE: `tests/test_unknown_callback_fallback.py`.
+
+### Риски / что мониторить
+* `STORAGE_JSON_SANITIZED` — индикатор не-JSON payload в legacy-записях.
+* `[STORAGE] backend=json reason=missing_database_url` — признак, что DB URL не задан.
+* `[DISTRIBUTED_LOCK] tenant_defaulted=true` — партнёрский инстанс без BOT_INSTANCE_ID.
+
+### Итог
+**GO** — все пункты QUALITY GATE зелёные (pytest + behavioral_e2e + без критичных исключений).
+
 ## ✅ 2026-02-01 TOP-5 критических фиксов (prod/UX/DB/партнёры/CI)
 
 ### Факты / прогоны

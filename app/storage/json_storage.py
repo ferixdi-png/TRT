@@ -32,12 +32,13 @@ class JsonStorage(BaseStorage):
     
     def __init__(self, data_dir: str = "./data", bot_instance_id: Optional[str] = None):
         self.bot_instance_id = (bot_instance_id or os.getenv("BOT_INSTANCE_ID") or "").strip()
+        if not self.bot_instance_id:
+            self.bot_instance_id = "default"
+            logger.warning("BOT_INSTANCE_ID missing; JSON storage defaulting to tenant=%s", self.bot_instance_id)
         base_dir = Path(data_dir)
         if self.bot_instance_id:
             if self.bot_instance_id not in base_dir.parts:
                 base_dir = base_dir / self.bot_instance_id
-        else:
-            logger.warning("BOT_INSTANCE_ID missing; JSON storage not tenant-scoped (dir=%s)", base_dir)
         self.data_dir = base_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
