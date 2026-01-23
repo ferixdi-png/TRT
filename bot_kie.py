@@ -20457,7 +20457,24 @@ async def create_webhook_handler():
     """Create aiohttp webhook handler for Telegram updates."""
     from aiohttp import web
     import uuid
-    
+    import math
+
+    max_payload_bytes = int(os.getenv("WEBHOOK_MAX_PAYLOAD_BYTES", "1048576"))
+    ip_rate_limit_per_sec = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_PER_SEC", "4"))
+    ip_rate_limit_burst = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_BURST", "12"))
+    request_dedup_ttl_seconds = float(os.getenv("WEBHOOK_REQUEST_DEDUP_TTL_SECONDS", "30"))
+    process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
+    concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
+    concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
+
+    ip_rate_limiter = (
+        PerKeyRateLimiter(ip_rate_limit_per_sec, ip_rate_limit_burst)
+        if ip_rate_limit_per_sec > 0 and ip_rate_limit_burst > 0
+        else None
+    )
+    request_deduper = TTLCache(request_dedup_ttl_seconds)
+    webhook_semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit > 0 else None
+
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
         """Handle incoming Telegram webhook updates."""
         try:
@@ -20468,6 +20485,13 @@ async def create_webhook_handler():
                 or str(uuid.uuid4())[:8]
             )
             logger.debug(f"[WEBHOOK] {correlation_id} handler_invoked")
+
+            forwarded_for = request.headers.get("X-Forwarded-For", "")
+            client_ip = (
+                forwarded_for.split(",", 1)[0].strip()
+                if forwarded_for
+                else request.headers.get("X-Real-IP") or request.remote or "unknown"
+            )
 
             if not _webhook_app_ready_event.is_set() or _application_for_webhook is None:
                 update_id = None
@@ -20495,24 +20519,111 @@ async def create_webhook_handler():
                     text="Bot not ready",
                     headers={"Retry-After": str(retry_after)},
                 )
-            
+
+            content_length = request.content_length
+            if content_length is not None and content_length > max_payload_bytes:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="WEBHOOK_ABUSE",
+                    action_path="webhook:payload_too_large",
+                    outcome="rejected",
+                    error_id="WEBHOOK_PAYLOAD_TOO_LARGE",
+                    abuse_id="payload_oversize",
+                    param={"client_ip": client_ip, "content_length": content_length},
+                )
+                return web.Response(status=413, text="Payload too large")
+
+            if ip_rate_limiter is not None:
+                allowed, retry_after = ip_rate_limiter.check(client_ip)
+                if not allowed:
+                    retry_after_seconds = max(1, int(math.ceil(retry_after)))
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="WEBHOOK_ABUSE",
+                        action_path="webhook:rate_limit_ip",
+                        outcome="throttled",
+                        error_id="WEBHOOK_RATE_LIMIT",
+                        abuse_id="rate_limit_ip",
+                        param={"client_ip": client_ip, "retry_after": retry_after_seconds},
+                    )
+                    return web.Response(
+                        status=429,
+                        text="Too many requests",
+                        headers={"Retry-After": str(retry_after_seconds)},
+                    )
+
+            request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
+            if request_id and request_deduper.seen(request_id):
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="WEBHOOK_DEDUP",
+                    action_path="webhook:request_id",
+                    outcome="deduped",
+                    abuse_id="duplicate_request_id",
+                    param={"client_ip": client_ip},
+                )
+                return web.Response(status=200, text="ok")
+
             try:
                 data = await request.json()
             except Exception as exc:
                 logger.warning(f"[WEBHOOK] {correlation_id} parse_error={exc}")
                 return web.Response(status=400, text="Invalid JSON")
-            
+
             # Process update
             try:
                 update = Update.de_json(data, _application_for_webhook.bot)
                 if update:
                     logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
-                    await _application_for_webhook.process_update(update)
+                    semaphore_acquired = False
+                    if webhook_semaphore is not None:
+                        try:
+                            await asyncio.wait_for(webhook_semaphore.acquire(), timeout=concurrency_timeout_seconds)
+                            semaphore_acquired = True
+                        except asyncio.TimeoutError:
+                            retry_after = max(1, int(math.ceil(concurrency_timeout_seconds)))
+                            log_structured_event(
+                                correlation_id=correlation_id,
+                                action="WEBHOOK_BACKPRESSURE",
+                                action_path="webhook:concurrency_limit",
+                                outcome="throttled",
+                                error_id="WEBHOOK_CONCURRENCY_LIMIT",
+                                abuse_id="concurrency_limit",
+                                param={"client_ip": client_ip, "retry_after": retry_after},
+                            )
+                            return web.Response(
+                                status=503,
+                                text="Server busy",
+                                headers={"Retry-After": str(retry_after)},
+                            )
+                    try:
+                        await asyncio.wait_for(
+                            _application_for_webhook.process_update(update),
+                            timeout=process_timeout_seconds,
+                        )
+                    finally:
+                        if webhook_semaphore is not None and semaphore_acquired:
+                            webhook_semaphore.release()
                     logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
                     return web.Response(status=200, text="ok")
                 else:
                     logger.warning(f"[WEBHOOK] {correlation_id} update_parse_failed")
                     return web.Response(status=400, text="Invalid update")
+            except asyncio.TimeoutError:
+                retry_after = max(1, int(math.ceil(process_timeout_seconds)))
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="WEBHOOK_TIMEOUT",
+                    action_path="webhook:process_update",
+                    outcome="timeout",
+                    error_id="WEBHOOK_PROCESS_TIMEOUT",
+                    param={"client_ip": client_ip, "retry_after": retry_after},
+                )
+                return web.Response(
+                    status=503,
+                    text="Processing timeout",
+                    headers={"Retry-After": str(retry_after)},
+                )
             except Exception as exc:
                 logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
                 return web.Response(status=500, text="Processing error")

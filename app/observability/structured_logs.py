@@ -65,5 +65,6 @@ def log_structured_event(**fields: Any) -> None:
         "error_id": fields.get("error_id"),
         "error_code": fields.get("error_code"),
         "fix_hint": fields.get("fix_hint"),
+        "abuse_id": fields.get("abuse_id"),
     }
     logger.info("STRUCTURED_LOG %s", json.dumps(payload, ensure_ascii=False, default=str))
