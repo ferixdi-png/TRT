@@ -3,7 +3,10 @@ import re
 
 import pytest
 
-from app.diagnostics.billing_preflight import run_billing_preflight
+from app.diagnostics.billing_preflight import (
+    build_billing_preflight_log_payload,
+    run_billing_preflight,
+)
 
 
 class FakeStorage:
@@ -379,3 +382,22 @@ async def test_billing_preflight_section_error_isolated(monkeypatch, test_env):
     assert report["sections"]["free_limits"]["status"] == "OK"
     assert report["sections"]["attempts"]["status"] == "OK"
     assert report["result"] == "DEGRADED"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_log_payload_contains_lat_ms(test_env):
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+    payload = build_billing_preflight_log_payload(report)
+
+    assert payload["result"] == "READY"
+    assert payload["db"]["status"] == "OK"
+    assert isinstance(payload["db"]["lat_ms"], int)
+    assert isinstance(payload["balances"]["records"], int)
+    assert isinstance(payload["users"]["records"], int)
+    assert isinstance(payload["free_limits"]["records"], int)
+    assert isinstance(payload["attempts"]["records"], int)

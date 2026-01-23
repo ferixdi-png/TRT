@@ -256,6 +256,60 @@ def _append_error_details(details: str, meta: Dict[str, Any]) -> str:
     return details
 
 
+def _coerce_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _section_latency_ms(meta: Dict[str, Any]) -> Optional[int]:
+    for key in ("lat_ms", "query_latency_ms", "latency_ms"):
+        value = meta.get(key)
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def build_billing_preflight_log_payload(report: Dict[str, Any]) -> Dict[str, Any]:
+    sections = report.get("sections", {})
+
+    def _section(name: str, *, records_key: Optional[str]) -> Dict[str, Any]:
+        section = sections.get(name, {})
+        meta = section.get("meta", {}) or {}
+        records = None
+        if records_key:
+            records = _coerce_int(meta.get(records_key))
+        return {
+            "status": section.get("status", STATUS_DEGRADED),
+            "records": records,
+            "lat_ms": _section_latency_ms(meta),
+        }
+
+    db_section = sections.get("db", {})
+    db_meta = db_section.get("meta", {}) or {}
+    db_status = db_section.get("status", STATUS_DEGRADED)
+    db_records = 1 if db_status == STATUS_OK else 0
+
+    return {
+        "result": report.get("result", RESULT_DEGRADED),
+        "db": {
+            "status": db_status,
+            "records": db_records,
+            "lat_ms": _section_latency_ms(db_meta),
+        },
+        "users": _section("users", records_key="records"),
+        "balances": _section("balances", records_key="records"),
+        "free_limits": _section("free_limits", records_key="records"),
+        "attempts": _section("attempts", records_key="total"),
+    }
+
+
 def format_billing_preflight_report(report: Dict[str, Any]) -> str:
     sections = report.get("sections", {})
     db_meta = sections.get("db", {}).get("meta", {})
@@ -532,6 +586,7 @@ async def run_billing_preflight(
     db_pool: Optional[asyncpg.Pool],
     *,
     max_partners: int = 50,
+    emit_logs: bool = True,
 ) -> Dict[str, Any]:
     report: Dict[str, Any] = {
         "sections": {},
@@ -555,8 +610,9 @@ async def run_billing_preflight(
             "Ensure Postgres schema is reachable from the bot container.",
         ]
         human = format_billing_preflight_report(report)
-        logger.info("BILLING_PREFLIGHT %s", _build_report_json(report))
-        logger.info("%s", human)
+        if emit_logs:
+            logger.info("BILLING_PREFLIGHT %s", _build_report_json(report))
+            logger.info("%s", human)
         _cache_billing_preflight(report, human)
         return report
 
@@ -1142,7 +1198,8 @@ async def run_billing_preflight(
 
     await _persist_preflight_report(storage, report)
     human = format_billing_preflight_report(report)
-    logger.info("BILLING_PREFLIGHT %s", _build_report_json(report))
-    logger.info("%s", human)
+    if emit_logs:
+        logger.info("BILLING_PREFLIGHT %s", _build_report_json(report))
+        logger.info("%s", human)
     _cache_billing_preflight(report, human)
     return report
