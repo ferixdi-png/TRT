@@ -51,7 +51,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm:users":
-        summary = users_summary()
+        summary = await users_summary()
         text, kb = render_users(summary)
         await query.edit_message_text(text, reply_markup=kb)
         await query.answer()

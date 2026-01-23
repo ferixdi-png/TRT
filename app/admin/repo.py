@@ -14,6 +14,8 @@ from bot_kie import (
     get_all_users,
     get_all_payments,
 )
+from app.services.referral_service import get_referral_admin_summary
+from app.storage import get_storage
 
 
 def _parse_ts(value: Any) -> int:
@@ -31,7 +33,7 @@ def _parse_ts(value: Any) -> int:
         return 0
 
 
-def users_summary(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+async def users_summary(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
     data = load_json_file(USER_REGISTRY_FILE, {})
     all_users = get_all_users()
     total = len(all_users)
@@ -65,6 +67,10 @@ def users_summary(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
     end = start + page_size
     page_items = enriched[start:end]
 
+    storage = get_storage()
+    partner_id = getattr(storage, "partner_id", None)
+    referral_summary = await get_referral_admin_summary(limit=5, partner_id=partner_id)
+
     return {
         "total": total,
         "new_24h": new_24h,
@@ -73,6 +79,7 @@ def users_summary(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         "page": page,
         "page_size": page_size,
         "has_more": end < len(enriched),
+        "referrals": referral_summary,
     }
 
 

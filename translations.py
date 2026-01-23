@@ -49,7 +49,7 @@ TRANSLATIONS = {
         # Buttons
         'btn_generate_free': '🎁 ГЕНЕРИРОВАТЬ БЕСПЛАТНО ({remaining}/{total})',
         'btn_generate_free_no_left': '🎁 ГЕНЕРИРОВАТЬ БЕСПЛАТНО (0/{total})',
-        'btn_invite_friend': '🎁 Пригласи друга → +{bonus} бесплатных!',
+        'btn_invite_friend': '🎁 Пригласи друга → +{bonus} в free tools обоим!',
         'btn_free_tools': '🆓 БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ',
         'btn_all_models': '🤖 Все модели ({count})',
         'btn_claim_gift': '🎰 Получить подарок',
@@ -96,7 +96,7 @@ TRANSLATIONS = {
             '1) Выберите раздел в меню\n'
             '2) Опишите задачу или загрузите файл\n'
             '3) Получите результат\n\n'
-            '🎁 <b>Партнерка:</b> +{ref_bonus} генераций за друга\n'
+            '🎁 <b>Партнерка:</b> +{ref_bonus} генераций в free tools вам и другу\n'
             '🔗 <code>{ref_link}</code>'
         ),
         'error_invalid_language': 'Неверный язык / Invalid language',
@@ -112,25 +112,26 @@ TRANSLATIONS = {
         'msg_referral_how_it_works': (
             '💡 <b>КАК ЭТО РАБОТАЕТ:</b>\n\n'
             '1) Пригласи друга по своей ссылке\n'
-            '2) Друг нажимает /start по ссылке и доходит до главного меню (считаем активацией)\n'
-            '3) Ты получаешь <b>+{bonus} бесплатных генераций</b>'
+            '2) Друг нажимает /start по ссылке и доходит до главного меню (это активация)\n'
+            '3) Вам обоим начисляется <b>+{bonus} бесплатных генераций</b> в free tools'
         ),
         'msg_referral_stats': (
             '📊 <b>ВАША СТАТИСТИКА:</b>\n\n'
-            '• Приглашено друзей: <b>{count}</b>\n'
-            '• Получено бонусов: <b>{bonus_total}</b> генераций\n'
-            '• Доступно бесплатно: <b>{remaining}</b> генераций в free tools'
+            '• Приглашено: <b>{invited}</b>\n'
+            '• Активировано: <b>{activated}</b>\n'
+            '• Начислено бонусов: <b>{bonus_total}</b> генераций\n'
+            '• Доступно в free tools: <b>{remaining}</b> генераций'
         ),
         'msg_referral_important': (
-            'Начисление приходит автоматически после первой активации друга.'
+            'Начисление приходит автоматически и только один раз на пользователя.'
         ),
         'msg_referral_link_title': '🔗 <b>ВАША РЕФЕРАЛЬНАЯ ССЫЛКА:</b>',
         'msg_referral_send': (
             '💬 <b>Отправьте эту ссылку другу!</b>\n\n'
-            '💡 <b>После его регистрации:</b>\n'
-            '• Вы получите +{bonus} бесплатных генераций автоматически\n'
-            '• Ваш друг получит стартовый подарок\n'
-            '• Выиграют оба! 🎉'
+            '💡 <b>После его активации:</b>\n'
+            '• Вы получите +{bonus} бесплатных генераций в free tools\n'
+            '• Ваш друг получит +{bonus} бесплатных генераций в free tools\n'
+            '• Бонус начисляется один раз на пользователя 🎉'
         ),
         'gen_type_text_to_image': '✨ Текст в фото',
         'gen_type_image_to_image': '🎨 Фото в фото',
@@ -317,7 +318,7 @@ TRANSLATIONS = {
         # Buttons
         'btn_generate_free': '🎁 GENERATE FREE ({remaining}/{total} left)',
         'btn_generate_free_no_left': '🎁 GENERATE FREE (0/{total} left)',
-        'btn_invite_friend': '🎁 Invite friend → get +{bonus} free!',
+        'btn_invite_friend': '🎁 Invite friend → +{bonus} in free tools for both!',
         'btn_free_tools': '🆓 FREE TOOLS',
         'btn_all_models': '🤖 All Models ({count})',
         'btn_claim_gift': '🎰 Claim Gift',
@@ -366,7 +367,7 @@ TRANSLATIONS = {
             '1) Pick a section from the menu\n'
             '2) Describe the task or upload a file\n'
             '3) Receive the result\n\n'
-            '🎁 <b>Referral:</b> +{ref_bonus} generations per friend\n'
+            '🎁 <b>Referral:</b> +{ref_bonus} free tools generations for both\n'
             '🔗 <code>{ref_link}</code>'
         ),
         'error_invalid_language': 'Invalid language / Неверный язык',
@@ -383,24 +384,25 @@ TRANSLATIONS = {
             '💡 <b>HOW IT WORKS:</b>\n\n'
             '1) Invite a friend using your link\n'
             '2) They tap /start from the link and reach the main menu (activation)\n'
-            '3) You receive <b>+{bonus} free generations</b>'
+            '3) You both receive <b>+{bonus} free generations</b> in free tools'
         ),
         'msg_referral_stats': (
             '📊 <b>YOUR STATISTICS:</b>\n\n'
-            '• Friends invited: <b>{count}</b>\n'
-            '• Bonuses received: <b>{bonus_total}</b> generations\n'
-            '• Available free: <b>{remaining}</b> free tools generations'
+            '• Invited: <b>{invited}</b>\n'
+            '• Activated: <b>{activated}</b>\n'
+            '• Bonuses credited: <b>{bonus_total}</b> generations\n'
+            '• Available in free tools: <b>{remaining}</b> generations'
         ),
         'msg_referral_important': (
-            'Bonus is credited automatically after your friend’s first activation.'
+            'Bonus is credited automatically and only once per user.'
         ),
         'msg_referral_link_title': '🔗 <b>YOUR REFERRAL LINK:</b>',
         'msg_referral_send': (
             '💬 <b>Send this link to a friend!</b>\n\n'
-            '💡 <b>After they register:</b>\n'
-            '• You will receive +{bonus} free generations automatically\n'
-            '• Your friend will get a starter gift\n'
-            '• Both win! 🎉'
+            '💡 <b>After activation:</b>\n'
+            '• You receive +{bonus} free tools generations\n'
+            '• Your friend receives +{bonus} free tools generations\n'
+            '• Bonus is credited once per user 🎉'
         ),
         'gen_type_text_to_image': '✨ Text to Image',
         'gen_type_image_to_image': '🎨 Image to Image',
