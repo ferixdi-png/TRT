@@ -3,7 +3,10 @@ import re
 
 import pytest
 
-from app.diagnostics.billing_preflight import run_billing_preflight
+from app.diagnostics.billing_preflight import (
+    build_billing_preflight_log_payload,
+    run_billing_preflight,
+)
 
 
 class FakeStorage:
@@ -93,7 +96,7 @@ def _base_responses():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_empty_db_ready():
+async def test_billing_preflight_empty_db_ready(test_env):
     responses = _base_responses()
     fake_conn = FakeConn(responses)
     fake_pool = FakePool(fake_conn)
@@ -107,7 +110,7 @@ async def test_billing_preflight_empty_db_ready():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_counts_two_partners():
+async def test_billing_preflight_counts_two_partners(test_env):
     responses = _base_responses()
     responses.update(
         {
@@ -141,7 +144,7 @@ async def test_billing_preflight_counts_two_partners():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_query_meta_success():
+async def test_billing_preflight_query_meta_success(test_env):
     responses = _base_responses()
     fake_conn = FakeConn(responses)
     fake_pool = FakePool(fake_conn)
@@ -155,7 +158,23 @@ async def test_billing_preflight_query_meta_success():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_query_exception_degraded():
+async def test_billing_preflight_happy_path_meta_lat_ms(test_env):
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    db_meta = report["sections"]["db"]["meta"]
+    assert report["sections"]["db"]["status"] == "OK"
+    assert isinstance(db_meta["lat_ms"], int)
+    assert isinstance(report["sections"]["balances"]["meta"]["records"], int)
+    assert report["result"] == "READY"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_query_exception_degraded(test_env):
     responses = _base_responses()
 
     class ErroringConn(FakeConn):
@@ -176,7 +195,7 @@ async def test_billing_preflight_query_exception_degraded():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_detects_violations():
+async def test_billing_preflight_detects_violations(test_env):
     responses = _base_responses()
     responses.update(
         {
@@ -209,7 +228,7 @@ async def test_billing_preflight_detects_violations():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_no_pii_in_report():
+async def test_billing_preflight_no_pii_in_report(test_env):
     responses = _base_responses()
     responses.update(
         {
@@ -231,7 +250,7 @@ async def test_billing_preflight_no_pii_in_report():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_text_payload_compatible():
+async def test_billing_preflight_text_payload_compatible(test_env):
     responses = _base_responses()
     responses.update(
         {
@@ -253,7 +272,7 @@ async def test_billing_preflight_text_payload_compatible():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_json_payload_compatible():
+async def test_billing_preflight_json_payload_compatible(test_env):
     responses = _base_responses()
     responses.update(
         {
@@ -275,7 +294,7 @@ async def test_billing_preflight_json_payload_compatible():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_aggregate_failure_degraded():
+async def test_billing_preflight_aggregate_failure_degraded(test_env):
     responses = _base_responses()
     responses.update(
         {
@@ -302,7 +321,7 @@ async def test_billing_preflight_aggregate_failure_degraded():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_storage_rw_fallback_degraded():
+async def test_billing_preflight_storage_rw_fallback_degraded(test_env):
     responses = _base_responses()
     fake_conn = FakeConn(responses)
     fake_pool = FakePool(fake_conn)
@@ -322,7 +341,7 @@ async def test_billing_preflight_storage_rw_fallback_degraded():
 
 
 @pytest.mark.asyncio
-async def test_billing_preflight_storage_rw_handles_string_payload():
+async def test_billing_preflight_storage_rw_handles_string_payload(test_env):
     responses = _base_responses()
     fake_conn = FakeConn(responses)
     fake_pool = FakePool(fake_conn)
@@ -334,3 +353,51 @@ async def test_billing_preflight_storage_rw_handles_string_payload():
 
     assert report["result"] == "READY"
     assert report["sections"]["storage_rw"]["status"] == "OK"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_section_error_isolated(monkeypatch, test_env):
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    from app.diagnostics import sql_helpers
+
+    async def broken_count_payload_entries(conn, filename, *, column_type, key):
+        if key == "balances_total":
+            raise TypeError("PoolConnectionProxy object is not callable")
+        return await sql_helpers.count_payload_entries(conn, filename, column_type=column_type, key=key)
+
+    monkeypatch.setattr(
+        "app.diagnostics.billing_preflight.count_payload_entries",
+        broken_count_payload_entries,
+    )
+
+    report = await run_billing_preflight(storage, fake_pool)
+
+    assert report["sections"]["balances"]["status"] == "DEGRADED"
+    assert "TypeError" in report["sections"]["balances"]["details"]
+    assert report["sections"]["users"]["status"] == "OK"
+    assert report["sections"]["free_limits"]["status"] == "OK"
+    assert report["sections"]["attempts"]["status"] == "OK"
+    assert report["result"] == "DEGRADED"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_log_payload_contains_lat_ms(test_env):
+    responses = _base_responses()
+    fake_conn = FakeConn(responses)
+    fake_pool = FakePool(fake_conn)
+    storage = FakeStorage()
+
+    report = await run_billing_preflight(storage, fake_pool)
+    payload = build_billing_preflight_log_payload(report)
+
+    assert payload["result"] == "READY"
+    assert payload["db"]["status"] == "OK"
+    assert isinstance(payload["db"]["lat_ms"], int)
+    assert isinstance(payload["balances"]["records"], int)
+    assert isinstance(payload["users"]["records"], int)
+    assert isinstance(payload["free_limits"]["records"], int)
+    assert isinstance(payload["attempts"]["records"], int)
