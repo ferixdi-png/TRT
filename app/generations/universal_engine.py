@@ -10,7 +10,7 @@ import os
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 
 from app.kie.kie_client import KIEClient
 from app.observability.trace import trace_event, url_summary, prompt_summary
@@ -25,6 +25,93 @@ from app.storage import get_storage
 import aiohttp
 
 logger = logging.getLogger(__name__)
+
+WATCHDOG_FILE = "kie_watchdog.json"
+WATCHDOG_TTL_SECONDS = int(os.getenv("KIE_WATCHDOG_TTL_SECONDS", "86400"))
+WAITING_TIMEOUT_SECONDS = int(os.getenv("KIE_WAITING_TIMEOUT_SECONDS", "120"))
+WAITING_MAX_RETRIES = int(os.getenv("KIE_WAITING_MAX_RETRIES", "2"))
+POLL_PROGRESS_INTERVAL_SECONDS = int(os.getenv("KIE_POLL_PROGRESS_INTERVAL_SECONDS", "15"))
+_redis_client: Optional[Any] = None
+_redis_client_lock = asyncio.Lock()
+
+
+async def _get_redis_client() -> Optional[Any]:
+    redis_url = os.getenv("REDIS_URL", "").strip()
+    if not redis_url:
+        return None
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    async with _redis_client_lock:
+        if _redis_client is not None:
+            return _redis_client
+        try:
+            import redis.asyncio as redis  # type: ignore
+        except Exception:
+            logger.warning("Redis client unavailable; watchdog will use storage only.")
+            return None
+        _redis_client = redis.from_url(redis_url, decode_responses=True)
+        return _redis_client
+
+
+async def _watchdog_lock(prompt_hash: str, ttl_seconds: int) -> Optional[str]:
+    if not prompt_hash:
+        return None
+    redis = await _get_redis_client()
+    if not redis:
+        return None
+    token = uuid.uuid4().hex
+    key = f"kie:watchdog:lock:{prompt_hash}"
+    acquired = await redis.set(key, token, nx=True, ex=ttl_seconds)
+    return token if acquired else None
+
+
+async def _watchdog_unlock(prompt_hash: str, token: Optional[str]) -> None:
+    if not prompt_hash or not token:
+        return
+    redis = await _get_redis_client()
+    if not redis:
+        return
+    key = f"kie:watchdog:lock:{prompt_hash}"
+    lua = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+    try:
+        await redis.eval(lua, 1, key, token)
+    except Exception as exc:
+        logger.warning("Failed to release watchdog lock: %s", exc)
+
+
+async def _watchdog_store(
+    storage: Optional[Any],
+    prompt_hash: Optional[str],
+    payload: Optional[Dict[str, Any]],
+) -> None:
+    if not prompt_hash:
+        return
+    redis = await _get_redis_client()
+    key = f"kie:watchdog:state:{prompt_hash}"
+    if redis:
+        try:
+            if payload is None:
+                await redis.delete(key)
+            else:
+                await redis.set(key, json.dumps(payload, ensure_ascii=False), ex=WATCHDOG_TTL_SECONDS)
+        except Exception as exc:
+            logger.warning("Failed to update watchdog redis state: %s", exc)
+    if not storage:
+        return
+
+    def _update(data: Dict[str, Any]) -> Dict[str, Any]:
+        next_data = dict(data)
+        if payload is None:
+            next_data.pop(prompt_hash, None)
+        else:
+            existing = next_data.get(prompt_hash, {})
+            merged = dict(existing) if isinstance(existing, dict) else {}
+            merged.update(payload)
+            next_data[prompt_hash] = merged
+        return next_data
+
+    await storage.update_json_file(WATCHDOG_FILE, _update)
 
 
 @dataclass(frozen=True)
@@ -438,11 +525,20 @@ async def wait_job_result(
     validate_result_fn: Optional[Any] = None,
     storage: Optional[Any] = None,
     on_timeout: Optional[Any] = None,
+    on_waiting_timeout: Optional[Callable[[int], Any]] = None,
+    task_ref: Optional[Dict[str, str]] = None,
+    waiting_timeout_s: Optional[int] = None,
+    progress_interval_s: Optional[int] = None,
 ) -> Dict[str, Any]:
     start = time.monotonic()
     delay = base_delay
     attempt = 0
+    retry_count = 0
+    waiting_since: Optional[float] = None
+    last_progress_ts = 0.0
     validate_result_fn = validate_result_fn or _validate_result_urls
+    waiting_timeout_s = waiting_timeout_s or WAITING_TIMEOUT_SECONDS
+    progress_interval_s = progress_interval_s or POLL_PROGRESS_INTERVAL_SECONDS
     while True:
         elapsed = time.monotonic() - start
         if elapsed >= timeout or attempt >= max_attempts:
@@ -471,9 +567,16 @@ async def wait_job_result(
             raise TimeoutError("ERR_KIE_TIMEOUT")
 
         attempt += 1
+        poll_call_start = time.monotonic()
         try:
             if "correlation_id" in inspect.signature(client.get_task_status).parameters:
-                record = await client.get_task_status(task_id, correlation_id=correlation_id)
+                record = await client.get_task_status(
+                    task_id,
+                    correlation_id=correlation_id,
+                    poll_attempt=attempt,
+                    total_wait_ms=int(elapsed * 1000),
+                    retry_count=retry_count,
+                )
             else:
                 record = await client.get_task_status(task_id)
         except Exception as exc:
@@ -493,6 +596,7 @@ async def wait_job_result(
             await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
             delay = min(max_delay, delay * 2)
             continue
+        poll_latency_ms = int((time.monotonic() - poll_call_start) * 1000)
 
         record["taskId"] = task_id
         record["elapsed"] = elapsed
@@ -511,9 +615,49 @@ async def wait_job_result(
             error_code=None,
             error_msg=None,
         )
+        await _watchdog_store(
+            storage,
+            prompt_hash,
+            {
+                "task_id": task_id,
+                "job_id": job_id,
+                "status": state,
+            },
+        )
 
-        if progress_callback and attempt == 1:
-            await progress_callback({"stage": "KIE_POLL", "task_id": task_id, "state": raw_state, "elapsed": elapsed})
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_POLL",
+            action_path="universal_engine.wait_job_result",
+            model_id=model_id,
+            task_id=task_id,
+            stage="KIE_POLL",
+            outcome=state,
+            poll_attempt=attempt,
+            poll_latency_ms=poll_latency_ms,
+            total_wait_ms=int(elapsed * 1000),
+            task_state=raw_state,
+            retry_count=retry_count,
+        )
+
+        if progress_callback:
+            now = time.monotonic()
+            if attempt == 1 or now - last_progress_ts >= progress_interval_s:
+                await progress_callback(
+                    {
+                        "stage": "KIE_POLL",
+                        "task_id": task_id,
+                        "state": raw_state,
+                        "elapsed": elapsed,
+                        "poll_attempt": attempt,
+                        "retry_count": retry_count,
+                        "total_wait_ms": int(elapsed * 1000),
+                        "force": True,
+                        "min_interval": progress_interval_s,
+                    }
+                )
+                last_progress_ts = now
 
         if record.get("ok") is False:
             status = record.get("status")
@@ -528,6 +672,38 @@ async def wait_job_result(
                 error_code=record.get("error_code"),
                 correlation_id=record.get("correlation_id") or correlation_id,
             )
+
+        if raw_state and raw_state.lower() == "waiting":
+            if waiting_since is None:
+                waiting_since = time.monotonic()
+            waiting_elapsed = time.monotonic() - waiting_since
+            if waiting_elapsed >= waiting_timeout_s and retry_count < WAITING_MAX_RETRIES and on_waiting_timeout:
+                retry_count += 1
+                retry_task_id = await on_waiting_timeout(retry_count)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    action="KIE_WAITING_TIMEOUT",
+                    action_path="universal_engine.wait_job_result",
+                    model_id=model_id,
+                    task_id=task_id,
+                    stage="KIE_POLL",
+                    outcome="waiting_timeout",
+                    poll_attempt=attempt,
+                    poll_latency_ms=poll_latency_ms,
+                    total_wait_ms=int(elapsed * 1000),
+                    task_state=raw_state,
+                    retry_count=retry_count,
+                )
+                task_id = retry_task_id
+                record["taskId"] = task_id
+                if task_ref is not None:
+                    task_ref["task_id"] = task_id
+                waiting_since = None
+                delay = base_delay
+                continue
+        else:
+            waiting_since = None
 
         if state in {"queued", "running"}:
             if storage and job_id:
@@ -609,6 +785,20 @@ async def run_generation(
     if prompt_hash is None:
         prompt_hash = prompt_summary(prompt or session_params.get("prompt") or session_params.get("text")).get("prompt_hash")
 
+    storage = get_storage()
+    watchdog_lock = await _watchdog_lock(prompt_hash or "", timeout)
+    watchdog_started_ts = time.time()
+    await _watchdog_store(
+        storage,
+        prompt_hash,
+        {
+            "task_id": None,
+            "job_id": job_id,
+            "status": "create_start",
+            "started_ts": watchdog_started_ts,
+        },
+    )
+
     try:
         payload = build_kie_payload(spec, session_params)
     except PayloadBuildError as exc:
@@ -622,48 +812,9 @@ async def run_generation(
         from app.kie.kie_client import get_kie_client
 
         client = get_kie_client()
+    task_ref: Dict[str, Optional[str]] = {"task_id": None}
     create_start = time.monotonic()
-    log_request_event(
-        request_id=request_id,
-        user_id=user_id,
-        model=model_id,
-        prompt_hash=prompt_hash,
-        task_id=None,
-        job_id=job_id,
-        status="create_start",
-        latency_ms=0,
-        attempt=0,
-        error_code=None,
-        error_msg=None,
-    )
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        action="KIE_SUBMIT",
-        action_path="universal_engine.run_generation",
-        model_id=model_id,
-        gen_type=spec.model_mode,
-        stage="KIE_SUBMIT",
-        waiting_for="KIE_CREATE",
-        outcome="start",
-    )
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        action="KIE_CREATE",
-        action_path="universal_engine.run_generation",
-        model_id=model_id,
-        gen_type=spec.model_mode,
-        stage="KIE_CREATE",
-        outcome="start",
-    )
-    create_fn = getattr(client, "create_task", None)
-    if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
-        created = await client.create_task(spec.kie_model, payload["input"], correlation_id=correlation_id)
-    else:
-        created = await client.create_task(spec.kie_model, payload["input"])
-    create_duration_ms = int((time.monotonic() - create_start) * 1000)
-    if not created.get("ok"):
+    try:
         log_request_event(
             request_id=request_id,
             user_id=user_id,
@@ -671,24 +822,11 @@ async def run_generation(
             prompt_hash=prompt_hash,
             task_id=None,
             job_id=job_id,
-            status="create_failed",
-            latency_ms=create_duration_ms,
+            status="create_start",
+            latency_ms=0,
             attempt=0,
-            error_code=created.get("error_code") or "KIE_CREATE_FAILED",
-            error_msg=created.get("error"),
-        )
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            action="KIE_CREATE",
-            action_path="universal_engine.run_generation",
-            model_id=model_id,
-            gen_type=spec.model_mode,
-            stage="KIE_CREATE",
-            outcome="failed",
-            error_code=created.get("error_code") or "KIE_CREATE_FAILED",
-            fix_hint=created.get("user_message"),
-            duration_ms=create_duration_ms,
+            error_code=None,
+            error_msg=None,
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -698,207 +836,362 @@ async def run_generation(
             model_id=model_id,
             gen_type=spec.model_mode,
             stage="KIE_SUBMIT",
-            outcome="failed",
-            error_code="KIE_CREATE_FAILED",
+            waiting_for="KIE_CREATE",
+            outcome="start",
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_CREATE",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            gen_type=spec.model_mode,
+            stage="KIE_CREATE",
+            outcome="start",
+        )
+        create_fn = getattr(client, "create_task", None)
+        if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
+            created = await client.create_task(spec.kie_model, payload["input"], correlation_id=correlation_id)
+        else:
+            created = await client.create_task(spec.kie_model, payload["input"])
+        create_duration_ms = int((time.monotonic() - create_start) * 1000)
+        if not created.get("ok"):
+            log_request_event(
+                request_id=request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=None,
+                job_id=job_id,
+                status="create_failed",
+                latency_ms=create_duration_ms,
+                attempt=0,
+                error_code=created.get("error_code") or "KIE_CREATE_FAILED",
+                error_msg=created.get("error"),
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_CREATE",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                gen_type=spec.model_mode,
+                stage="KIE_CREATE",
+                outcome="failed",
+                error_code=created.get("error_code") or "KIE_CREATE_FAILED",
+                fix_hint=created.get("user_message"),
+                duration_ms=create_duration_ms,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_SUBMIT",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                gen_type=spec.model_mode,
+                stage="KIE_SUBMIT",
+                outcome="failed",
+                error_code="KIE_CREATE_FAILED",
+                duration_ms=create_duration_ms,
+            )
+            raise KIERequestFailed(
+                created.get("error", "create_task_failed"),
+                status=created.get("status"),
+                user_message=created.get("user_message"),
+                error_code=created.get("error_code"),
+                correlation_id=created.get("correlation_id") or correlation_id,
+            )
+        task_id = created.get("taskId")
+        task_ref["task_id"] = task_id
+        log_request_event(
+            request_id=request_id,
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=prompt_hash,
+            task_id=task_id,
+            job_id=job_id,
+            status="task_created",
+            latency_ms=create_duration_ms,
+            attempt=0,
+            error_code=None,
+            error_msg=None,
+        )
+        await _watchdog_store(
+            storage,
+            prompt_hash,
+            {
+                "task_id": task_id,
+                "job_id": job_id,
+                "status": "task_created",
+                "started_ts": watchdog_started_ts,
+            },
+        )
+        if storage:
+            await storage.add_generation_job(
+                user_id=user_id,
+                model_id=model_id,
+                model_name=spec.name or model_id,
+                params=session_params,
+                price=0.0,
+                task_id=task_id,
+                status="queued",
+                job_id=job_id,
+                request_id=request_id,
+                prompt=prompt or session_params.get("prompt") or session_params.get("text"),
+                prompt_hash=prompt_hash,
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_CREATE",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            gen_type=spec.model_mode,
+            task_id=task_id,
+            stage="KIE_CREATE",
+            outcome="success",
             duration_ms=create_duration_ms,
         )
-        raise KIERequestFailed(
-            created.get("error", "create_task_failed"),
-            status=created.get("status"),
-            user_message=created.get("user_message"),
-            error_code=created.get("error_code"),
-            correlation_id=created.get("correlation_id") or correlation_id,
-        )
-    task_id = created.get("taskId")
-    log_request_event(
-        request_id=request_id,
-        user_id=user_id,
-        model=model_id,
-        prompt_hash=prompt_hash,
-        task_id=task_id,
-        job_id=job_id,
-        status="task_created",
-        latency_ms=create_duration_ms,
-        attempt=0,
-        error_code=None,
-        error_msg=None,
-    )
-    storage = get_storage()
-    if storage:
-        await storage.add_generation_job(
+        log_structured_event(
+            correlation_id=correlation_id,
             user_id=user_id,
+            action="KIE_TASK_CREATED",
+            action_path="universal_engine.run_generation",
             model_id=model_id,
-            model_name=spec.name or model_id,
-            params=session_params,
-            price=0.0,
+            gen_type=spec.model_mode,
             task_id=task_id,
-            status="queued",
-            job_id=job_id,
-            request_id=request_id,
-            prompt=prompt or session_params.get("prompt") or session_params.get("text"),
-            prompt_hash=prompt_hash,
+            stage="KIE_CREATE",
+            outcome="created",
+            duration_ms=create_duration_ms,
         )
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        action="KIE_CREATE",
-        action_path="universal_engine.run_generation",
-        model_id=model_id,
-        gen_type=spec.model_mode,
-        task_id=task_id,
-        stage="KIE_CREATE",
-        outcome="success",
-        duration_ms=create_duration_ms,
-    )
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        action="KIE_TASK_CREATED",
-        action_path="universal_engine.run_generation",
-        model_id=model_id,
-        gen_type=spec.model_mode,
-        task_id=task_id,
-        stage="KIE_CREATE",
-        outcome="created",
-        duration_ms=create_duration_ms,
-    )
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        action="KIE_SUBMIT",
-        action_path="universal_engine.run_generation",
-        model_id=model_id,
-        gen_type=spec.model_mode,
-        task_id=task_id,
-        stage="KIE_SUBMIT",
-        outcome="created",
-        duration_ms=create_duration_ms,
-    )
-    if progress_callback:
-        await progress_callback({"stage": "KIE_CREATE", "task_id": task_id})
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="KIE_SUBMIT",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            gen_type=spec.model_mode,
+            task_id=task_id,
+            stage="KIE_SUBMIT",
+            outcome="created",
+            duration_ms=create_duration_ms,
+        )
+        if progress_callback:
+            await progress_callback({"stage": "KIE_CREATE", "task_id": task_id})
 
-    poll_start = time.monotonic()
-    record = await wait_job_result(
-        task_id,
-        model_id,
-        client=client,
-        timeout=timeout,
-        max_attempts=int(os.getenv("KIE_POLL_MAX_ATTEMPTS", "80")),
-        base_delay=max(1.0, float(poll_interval)),
-        max_delay=max(poll_interval, 12),
-        correlation_id=correlation_id,
-        request_id=request_id,
-        user_id=user_id,
-        prompt_hash=prompt_hash,
-        job_id=job_id,
-        progress_callback=progress_callback,
-        storage=storage,
-    )
-    poll_duration_ms = int((time.monotonic() - poll_start) * 1000)
-    state = record.get("state")
-    if correlation_id:
-        trace_event(
-            "info",
-            correlation_id,
-            event="TRACE_IN",
-            stage="KIE_DONE",
-            action="KIE_DONE",
-            task_id=task_id,
-            state=state,
-            elapsed=record.get("elapsed"),
+        poll_start = time.monotonic()
+
+        async def _handle_waiting_timeout(retry_count: int) -> str:
+            new_request_id = str(uuid.uuid4())
+            retry_payload = build_kie_payload(spec, session_params)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_WAITING_TIMEOUT",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                gen_type=spec.model_mode,
+                task_id=task_ref.get("task_id"),
+                stage="KIE_POLL",
+                outcome="waiting_timeout",
+                retry_count=retry_count,
+            )
+            if "correlation_id" in inspect.signature(client.create_task).parameters:
+                created_retry = await client.create_task(spec.kie_model, retry_payload["input"], correlation_id=correlation_id)
+            else:
+                created_retry = await client.create_task(spec.kie_model, retry_payload["input"])
+            if not created_retry.get("ok"):
+                raise KIERequestFailed(
+                    created_retry.get("error", "create_task_failed"),
+                    status=created_retry.get("status"),
+                    user_message=created_retry.get("user_message"),
+                    error_code=created_retry.get("error_code"),
+                    correlation_id=created_retry.get("correlation_id") or correlation_id,
+                )
+            new_task_id = created_retry.get("taskId")
+            await _watchdog_store(
+                storage,
+                prompt_hash,
+                {
+                    "task_id": new_task_id,
+                    "job_id": job_id,
+                    "status": "retrying",
+                    "started_ts": time.time(),
+                },
+            )
+            log_request_event(
+                request_id=new_request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=new_task_id,
+                job_id=job_id,
+                status="retrying",
+                latency_ms=0,
+                attempt=retry_count,
+                error_code=None,
+                error_msg=None,
+            )
+            return new_task_id
+
+        record = await wait_job_result(
+            task_id,
+            model_id,
+            client=client,
+            timeout=timeout,
+            max_attempts=int(os.getenv("KIE_POLL_MAX_ATTEMPTS", "80")),
+            base_delay=max(1.0, float(poll_interval)),
+            max_delay=max(poll_interval, 12),
+            correlation_id=correlation_id,
+            request_id=request_id,
+            user_id=user_id,
+            prompt_hash=prompt_hash,
+            job_id=job_id,
+            progress_callback=progress_callback,
+            storage=storage,
+            on_waiting_timeout=_handle_waiting_timeout,
+            task_ref=task_ref,
+            waiting_timeout_s=WAITING_TIMEOUT_SECONDS,
+            progress_interval_s=POLL_PROGRESS_INTERVAL_SECONDS,
         )
-    if progress_callback:
-        await progress_callback({"stage": "KIE_DONE", "task_id": task_id, "state": state})
-    if state not in {"success", "completed"}:
-        fail_code = record.get("failCode")
-        fail_msg = record.get("failMsg") or record.get("errorMessage")
+        task_id = task_ref.get("task_id", task_id)
+        poll_duration_ms = int((time.monotonic() - poll_start) * 1000)
+        state = record.get("state")
         if correlation_id:
             trace_event(
                 "info",
                 correlation_id,
                 event="TRACE_IN",
-                stage="KIE_POLL",
-                action="KIE_POLL",
+                stage="KIE_DONE",
+                action="KIE_DONE",
                 task_id=task_id,
                 state=state,
+                elapsed=record.get("elapsed"),
+            )
+        if progress_callback:
+            await progress_callback({"stage": "KIE_DONE", "task_id": task_id, "state": state})
+        if state not in {"success", "completed"}:
+            fail_code = record.get("failCode")
+            fail_msg = record.get("failMsg") or record.get("errorMessage")
+            if correlation_id:
+                trace_event(
+                    "info",
+                    correlation_id,
+                    event="TRACE_IN",
+                    stage="KIE_POLL",
+                    action="KIE_POLL",
+                    task_id=task_id,
+                    state=state,
+                    fail_code=fail_code,
+                    fail_msg=fail_msg,
+                    parse_result="failed",
+                )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_POLL",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                gen_type=spec.model_mode,
+                task_id=task_id,
+                stage="KIE_POLL",
+                outcome="failed",
+                duration_ms=poll_duration_ms,
+                error_code=fail_code or "KIE_FAIL_STATE",
+                fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
+                param={"fail_code": fail_code, "fail_msg": fail_msg},
+            )
+            error_text = fail_msg or "Task failed"
+            if fail_code:
+                error_text = f"{error_text} (code: {fail_code})"
+            raise KIEJobFailed(
+                error_text,
                 fail_code=fail_code,
                 fail_msg=fail_msg,
-                parse_result="failed",
+                correlation_id=correlation_id,
+                record_info=record,
+            )
+
+        # Notify progress callback that generation is complete and we're preparing result
+        if progress_callback:
+            await progress_callback({"stage": "KIE_COMPLETE", "task_id": task_id, "state": state})
+
+        parse_start = time.monotonic()
+        try:
+            base_url = get_settings().kie_result_cdn_base_url
+            result = parse_record_info(
+                record,
+                spec.output_media_type,
+                model_id,
+                correlation_id=correlation_id,
+                base_url=base_url,
+            )
+            await _validate_result_urls(
+                result.urls,
+                media_type=result.media_type,
+                request_id=request_id,
+                user_id=user_id,
+                model_id=model_id,
+                prompt_hash=prompt_hash,
+                task_id=task_id,
+                job_id=job_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_PARSE",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                gen_type=spec.model_mode,
+                task_id=task_id,
+                stage="KIE_PARSE",
+                outcome="success",
+                duration_ms=int((time.monotonic() - parse_start) * 1000),
+            )
+            return result
+        except Exception:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                action="KIE_PARSE",
+                action_path="universal_engine.run_generation",
+                model_id=model_id,
+                gen_type=spec.model_mode,
+                task_id=task_id,
+                stage="KIE_PARSE",
+                outcome="failed",
+                duration_ms=int((time.monotonic() - parse_start) * 1000),
+            )
+            raise
+    except asyncio.CancelledError:
+        current_task_id = task_ref.get("task_id")
+        cancel_fn = getattr(client, "cancel_task", None)
+        if callable(cancel_fn) and current_task_id:
+            try:
+                if "correlation_id" in inspect.signature(cancel_fn).parameters:
+                    await cancel_fn(current_task_id, correlation_id=correlation_id)
+                else:
+                    await cancel_fn(current_task_id)
+            except Exception as exc:
+                logger.warning("KIE cancel failed: %s", exc)
+        if storage and job_id:
+            await storage.update_job_status(
+                job_id,
+                "canceled",
+                error_message="canceled",
+                error_code="KIE_CANCELED",
             )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
-            action="KIE_POLL",
+            action="KIE_CANCEL",
             action_path="universal_engine.run_generation",
             model_id=model_id,
-            gen_type=spec.model_mode,
-            task_id=task_id,
-            stage="KIE_POLL",
-            outcome="failed",
-            duration_ms=poll_duration_ms,
-            error_code=fail_code or "KIE_FAIL_STATE",
-            fix_hint=ERROR_CATALOG.get("KIE_FAIL_STATE"),
-            param={"fail_code": fail_code, "fail_msg": fail_msg},
-        )
-        error_text = fail_msg or "Task failed"
-        if fail_code:
-            error_text = f"{error_text} (code: {fail_code})"
-        raise KIEJobFailed(
-            error_text,
-            fail_code=fail_code,
-            fail_msg=fail_msg,
-            correlation_id=correlation_id,
-            record_info=record,
-        )
-
-    # Notify progress callback that generation is complete and we're preparing result
-    if progress_callback:
-        await progress_callback({"stage": "KIE_COMPLETE", "task_id": task_id, "state": state})
-
-    parse_start = time.monotonic()
-    try:
-        base_url = get_settings().kie_result_cdn_base_url
-        result = parse_record_info(
-            record,
-            spec.output_media_type,
-            model_id,
-            correlation_id=correlation_id,
-            base_url=base_url,
-        )
-        await _validate_result_urls(
-            result.urls,
-            media_type=result.media_type,
-            request_id=request_id,
-            user_id=user_id,
-            model_id=model_id,
-            prompt_hash=prompt_hash,
-            task_id=task_id,
-            job_id=job_id,
-        )
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            action="KIE_PARSE",
-            action_path="universal_engine.run_generation",
-            model_id=model_id,
-            gen_type=spec.model_mode,
-            task_id=task_id,
-            stage="KIE_PARSE",
-            outcome="success",
-            duration_ms=int((time.monotonic() - parse_start) * 1000),
-        )
-        return result
-    except Exception:
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            action="KIE_PARSE",
-            action_path="universal_engine.run_generation",
-            model_id=model_id,
-            gen_type=spec.model_mode,
-            task_id=task_id,
-            stage="KIE_PARSE",
-            outcome="failed",
-            duration_ms=int((time.monotonic() - parse_start) * 1000),
+            task_id=current_task_id,
+            stage="KIE_CANCEL",
+            outcome="canceled",
         )
         raise
+    finally:
+        await _watchdog_store(storage, prompt_hash, None)
+        await _watchdog_unlock(prompt_hash or "", watchdog_lock)
