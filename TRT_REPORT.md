@@ -1,5 +1,23 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-23 SSOT: Sora 2/Pro + canonical model IDs
+
+### Ключевые обновления
+* Удалён alias `sora-2-watermark-remover` из SSOT и каталога, оставлен канонический `sora-watermark-remover`.
+* Sora 2 specs приведены к официальным параметрам (aspect_ratio опционален).
+* Прайс SSOT дополнен Sora 2 Pro text-to-video и синхронизирован с каноном (без лишнего `size` для base I2V).
+* Добавлен self-test с моками KIE createTask/recordInfo и проверкой `resultJson`.
+
+### Тесты
+* `pytest -q tests/test_ssot_sora_selftest.py`
+
+### Ручной сценарий проверки (быстро)
+1) T2V: выбрать `sora-2-text-to-video` → ввести prompt → подтвердить → убедиться, что taskId получен и результат доставлен.
+2) I2V: выбрать `sora-2-image-to-video` → загрузить изображение → ввести prompt → подтвердить → получить видео.
+
+### Примечание по артефактам
+* ZIP `/mnt/data/TRT-main - 2026-01-23T075531.142.zip` в контейнере не обнаружен, работа велась по репозиторию `/workspace/TRT`.
+
 ## ✅ 2026-01-23 Мини-аудит: storage/pricing/идемпотентность
 
 ### Изменённые файлы

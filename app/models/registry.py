@@ -579,3 +579,11 @@ def get_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]:
     }
     model_type = reverse_mapping.get(gen_type, gen_type.replace('-', '_'))
     return get_models_by_model_type(model_type)
+
+
+def get_generation_type_info(gen_type: str) -> Dict[str, Any]:
+    """Return minimal generation type metadata for UI fallbacks."""
+    return {
+        "name": gen_type.replace("-", " ").title(),
+        "description": "",
+    }

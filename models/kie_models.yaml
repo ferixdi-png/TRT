@@ -214,16 +214,8 @@ models:
         required: true
         max: 500
     model_mode: video_editing
-  sora-2-watermark-remover:
-    model_type: video_editing
-    input:
-      video_url:
-        type: string
-        required: true
-        max: 500
-    model_mode: video_editing
   sora-2-text-to-video:
-    kie_model: sora-2/t2v
+    kie_model: sora-2-text-to-video
     model_type: text_to_video
     input:
       prompt:
@@ -232,7 +224,7 @@ models:
         max: 10000
       aspect_ratio:
         type: enum
-        required: true
+        required: false
         values:
         - portrait
         - landscape

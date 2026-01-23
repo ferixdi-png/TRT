@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.kie_contract.schema_loader import get_model_schema
+from app.models.registry_validator import get_invalid_model_ids, get_model_issues
 from app.pricing.price_ssot import list_model_skus
 
 
@@ -12,6 +13,7 @@ STATUS_READY_VISIBLE = "READY_VISIBLE"
 STATUS_HIDDEN_NO_INSTRUCTIONS = "HIDDEN_NO_INSTRUCTIONS"
 STATUS_BLOCKED_NO_PRICE = "BLOCKED_NO_PRICE"
 STATUS_BLOCKED_REQUIRED_MISSING = "BLOCKED_REQUIRED_MISSING"
+STATUS_BLOCKED_INVALID_REGISTRY = "BLOCKED_INVALID_REGISTRY"
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,18 @@ def _enum_values(spec: Dict[str, Any]) -> List[str]:
 
 
 def evaluate_model_visibility(model_id: str) -> ModelVisibilityResult:
+    invalid_ids = get_invalid_model_ids()
+    if model_id in invalid_ids:
+        issues = get_model_issues(model_id) or ["Registry validation failed for model."]
+        return ModelVisibilityResult(
+            model_id=model_id,
+            status=STATUS_BLOCKED_INVALID_REGISTRY,
+            issues=issues,
+            required_fields=[],
+            optional_fields=[],
+            defaults={},
+        )
+
     schema = get_model_schema(model_id)
     skus = list_model_skus(model_id)
     issues: List[str] = []
