@@ -83,7 +83,7 @@ class Settings:
         self.allow_real_generation = os.getenv('ALLOW_REAL_GENERATION', '1') != '0'
         
         # Storage configuration (DB-only)
-        self.github_only_storage = os.getenv('GITHUB_ONLY_STORAGE', 'true').lower() in ('1', 'true', 'yes')
+        self.github_only_storage = False
         self.storage_mode = "db"
         logger.debug("STORAGE_MODE from env (ignored): '%s'", os.getenv("STORAGE_MODE", "").strip())
         self.data_dir = os.getenv('DATA_DIR', '/app/data')
@@ -162,11 +162,7 @@ class Settings:
         except ConfigValidationError:
             raise
         if self.bot_mode == "webhook":
-            logger.info(
-                "[CONFIG] webhook_mode=true storage_mode=%s github_only_storage=%s",
-                self.storage_mode,
-                str(self.github_only_storage).lower(),
-            )
+            logger.info("[CONFIG] webhook_mode=true storage_mode=%s", self.storage_mode)
     
     @classmethod
     def from_env(cls, validate: bool = False) -> 'Settings':
