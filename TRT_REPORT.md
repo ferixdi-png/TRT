@@ -1,5 +1,20 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-24 CI: verify-and-test secrets scan стабилен
+
+### Причина
+* GitHub Actions `verify-and-test` падал на шаге secrets scan из-за отсутствия `rg` (ripgrep) в ubuntu runner (`/bin/sh: 1: rg: not found`), хотя `pytest` проходил.
+
+### Фикс
+* В workflow добавлена установка ripgrep через `apt-get`.
+* В `scripts/verify_project.py` добавлен fallback на `grep -R -nE` при отсутствии `rg`, с теми же паттернами и исключениями путей, плюс лог выбранного движка.
+
+### Проверки
+* `python scripts/verify_project.py` (локально: падение на `verify_ssot.py`, `verify_no_placeholders.py`, `verify_button_coverage.py` в существующем состоянии репозитория).
+
+### Итог
+* **STOP/GO:** STOP (GO только после зелёного `verify-and-test`).
+
 ## ✅ 2026-01-24 UX/SSOT audit: gen_type menu resilience & callback routing
 
 ### Найденные проблемы
