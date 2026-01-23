@@ -49,6 +49,22 @@ class PostgresStorage(BaseStorage):
         self.payments_file = "payments.json"
         self.referrals_file = "referrals.json"
         self.jobs_file = "generation_jobs.json"
+        self.balance_deductions_file = "balance_deductions.json"
+        self.free_deductions_file = "free_deductions.json"
+
+    @staticmethod
+    def _coerce_payload(payload: Any, *, filename: str) -> Dict[str, Any]:
+        if isinstance(payload, dict):
+            return dict(payload)
+        if isinstance(payload, str):
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                return parsed
+        logger.warning("STORAGE_JSON_TYPE_INVALID filename=%s payload_type=%s", filename, type(payload).__name__)
+        return {}
 
     async def _get_pool(self) -> asyncpg.Pool:
         loop = asyncio.get_running_loop()
@@ -226,6 +242,99 @@ class PostgresStorage(BaseStorage):
         )
         return True
 
+    async def charge_balance_once(
+        self,
+        user_id: int,
+        amount: float,
+        *,
+        task_id: str,
+        sku_id: str = "",
+        model_id: str = "",
+    ) -> Dict[str, Any]:
+        if not task_id:
+            return {"status": "missing_task_id"}
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.balances_file,
+                )
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.balance_deductions_file,
+                )
+
+                balances_payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.balances_file,
+                )
+                deductions_payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.balance_deductions_file,
+                )
+                balances = self._coerce_payload(balances_payload, filename=self.balances_file)
+                deductions = self._coerce_payload(deductions_payload, filename=self.balance_deductions_file)
+
+                if task_id in deductions:
+                    balance_before = float(balances.get(str(user_id), 0.0))
+                    return {
+                        "status": "duplicate",
+                        "balance_before": balance_before,
+                        "balance_after": balance_before,
+                    }
+
+                balance_before = float(balances.get(str(user_id), 0.0))
+                if balance_before < amount:
+                    return {
+                        "status": "insufficient",
+                        "balance_before": balance_before,
+                        "balance_after": balance_before,
+                    }
+
+                balance_after = balance_before - amount
+                if balance_after < 0:
+                    return {
+                        "status": "negative_blocked",
+                        "balance_before": balance_before,
+                        "balance_after": balance_before,
+                    }
+
+                balances[str(user_id)] = balance_after
+                deductions[task_id] = {
+                    "user_id": user_id,
+                    "model_id": model_id,
+                    "sku_id": sku_id,
+                    "amount": amount,
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.balances_file,
+                    json.dumps(balances) if balances else "{}",
+                )
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.balance_deductions_file,
+                    json.dumps(deductions) if deductions else "{}",
+                )
+                return {
+                    "status": "charged",
+                    "balance_before": balance_before,
+                    "balance_after": balance_after,
+                }
+
     async def get_user_language(self, user_id: int) -> str:
         data = await self._load_json(self.languages_file)
         return data.get(str(user_id), "ru")
@@ -276,6 +385,103 @@ class PostgresStorage(BaseStorage):
         user_data["count"] = old_count + 1
         await self._save_json(self.free_generations_file, data)
         logger.info("Free gen incremented user_id=%s date=%s count=%s", user_id, today, old_count + 1)
+
+    async def consume_free_generation_once(
+        self,
+        user_id: int,
+        *,
+        task_id: str,
+        sku_id: str = "",
+        source: str = "delivery",
+    ) -> Dict[str, Any]:
+        if not task_id:
+            return {"status": "missing_task_id"}
+        from app.pricing.free_policy import get_free_daily_limit
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.free_generations_file,
+                )
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.free_deductions_file,
+                )
+
+                free_payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.free_generations_file,
+                )
+                deductions_payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.free_deductions_file,
+                )
+                free_data = self._coerce_payload(free_payload, filename=self.free_generations_file)
+                deductions = self._coerce_payload(deductions_payload, filename=self.free_deductions_file)
+
+                today = datetime.now().strftime("%Y-%m-%d")
+                user_key = str(user_id)
+                entry = free_data.get(user_key, {})
+                if entry.get("date") != today:
+                    entry = {"date": today, "count": 0, "bonus": 0}
+                used_count = max(0, int(entry.get("count", 0)))
+                limit = int(get_free_daily_limit())
+                remaining = max(0, limit - used_count)
+
+                if task_id in deductions:
+                    return {
+                        "status": "duplicate",
+                        "used_today": used_count,
+                        "remaining": remaining,
+                        "limit_per_day": limit,
+                    }
+
+                if remaining <= 0:
+                    return {
+                        "status": "deny",
+                        "used_today": used_count,
+                        "remaining": 0,
+                        "limit_per_day": limit,
+                    }
+
+                entry["count"] = used_count + 1
+                free_data[user_key] = entry
+                deductions[task_id] = {
+                    "user_id": user_id,
+                    "sku_id": sku_id,
+                    "source": source,
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.free_generations_file,
+                    json.dumps(free_data) if free_data else "{}",
+                )
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.free_deductions_file,
+                    json.dumps(deductions) if deductions else "{}",
+                )
+                remaining = max(0, limit - int(entry.get("count", 0)))
+                return {
+                    "status": "ok",
+                    "used_today": int(entry.get("count", 0)),
+                    "remaining": remaining,
+                    "limit_per_day": limit,
+                }
 
     async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
         data = await self._load_json(self.hourly_free_usage_file)

@@ -223,6 +223,7 @@ models:
         max: 500
     model_mode: video_editing
   sora-2-text-to-video:
+    kie_model: sora-2/t2v
     model_type: text_to_video
     input:
       prompt:
