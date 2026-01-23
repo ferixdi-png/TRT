@@ -23,11 +23,6 @@ OPTIONAL_ENV: Tuple[str, ...] = (
     "CREDIT_TO_RUB_RATE",
     "DATA_DIR",
     "DRY_RUN",
-    "GITHUB_BACKOFF_BASE",
-    "GITHUB_MAX_PARALLEL",
-    "GITHUB_TIMEOUT_SECONDS",
-    "GITHUB_WRITE_RETRIES",
-    "GITHUB_ONLY_STORAGE",
     "KIE_API_KEY",
     "KIE_API_URL",
     "KIE_RESULT_CDN_BASE_URL",
@@ -39,9 +34,6 @@ OPTIONAL_ENV: Tuple[str, ...] = (
     "PORT_ALT",
     "PRICE_MULTIPLIER",
     "STORAGE_MODE",
-    "STORAGE_GITHUB_BRANCH",
-    "STORAGE_GITHUB_REPO",
-    "STORAGE_BRANCH",
     "TEST_MODE",
     "WEBHOOK_URL",
     # остальные опциональные
@@ -49,7 +41,6 @@ OPTIONAL_ENV: Tuple[str, ...] = (
 
 SECRET_ENV = {
     "TELEGRAM_BOT_TOKEN",
-    "GITHUB_TOKEN",
     "KIE_API_KEY",
 }
 
@@ -213,12 +204,6 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
     committer_email = ""
     committer_name = ""
     bot_mode = os.getenv("BOT_MODE", "").strip()
-    github_branch = os.getenv("GITHUB_BRANCH", "").strip()
-    github_repo = os.getenv("GITHUB_REPO", "").strip()
-    github_token = os.getenv("GITHUB_TOKEN", "").strip()
-    storage_branch = os.getenv("STORAGE_BRANCH", os.getenv("STORAGE_GITHUB_BRANCH", "storage")).strip()
-    committer_email = os.getenv("GITHUB_COMMITTER_EMAIL", "").strip()
-    committer_name = os.getenv("GITHUB_COMMITTER_NAME", "").strip()
     port = os.getenv("PORT", "").strip()
     storage_prefix = os.getenv("STORAGE_PREFIX", "").strip()
     payment_bank = os.getenv("PAYMENT_BANK", "").strip()
@@ -242,31 +227,18 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
             invalid_required.append("BOT_INSTANCE_ID (length 3-64)")
     if bot_mode and bot_mode not in {"polling", "webhook", "web", "smoke"}:
         invalid_required.append("BOT_MODE (polling/webhook/web/smoke)")
-    if github_branch and not _is_valid_branch(github_branch):
-        invalid_required.append("GITHUB_BRANCH (invalid format)")
-    if committer_email and "@" not in committer_email:
-        invalid_required.append("GITHUB_COMMITTER_EMAIL (must be email)")
-    if committer_name and not committer_name.strip():
-        invalid_required.append("GITHUB_COMMITTER_NAME (must be non-empty)")
-    if github_repo and not _is_valid_repo(github_repo):
-        invalid_required.append("GITHUB_REPO (format owner/repo)")
-    if github_token and len(github_token) < 10:
-        invalid_required.append("GITHUB_TOKEN (appears too short)")
     if kie_api_key and len(kie_api_key) < 10:
         invalid_optional.append("KIE_API_KEY (appears too short)")
     if port and not port.isdigit():
         invalid_required.append("PORT (must be number)")
-    if storage_mode and storage_mode not in {"auto", "github", "postgres", "db", "github_json"}:
-        invalid_optional.append("STORAGE_MODE (auto/github/postgres/db/github_json)")
+    if storage_mode and storage_mode not in {"auto", "postgres", "db"}:
+        invalid_optional.append("STORAGE_MODE (auto/postgres/db)")
     if support_telegram and not _is_valid_username(support_telegram):
         invalid_optional.append("SUPPORT_TELEGRAM (format @username)")
     if not telegram_bot_token and "TELEGRAM_BOT_TOKEN" not in missing_required:
         invalid_required.append("TELEGRAM_BOT_TOKEN (must be non-empty)")
     if webhook_base_url_raw and not _is_valid_webhook_base_url(webhook_base_url_raw):
         invalid_required.append("WEBHOOK_BASE_URL (must be https:// URL)")
-    if storage_branch and github_branch and storage_branch == github_branch:
-        invalid_required.append("STORAGE_BRANCH must differ from GITHUB_BRANCH")
-
     if storage_prefix and "BOT_INSTANCE_ID" not in missing_required:
         resolution = resolve_storage_prefix(storage_prefix, bot_instance_id)
         if not resolution.effective_prefix:

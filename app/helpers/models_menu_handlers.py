@@ -15,6 +15,7 @@ from app.helpers.models_menu import (
 )
 from app.kie_catalog import get_model
 from app.config import get_settings
+from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,21 @@ async def handle_model_callback(
         from app.ux.model_visibility import evaluate_model_visibility, STATUS_READY_VISIBLE
         visibility = evaluate_model_visibility(model.id)
         if visibility.status != STATUS_READY_VISIBLE:
+            log_structured_event(
+                correlation_id=None,
+                user_id=user_id,
+                action="MODEL_BLOCKED",
+                action_path="models_menu.card",
+                model_id=model.id,
+                stage="MODEL_VISIBILITY",
+                outcome="blocked",
+                error_code=visibility.status,
+                fix_hint="Проверьте требования модели и прайсинг.",
+                param={
+                    "issues": visibility.issues,
+                    "required_fields": visibility.required_fields,
+                },
+            )
             if user_lang == 'ru':
                 issues = "\n".join(f"• {issue}" for issue in visibility.issues) if visibility.issues else "• Причина не указана"
                 blocked_text = (

@@ -38,6 +38,54 @@ class DependencyContainer:
             "[STORAGE] fallback_disabled=true reason=%s mode=db_only",
             reason,
         )
+
+    async def _log_boot_storage_status(self, storage: Any) -> None:
+        if storage is None:
+            return
+
+        def _count_records(payload: Any, *, history: bool = False) -> int:
+            if isinstance(payload, dict):
+                if history:
+                    return sum(len(value) for value in payload.values() if isinstance(value, list))
+                return len(payload)
+            if isinstance(payload, list):
+                return len(payload)
+            return 0
+
+        counts: Dict[str, Dict[str, Any]] = {}
+        items = {
+            "balances": "user_balances.json",
+            "daily_free": "daily_free_generations.json",
+            "payments": "payments.json",
+            "history": "generations_history.json",
+        }
+        for key, filename in items.items():
+            try:
+                payload = await storage.read_json_file(filename, default={})
+                counts[key] = {
+                    "loaded": True,
+                    "records": _count_records(payload, history=(key == "history")),
+                }
+            except Exception as exc:
+                logger.warning("BOOT_STATUS preload_failed file=%s error=%s", filename, exc)
+                counts[key] = {"loaded": False, "records": 0}
+
+        logger.info(
+            "BOOT_STATUS STORAGE_BACKEND=postgres partner_id=%s "
+            "balances_loaded=%s balances_records_count=%s "
+            "daily_free_loaded=%s daily_free_records_count=%s "
+            "payments_loaded=%s payments_records_count=%s "
+            "history_loaded=%s history_records_count=%s",
+            getattr(storage, "partner_id", ""),
+            counts["balances"]["loaded"],
+            counts["balances"]["records"],
+            counts["daily_free"]["loaded"],
+            counts["daily_free"]["records"],
+            counts["payments"]["loaded"],
+            counts["payments"]["records"],
+            counts["history"]["loaded"],
+            counts["history"]["records"],
+        )
         
     async def initialize(self, settings: Settings):
         """Инициализирует все зависимости"""
@@ -54,6 +102,7 @@ class DependencyContainer:
 
             if storage_ok:
                 logger.info("[OK] Storage initialized")
+                await self._log_boot_storage_status(self.storage)
             else:
                 logger.warning("[WARN] Storage connection test failed")
                 self._storage_fallback_disabled("connection_test_failed")
