@@ -7,6 +7,7 @@ import os
 import json
 import asyncio
 import logging
+import math
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime
@@ -38,6 +39,7 @@ class JsonStorage(BaseStorage):
         self.languages_file = self.data_dir / "user_languages.json"
         self.gift_claimed_file = self.data_dir / "gift_claimed.json"
         self.free_generations_file = self.data_dir / "daily_free_generations.json"
+        self.free_deductions_file = self.data_dir / "free_deductions.json"
         self.hourly_free_usage_file = self.data_dir / "hourly_free_usage.json"
         self.referral_free_bank_file = self.data_dir / "referral_free_bank.json"
         self.admin_limits_file = self.data_dir / "admin_limits.json"
@@ -61,6 +63,7 @@ class JsonStorage(BaseStorage):
             self.referral_free_bank_file,
             self.admin_limits_file,
             self.balance_deductions_file,
+            self.free_deductions_file,
             self.generations_history_file,
             self.payments_file,
             self.referrals_file,
@@ -244,6 +247,19 @@ class JsonStorage(BaseStorage):
         """Идемпотентное списание по task_id."""
         if not task_id:
             return {"status": "missing_task_id"}
+        if not math.isfinite(amount) or amount <= 0:
+            balance_before = await self.get_user_balance(user_id)
+            logger.warning(
+                "INVALID_CHARGE_AMOUNT user_id=%s amount=%.4f task_id=%s",
+                user_id,
+                amount,
+                task_id,
+            )
+            return {
+                "status": "invalid_amount",
+                "balance_before": balance_before,
+                "balance_after": balance_before,
+            }
 
         deductions = await self._load_json(self.balance_deductions_file)
         if task_id in deductions:
@@ -347,6 +363,67 @@ class JsonStorage(BaseStorage):
         user_data['count'] = old_count + 1
         await self._save_json(self.free_generations_file, data)
         logger.info(f"📊 Free gen incremented: user_id={user_id}, date={today}, count={old_count+1}")
+
+    async def consume_free_generation_once(
+        self,
+        user_id: int,
+        *,
+        task_id: str,
+        sku_id: str = "",
+        source: str = "delivery",
+    ) -> Dict[str, Any]:
+        """Идемпотентное списание бесплатной генерации по task_id."""
+        if not task_id:
+            return {"status": "missing_task_id"}
+
+        from app.pricing.free_policy import get_free_daily_limit
+
+        free_data = await self._load_json(self.free_generations_file)
+        deductions = await self._load_json(self.free_deductions_file)
+
+        today = datetime.now().strftime('%Y-%m-%d')
+        user_key = str(user_id)
+        entry = free_data.get(user_key, {})
+        if entry.get("date") != today:
+            entry = {"date": today, "count": 0, "bonus": 0}
+        used_count = max(0, int(entry.get("count", 0)))
+        limit = int(get_free_daily_limit())
+        remaining = max(0, limit - used_count)
+
+        if task_id in deductions:
+            return {
+                "status": "duplicate",
+                "used_today": used_count,
+                "remaining": remaining,
+                "limit_per_day": limit,
+            }
+
+        if remaining <= 0:
+            return {
+                "status": "deny",
+                "used_today": used_count,
+                "remaining": 0,
+                "limit_per_day": limit,
+            }
+
+        entry["count"] = used_count + 1
+        free_data[user_key] = entry
+        deductions[task_id] = {
+            "user_id": user_id,
+            "sku_id": sku_id,
+            "source": source,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        await self._save_json(self.free_generations_file, free_data)
+        await self._save_json(self.free_deductions_file, deductions)
+
+        remaining_after = max(0, limit - entry["count"])
+        return {
+            "status": "ok",
+            "used_today": entry["count"],
+            "remaining": remaining_after,
+            "limit_per_day": limit,
+        }
 
     async def get_hourly_free_usage(self, user_id: int) -> Dict[str, Any]:
         data = await self._load_json(self.hourly_free_usage_file)

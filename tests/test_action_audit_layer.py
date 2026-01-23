@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.session_store import get_session_store
+from app.observability.structured_logs import log_structured_event
 from bot_kie import _register_all_handlers_internal
 from tests.ptb_harness import PTBHarness
 
@@ -70,3 +71,15 @@ async def test_action_audit_logs_message_and_callback(caplog):
 
     store.clear(user_id)
     await harness.teardown()
+
+
+def test_structured_logs_include_timestamp_ms(caplog):
+    caplog.set_level(logging.INFO, logger="app.observability.structured_logs")
+
+    log_structured_event(action="TEST_EVENT", outcome="ok")
+
+    payloads = _extract_structured_payloads(caplog.records)
+    assert payloads, "Expected structured log payloads"
+    payload = payloads[-1]
+    assert isinstance(payload.get("timestamp_ms"), int)
+    assert payload["timestamp_ms"] > 0
