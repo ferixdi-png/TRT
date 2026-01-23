@@ -830,6 +830,11 @@ class PostgresStorage(BaseStorage):
     # ==================== UTILITY ====================
 
     def test_connection(self) -> bool:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.ping())
+        logger.warning("[STORAGE] test_connection called inside running loop; use await ping()")
         return True
 
     async def ping(self) -> bool:
@@ -849,6 +854,15 @@ class PostgresStorage(BaseStorage):
         self._file_locks.clear()
         for pool in pools:
             await pool.close()
+
+    async def initialize(self) -> bool:
+        """Initialize storage connection and ensure schema."""
+        try:
+            await self._get_pool()
+            return await self.ping()
+        except Exception as exc:
+            logger.warning("[STORAGE] init_failed partner_id=%s error=%s", self.partner_id, exc)
+            return False
 
     # ==================== MIGRATION HELPERS ====================
 

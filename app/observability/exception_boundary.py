@@ -84,7 +84,11 @@ async def handle_update_exception(
     if not partner_id:
         import os
 
-        partner_id = os.getenv("BOT_INSTANCE_ID", "").strip() or None
+        partner_id = (
+            os.getenv("BOT_INSTANCE_ID", "").strip()
+            or os.getenv("PARTNER_ID", "").strip()
+            or None
+        )
     correlation_id = ensure_correlation_id(update, context)
     update_id = update.update_id if isinstance(update, Update) else None
     callback_data = None
@@ -178,7 +182,11 @@ async def handle_unknown_callback(
     if not partner_id:
         import os
 
-        partner_id = os.getenv("BOT_INSTANCE_ID", "").strip() or None
+        partner_id = (
+            os.getenv("BOT_INSTANCE_ID", "").strip()
+            or os.getenv("PARTNER_ID", "").strip()
+            or None
+        )
     correlation_id = ensure_correlation_id(update, context)
     masked_callback = _mask_callback_data(callback_data)
     payload = {
