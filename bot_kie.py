@@ -20641,7 +20641,10 @@ async def main():
         from app.storage.factory import get_storage
 
         storage_instance = get_storage()
-        storage_ok = storage_instance.test_connection()
+        if hasattr(storage_instance, "ping") and asyncio.iscoroutinefunction(storage_instance.ping):
+            storage_ok = await storage_instance.ping()
+        else:
+            storage_ok = storage_instance.test_connection()
         if storage_ok:
             logger.info("✅ Storage backend ready")
         else:
