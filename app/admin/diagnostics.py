@@ -61,6 +61,49 @@ async def _redis_status() -> str:
         return "❌ error"
 
 
+def _storage_mode(storage: object) -> str:
+    name = storage.__class__.__name__.lower()
+    if "postgres" in name:
+        return "postgres"
+    if "github" in name:
+        return "github"
+    if "hybrid" in name:
+        return "hybrid"
+    if "json" in name:
+        return "json"
+    return "unknown"
+
+
+def _storage_tenant_check(storage: object, bot_instance_id: str) -> str:
+    if not bot_instance_id:
+        return "❌ missing BOT_INSTANCE_ID"
+
+    def _check_instance(obj: object) -> tuple[bool, str]:
+        if hasattr(obj, "partner_id"):
+            partner_id = str(getattr(obj, "partner_id") or "")
+            return (partner_id == bot_instance_id, f"partner_id={partner_id or 'missing'}")
+        config = getattr(obj, "config", None)
+        if config and hasattr(config, "bot_instance_id"):
+            value = str(getattr(config, "bot_instance_id") or "")
+            return (value == bot_instance_id, f"bot_instance_id={value or 'missing'}")
+        data_dir = getattr(obj, "data_dir", None)
+        if data_dir:
+            dir_text = str(data_dir)
+            scoped = bot_instance_id in dir_text.split("/")
+            return (scoped, f"data_dir={dir_text}")
+        return (False, "tenant_scope=unknown")
+
+    if hasattr(storage, "_primary") and hasattr(storage, "_runtime"):
+        primary_ok, primary_note = _check_instance(getattr(storage, "_primary"))
+        runtime_ok, runtime_note = _check_instance(getattr(storage, "_runtime"))
+        if primary_ok and runtime_ok:
+            return f"✅ ok ({primary_note}, {runtime_note})"
+        return f"❌ mismatch ({primary_note}, {runtime_note})"
+
+    ok, note = _check_instance(storage)
+    return f"✅ ok ({note})" if ok else f"❌ mismatch ({note})"
+
+
 def _format_env_status(keys: List[str]) -> str:
     return ", ".join(f"{key}={'SET' if _env_set(key) else 'NOT SET'}" for key in keys)
 
@@ -108,6 +151,9 @@ async def build_admin_diagnostics_report() -> str:
     env_status = _format_env_status(
         ["TELEGRAM_BOT_TOKEN", "ADMIN_ID", "BOT_INSTANCE_ID", "WEBHOOK_BASE_URL", "KIE_API_KEY"]
     )
+    storage = get_storage()
+    storage_mode = _storage_mode(storage)
+    tenant_check = _storage_tenant_check(storage, bot_instance_id)
     db_status = await _db_status()
     redis_status = await _redis_status()
     boot_report_text = await _load_boot_report_text()
@@ -118,9 +164,10 @@ async def build_admin_diagnostics_report() -> str:
         f"• BOT_MODE: <code>{os.getenv('BOT_MODE', 'polling')}</code>",
         f"• ALLOW_REAL_GENERATION: <code>{os.getenv('ALLOW_REAL_GENERATION', '1')}</code>",
         f"• TEST_MODE: <code>{os.getenv('TEST_MODE', '0')}</code>",
-        "• STORAGE backend: db-only",
+        f"• STORAGE backend: {storage_mode}",
         f"• DB: {db_status}",
         f"• Redis: {redis_status}",
+        f"• Tenant scope: {tenant_check}",
         f"• WEBHOOK_BASE_URL: <code>{webhook_base or webhook_base_raw or 'missing'}</code>",
         f"• ENV: {env_status}",
         f"• Version: <code>{_git_version()}</code>",

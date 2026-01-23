@@ -45,6 +45,7 @@ SECRET_ENV = {
 }
 
 _COMMON_STORAGE_PREFIXES = {"storage", "data", "shared", "default"}
+_INSTANCE_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
 _ENV_EXAMPLES = {
     "TELEGRAM_BOT_TOKEN": "123456:ABCDEF",
     "ADMIN_ID": "123456789",
@@ -110,8 +111,15 @@ def _is_valid_branch(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9._/-]+", value))
 
 
+def is_valid_instance_slug(value: str) -> bool:
+    """Validate short BOT_INSTANCE_ID slug (3-32 chars, lowercase, no spaces)."""
+    if not value:
+        return False
+    return bool(_INSTANCE_SLUG_RE.fullmatch(value))
+
+
 def _is_valid_instance(value: str) -> bool:
-    return bool(re.fullmatch(r"[a-z0-9._/-]+", value))
+    return is_valid_instance_slug(value)
 
 
 def _is_valid_webhook_base_url(value: str) -> bool:
@@ -224,9 +232,9 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
             invalid_required.append("ADMIN_ID (must be number or list of numbers)")
     if bot_instance_id:
         if " " in bot_instance_id or not _is_valid_instance(bot_instance_id):
-            invalid_required.append("BOT_INSTANCE_ID (lowercase letters/numbers/._/- only)")
-        if not (3 <= len(bot_instance_id) <= 64):
-            invalid_required.append("BOT_INSTANCE_ID (length 3-64)")
+            invalid_required.append("BOT_INSTANCE_ID (slug: lowercase letters/numbers/._- only)")
+        if not (3 <= len(bot_instance_id) <= 32):
+            invalid_required.append("BOT_INSTANCE_ID (length 3-32)")
     if bot_mode and bot_mode not in {"polling", "webhook", "web", "smoke"}:
         invalid_required.append("BOT_MODE (polling/webhook/web/smoke)")
     if kie_api_key and len(kie_api_key) < 10:

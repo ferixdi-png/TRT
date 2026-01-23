@@ -100,6 +100,7 @@ async def test_admin_diagnostics_output_contains_keys(monkeypatch):
 
     report = await build_admin_diagnostics_report()
     assert "BOT_INSTANCE_ID" in report
+    assert "Tenant scope" in report
     assert "WEBHOOK_BASE_URL" in report
     assert "DB:" in report
     assert "Redis:" in report

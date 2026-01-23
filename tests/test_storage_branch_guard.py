@@ -85,7 +85,7 @@ async def test_storage_branch_only(monkeypatch):
 @pytest.mark.asyncio
 async def test_history_idempotent(tmp_path, monkeypatch):
     _set_required_env(monkeypatch, {"DATA_DIR": str(tmp_path), "STORAGE_MODE": "github"})
-    storage = JsonStorage(data_dir=str(tmp_path))
+    storage = JsonStorage(data_dir=str(tmp_path), bot_instance_id="test-instance")
 
     event_id = "evt-123"
     await append_event(storage, user_id=1, kind="generation", payload={"x": 1}, event_id=event_id)
