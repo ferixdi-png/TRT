@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import uuid
-import hashlib
 import math
 from datetime import datetime, date
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -17,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import asyncpg
 
 from app.storage.base import BaseStorage
+from app.observability.trace import get_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -172,10 +172,11 @@ class PostgresStorage(BaseStorage):
             await self._save_json_unlocked(filename, updated)
             return updated
 
-    def _advisory_lock_key(self, filename: str) -> int:
-        payload = f"{self.partner_id}:{filename}".encode("utf-8")
-        digest = hashlib.sha256(payload).digest()
-        return int.from_bytes(digest[:8], "big", signed=False)
+    def _advisory_lock_key_pair(self, filename: str):
+        from app.utils.pg_advisory_lock import build_advisory_lock_key_pair
+
+        payload = f"{self.partner_id}:{filename}"
+        return build_advisory_lock_key_pair(source="storage_json", payload=payload)
 
     # ==================== USER OPERATIONS ====================
 
@@ -787,10 +788,20 @@ class PostgresStorage(BaseStorage):
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
         pool = await self._get_pool()
-        lock_key = self._advisory_lock_key(filename)
+        lock_key = self._advisory_lock_key_pair(filename)
         async with pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+                correlation_id = get_correlation_id() or "corr-na"
+                logger.info(
+                    "ADVISORY_LOCK_KEY lock_key_source=%s lock_key_raw=%s lock_key_hash=%s lock_key_pair_a=%s lock_key_pair_b=%s correlation_id=%s",
+                    lock_key.source,
+                    lock_key.payload,
+                    lock_key.hash_hex,
+                    lock_key.key_a,
+                    lock_key.key_b,
+                    correlation_id,
+                )
+                await conn.execute("SELECT pg_advisory_xact_lock($1, $2)", lock_key.key_a, lock_key.key_b)
                 row = await conn.fetchrow(
                     "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
                     self.partner_id,

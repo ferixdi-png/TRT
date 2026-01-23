@@ -6,10 +6,12 @@ import logging
 import os
 import sys
 import time
-import hashlib
 import threading
 from pathlib import Path
 from typing import Optional
+
+from app.observability.trace import get_correlation_id
+from app.utils.pg_advisory_lock import AdvisoryLockKeyPair, build_advisory_lock_key_pair
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ _file_lock_handle = None
 _file_lock_path: Optional[Path] = None
 _no_db_warned = False
 _pg_conn = None
-_pg_lock_key: Optional[int] = None
+_pg_lock_key: Optional[AdvisoryLockKeyPair] = None
 _redis_client = None
 _redis_lock_key: Optional[str] = None
 _redis_lock_value: Optional[str] = None
@@ -323,7 +325,7 @@ def _acquire_file_lock() -> bool:
         return False
 
 
-def _derive_pg_lock_key() -> int:
+def _derive_pg_lock_key() -> AdvisoryLockKeyPair:
     global _pg_lock_key
     if _pg_lock_key is not None:
         return _pg_lock_key
@@ -333,8 +335,7 @@ def _derive_pg_lock_key() -> int:
         or os.getenv("BOT_INSTANCE_ID")
         or "trt_bot_lock"
     )
-    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
-    _pg_lock_key = int(digest[:8], 16) % 2147483647
+    _pg_lock_key = build_advisory_lock_key_pair(source="singleton_lock", payload=seed)
     return _pg_lock_key
 
 async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
@@ -416,16 +417,35 @@ async def _acquire_postgres_lock(dsn: str) -> bool:
     try:
         conn = await asyncpg.connect(dsn)
         lock_key = _derive_pg_lock_key()
-        acquired = await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock_key)
+        correlation_id = get_correlation_id() or "corr-na"
+        logger.info(
+            "ADVISORY_LOCK_KEY lock_key_source=%s lock_key_raw=%s lock_key_hash=%s lock_key_pair_a=%s lock_key_pair_b=%s correlation_id=%s",
+            lock_key.source,
+            lock_key.payload,
+            lock_key.hash_hex,
+            lock_key.key_a,
+            lock_key.key_b,
+            correlation_id,
+        )
+        acquired = await conn.fetchval(
+            "SELECT pg_try_advisory_lock($1, $2)",
+            lock_key.key_a,
+            lock_key.key_b,
+        )
         if not acquired:
             await conn.close()
             logger.error(
-                "[LOCK] LOCK_MODE=postgres lock_acquired=false lock_key=%s reason=pg_try_advisory_lock_failed",
-                lock_key,
+                "[LOCK] LOCK_MODE=postgres lock_acquired=false lock_key_pair_a=%s lock_key_pair_b=%s reason=pg_try_advisory_lock_failed",
+                lock_key.key_a,
+                lock_key.key_b,
             )
             return False
         _pg_conn = conn
-        logger.info("[LOCK] LOCK_MODE=postgres lock_acquired=true lock_key=%s", lock_key)
+        logger.info(
+            "[LOCK] LOCK_MODE=postgres lock_acquired=true lock_key_pair_a=%s lock_key_pair_b=%s",
+            lock_key.key_a,
+            lock_key.key_b,
+        )
         return True
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("[LOCK] LOCK_MODE=postgres lock_acquire_failed=true reason=%s", exc)
@@ -438,9 +458,17 @@ async def _release_postgres_lock() -> None:
         return
     lock_key = _derive_pg_lock_key()
     try:
-        await _pg_conn.execute("SELECT pg_advisory_unlock($1)", lock_key)
+        await _pg_conn.execute(
+            "SELECT pg_advisory_unlock($1, $2)",
+            lock_key.key_a,
+            lock_key.key_b,
+        )
         await _pg_conn.close()
-        logger.info("[LOCK] LOCK_MODE=postgres lock_released=true lock_key=%s", lock_key)
+        logger.info(
+            "[LOCK] LOCK_MODE=postgres lock_released=true lock_key_pair_a=%s lock_key_pair_b=%s",
+            lock_key.key_a,
+            lock_key.key_b,
+        )
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("[LOCK] LOCK_MODE=postgres lock_release_failed=true reason=%s", exc)
     finally:
