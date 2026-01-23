@@ -12,6 +12,7 @@ from collections import defaultdict
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.kie_catalog import load_catalog, get_model, ModelSpec
+from app.models.canonical import canonicalize_model_id
 from app.pricing.price_resolver import format_price_rub
 from app.pricing.price_ssot import get_min_price, model_has_free_sku
 from app.ux.model_visibility import is_model_visible
@@ -27,7 +28,6 @@ MODEL_CARD_CACHE_TTL_SECONDS = int(os.getenv("MODEL_CARD_CACHE_TTL_SECONDS", "30
 OTHER_MODELS_TYPE = "other"
 OTHER_MODELS_FORCE = {
     "sora-watermark-remover",
-    "sora-2-watermark-remover",
 }
 
 
@@ -141,7 +141,8 @@ def _create_callback_data(model_id: str) -> str:
     Создаёт callback_data для модели.
     Если model_id слишком длинный, использует короткий формат с маппингом.
     """
-    callback_data = f"model:{model_id}"
+    canonical_id = canonicalize_model_id(model_id)
+    callback_data = f"model:{canonical_id}"
     callback_bytes = callback_data.encode('utf-8')
     
     # Telegram ограничение: 64 байта
@@ -149,12 +150,12 @@ def _create_callback_data(model_id: str) -> str:
         return callback_data
     
     # Используем короткий формат с хешем
-    model_hash = hashlib.md5(model_id.encode()).hexdigest()[:12]
+    model_hash = hashlib.md5(canonical_id.encode()).hexdigest()[:12]
     short_callback = f"modelk:{model_hash}"
-    
+
     # Сохраняем маппинг
-    _callback_mapping[short_callback] = model_id
-    _reverse_mapping[model_id] = short_callback
+    _callback_mapping[short_callback] = canonical_id
+    _reverse_mapping[canonical_id] = short_callback
     
     return short_callback
 
@@ -162,24 +163,24 @@ def _create_callback_data(model_id: str) -> str:
 def _resolve_model_id(callback_data: str) -> Optional[str]:
     """Разрешает callback_data в model_id (поддерживает короткий формат)."""
     if callback_data.startswith("model:"):
-        return callback_data[6:]  # Убираем "model:"
+        return canonicalize_model_id(callback_data[6:])  # Убираем "model:"
     elif callback_data.startswith("modelk:"):
         hash_part = callback_data[7:]  # Убираем "modelk:"
         # Ищем в маппинге
         for short, model_id in _callback_mapping.items():
             if short.endswith(hash_part):
-                return model_id
+                return canonicalize_model_id(model_id)
         # Если не нашли, пробуем найти по хешу из обратного маппинга
         for model_id in _reverse_mapping.keys():
             model_hash = hashlib.md5(model_id.encode()).hexdigest()[:12]
             if model_hash == hash_part:
-                return model_id
+                return canonicalize_model_id(model_id)
         # Fallback: пересчитать хеши по каталогу (на случай разных процессов)
         try:
             for model in load_catalog():
                 model_hash = hashlib.md5(model.id.encode()).hexdigest()[:12]
                 if model_hash == hash_part:
-                    return model.id
+                    return canonicalize_model_id(model.id)
         except Exception as exc:
             logger.warning("Failed to resolve modelk callback via catalog: %s", exc)
     return None
@@ -197,6 +198,8 @@ def build_models_menu_by_type(
         InlineKeyboardMarkup с кнопками моделей, сгруппированных по типам
     """
     catalog = load_catalog()
+    if default_model_id:
+        default_model_id = canonicalize_model_id(default_model_id)
     
     type_order = ['t2i', 'i2i', 't2v', 'i2v', 'v2v', 'tts', 'stt', 'sfx', 'audio_isolation', 
                   'upscale', 'bg_remove', 'watermark_remove', 'music', 'lip_sync', OTHER_MODELS_TYPE]

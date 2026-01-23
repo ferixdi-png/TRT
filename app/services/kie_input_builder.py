@@ -7,6 +7,7 @@ import re
 import logging
 from typing import Dict, Any, Optional, Tuple, List, Set
 from app.kie_catalog.catalog import ModelSpec, ModelMode
+from app.models.canonical import canonicalize_model_id
 from app.kie_catalog.input_schemas import (
     get_schema_for_type,
     get_required_fields_for_type,
@@ -7518,7 +7519,8 @@ def _validate_sora_2_pro_storyboard(
         (is_valid, error_message)
     """
     # Проверяем оба возможных ID модели
-    if model_id not in ["sora-2-pro-storyboard", "sora-2-pro/storyboard", "openai/sora-2-pro-storyboard"]:
+    canonical_model_id = canonicalize_model_id(model_id)
+    if canonical_model_id != "sora-2-pro-storyboard":
         return True, None
     
     # Валидация n_frames: обязательный, enum ("10", "15", "25")
@@ -7673,8 +7675,8 @@ def _validate_sora_2_pro_text_to_video(
     Returns:
         (is_valid, error_message)
     """
-    # Проверяем оба возможных ID модели
-    if model_id not in ["sora-2-pro-text-to-video", "sora-2-pro/t2v", "openai/sora-2-pro-text-to-video"]:
+    canonical_model_id = canonicalize_model_id(model_id)
+    if canonical_model_id != "sora-2-pro-text-to-video":
         return True, None
     
     # Валидация prompt: обязательный, максимум 10000 символов
@@ -7749,7 +7751,8 @@ def _validate_sora_2_pro_image_to_video(
         (is_valid, error_message)
     """
     # Проверяем оба возможных ID модели
-    if model_id not in ["sora-2-pro-image-to-video", "sora-2-pro/i2v", "openai/sora-2-pro-image-to-video"]:
+    canonical_model_id = canonicalize_model_id(model_id)
+    if canonical_model_id != "sora-2-pro-image-to-video":
         return True, None
     
     # Валидация prompt: обязательный, максимум 10000 символов
@@ -7837,8 +7840,8 @@ def _validate_sora_2_text_to_video(
     Returns:
         (is_valid, error_message)
     """
-    # Проверяем оба возможных ID модели
-    if model_id not in ["sora-2-text-to-video", "sora-2/t2v", "openai/sora-2-text-to-video"]:
+    canonical_model_id = canonicalize_model_id(model_id)
+    if canonical_model_id != "sora-2-text-to-video":
         return True, None
     
     # Валидация prompt: обязательный, максимум 10000 символов
@@ -7910,7 +7913,8 @@ def _validate_sora_2_image_to_video(
         (is_valid, error_message)
     """
     # Проверяем оба возможных ID модели
-    if model_id not in ["sora-2-image-to-video", "sora-2/i2v", "openai/sora-2-image-to-video"]:
+    canonical_model_id = canonicalize_model_id(model_id)
+    if canonical_model_id != "sora-2-image-to-video":
         return True, None
     
     # Валидация prompt: обязательный, максимум 10000 символов
@@ -8282,7 +8286,8 @@ def _validate_sora_watermark_remover(
         (is_valid, error_message)
     """
     # Проверяем оба возможных ID модели
-    if model_id not in ["sora-watermark-remover", "openai/sora-watermark-remover", "sora-2-watermark-remover"]:
+    canonical_model_id = canonicalize_model_id(model_id)
+    if canonical_model_id != "sora-watermark-remover":
         return True, None
     
     # Валидация video_url: обязательный, должен начинаться с sora.chatgpt.com, максимум 500 символов
@@ -8917,14 +8922,14 @@ def build_input(
             normalized_input['resolution'] = "768P"  # Default согласно документации
     
     # Применяем дефолты для sora-2-pro-storyboard
-    if model_id in ["sora-2-pro-storyboard", "sora-2-pro/storyboard", "openai/sora-2-pro-storyboard"]:
+    if canonicalize_model_id(model_id) == "sora-2-pro-storyboard":
         if 'n_frames' not in normalized_input:
             normalized_input['n_frames'] = "15"  # Default согласно документации
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
     
     # Применяем дефолты для sora-2-text-to-video (не pro версия!)
-    if model_id in ["sora-2-text-to-video", "sora-2/t2v", "openai/sora-2-text-to-video"]:
+    if canonicalize_model_id(model_id) == "sora-2-text-to-video":
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
         if 'n_frames' not in normalized_input:
@@ -8934,7 +8939,7 @@ def build_input(
         # ВАЖНО: НЕТ параметра size в sora-2-text-to-video (только в pro версии!)
     
     # Применяем дефолты для sora-2-image-to-video (не pro версия!)
-    if model_id in ["sora-2-image-to-video", "sora-2/i2v", "openai/sora-2-image-to-video"]:
+    if canonicalize_model_id(model_id) == "sora-2-image-to-video":
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
         if 'n_frames' not in normalized_input:
@@ -8944,18 +8949,18 @@ def build_input(
         # ВАЖНО: НЕТ параметра size в sora-2-image-to-video (только в pro версии!)
     
     # Применяем дефолты для sora-2-pro-text-to-video
-    if model_id in ["sora-2-pro-text-to-video", "sora-2-pro/t2v", "openai/sora-2-pro-text-to-video"]:
+    if canonicalize_model_id(model_id) == "sora-2-pro-text-to-video":
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
         if 'n_frames' not in normalized_input:
             normalized_input['n_frames'] = "10"  # Default согласно документации
         if 'size' not in normalized_input:
-            normalized_input['size'] = "high"  # Default согласно документации
+            normalized_input['size'] = "standard"  # Default согласно документации
         if 'remove_watermark' not in normalized_input:
             normalized_input['remove_watermark'] = True  # Default согласно документации
     
     # Применяем дефолты для sora-2-pro-image-to-video
-    if model_id in ["sora-2-pro-image-to-video", "sora-2-pro/i2v", "openai/sora-2-pro-image-to-video"]:
+    if canonicalize_model_id(model_id) == "sora-2-pro-image-to-video":
         if 'aspect_ratio' not in normalized_input:
             normalized_input['aspect_ratio'] = "landscape"  # Default согласно документации
         if 'n_frames' not in normalized_input:
@@ -8966,7 +8971,7 @@ def build_input(
             normalized_input['remove_watermark'] = True  # Default согласно документации
     
     # Применяем дефолты для sora-watermark-remover
-    if model_id in ["sora-watermark-remover", "openai/sora-watermark-remover", "sora-2-watermark-remover"]:
+    if canonicalize_model_id(model_id) == "sora-watermark-remover":
         if 'video_url' not in normalized_input:
             normalized_input['video_url'] = "https://sora.chatgpt.com/p/s_68e83bd7eee88191be79d2ba7158516f"  # Default согласно документации
     

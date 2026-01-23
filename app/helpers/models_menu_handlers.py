@@ -14,6 +14,7 @@ from app.helpers.models_menu import (
     resolve_model_id_from_callback
 )
 from app.kie_catalog import get_model
+from app.models.canonical import canonicalize_model_id
 from app.config import get_settings
 from app.observability.structured_logs import log_structured_event
 
@@ -111,6 +112,8 @@ async def handle_model_callback(
     
     # Разрешаем model_id из callback_data
     model_id = resolve_model_id_from_callback(callback_data)
+    if model_id:
+        model_id = canonicalize_model_id(model_id)
     
     if not model_id:
         logger.warning(f"Could not resolve model_id from callback_data: {callback_data}")

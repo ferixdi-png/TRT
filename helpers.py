@@ -67,14 +67,8 @@ def _init_imports():
             get_models_sync,
             get_generation_types as _get_generation_types_func,
             get_models_by_generation_type as _get_models_by_generation_type_func,
+            get_generation_type_info as _get_generation_type_info_func,
         )
-        # Для обратной совместимости с get_generation_type_info
-        try:
-            from kie_models import get_generation_type_info as _get_generation_type_info_func
-        except ImportError:
-            def _get_generation_type_info_func(gen_type: str):
-                return {'name': gen_type.replace('-', ' ').title()}
-            _get_generation_type_info_func = _get_generation_type_info_func
         
         from kie_client import get_client as _get_client_func
         
