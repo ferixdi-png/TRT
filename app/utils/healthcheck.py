@@ -83,6 +83,32 @@ async def health_handler(request):
     )
 
 
+async def billing_preflight_handler(request):
+    """Billing preflight diagnostic endpoint."""
+    from app.diagnostics.billing_preflight import (
+        build_billing_preflight_log_payload,
+        run_billing_preflight,
+    )
+    from app.storage.factory import get_storage
+
+    storage = get_storage()
+    db_pool = None
+    if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
+        db_pool = await storage._get_pool()
+
+    report = await run_billing_preflight(storage, db_pool, emit_logs=False)
+    payload = build_billing_preflight_log_payload(report)
+    logger.info(
+        "BILLING_PREFLIGHT_RUNTIME %s",
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+    )
+    return web.Response(
+        text=json.dumps(payload),
+        content_type="application/json",
+        status=200,
+    )
+
+
 async def start_health_server(
     port: int = 8000,
     webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
@@ -106,6 +132,7 @@ async def start_health_server(
         app = web.Application()
         app.router.add_get('/health', health_handler)
         app.router.add_get('/', health_handler)  # Для совместимости
+        app.router.add_get('/__diag/billing_preflight', billing_preflight_handler)
         if webhook_handler is not None:
             try:
                 app.router.add_post('/webhook', webhook_handler)
