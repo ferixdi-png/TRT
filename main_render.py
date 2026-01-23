@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 _bot_ready: bool = False
 _handler_ready: bool = False
 _seen_update_ids: set[int] = set()
+_early_update_count: int = 0
 
 
 def _resolve_correlation_id(request: web.Request) -> str:
@@ -57,6 +58,12 @@ def build_webhook_handler(
     global _handler_ready
 
     async def _handler(request: web.Request) -> web.StreamResponse:
+        global _early_update_count
+
+        if not _bot_ready:
+            _early_update_count += 1
+            return web.json_response({"ok": True}, status=200)
+
         correlation_id = _resolve_correlation_id(request)
         logger.info("WEBHOOK correlation_id=%s update_received=true", correlation_id)
 
@@ -106,6 +113,8 @@ async def main() -> None:
 
     application = await create_application(settings)
     _bot_ready = True
+    if _early_update_count:
+        logger.warning("WEBHOOK early_updates=%s gate=ready", _early_update_count)
 
     port = int(os.getenv("PORT", "10000"))
     webhook_handler = build_webhook_handler(application, settings)
