@@ -33,6 +33,7 @@ from app.observability.structured_logs import (
 )
 from app.observability.exception_boundary import handle_update_exception, handle_unknown_callback
 from app.observability.no_silence_guard import track_outgoing_action
+from app.observability.cancel_metrics import increment as increment_metric
 from app.observability.trace import (
     ensure_correlation_id,
     prompt_summary,
@@ -90,6 +91,7 @@ KNOWN_CALLBACK_PREFIXES = (
     "tutorial_step",
     "retry_generate:",
     "retry_delivery:",
+    "cancel:",
 )
 
 KNOWN_CALLBACK_EXACT = {
@@ -144,6 +146,8 @@ CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "8")
 CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "2.0"))
 STORAGE_IO_TIMEOUT_SECONDS = float(os.getenv("STORAGE_IO_TIMEOUT_SECONDS", "2.5"))
 GEN_TYPE_MENU_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_TIMEOUT_SECONDS", "6.0"))
+JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "900"))
+JOB_TIMEOUT_MS = JOB_TIMEOUT_SECONDS * 1000
 
 _message_rate_limiter = PerUserRateLimiter(MESSAGE_RATE_LIMIT_PER_SEC, MESSAGE_RATE_LIMIT_BURST)
 _callback_rate_limiter = PerUserRateLimiter(CALLBACK_RATE_LIMIT_PER_SEC, CALLBACK_RATE_LIMIT_BURST)
@@ -2060,6 +2064,66 @@ active_generations_lock = asyncio.Lock()
 active_generation_tasks: Dict[int, asyncio.Task] = {}
 active_generation_tasks_lock = asyncio.Lock()
 
+ACTIVE_JOB_STATES_TERMINAL = {"cancelled", "finished", "failed", "timed_out"}
+ACTIVE_JOB_STATES_ACTIVE = {"queued", "running", "cancel_requested"}
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _parse_cancel_callback(callback_data: Optional[str]) -> Optional[str]:
+    if not callback_data or not callback_data.startswith("cancel:"):
+        return None
+    parts = callback_data.split(":", 1)
+    if len(parts) != 2 or not parts[1]:
+        return None
+    return parts[1]
+
+
+def _build_cancel_callback(job_id: Optional[str]) -> str:
+    if job_id:
+        return f"cancel:{job_id}"
+    return "cancel"
+
+
+def _log_cancel_update(
+    *,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    user_id: Optional[int],
+    chat_id: Optional[int],
+    message_id: Optional[int],
+    callback_query_id: Optional[str],
+    callback_data: Optional[str],
+    job_id: Optional[str],
+    state_before: Optional[str],
+    state_after: Optional[str],
+    action: str,
+) -> None:
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action=action,
+        action_path="cancel",
+        stage="CANCEL_FLOW",
+        outcome=state_after or "noop",
+        param={
+            "update_id": update_id,
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "callback_query_id": callback_query_id,
+            "callback_data": callback_data,
+            "job_id": job_id,
+            "state_before": state_before,
+            "state_after": state_after,
+            "ts_ms": _now_ms(),
+        },
+    )
+
 
 async def _remove_active_generation_task(user_id: int) -> None:
     """Remove task tracking entry (best-effort, ignores missing users)."""
@@ -2955,7 +3019,9 @@ _file_locks = {
     'broadcasts': threading.Lock(),
     'admin_limits': threading.Lock(),
     'blocked_users': threading.Lock(),
-    'user_registry': threading.Lock()
+    'user_registry': threading.Lock(),
+    'jobs': threading.Lock(),
+    'ui_actions': threading.Lock(),
 }
 
 # In-memory cache for frequently accessed data (optimized for 1000+ users)
@@ -2965,6 +3031,8 @@ _data_cache = {
     'languages': {},
     'gifts': {},
     'user_registry': {},
+    'jobs': {},
+    'ui_actions': {},
     'cache_timestamps': {}
 }
 
@@ -3016,6 +3084,8 @@ REFERRAL_EVENTS_FILE = get_data_file_path("referral_events.json")  # File to sto
 BROADCASTS_FILE = get_data_file_path("broadcasts.json")  # File to store broadcast statistics
 GENERATIONS_HISTORY_FILE = get_data_file_path("generations_history.json")  # File to store user generation history
 USER_REGISTRY_FILE = get_data_file_path("user_registry.json")
+JOBS_FILE = get_data_file_path("jobs.json")
+UI_ACTIONS_FILE = get_data_file_path("ui_actions.json")
 
 # Free tools settings
 FREE_TOOLS_CONFIG = get_free_tools_config()
@@ -3067,6 +3137,8 @@ def get_cache_key(filename: str) -> str:
         ADMIN_LIMITS_FILE: 'admin_limits',
         BLOCKED_USERS_FILE: 'blocked_users',
         USER_REGISTRY_FILE: 'user_registry',
+        JOBS_FILE: 'jobs',
+        UI_ACTIONS_FILE: 'ui_actions',
         REFERRAL_EVENTS_FILE: 'referral_events',
     }
     return cache_map.get(filename, filename)
@@ -3249,6 +3321,157 @@ def get_user_registry_entry(user_id: int) -> dict:
     """Get stored user identity if available."""
     data = load_json_file(USER_REGISTRY_FILE, {})
     return data.get(str(user_id), {})
+
+
+def _load_jobs_registry() -> dict:
+    return load_json_file(JOBS_FILE, {})
+
+
+def _save_jobs_registry(data: dict) -> None:
+    save_json_file(JOBS_FILE, data, use_cache=True)
+
+
+def _create_job_record(
+    *,
+    job_id: str,
+    user_id: int,
+    chat_id: Optional[int],
+    message_id: Optional[int],
+    model_id: Optional[str],
+    correlation_id: Optional[str],
+    state: str,
+    start_ts_ms: int,
+) -> dict:
+    data = _load_jobs_registry()
+    record = {
+        "job_id": job_id,
+        "user_id": user_id,
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "model_id": model_id,
+        "correlation_id": correlation_id,
+        "state": state,
+        "start_ts_ms": start_ts_ms,
+        "updated_ts_ms": start_ts_ms,
+    }
+    data[job_id] = record
+    _save_jobs_registry(data)
+    return record
+
+
+def _update_job_record(job_id: str, **updates: Any) -> Optional[dict]:
+    data = _load_jobs_registry()
+    record = data.get(job_id)
+    if not record:
+        return None
+    record.update(updates)
+    record["updated_ts_ms"] = updates.get("updated_ts_ms", _now_ms())
+    data[job_id] = record
+    _save_jobs_registry(data)
+    return record
+
+
+def _get_job_record(job_id: Optional[str]) -> Optional[dict]:
+    if not job_id:
+        return None
+    data = _load_jobs_registry()
+    return data.get(job_id)
+
+
+def _set_user_ui_action(user_id: int, action: str, ts_ms: int) -> None:
+    data = load_json_file(UI_ACTIONS_FILE, {})
+    data[str(user_id)] = {"action": action, "ts_ms": ts_ms}
+    save_json_file(UI_ACTIONS_FILE, data, use_cache=True)
+
+
+def _get_user_ui_action(user_id: int) -> dict:
+    data = load_json_file(UI_ACTIONS_FILE, {})
+    return data.get(str(user_id), {})
+
+
+def _is_recent_cancel_click(user_id: int, now_ms: int, window_ms: int = 3000) -> bool:
+    record = _get_user_ui_action(user_id)
+    if record.get("action") != "cancel_click":
+        return False
+    ts_ms = record.get("ts_ms")
+    if not isinstance(ts_ms, int):
+        return False
+    return 0 <= now_ms - ts_ms <= window_ms
+
+
+def _log_job_state_update(
+    *,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    user_id: Optional[int],
+    chat_id: Optional[int],
+    message_id: Optional[int],
+    callback_query_id: Optional[str],
+    callback_data: Optional[str],
+    job_id: Optional[str],
+    state_before: Optional[str],
+    state_after: Optional[str],
+) -> None:
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update_id,
+        action="JOB_STATE_UPDATE",
+        action_path="job_state",
+        stage="JOB_STATE",
+        outcome=state_after or "noop",
+        param={
+            "update_id": update_id,
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "callback_query_id": callback_query_id,
+            "callback_data": callback_data,
+            "job_id": job_id,
+            "state_before": state_before,
+            "state_after": state_after,
+            "ts_ms": _now_ms(),
+        },
+    )
+
+
+def _recover_jobs_on_startup() -> None:
+    data = _load_jobs_registry()
+    if not data:
+        return
+    now_ms = _now_ms()
+    updated = False
+    for job_id, record in data.items():
+        state = record.get("state")
+        if state not in {"running", "cancel_requested"}:
+            continue
+        increment_metric("worker_restart_detected_total")
+        start_ts = record.get("start_ts_ms") or now_ms
+        if isinstance(start_ts, str) and start_ts.isdigit():
+            start_ts = int(start_ts)
+        timed_out = now_ms - int(start_ts) >= JOB_TIMEOUT_MS
+        record["state"] = "timed_out"
+        record["timed_out_ts_ms"] = now_ms
+        record["recovered_ts_ms"] = now_ms
+        data[job_id] = record
+        updated = True
+        if timed_out:
+            increment_metric("job_timeout_total")
+        _log_job_state_update(
+            correlation_id=record.get("correlation_id"),
+            update_id=None,
+            user_id=record.get("user_id"),
+            chat_id=record.get("chat_id"),
+            message_id=record.get("message_id"),
+            callback_query_id=None,
+            callback_data=None,
+            job_id=job_id,
+            state_before=state,
+            state_after="timed_out",
+        )
+    if updated:
+        _save_jobs_registry(data)
 
 
 async def build_admin_user_overview(target_user_id: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -8204,8 +8427,53 @@ async def _button_callback_impl(
                 await query.answer("Неверный язык / Invalid language")
             return ConversationHandler.END
         
+        if data.startswith("cancel:"):
+            user_lang = get_user_language(user_id)
+            now_ms = _now_ms()
+            _set_user_ui_action(user_id, "cancel_click", now_ms)
+            session = get_session_cached(context, session_store, user_id, update_id, default={})
+            if isinstance(session, dict):
+                session["last_ui_action"] = "cancel_click"
+                session["last_ui_ts_ms"] = now_ms
+            job_id = _parse_cancel_callback(data)
+            await _request_job_cancel(
+                update=update,
+                context=context,
+                job_id=job_id,
+                user_id=user_id,
+                user_lang=user_lang,
+                callback_data=data,
+                query=query,
+                correlation_id=correlation_id,
+                state_source="callback",
+            )
+            return ConversationHandler.END
+
         if data == "cancel":
             user_lang = get_user_language(user_id)
+            session = get_session_cached(context, session_store, user_id, update_id, default={})
+            active_job_id = session.get("job_id") if isinstance(session, dict) else None
+            active_state = session.get("job_state") if isinstance(session, dict) else None
+            if active_job_id and active_state in ACTIVE_JOB_STATES_ACTIVE:
+                increment_metric("cancel_without_job_total")
+                _log_cancel_update(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query and query.message else None,
+                    message_id=query.message.message_id if query and query.message else None,
+                    callback_query_id=query.id if query else None,
+                    callback_data=data,
+                    job_id=active_job_id,
+                    state_before=active_state,
+                    state_after="ignored",
+                    action="CANCEL_MISSING_JOB_ID",
+                )
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+                return ConversationHandler.END
             await query.answer(t('btn_cancel', lang=user_lang).replace('❌ ', ''))
             session_store.clear(user_id)
             try:
@@ -17823,6 +18091,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         outcome="received",
     )
 
+    job_id: Optional[str] = None
     # Track running generation task for user-driven cancellation
     await register_active_generation_task(user_id)
     
@@ -17930,6 +18199,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     session = user_sessions[user_id]
     logger.info(f"✅✅✅ Session found in confirm_generation: user_id={user_id}, model_id={session.get('model_id')}, params_keys={list(session.get('params', {}).keys())}")
+
+    job_id = session.get("job_id")
     
     # CRITICAL: Check if task_id already exists in session (prevent duplicate)
     if 'task_id' in session:
@@ -18289,7 +18560,44 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "💡 Usually takes a few seconds..."
     ).format(model_name=model_name)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
-    status_message = await send_or_edit_message(loading_msg)
+    if not job_id:
+        job_id = f"job-{uuid.uuid4().hex[:12]}"
+        session["job_id"] = job_id
+        session["job_state"] = "queued"
+        session["job_start_ts_ms"] = _now_ms()
+        _create_job_record(
+            job_id=job_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=query.message.message_id if query and query.message else None,
+            model_id=session.get("model_id"),
+            correlation_id=correlation_id,
+            state="queued",
+            start_ts_ms=session["job_start_ts_ms"],
+        )
+        _log_job_state_update(
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=query.message.message_id if query and query.message else None,
+            callback_query_id=query.id if query else None,
+            callback_data=query.data if query else None,
+            job_id=job_id,
+            state_before=None,
+            state_after="queued",
+        )
+    cancel_keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    t('btn_cancel', lang=user_lang),
+                    callback_data=_build_cancel_callback(job_id),
+                )
+            ]
+        ]
+    )
+    status_message = await send_or_edit_message(loading_msg, reply_markup=cancel_keyboard)
 
     # Progress tracking state
     last_progress_ts = 0.0
@@ -18430,6 +18738,22 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             stage="GEN_START",
             outcome="start",
         )
+        if job_id:
+            state_before = session.get("job_state")
+            session["job_state"] = "running"
+            _update_job_record(job_id, state="running", updated_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="running",
+            )
         job_result = await run_generation(
             user_id,
             model_id,
@@ -18643,6 +18967,22 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode="HTML",
             reply_markup=keyboard,
         )
+        if job_id:
+            state_before = session.get("job_state")
+            session["job_state"] = "finished"
+            _update_job_record(job_id, state="finished", finished_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="finished",
+            )
         user_sessions.pop(user_id, None)
         log_structured_event(
             correlation_id=correlation_id,
@@ -18657,6 +18997,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
     except KIERequestFailed as exc:
+        if job_id:
+            state_before = session.get("job_state") if "session" in locals() else None
+            _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="failed",
+            )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -18766,6 +19121,22 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except TimeoutError as exc:
         logger.error("❌ Generation timeout: %s", exc, exc_info=True)
+        if job_id:
+            state_before = session.get("job_state") if "session" in locals() else None
+            _update_job_record(job_id, state="timed_out", timed_out_ts_ms=_now_ms())
+            increment_metric("job_timeout_total")
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="timed_out",
+            )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -18814,6 +19185,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from app.observability.redaction import redact_payload
 
         logger.error(f"❌ Generation failed: {exc}", exc_info=True)
+        if job_id:
+            state_before = session.get("job_state") if "session" in locals() else None
+            _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="failed",
+            )
         redacted_record = redact_payload(exc.record_info or {})
         log_structured_event(
             correlation_id=correlation_id,
@@ -18854,6 +19240,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except (KIEResultError, ValueError) as exc:
         error_text = str(exc)
+        if job_id:
+            state_before = session.get("job_state") if "session" in locals() else None
+            _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="failed",
+            )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -18904,18 +19305,58 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     except asyncio.CancelledError:
         logger.info("Generation cancelled by user_id=%s", user_id)
-        try:
-            await send_or_edit_message(
-                "❌ Генерация остановлена по запросу. Вы можете запустить новую.",
-                parse_mode="HTML",
+        now_ms = _now_ms()
+        job_record = _get_job_record(job_id)
+        state_before = job_record.get("state") if job_record else None
+        if job_id and state_before in ACTIVE_JOB_STATES_ACTIVE:
+            _update_job_record(job_id, state="cancelled", cancelled_ts_ms=now_ms)
+            session = user_sessions.get(user_id)
+            if isinstance(session, dict):
+                session["job_state"] = "cancelled"
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="cancelled",
             )
-        except Exception:
-            # If editing/sending fails, silently continue to exit the flow
-            pass
+        if (
+            job_record
+            and job_record.get("cancel_source") == "user"
+            and _is_recent_cancel_click(user_id, now_ms)
+        ):
+            try:
+                await send_or_edit_message(
+                    "❌ Генерация остановлена по запросу. Вы можете запустить новую.",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                # If editing/sending fails, silently continue to exit the flow
+                pass
         user_sessions.pop(user_id, None)
         return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
+        if job_id:
+            state_before = session.get("job_state") if "session" in locals() else None
+            _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="failed",
+            )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -19613,6 +20054,129 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _request_job_cancel(
+    *,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    job_id: Optional[str],
+    user_id: int,
+    user_lang: str,
+    callback_data: Optional[str],
+    query: Optional[CallbackQuery],
+    correlation_id: Optional[str],
+    state_source: str,
+) -> bool:
+    now_ms = _now_ms()
+    increment_metric("cancel_received_total")
+    job_record = _get_job_record(job_id)
+    chat_id = query.message.chat_id if query and query.message else None
+    message_id = query.message.message_id if query and query.message else None
+    callback_query_id = query.id if query else None
+
+    if not job_id:
+        increment_metric("cancel_without_job_total")
+        _log_cancel_update(
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=message_id,
+            callback_query_id=callback_query_id,
+            callback_data=callback_data,
+            job_id=job_id,
+            state_before=None,
+            state_after="ignored",
+            action="CANCEL_NO_JOB",
+        )
+        return False
+
+    if not job_record or job_record.get("user_id") != user_id:
+        increment_metric("cancel_without_job_total")
+        _log_cancel_update(
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=message_id,
+            callback_query_id=callback_query_id,
+            callback_data=callback_data,
+            job_id=job_id,
+            state_before=job_record.get("state") if job_record else None,
+            state_after="ignored",
+            action="CANCEL_JOB_MISMATCH",
+        )
+        return False
+
+    state_before = job_record.get("state")
+    if state_before in ACTIVE_JOB_STATES_TERMINAL or state_before == "cancel_requested":
+        increment_metric("cancel_ignored_total")
+        _log_cancel_update(
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=message_id,
+            callback_query_id=callback_query_id,
+            callback_data=callback_data,
+            job_id=job_id,
+            state_before=state_before,
+            state_after=state_before,
+            action="CANCEL_ALREADY_TERMINAL",
+        )
+        return False
+
+    if not _is_recent_cancel_click(user_id, now_ms):
+        increment_metric("cancel_ignored_total")
+        _log_cancel_update(
+            correlation_id=correlation_id,
+            update_id=update.update_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=message_id,
+            callback_query_id=callback_query_id,
+            callback_data=callback_data,
+            job_id=job_id,
+            state_before=state_before,
+            state_after="ignored",
+            action="CANCEL_DEBOUNCE_REJECT",
+        )
+        return False
+
+    increment_metric("cancel_accepted_total")
+    _update_job_record(
+        job_id,
+        state="cancel_requested",
+        cancel_requested_ts_ms=now_ms,
+        cancel_source="user",
+        cancel_source_channel=state_source,
+    )
+    session = user_sessions.get(user_id)
+    if isinstance(session, dict):
+        session["job_state"] = "cancel_requested"
+    _log_cancel_update(
+        correlation_id=correlation_id,
+        update_id=update.update_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        message_id=message_id,
+        callback_query_id=callback_query_id,
+        callback_data=callback_data,
+        job_id=job_id,
+        state_before=state_before,
+        state_after="cancel_requested",
+        action="CANCEL_ACCEPTED",
+    )
+    await cancel_active_generation(user_id)
+    try:
+        if query:
+            await query.answer(
+                "Останавливаю генерацию…" if user_lang == "ru" else "Stopping generation…"
+            )
+    except Exception:
+        pass
+    return True
+
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current operation."""
     user_id = update.effective_user.id
@@ -19623,32 +20187,28 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         callback_data=update.callback_query.data if update.callback_query else None,
     )
 
-    # If a generation is in-flight, cancel it first
-    generation_cancelled = await cancel_active_generation(user_id)
-    if generation_cancelled:
-        if update.callback_query:
-            try:
-                await update.callback_query.answer("Останавливаю генерацию…")
-            except Exception:
-                pass
-        cancel_text = (
-            "❌ Генерация остановлена. Можете запустить новую."
-            if get_user_language(user_id) == "ru"
-            else "❌ Generation cancelled. You can start a new one."
+    session = user_sessions.get(user_id, {})
+    job_id = session.get("job_id")
+    if job_id:
+        now_ms = _now_ms()
+        _set_user_ui_action(user_id, "cancel_click", now_ms)
+        if isinstance(session, dict):
+            session["last_ui_action"] = "cancel_click"
+            session["last_ui_ts_ms"] = now_ms
+        accepted = await _request_job_cancel(
+            update=update,
+            context=context,
+            job_id=job_id,
+            user_id=user_id,
+            user_lang=user_lang,
+            callback_data="cancel_command",
+            query=update.callback_query,
+            correlation_id=ensure_correlation_id(update, context),
+            state_source="command",
         )
-        try:
-            if update.callback_query and update.callback_query.message:
-                await update.callback_query.edit_message_text(cancel_text)
-            elif update.message:
-                await update.message.reply_text(cancel_text)
-        except Exception:
-            try:
-                await context.bot.send_message(chat_id=user_id, text=cancel_text)
-            except Exception:
-                pass
-        user_sessions.pop(user_id, None)
-        await ensure_main_menu(update, context, source="cancel_generation", prefer_edit=False)
-        return ConversationHandler.END
+        if accepted:
+            await ensure_main_menu(update, context, source="cancel_generation", prefer_edit=False)
+            return ConversationHandler.END
     
     # Handle callback query (button press)
     if update.callback_query:
@@ -20008,6 +20568,7 @@ async def create_bot_application(settings) -> Application:
         raise ValueError("telegram_bot_token is required in settings")
     
     ensure_source_of_truth()
+    _recover_jobs_on_startup()
 
     # Verify models are loaded correctly (using registry)
     from app.models.registry import get_models_sync, get_model_registry
@@ -20193,7 +20754,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             CONFIRMING_GENERATION: [
@@ -20232,7 +20793,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             INPUTTING_PARAMS: [
@@ -20240,7 +20801,7 @@ async def _register_all_handlers_internal(application: Application):
                 MessageHandler(filters.PHOTO, input_parameters),
                 MessageHandler(filters.Document.ALL, input_parameters),
                 MessageHandler(filters.AUDIO | filters.VOICE, input_parameters),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^start:'),
@@ -20281,7 +20842,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$')
             ]
         },
-        fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+        fallbacks=[CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
                    CommandHandler('cancel', cancel)],
         per_message=True,
         per_chat=True,
@@ -21089,7 +21650,7 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             CONFIRMING_GENERATION: [
@@ -21135,7 +21696,7 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_previous_step$')
             ],
             INPUTTING_PARAMS: [
@@ -21187,7 +21748,7 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$')
             ],
             SELECTING_AMOUNT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
@@ -21227,7 +21788,7 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$')
             ],
             WAITING_PAYMENT_SCREENSHOT: [
                 MessageHandler(filters.PHOTO, input_parameters),
@@ -21265,7 +21826,7 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$')
             ],
             ADMIN_TEST_OCR: [
                 MessageHandler(filters.PHOTO, input_parameters),
@@ -21303,7 +21864,7 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$')
             ],
             WAITING_BROADCAST_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, input_parameters),
@@ -21318,13 +21879,13 @@ async def main():
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
-                CallbackQueryHandler(button_callback, block=True, pattern='^cancel$')
+                CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$')
             ]
         },
         fallbacks=[
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_info:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_topup_user:'),
-            CallbackQueryHandler(cancel, pattern='^cancel$'),
+            CallbackQueryHandler(cancel, pattern='^cancel(:.*)?$'),
             CommandHandler('cancel', cancel)
         ],
         per_message=True,
