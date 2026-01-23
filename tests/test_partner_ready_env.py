@@ -9,7 +9,14 @@ from app.config_env import (
     mask_secrets_in_text,
     validate_config,
 )
-from app.utils.healthcheck import health_handler
+from app.utils.healthcheck import billing_preflight_handler, health_handler
+
+
+class _FakeStorage:
+    async def _get_pool(self):
+        return None
+
+
 
 
 def _set_required_env(monkeypatch, overrides=None):
@@ -68,6 +75,33 @@ async def test_health_endpoint_ok(monkeypatch):
     assert payload["ok"] is True
     assert payload["bot_mode"] == "webhook"
     assert payload["instance"] == "partner-instance"
+
+
+@pytest.mark.asyncio
+async def test_billing_preflight_diag_endpoint_logs_payload(monkeypatch):
+    sample_report = {
+        "result": "READY",
+        "sections": {
+            "db": {"status": "OK", "meta": {"lat_ms": 12}},
+            "users": {"status": "OK", "meta": {"records": 5, "query_latency_ms": 7}},
+            "balances": {"status": "OK", "meta": {"records": 3, "query_latency_ms": 8}},
+            "free_limits": {"status": "OK", "meta": {"records": 2, "query_latency_ms": 9}},
+            "attempts": {"status": "OK", "meta": {"total": 1, "query_latency_ms": 10}},
+        },
+    }
+
+    async def _fake_run_billing_preflight(storage, db_pool, emit_logs=True):
+        return sample_report
+
+    monkeypatch.setattr("app.storage.factory.get_storage", lambda: _FakeStorage())
+    monkeypatch.setattr("app.diagnostics.billing_preflight.run_billing_preflight", _fake_run_billing_preflight)
+
+    response = await billing_preflight_handler(None)
+    payload = json.loads(response.text)
+
+    assert payload["result"] == "READY"
+    assert payload["db"]["lat_ms"] == 12
+    assert payload["users"]["records"] == 5
 
 
 def test_admin_self_check_output_no_secrets(monkeypatch):
