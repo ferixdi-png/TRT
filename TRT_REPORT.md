@@ -1,5 +1,61 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-01 TOP-5 критических фиксов (prod/UX/DB/партнёры/CI)
+
+### Факты / прогоны
+* `pytest -q` (полный набор, 530 тестов) — ✅
+* `python scripts/behavioral_e2e.py` — ✅ (локально без `DATABASE_URL/BOT_INSTANCE_ID`, поэтому в логах были предупреждения о storage).
+
+### Матрица рисков (impact × probability)
+| # | Категория | Риск | Вероятность | Влияние | Статус |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Deploy/CI | Secrets-scan валится без `rg` | Высокая | Высокое | ✅ FIXED |
+| 2 | Storage/DB | Bootstrap считал DB доступной без проверки | Средняя | Высокое | ✅ FIXED |
+| 3 | Partner isolation | Redis lock + error logs не учитывали `PARTNER_ID` | Средняя | Высокое | ✅ FIXED |
+| 4 | Observability | `/__diag/billing_preflight` падал при storage init error | Средняя | Среднее | ✅ FIXED |
+| 5 | UX/Behavioral | behavioral_e2e падал из-за отсутствия `DATABASE_AVAILABLE` | Средняя | Среднее | ✅ FIXED |
+
+### ТОП-5: воспроизведение → минимальный фикс → тесты → логи
+1) **Deploy/CI (secrets scan без внешних бинарей)**
+   * **Repro:** `scripts/verify_project.py` в среде без `rg` падал на secrets-scan.
+   * **Fix:** добавлен Python fallback-сканер, без внешних утилит.
+   * **Tests:** `pytest -q tests/test_verify_project_secrets_scan.py`.
+   * **Logs:** `Secrets scan engine: python`.
+
+2) **Storage/DB (ложный green при недоступной БД)**
+   * **Repro:** `DependencyContainer.initialize` использовал `test_connection`, а `PostgresStorage.test_connection` всегда возвращал `True`.
+   * **Fix:** `PostgresStorage.initialize` + `ping()` реальной БД; `bootstrap` предпочитает `ping()`/`initialize()`.
+   * **Tests:** `pytest -q tests/test_dependency_container_storage_ping.py`.
+   * **Logs:** `"[STORAGE] init_failed ..."`, `"[STORAGE] ping_failed ..."`.
+
+3) **Partner isolation (локи + диагностика)**
+   * **Repro:** `build_tenant_lock_key` не учитывал `PARTNER_ID`, а в exception logs отсутствовал partner id.
+   * **Fix:** fallback на `PARTNER_ID` в lock-ключах и в exception boundary.
+   * **Tests:** `pytest -q tests/test_distributed_lock_tenant_key.py`, `pytest -q tests/test_exception_boundary_partner_id.py`.
+   * **Logs:** `UNKNOWN_CALLBACK`/`ROUTER_FAIL` теперь включают partner_id.
+
+4) **Observability (billing preflight health)**
+   * **Repro:** `/__diag/billing_preflight` падал при ошибках storage и отдавал 500.
+   * **Fix:** добавлен try/except с 503 + payload `billing_preflight_failed`.
+   * **Tests:** `pytest -q tests/test_healthcheck_billing_preflight_error.py`.
+   * **Logs:** `"[BILLING_PREFLIGHT] runtime_failed ..."`.
+
+5) **UX/Behavioral (smoke-e2e)**
+   * **Repro:** `scripts/behavioral_e2e.py` падал, т.к. `bot_kie.DATABASE_AVAILABLE` отсутствовал.
+   * **Fix:** добавлен флаг `DATABASE_AVAILABLE` в `bot_kie.py`.
+   * **Tests:** `pytest -q tests/test_bot_kie_database_flag.py`, `python scripts/behavioral_e2e.py`.
+
+### Смоук-сценарии (A–E)
+* **A) Cold start:** частично в локальной среде — DB не задана → выводы ограничены (нужен реальный `DATABASE_URL`).
+* **B) UX flow:** покрыто `behavioral_e2e.py` (menu → model → prompt → confirm → generation → history).
+* **C) Billing:** покрыто unit-тестами storage/idempotency; реальный debit/quote требует env + внешних сервисов.
+* **D) Admin free:** покрыто существующими тестами (admin policy).
+* **E) Partner isolation:** добавлены тесты на tenant lock + partner_id в логах; реальный запуск 2 BOT_INSTANCE_ID требует env.
+
+### Итог
+* **STOP/GO:** **STOP** — нет подтверждения партнёрского запуска с реальными ENV (`DATABASE_URL`, `BOT_INSTANCE_ID`, `WEBHOOK_BASE_URL`, `KIE_API_KEY`) и отсутствует live-проверка холодного старта БД.  
+* **Что нужно для GO:** прогон smoke в реальном окружении (A–E), зелёный `pytest` + `behavioral_e2e`, и верификация разделения данных для двух `BOT_INSTANCE_ID`.
+
 ## ✅ 2026-01-24 CI: verify-and-test secrets scan стабилен
 
 ### Причина

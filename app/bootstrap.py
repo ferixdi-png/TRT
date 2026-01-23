@@ -97,6 +97,8 @@ class DependencyContainer:
             storage_ok = True
             if hasattr(self.storage, "initialize") and asyncio.iscoroutinefunction(self.storage.initialize):
                 storage_ok = await self.storage.initialize()
+            elif hasattr(self.storage, "ping") and asyncio.iscoroutinefunction(self.storage.ping):
+                storage_ok = await self.storage.ping()
             elif hasattr(self.storage, "test_connection"):
                 storage_ok = await asyncio.to_thread(self.storage.test_connection)
 

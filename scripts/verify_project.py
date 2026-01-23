@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,29 @@ def ensure_dependencies() -> None:
     )
 
 
+EXCLUDE_DIRS = {".git", "node_modules"}
+EXCLUDE_FILES = {Path("scripts/verify_project.py")}
+
+
+def _python_secrets_scan(pattern: re.Pattern[str]) -> list[str]:
+    matches: list[str] = []
+    for root, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+        for filename in files:
+            path = Path(root) / filename
+            rel_path = path.relative_to(ROOT)
+            if rel_path in EXCLUDE_FILES:
+                continue
+            try:
+                with path.open("r", encoding="utf-8", errors="ignore") as handle:
+                    for index, line in enumerate(handle, start=1):
+                        if pattern.search(line):
+                            matches.append(f"{rel_path}:{index}:{line.strip()}")
+            except (OSError, UnicodeDecodeError):
+                continue
+    return matches
+
+
 def run_secrets_scan() -> bool:
     pattern = "BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}"
     rg_cmd = f"rg -n \"{pattern}\" -g '!node_modules' -g '!.git' -g '!scripts/verify_project.py'"
@@ -72,20 +96,17 @@ def run_secrets_scan() -> bool:
         )
         engine = "rg"
     else:
-        grep_cmd = (
-            f"grep -R -nE \"{pattern}\" "
-            "--exclude-dir=node_modules --exclude-dir=.git "
-            "--exclude=scripts/verify_project.py ."
-        )
-        print(f"\n$ {grep_cmd}")
-        result = subprocess.run(
-            grep_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=ROOT,
-        )
-        engine = "grep"
+        engine = "python"
+        compiled = re.compile(pattern)
+        matches = _python_secrets_scan(compiled)
+        print(f"ℹ️ Secrets scan engine: {engine}")
+        if matches:
+            print("❌ Secret patterns found:")
+            for entry in matches:
+                print(entry)
+            return False
+        print("✅ No secrets detected.")
+        return True
     print(f"ℹ️ Secrets scan engine: {engine}")
     if result.returncode == 0:
         print("❌ Secret patterns found:")

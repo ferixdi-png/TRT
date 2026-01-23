@@ -91,22 +91,36 @@ async def billing_preflight_handler(request):
     )
     from app.storage.factory import get_storage
 
-    storage = get_storage()
-    db_pool = None
-    if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
-        db_pool = await storage._get_pool()
+    try:
+        storage = get_storage()
+        db_pool = None
+        if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
+            db_pool = await storage._get_pool()
 
-    report = await run_billing_preflight(storage, db_pool, emit_logs=False)
-    payload = build_billing_preflight_log_payload(report)
-    logger.info(
-        "BILLING_PREFLIGHT_RUNTIME %s",
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-    )
-    return web.Response(
-        text=json.dumps(payload),
-        content_type="application/json",
-        status=200,
-    )
+        report = await run_billing_preflight(storage, db_pool, emit_logs=False)
+        payload = build_billing_preflight_log_payload(report)
+        logger.info(
+            "BILLING_PREFLIGHT_RUNTIME %s",
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        )
+        return web.Response(
+            text=json.dumps(payload),
+            content_type="application/json",
+            status=200,
+        )
+    except Exception as exc:
+        payload = {
+            "ok": False,
+            "status": "error",
+            "error": "billing_preflight_failed",
+            "detail": str(exc)[:200],
+        }
+        logger.exception("[BILLING_PREFLIGHT] runtime_failed error=%s", exc)
+        return web.Response(
+            text=json.dumps(payload, ensure_ascii=False),
+            content_type="application/json",
+            status=503,
+        )
 
 
 async def start_health_server(
