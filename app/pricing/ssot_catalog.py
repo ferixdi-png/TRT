@@ -132,20 +132,31 @@ def format_pricing_blocked_message(model_id: str, *, user_lang: str) -> str:
     issues = entry.get("issues", [])
     if not isinstance(issues, list):
         issues = []
+    missing_skus = entry.get("missing_skus", [])
+    if isinstance(missing_skus, list) and missing_skus:
+        if user_lang == "ru":
+            issues.append("Отсутствуют SKU: " + ", ".join(missing_skus))
+        else:
+            issues.append("Missing SKU: " + ", ".join(missing_skus))
     anchor = _slugify_model_id(model_id)
     link = f"PRICING_COVERAGE.md#model-{anchor}"
+    status_display = status
+    if status == "READY":
+        status_display = "NO_PRICE_FOR_PARAMS"
+        if not issues:
+            issues = ["Нет цены для выбранных параметров (SKU не найден)."]
     if user_lang == "ru":
         issues_text = "\n".join(f"• {issue}" for issue in issues) if issues else "• Причина не указана"
         return (
             "⛔️ <b>Модель заблокирована</b>\n\n"
-            f"Причина: <code>{status}</code>\n"
+            f"Причина: <code>{status_display}</code>\n"
             f"{issues_text}\n\n"
             f"Подробнее: <code>{link}</code>"
         )
     issues_text = "\n".join(f"• {issue}" for issue in issues) if issues else "• No details available"
     return (
         "⛔️ <b>Model blocked</b>\n\n"
-        f"Reason: <code>{status}</code>\n"
+        f"Reason: <code>{status_display}</code>\n"
         f"{issues_text}\n\n"
         f"Details: <code>{link}</code>"
     )

@@ -10,13 +10,17 @@ import logging
 from typing import Any, Dict, Optional
 
 from app.config import Settings, get_settings
-from app.pricing.price_ssot import resolve_sku_for_params
+from app.pricing.price_ssot import list_model_skus, resolve_sku_for_params
 
 logger = logging.getLogger(__name__)
 _pricing_ok_logged: set[str] = set()
 
 
 PRICE_QUANT = Decimal("0.01")
+PRICING_DEFAULT_PARAMS: Dict[str, Dict[str, Any]] = {
+    "sora-2-text-to-video": {"n_frames": "10"},
+    "sora-2-image-to-video": {"n_frames": "10", "size": "standard"},
+}
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,27 @@ def format_price_rub(value: Decimal | float | str) -> str:
     return f"{_quantize_price(_to_decimal(value)):.2f}"
 
 
+def _apply_pricing_defaults(model_id: str, selected_params: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(selected_params or {})
+    default_params = PRICING_DEFAULT_PARAMS.get(model_id, {})
+    for key, value in default_params.items():
+        if key not in normalized or normalized.get(key) in (None, ""):
+            normalized[key] = value
+
+    skus = list_model_skus(model_id)
+    if skus:
+        param_values: Dict[str, set[str]] = {}
+        for sku in skus:
+            for param_key, param_value in (sku.params or {}).items():
+                param_values.setdefault(param_key, set()).add(str(param_value))
+        for param_key, values in param_values.items():
+            if param_key in normalized:
+                continue
+            if len(values) == 1:
+                normalized[param_key] = next(iter(values))
+    return normalized
+
+
 def resolve_price_quote(
     model_id: str,
     mode_index: int,
@@ -59,7 +84,8 @@ def resolve_price_quote(
         "sora-2/t2v": "sora-2-text-to-video",
         "openai/sora-2-text-to-video": "sora-2-text-to-video",
     }.get(model_id, model_id)
-    sku = resolve_sku_for_params(canonical_model_id, selected_params or {})
+    effective_params = _apply_pricing_defaults(canonical_model_id, selected_params or {})
+    sku = resolve_sku_for_params(canonical_model_id, effective_params)
     if not sku:
         return None
 
@@ -79,7 +105,7 @@ def resolve_price_quote(
         "model_id": canonical_model_id,
         "mode_index": mode_index,
         "gen_type": gen_type,
-        "params": dict(selected_params or {}),
+        "params": dict(effective_params or {}),
         "sku_id": sku.sku_key,
         "unit": sku.unit,
         "free_sku": sku.is_free_sku,
