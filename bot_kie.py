@@ -2834,6 +2834,14 @@ def _build_insufficient_funds_keyboard(user_lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+def _build_topup_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang), callback_data="topup_balance")],
+        [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 def _build_mode_selection_text(model_name: str, user_lang: str) -> str:
     if user_lang == "ru":
         return (
@@ -7743,14 +7751,11 @@ async def _button_callback_impl(
                                         balance=format_price_rub(user_balance, is_admin),
                                         required=price_text)
                     
-                    keyboard = [
-                        [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang), callback_data="topup_balance")],
-                        [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
-                    ]
+                    keyboard = _build_topup_menu_keyboard(user_lang)
                     
                     await query.edit_message_text(
                         model_info_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        reply_markup=keyboard,
                         parse_mode='HTML'
                     )
                     return ConversationHandler.END
@@ -7758,10 +7763,7 @@ async def _button_callback_impl(
             # Check balance before starting generation
             if not is_admin and user_balance < min_price:
                 user_lang = get_user_language(user_id)
-                keyboard = [
-                    [InlineKeyboardButton(t('btn_top_up_balance', lang=user_lang), callback_data="topup_balance")],
-                    [InlineKeyboardButton(t('btn_back_to_models', lang=user_lang), callback_data="back_to_menu")]
-                ]
+                keyboard = _build_topup_menu_keyboard(user_lang)
                 
                 needed = min_price - user_balance
                 needed_str = format_rub_amount(needed)
@@ -7808,7 +7810,7 @@ async def _button_callback_impl(
                 
                 await query.edit_message_text(
                     _append_free_counter_text(insufficient_msg, free_counter_line),
-                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    reply_markup=keyboard,
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
@@ -17406,7 +17408,7 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
     update_type = _resolve_update_type(update)
 
     if waiting_for or current_param:
-        if update.message:
+        if update.message and (update.message.text or update.message.caption):
             _log_route_decision_once(
                 update,
                 context,
@@ -17459,6 +17461,10 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
             if user_lang == "ru"
             else f"I'm waiting for parameter <b>{param_label}</b>."
         )
+        menu_label = "🏠 Главное меню" if user_lang == "ru" else "🏠 Main Menu"
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(menu_label, callback_data="back_to_menu")]]
+        )
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -17490,7 +17496,12 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
             },
         )
         if chat_id:
-            await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode="HTML")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
             track_outgoing_action(update.update_id, action_type="fallback")
         return
 

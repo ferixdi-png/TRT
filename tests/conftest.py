@@ -11,6 +11,7 @@ import tempfile
 import pytest
 import asyncio
 import inspect
+import socket
 from pathlib import Path
 
 
@@ -37,6 +38,54 @@ _ensure_test_dependencies()
 
 from tests.ptb_harness import PTBHarness
 from tests.webhook_harness import WebhookHarness
+
+
+def _is_localhost(host: object) -> bool:
+    if host is None:
+        return False
+    if isinstance(host, bytes):
+        host = host.decode("utf-8", errors="ignore")
+    if not isinstance(host, str):
+        return False
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disable_network_calls():
+    """Global network kill-switch for tests."""
+    if os.getenv("NETWORK_DISABLED", "1").lower() in ("0", "false", "no"):
+        yield
+        return
+
+    original_create_connection = socket.create_connection
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+
+    def guarded_create_connection(address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        if _is_localhost(host):
+            return original_create_connection(address, *args, **kwargs)
+        raise RuntimeError("NETWORK_DISABLED_IN_TESTS")
+
+    def guarded_connect(self, address):
+        host = address[0] if isinstance(address, tuple) else address
+        if _is_localhost(host):
+            return original_connect(self, address)
+        raise RuntimeError("NETWORK_DISABLED_IN_TESTS")
+
+    def guarded_connect_ex(self, address):
+        host = address[0] if isinstance(address, tuple) else address
+        if _is_localhost(host):
+            return original_connect_ex(self, address)
+        raise RuntimeError("NETWORK_DISABLED_IN_TESTS")
+
+    socket.create_connection = guarded_create_connection
+    socket.socket.connect = guarded_connect
+    socket.socket.connect_ex = guarded_connect_ex
+    yield
+    socket.create_connection = original_create_connection
+    socket.socket.connect = original_connect
+    socket.socket.connect_ex = original_connect_ex
 
 
 @pytest.fixture(scope="function")
