@@ -2298,11 +2298,19 @@ def format_rub_amount(value: float) -> str:
 
     return f"{format_price_rub(value)} ₽"
 
+_admin_price_notice_logged = False
+
 
 def format_price_rub(price: float, is_admin: bool = False) -> str:
     """Format price in rubles with appropriate text (2 decimals)."""
     if is_admin:
-        return "💰 <b>Админ: бесплатно</b>"
+        global _admin_price_notice_logged
+        if not _admin_price_notice_logged:
+            _admin_price_notice_logged = True
+            logger.info(
+                "ADMIN_PRICE_TEXT applied=true message=admin_unlimited_free_generations",
+            )
+        return "🎁 Админ: безлимитные генерации (квота не расходуется)."
     price_str = format_rub_amount(price)
     return f"💰 <b>{price_str}</b>"
 
@@ -2340,7 +2348,7 @@ def _build_price_line(
     from app.pricing.price_resolver import format_price_rub as format_price_value
 
     if is_admin:
-        return "💰 <b>Админ: бесплатно</b>"
+        return "🎁 Админ: безлимитные генерации (квота не расходуется)."
     prefix = "от " if user_lang == "ru" and is_from else ("from " if user_lang != "ru" and is_from else "")
     label = "Стоимость" if user_lang == "ru" else "Price"
     price_display = format_price_value(price_rub)
@@ -2959,16 +2967,22 @@ _last_save_time = {}
 # Storage paths - storage backend handles persistence (DB only).
 DATA_DIR = os.getenv("DATA_DIR", "").strip()
 BOT_INSTANCE_ID = os.getenv("BOT_INSTANCE_ID", "").strip()
+_data_dir_warning_logged = False
 
 
 def _resolve_data_dir() -> str:
     base_dir = DATA_DIR or "."
-    if BOT_INSTANCE_ID:
+    bot_instance_id = BOT_INSTANCE_ID or "default"
+    if not BOT_INSTANCE_ID:
+        global _data_dir_warning_logged
+        if not _data_dir_warning_logged:
+            _data_dir_warning_logged = True
+            logger.warning("BOT_INSTANCE_ID missing; data dir defaulted tenant=%s", bot_instance_id)
+    if bot_instance_id:
         base_path = Path(base_dir)
-        if BOT_INSTANCE_ID not in base_path.parts:
-            base_path = base_path / BOT_INSTANCE_ID
+        if bot_instance_id not in base_path.parts:
+            base_path = base_path / bot_instance_id
         return str(base_path)
-    logger.warning("BOT_INSTANCE_ID missing; data dir not tenant-scoped (dir=%s)", base_dir)
     return base_dir
 
 
@@ -3144,15 +3158,29 @@ def load_json_file(filename: str, default: dict = None) -> dict:
             return default.copy()
 
 
+def _sanitize_json_payload(data: dict, *, filename: str) -> dict:
+    try:
+        json.dumps(data)
+        return data
+    except TypeError:
+        sanitized = json.loads(json.dumps(data, default=str))
+        logger.warning(
+            "STORAGE_JSON_SANITIZED filename=%s reason=non_serializable_payload",
+            filename,
+        )
+        return sanitized
+
+
 def save_json_file(filename: str, data: dict, use_cache: bool = True):
     """Save data to storage with cached writes."""
     try:
         cache_key = get_cache_key(filename)
         current_time = time.time()
+        safe_data = _sanitize_json_payload(data, filename=filename)
         
         # Update cache immediately
         if use_cache and cache_key != filename:
-            _data_cache[cache_key] = data.copy()
+            _data_cache[cache_key] = safe_data.copy()
             _data_cache['cache_timestamps'][cache_key] = current_time
         
         try:
@@ -3161,7 +3189,7 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
             storage = get_storage()
             storage_filename = os.path.basename(filename)
             _run_storage_coro_sync(
-                storage.write_json_file(storage_filename, data),
+                storage.write_json_file(storage_filename, safe_data),
                 label=f"write:{storage_filename}",
             )
             _last_save_time[filename] = current_time
