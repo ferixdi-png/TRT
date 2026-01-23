@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.kie_catalog import ModelSpec
+from app.models.canonical import canonicalize_kie_model
 from app.kie_contract.image_adapter import adapt_image_input
 from app.kie_contract.normalizer import _coerce_value
 
@@ -50,4 +51,4 @@ def build_kie_payload(model_spec: ModelSpec, session_params: Dict[str, Any]) -> 
         raise PayloadBuildError(f"Missing required fields: {', '.join(missing)}")
 
     adapted = adapt_image_input(model_spec.id, normalized)
-    return {"model": model_spec.kie_model, "input": adapted}
+    return {"model": canonicalize_kie_model(model_spec.kie_model), "input": adapted}

@@ -97,13 +97,13 @@ def load_yaml_models() -> Dict[str, Dict[str, Any]]:
             if 'input' not in model_data or not model_data['input']:
                 logger.warning(f"Model {model_id} missing or empty input, skipping")
                 continue
-            
-        validated[model_id] = {
-            'model_type': model_data['model_type'],
-            'model_mode': model_data.get('model_mode'),
-            'kie_model': model_data.get('kie_model'),
-            'input': model_data['input'],
-        }
+
+            validated[model_id] = {
+                'model_type': model_data['model_type'],
+                'model_mode': model_data.get('model_mode'),
+                'kie_model': model_data.get('kie_model'),
+                'input': model_data['input'],
+            }
         
         _yaml_cache = validated
         logger.info(f"Loaded {len(validated)} models from YAML: {yaml_path}")
