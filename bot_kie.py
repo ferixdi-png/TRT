@@ -16651,6 +16651,16 @@ async def active_session_router(update: Update, context: ContextTypes.DEFAULT_TY
         await input_parameters(update, context)
     except Exception as exc:
         logger.error("Active session router failed: %s", exc, exc_info=True)
+        try:
+            await handle_update_exception(
+                update,
+                context,
+                exc,
+                stage="router",
+                handler="active_session_router",
+            )
+        except Exception:
+            logger.debug("active_session_router exception boundary failed", exc_info=True)
         await guard.check_and_ensure_response(update, context)
     raise ApplicationHandlerStop
 
@@ -16716,6 +16726,16 @@ async def _global_text_router_impl(update: Update, context: ContextTypes.DEFAULT
         track_outgoing_action(update_id)
     except Exception as exc:
         logger.error("Error in global_text_router fallback: %s", exc, exc_info=True)
+        try:
+            await handle_update_exception(
+                update,
+                context,
+                exc,
+                stage="router",
+                handler="global_text_router",
+            )
+        except Exception:
+            logger.debug("global_text_router exception boundary failed", exc_info=True)
         await guard.check_and_ensure_response(update, context)
     raise ApplicationHandlerStop
 
@@ -16782,6 +16802,16 @@ async def _global_photo_router_impl(update: Update, context: ContextTypes.DEFAUL
         track_outgoing_action(update_id)
     except Exception as exc:
         logger.error("Error in global_photo_router fallback: %s", exc, exc_info=True)
+        try:
+            await handle_update_exception(
+                update,
+                context,
+                exc,
+                stage="router",
+                handler="global_photo_router",
+            )
+        except Exception:
+            logger.debug("global_photo_router exception boundary failed", exc_info=True)
         await guard.check_and_ensure_response(update, context)
     raise ApplicationHandlerStop
 
@@ -16839,6 +16869,16 @@ async def global_audio_router(update: Update, context: ContextTypes.DEFAULT_TYPE
         track_outgoing_action(update_id)
     except Exception as exc:
         logger.error("Error in global_audio_router fallback: %s", exc, exc_info=True)
+        try:
+            await handle_update_exception(
+                update,
+                context,
+                exc,
+                stage="router",
+                handler="global_audio_router",
+            )
+        except Exception:
+            logger.debug("global_audio_router exception boundary failed", exc_info=True)
         await guard.check_and_ensure_response(update, context)
     raise ApplicationHandlerStop
 
