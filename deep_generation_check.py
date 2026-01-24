@@ -1,224 +1,334 @@
 #!/usr/bin/env python3
 """
-Глубокая проверка всех сценариев генерации
-Проверяет каждый путь от начала до конца
+Глубокая проверка архитектурных инвариантов генерации.
+
+Обновлено под текущую архитектуру:
+- экран «Задача уже запущена»;
+- debounce confirm_generate через submit-lock;
+- идемпотентный open_result:<task_id>;
+- очистка task_id при терминальных состояниях;
+- dedupe по fingerprint/prompt_hash.
 """
 
+from __future__ import annotations
+
+import io
 import re
 import sys
-import io
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Sequence, Set, Tuple
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-def check_generation_flow(file_path):
-    """Проверяет полный поток генерации"""
-    issues = []
-    
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # 1. Проверка: select_model -> input_parameters
-    print("[ПРОВЕРКА 1] Путь: select_model -> input_parameters")
-    if 'select_model:' in content and 'async def input_parameters' in content:
-        # Проверяем, что select_model вызывает input_parameters или устанавливает состояние
-        select_model_section = content.split('select_model:')[1].split('def ')[0] if 'select_model:' in content else ''
-        if 'INPUTTING_PARAMS' in select_model_section or 'input_parameters' in select_model_section:
-            print("   [OK] select_model правильно переходит к input_parameters")
+BOT_FILE = Path("bot_kie.py")
+
+
+@dataclass
+class CheckIssue:
+    level: str  # ERROR / WARNING
+    message: str
+
+    def format(self) -> str:
+        return f"[{self.level}] {self.message}"
+
+
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _section(content: str, marker: str, next_markers: Sequence[str]) -> str:
+    if marker not in content:
+        return ""
+    start = content.index(marker) + len(marker)
+    tail = content[start:]
+    end_positions = [tail.index(m) for m in next_markers if m in tail]
+    end = min(end_positions) if end_positions else len(tail)
+    return tail[:end]
+
+
+def _extract_string_literals(block: str) -> List[str]:
+    literals: List[str] = []
+    for raw in re.findall(r"['\"]([^'\"\\]*(?:\\.[^'\"\\]*)*)['\"]", block):
+        if raw:
+            literals.append(raw)
+    return literals
+
+
+def _extract_known_prefixes(content: str) -> Set[str]:
+    match = re.search(r"KNOWN_CALLBACK_PREFIXES\s*=\s*\((.*?)\)\n\n", content, re.S)
+    if not match:
+        return set()
+    return {s for s in _extract_string_literals(match.group(1)) if s}
+
+
+def _extract_known_exact(content: str) -> Set[str]:
+    match = re.search(r"KNOWN_CALLBACK_EXACT\s*=\s*\{(.*?)\}\n\n", content, re.S)
+    if not match:
+        return set()
+    return {s for s in _extract_string_literals(match.group(1)) if s}
+
+
+def _extract_callback_data(content: str) -> Set[str]:
+    callbacks: Set[str] = set()
+    pattern = re.compile(
+        r"InlineKeyboardButton\([^)]*callback_data\s*=\s*f?[\"']([^\"']+)[\"']",
+        re.S,
+    )
+    for raw in pattern.findall(content):
+        base = raw.split("{", 1)[0].strip()
+        if base:
+            callbacks.add(base)
+    return callbacks
+
+
+def _extract_button_callback_handlers(content: str) -> Tuple[Set[str], Set[str]]:
+    block = ""
+    for func_name in ("_button_callback_impl", "button_callback"):
+        match = re.search(rf"^async def {func_name}.*?(?=^async def |\Z)", content, re.S | re.M)
+        if match:
+            block = match.group(0)
+            break
+    exact = set(re.findall(r"(?:if|elif)\s+data\s*==\s*[\"']([^\"']+)[\"']", block))
+    prefix = set(re.findall(r"(?:if|elif)\s+data\.startswith\([\"']([^\"']+)[\"']", block))
+    return exact, prefix
+
+
+def _extract_conversation_patterns(content: str) -> Tuple[Set[str], Set[str]]:
+    pattern = re.compile(r"CallbackQueryHandler\([^,]+,\s*pattern\s*=\s*[\"']\^([^\"']+)\$[\"']")
+    exact: Set[str] = set()
+    prefix: Set[str] = set()
+    for token in pattern.findall(content):
+        if token.endswith(":"):
+            prefix.add(token)
         else:
-            issues.append("[ERROR] select_model не переходит к input_parameters")
-            print("   [ERROR] select_model не переходит к input_parameters")
-    print()
-    
-    # 2. Проверка: input_parameters -> показ кнопки
-    print("[ПРОВЕРКА 2] Путь: input_parameters -> показ кнопки confirm_generate")
-    if 'all_required_collected' in content:
-        # Находим место где показывается кнопка
-        all_required_sections = content.split('all_required_collected')
-        found_button = False
-        found_return = False
-        
-        for i, section in enumerate(all_required_sections[1:], 1):
-            # Проверяем первые 3000 символов после all_required_collected
-            check_section = section[:3000]
-            if 'confirm_generate' in check_section:
-                found_button = True
-            if 'CONFIRMING_GENERATION' in check_section:
-                found_return = True
-        
-        if found_button and found_return:
-            print("   [OK] Кнопка confirm_generate показывается после all_required_collected")
-        else:
-            if not found_button:
-                issues.append("[ERROR] Кнопка confirm_generate не показывается после all_required_collected")
-                print("   [ERROR] Кнопка confirm_generate не показывается после all_required_collected")
-            if not found_return:
-                issues.append("[ERROR] Не возвращается CONFIRMING_GENERATION после показа кнопки")
-                print("   [ERROR] Не возвращается CONFIRMING_GENERATION после показа кнопки")
-    print()
-    
-    # 3. Проверка: confirm_generate -> confirm_generation
-    print("[ПРОВЕРКА 3] Путь: confirm_generate -> confirm_generation")
-    if 'CallbackQueryHandler(confirm_generation, pattern=\'^confirm_generate$\')' in content:
-        print("   [OK] confirm_generate правильно обрабатывается через confirm_generation")
+            exact.add(token)
+    return exact, prefix
+
+
+def _require(content: str, needle: str, message: str, issues: List[CheckIssue]) -> None:
+    if needle in content:
+        print(f"   [OK] {message}")
     else:
-        issues.append("[ERROR] confirm_generate не обрабатывается через confirm_generation")
-        print("   [ERROR] confirm_generate не обрабатывается через confirm_generation")
+        issues.append(CheckIssue("ERROR", message))
+        print(f"   [ERROR] {message}")
+
+
+def check_confirm_generation_architecture(content: str) -> List[CheckIssue]:
+    issues: List[CheckIssue] = []
+    confirm_block = _section(content, "async def confirm_generation", ["\nasync def poll_task_status", "\nasync def "])
+
+    print("[ПРОВЕРКА 1] Debounce confirm_generate через submit-lock")
+    _require(confirm_block, "_acquire_generation_submit_lock", "submit-lock используется", issues)
+    _require(confirm_block, "generation_submit_lock_remaining", "пользователю показывается ожидание debounce", issues)
     print()
-    
-    # 4. Проверка: confirm_generation -> создание задачи
-    print("[ПРОВЕРКА 4] Путь: confirm_generation -> создание задачи")
-    confirm_section = content.split('async def confirm_generation')[1].split('async def ')[0] if 'async def confirm_generation' in content else ''
-    
-    checks = {
-        'query.answer()': 'query.answer() вызывается',
-        'send_or_edit_message': 'send_or_edit_message используется',
-        'kie.create_task': 'kie.create_task вызывается',
-        'poll_task_status': 'poll_task_status запускается'
-    }
-    
-    for check, description in checks.items():
-        if check in confirm_section:
-            print(f"   [OK] {description}")
-        else:
-            issues.append(f"[WARNING] {description} не найдено")
-            print(f"   [WARNING] {description} не найдено")
+
+    print("[ПРОВЕРКА 2] Экран «Задача уже запущена»")
+    _require(content, "Задача уже запущена", "текст экрана «Задача уже запущена» присутствует", issues)
+    _require(confirm_block, "task_id_existing = session.get(\"task_id\")", "есть precheck существующего task_id в сессии", issues)
+    _require(confirm_block, "reason=\"task_exists_session\"", "precheck ведёт на already-started экран", issues)
+    _require(confirm_block, "reason=\"task_exists_active\"", "детект дубля в active_generations ведёт на already-started экран", issues)
     print()
-    
-    # 5. Проверка обработки ошибок
-    print("[ПРОВЕРКА 5] Обработка ошибок в confirm_generation")
-    error_checks = {
-        'try:': 'Есть try блоки',
-        'except': 'Есть except блоки',
-        'send_or_edit_message': 'Используется send_or_edit_message для ошибок'
-    }
-    
-    for check, description in error_checks.items():
-        if check in confirm_section:
-            print(f"   [OK] {description}")
-        else:
-            issues.append(f"[WARNING] {description} не найдено")
-            print(f"   [WARNING] {description} не найдено")
+
+    print("[ПРОВЕРКА 3] Dedupe по fingerprint/prompt_hash")
+    _require(content, "def _build_request_fingerprint", "функция fingerprint определена", issues)
+    _require(content, "hashlib.sha256", "fingerprint использует sha256", issues)
+    _require(confirm_block, "prompt_hash = _build_request_fingerprint", "есть fallback prompt_hash -> fingerprint", issues)
+    _require(confirm_block, "get_dedupe_entry(", "dedupe store читается", issues)
+    _require(confirm_block, "set_dedupe_entry(", "dedupe store пишется", issues)
     print()
-    
-    # 6. Проверка всех путей показа кнопки
-    print("[ПРОВЕРКА 6] Все пути показа кнопки confirm_generate")
-    # Ищем все места где создается кнопка confirm_generate
-    button_pattern = r'InlineKeyboardButton\([^,]+,\s*callback_data=["\']confirm_generate["\']'
-    matches = re.findall(button_pattern, content)
-    print(f"   Найдено {len(matches)} мест создания кнопки confirm_generate")
-    
-    # Проверяем, что после каждого создания кнопки возвращается CONFIRMING_GENERATION
-    for i, match in enumerate(matches[:5], 1):  # Проверяем первые 5
-        match_pos = content.find(match)
-        after_match = content[match_pos:match_pos+500]  # 500 символов после кнопки
-        if 'CONFIRMING_GENERATION' in after_match or 'return CONFIRMING_GENERATION' in after_match:
-            print(f"   [OK] Путь {i}: кнопка -> CONFIRMING_GENERATION")
-        else:
-            issues.append(f"[WARNING] Путь {i}: кнопка может не возвращать CONFIRMING_GENERATION")
-            print(f"   [WARNING] Путь {i}: кнопка может не возвращать CONFIRMING_GENERATION")
+
+    print("[ПРОВЕРКА 4] Очистка task_id при терминальных состояниях")
+    _require(content, "def _clear_session_task_id", "функция очистки task_id определена", issues)
+    _require(content, "session.pop(\"task_id\", None)", "task_id удаляется из сессии", issues)
+    _require(content, "reason=\"terminal_success\"", "task_id чистится при terminal_success", issues)
+    _require(content, "reason=\"terminal_fail\"", "task_id чистится при terminal_fail", issues)
     print()
-    
-    # 7. Проверка состояний ConversationHandler
-    print("[ПРОВЕРКА 7] Состояния ConversationHandler")
-    states = {
-        'SELECTING_MODEL': ['select_model:', 'show_models'],
-        'INPUTTING_PARAMS': ['input_parameters', 'all_required_collected'],
-        'CONFIRMING_GENERATION': ['confirm_generate', 'confirm_generation']
-    }
-    
-    for state, keywords in states.items():
-        if state in content:
-            # Проверяем, что состояние содержит нужные ключевые слова
-            state_section = content.split(state + ':')[1].split('],')[0] if state + ':' in content else ''
-            found_keywords = sum(1 for kw in keywords if kw in state_section)
-            if found_keywords > 0:
-                print(f"   [OK] Состояние {state} правильно настроено ({found_keywords}/{len(keywords)} ключевых слов)")
-            else:
-                issues.append(f"[WARNING] Состояние {state} может быть неправильно настроено")
-                print(f"   [WARNING] Состояние {state} может быть неправильно настроено")
-        else:
-            issues.append(f"[ERROR] Состояние {state} не найдено")
-            print(f"   [ERROR] Состояние {state} не найдено")
+
+    print("[ПРОВЕРКА 5] open_result:<task_id> идемпотентен и чистит контекст")
+    _require(content, "data.startswith(\"open_result:\")", "open_result:<task_id> обрабатывается в button_callback", issues)
+    _require(content, "deliver_job_result(", "open_result пытается доставить результат", issues)
+    _require(content, "reason=\"terminal_success_open_result\"", "open_result чистит task_id при успехе", issues)
+    _require(content, "reason=\"terminal_fail_open_result\"", "open_result чистит task_id при ошибке", issues)
     print()
-    
+
     return issues
 
-def check_button_handlers(file_path):
-    """Проверяет все обработчики кнопок"""
-    issues = []
-    
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    print("[ПРОВЕРКА 8] Обработчики кнопок в button_callback")
-    
-    # Ищем все if data == или if data.startswith в button_callback
-    button_callback_section = content.split('async def button_callback')[1].split('async def ')[0] if 'async def button_callback' in content else ''
-    
-    # Извлекаем все проверки data
-    data_checks = re.findall(r'if\s+data\s*==\s*["\']([^"\']+)["\']', button_callback_section)
-    data_starts = re.findall(r'data\.startswith\(["\']([^"\']+)["\']', button_callback_section)
-    
-    print(f"   Найдено {len(data_checks)} точных проверок data")
-    print(f"   Найдено {len(data_starts)} проверок data.startswith")
-    
-    # Проверяем, что после каждой проверки есть query.answer()
-    for check in data_checks[:10]:  # Первые 10
-        # Находим место проверки
-        check_pos = button_callback_section.find(f'data == "{check}"')
-        if check_pos == -1:
-            check_pos = button_callback_section.find(f"data == '{check}'")
-        
-        if check_pos != -1:
-            # Проверяем следующие 200 символов на наличие query.answer()
-            after_check = button_callback_section[check_pos:check_pos+200]
-            if 'query.answer()' in after_check or 'await query.answer()' in after_check:
-                print(f"   [OK] {check}: query.answer() вызывается")
-            else:
-                issues.append(f"[WARNING] {check}: query.answer() может не вызываться")
-                print(f"   [WARNING] {check}: query.answer() может не вызываться")
+
+def validate_prefix_registry(content: str) -> List[CheckIssue]:
+    issues: List[CheckIssue] = []
+    known_prefixes = _extract_known_prefixes(content)
+    known_exact = _extract_known_exact(content)
+    callbacks = _extract_callback_data(content)
+    handlers_exact, handlers_prefix = _extract_button_callback_handlers(content)
+    conv_exact, conv_prefix = _extract_conversation_patterns(content)
+
+    print("[ПРОВЕРКА 6] Валидация зарегистрированных префиксов")
+    if not known_prefixes:
+        issues.append(CheckIssue("ERROR", "KNOWN_CALLBACK_PREFIXES не найден"))
+        print("   [ERROR] KNOWN_CALLBACK_PREFIXES не найден")
+        print()
+        return issues
+
+    missing_prefixes: Set[str] = set()
+    colon_callbacks = sorted(cb for cb in callbacks if ":" in cb)
+    for cb in colon_callbacks:
+        prefix = cb.split(":", 1)[0] + ":"
+        if prefix not in known_prefixes:
+            missing_prefixes.add(prefix)
+
+    if missing_prefixes:
+        issues.append(
+            CheckIssue(
+                "ERROR",
+                "Не зарегистрированы префиксы: " + ", ".join(sorted(missing_prefixes)),
+            )
+        )
+        print(f"   [ERROR] Не зарегистрированы префиксы: {', '.join(sorted(missing_prefixes))}")
+    else:
+        print(f"   [OK] Все {len(colon_callbacks)} callback'ов с ':' покрыты KNOWN_CALLBACK_PREFIXES")
+
+    # Проверяем, что важные префиксы покрыты и регистрацией, и обработчиками
+    critical_prefixes = {"open_result:", "retry_delivery:", "retry_generate:", "cancel:", "select_model:", "set_param:"}
+    for prefix in sorted(critical_prefixes):
+        registered = prefix in known_prefixes
+        handled = prefix in handlers_prefix or prefix in conv_prefix
+        if registered and handled:
+            print(f"   [OK] {prefix} зарегистрирован и имеет обработчик")
+        elif registered and not handled:
+            issues.append(CheckIssue("ERROR", f"{prefix} зарегистрирован, но не найден обработчик"))
+            print(f"   [ERROR] {prefix} зарегистрирован, но не найден обработчик")
+        else:
+            issues.append(CheckIssue("ERROR", f"{prefix} отсутствует в KNOWN_CALLBACK_PREFIXES"))
+            print(f"   [ERROR] {prefix} отсутствует в KNOWN_CALLBACK_PREFIXES")
     print()
-    
+
+    print("[ПРОВЕРКА 7] Валидация exact callback'ов")
+    critical_exact = {"confirm_generate", "my_generations", "back_to_menu", "cancel", "show_models"}
+    for cb in sorted(critical_exact):
+        registered = cb in known_exact
+        handled = cb in handlers_exact or cb in conv_exact
+        if registered and handled:
+            print(f"   [OK] {cb} зарегистрирован и имеет обработчик")
+        elif registered and not handled:
+            issues.append(CheckIssue("ERROR", f"{cb} зарегистрирован, но не найден обработчик"))
+            print(f"   [ERROR] {cb} зарегистрирован, но не найден обработчик")
+        elif handled and not registered:
+            issues.append(CheckIssue("ERROR", f"{cb} обрабатывается, но отсутствует в KNOWN_CALLBACK_EXACT"))
+            print(f"   [ERROR] {cb} обрабатывается, но отсутствует в KNOWN_CALLBACK_EXACT")
+        else:
+            issues.append(CheckIssue("ERROR", f"{cb} не зарегистрирован и не обрабатывается"))
+            print(f"   [ERROR] {cb} не зарегистрирован и не обрабатывается")
+    print()
+
+    # Дополнительный контроль: все exact callback'и в коде должны быть где-то обработаны
+    unhandled_exact: Set[str] = set()
+    for cb in callbacks:
+        if ":" in cb:
+            continue
+        if cb in handlers_exact or cb in conv_exact or cb in known_exact:
+            continue
+        # Допускаем, что некоторые callback'и только регистрируются через prefix
+        if any(cb.startswith(prefix) for prefix in known_prefixes):
+            continue
+        unhandled_exact.add(cb)
+
+    if unhandled_exact:
+        issues.append(
+            CheckIssue(
+                "ERROR",
+                "Найдены exact callback'и без регистрации/обработчика: " + ", ".join(sorted(unhandled_exact)[:10]),
+            )
+        )
+        preview = ", ".join(sorted(unhandled_exact)[:10])
+        print(f"   [ERROR] Exact callback'и без покрытия (первые 10): {preview}")
+    else:
+        print("   [OK] Все exact callback'и из callback_data имеют покрытие")
+    print()
+
     return issues
 
-def main():
-    file_path = 'bot_kie.py'
-    
-    print("=" * 80)
-    print("ГЛУБОКАЯ ПРОВЕРКА ВСЕХ СЦЕНАРИЕВ ГЕНЕРАЦИИ")
-    print("=" * 80)
+
+def simulate_callbacks(content: str) -> List[CheckIssue]:
+    issues: List[CheckIssue] = []
+    known_prefixes = _extract_known_prefixes(content)
+    known_exact = _extract_known_exact(content)
+    handlers_exact, handlers_prefix = _extract_button_callback_handlers(content)
+    conv_exact, conv_prefix = _extract_conversation_patterns(content)
+
+    print("[ПРОВЕРКА 8] E2E-симуляция маршрутизации callback'ов")
+
+    def route_ok(callback_data: str) -> bool:
+        if callback_data in handlers_exact or callback_data in conv_exact:
+            return True
+        if callback_data in known_exact and (
+            callback_data in handlers_exact or callback_data in conv_exact or callback_data == "confirm_generate"
+        ):
+            return True
+        if ":" in callback_data:
+            prefix = callback_data.split(":", 1)[0] + ":"
+            if prefix not in known_prefixes:
+                return False
+            return prefix in handlers_prefix or prefix in conv_prefix
+        return callback_data in known_exact
+
+    scenarios = {
+        "confirm_generate": "debounced confirm",
+        "open_result:task123": "open_result idempotent",
+        "retry_delivery:task123": "retry delivery",
+        "retry_generate:": "retry generate",
+        "cancel:job123": "cancel by job",
+        "select_model:model_x": "select model",
+        "set_param:prompt": "set param",
+        "my_generations": "status list",
+    }
+
+    for callback_data, label in scenarios.items():
+        if route_ok(callback_data):
+            print(f"   [OK] {label}: {callback_data}")
+        else:
+            issues.append(CheckIssue("ERROR", f"Маршрут не найден для {callback_data}"))
+            print(f"   [ERROR] {label}: {callback_data}")
     print()
-    
-    # Проверка потока генерации
-    flow_issues = check_generation_flow(file_path)
-    
-    # Проверка обработчиков кнопок
-    handler_issues = check_button_handlers(file_path)
-    
-    # Итоговый отчет
-    print("=" * 80)
-    print("ИТОГОВЫЙ ОТЧЕТ")
-    print("=" * 80)
-    
-    all_issues = flow_issues + handler_issues
-    
-    if len(all_issues) == 0:
-        print("[SUCCESS] ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ УСПЕШНО!")
-        print("   Все пути генерации работают корректно")
-        print("   Все кнопки имеют обработчики")
-        print("   Все состояния правильно настроены")
-        return 0
-    else:
-        print(f"[WARNING] НАЙДЕНО {len(all_issues)} ПРОБЛЕМ:")
-        for issue in all_issues[:20]:  # Показываем первые 20
-            print(f"   {issue}")
-        if len(all_issues) > 20:
-            print(f"   ... и еще {len(all_issues) - 20}")
+
+    return issues
+
+
+def main() -> int:
+    if not BOT_FILE.exists():
+        print(f"[ERROR] Файл не найден: {BOT_FILE}")
         return 1
 
-if __name__ == '__main__':
-    sys.exit(main())
+    content = _read_text(BOT_FILE)
+
+    print("=" * 80)
+    print("DEEP GENERATION CHECK — ARCHITECTURE")
+    print("=" * 80)
+    print()
+
+    issues: List[CheckIssue] = []
+    issues.extend(check_confirm_generation_architecture(content))
+    issues.extend(validate_prefix_registry(content))
+    issues.extend(simulate_callbacks(content))
+
+    print("=" * 80)
+    print("ИТОГОВЫЙ ОТЧЁТ")
+    print("=" * 80)
+
+    if not issues:
+        print("[SUCCESS] Все архитектурные проверки пройдены.")
+        return 0
+
+    errors = [i for i in issues if i.level == "ERROR"]
+    warnings = [i for i in issues if i.level != "ERROR"]
+
+    print(f"[FAIL] Найдено проблем: {len(issues)} (errors={len(errors)}, warnings={len(warnings)})")
+    for issue in issues[:40]:
+        print("  ", issue.format())
+    if len(issues) > 40:
+        print(f"   ... и ещё {len(issues) - 40}")
+    return 1
 
 
-
-
+if __name__ == "__main__":
+    raise SystemExit(main())
