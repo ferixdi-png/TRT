@@ -25,7 +25,7 @@ async def test_runtime_migration_scheduled_when_loop_running(tmp_path, monkeypat
     if task is not None:
         await asyncio.wait_for(task, timeout=2)
 
-    marker_path = Path(tmp_path / "runtime" / ".runtime_migrated")
+    marker_path = Path(tmp_path / "runtime" / "partner-01" / ".runtime_migrated")
     for _ in range(20):
         if marker_path.exists():
             break

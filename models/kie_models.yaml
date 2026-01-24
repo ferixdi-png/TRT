@@ -1,6 +1,6 @@
 meta:
   source: kie_models.py
-  total_models: 72
+  total_models: 74
 models:
   z-image:
     model_type: text_to_image

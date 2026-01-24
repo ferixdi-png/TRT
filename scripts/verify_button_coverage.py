@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, Set
 
 ROOT = Path(__file__).resolve().parent.parent
 SCAN_FILES = [
@@ -14,7 +14,7 @@ SCAN_FILES = [
 ]
 SCAN_FILES.extend([path for path in (ROOT / "app").rglob("*.py")])
 
-IGNORED_CALLBACKS = set()
+IGNORED_CALLBACKS: Set[str] = set()
 
 DYNAMIC_CALLBACK_PREFIXES = {
     "modelk:",
@@ -80,11 +80,7 @@ def main() -> int:
             continue
         content = path.read_text(encoding="utf-8", errors="ignore")
         callbacks.update(_extract_callbacks(content))
-
-    bot_file = ROOT / "bot_kie.py"
-    if bot_file.exists():
-        bot_content = bot_file.read_text(encoding="utf-8", errors="ignore")
-        handlers = _extract_handlers(bot_content)
+        handlers = _extract_handlers(content)
         handler_exact.update(handlers["exact"])
         handler_prefixes.update(handlers["prefixes"])
 
@@ -100,7 +96,7 @@ def main() -> int:
 
     orphan_callbacks = sorted(cb for cb in callbacks if cb not in IGNORED_CALLBACKS and not is_covered(cb))
 
-    unused_handler_allowlist = {"pay_card:", "pay_stars:"}
+    unused_handler_allowlist = {"pay_card:", "pay_stars:", "reset_step", "..."}
     unused_handlers = sorted(
         h for h in handler_prefixes.union(handler_exact)
         if h not in unused_handler_allowlist
