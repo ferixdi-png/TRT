@@ -60,7 +60,10 @@ def ensure_dependencies() -> None:
 
 
 EXCLUDE_DIRS = {".git", "node_modules"}
-EXCLUDE_FILES = {Path("scripts/verify_project.py")}
+EXCLUDE_FILES = {
+    Path("scripts/verify_project.py"),
+    Path("tests/test_verify_project_secrets_scan.py"),
+}
 
 
 def _python_secrets_scan(pattern: re.Pattern[str]) -> list[str]:
@@ -84,7 +87,10 @@ def _python_secrets_scan(pattern: re.Pattern[str]) -> list[str]:
 
 def run_secrets_scan() -> bool:
     pattern = "BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}"
-    rg_cmd = f"rg -n \"{pattern}\" -g '!node_modules' -g '!.git' -g '!scripts/verify_project.py'"
+    rg_cmd = (
+        f"rg -n \"{pattern}\" -g '!node_modules' -g '!.git' "
+        "-g '!scripts/verify_project.py' -g '!tests/test_verify_project_secrets_scan.py'"
+    )
     if shutil.which("rg"):
         print(f"\n$ {rg_cmd}")
         result = subprocess.run(

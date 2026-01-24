@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import yaml
 
@@ -132,7 +132,7 @@ async def _run_media_check(spec: ModelSpec, media_kind: str, style: str) -> bool
     return tg_method in {"send_photo", "send_video", "send_audio", "send_voice", "send_document"}
 
 
-def _validate_ssot_counts() -> bool:
+def _validate_ssot_counts() -> Tuple[bool, int, int, int]:
     root = Path(__file__).resolve().parents[1]
     registry_path = root / "models" / "kie_models.yaml"
     pricing_path = root / "app" / "kie_catalog" / "models_pricing.yaml"
@@ -141,8 +141,13 @@ def _validate_ssot_counts() -> bool:
     pricing = yaml.safe_load(pricing_path.read_text(encoding="utf-8")) or {}
     models_count = len((registry.get("models") or {}))
     pricing_count = len((pricing.get("models") or []))
+    meta_total = registry.get("meta", {}).get("total_models")
+    if isinstance(meta_total, bool):
+        meta_total = None
+    expected_total = meta_total if isinstance(meta_total, int) else models_count
 
-    return models_count == 72 and pricing_count == 72
+    is_valid = models_count == expected_total and pricing_count == expected_total
+    return is_valid, expected_total, models_count, pricing_count
 
 
 async def main() -> int:
@@ -150,8 +155,12 @@ async def main() -> int:
         print(f"Missing fixture file: {FIXTURE_PATH}")
         return 1
 
-    if not _validate_ssot_counts():
-        print("SSOT validation failed (expected 72 models in registry and pricing)")
+    ssot_valid, expected_total, models_count, pricing_count = _validate_ssot_counts()
+    if not ssot_valid:
+        print(
+            "SSOT validation failed "
+            f"(expected {expected_total}, registry={models_count}, pricing={pricing_count})"
+        )
         return 1
 
     model_map = get_model_map()

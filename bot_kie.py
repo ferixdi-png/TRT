@@ -4447,12 +4447,21 @@ def set_user_balance(user_id: int, amount: float):
     """Set user balance in rubles (synchronous wrapper for storage)."""
     # Use storage layer through async wrapper (blocking call)
     import asyncio
-    from app.services.user_service import set_user_balance as set_balance_async
+    from app.services.user_service import (
+        get_user_balance as get_balance_async,
+        set_user_balance as set_balance_async,
+    )
     logger.info(f"💰💰💰 SET_BALANCE: user_id={user_id}, amount={amount:.2f} ₽")
 
     _guard_sync_wrapper_in_event_loop("set_user_balance")
     try:
         asyncio.run(set_balance_async(user_id, amount))
+        verified_balance = asyncio.run(get_balance_async(user_id))
+        logger.info(
+            "BALANCE VERIFIED: user_id=%s balance=%.2f ₽",
+            user_id,
+            verified_balance,
+        )
     except Exception as e:
         logger.error(f"❌ Error setting user balance: {e}", exc_info=True)
 
@@ -8053,6 +8062,54 @@ async def _button_callback_impl(
                     pass
                 await show_main_menu(update, context, source="other_models_error")
                 return ConversationHandler.END
+
+        if data == "cancel_command":
+            session = user_sessions.get(user_id, {}) if user_id else {}
+            job_id = session.get("job_id") if isinstance(session, dict) else None
+            if job_id and user_id is not None:
+                now_ms = _now_ms()
+                _set_user_ui_action(user_id, "cancel_click", now_ms)
+                if isinstance(session, dict):
+                    session["last_ui_action"] = "cancel_click"
+                    session["last_ui_ts_ms"] = now_ms
+                accepted = await _request_job_cancel(
+                    update=update,
+                    context=context,
+                    job_id=job_id,
+                    user_id=user_id,
+                    user_lang=user_lang,
+                    callback_data="cancel_command",
+                    query=query,
+                    correlation_id=correlation_id,
+                    state_source="callback",
+                )
+                if accepted:
+                    _clear_user_task_context(
+                        user_id,
+                        reason="cancel_accepted",
+                        task_id=session.get("task_id"),
+                        allow_mismatch=True,
+                    )
+                    await ensure_main_menu(
+                        update,
+                        context,
+                        source="cancel_generation",
+                        prefer_edit=False,
+                    )
+                    return ConversationHandler.END
+            try:
+                await query.answer("Операция отменена" if user_lang == "ru" else "Cancelled")
+            except Exception:
+                pass
+            if user_id is not None:
+                _clear_user_task_context(
+                    user_id,
+                    reason="cancel_callback",
+                    task_id=session.get("task_id") if isinstance(session, dict) else None,
+                    allow_mismatch=True,
+                )
+            await ensure_main_menu(update, context, source="cancel", prefer_edit=False)
+            return ConversationHandler.END
 
         if data == "reset_step":
             session_store.clear(user_id)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import time
@@ -657,6 +658,8 @@ async def deliver_job_result(
             correlation_id=correlation_id,
             base_url=base_url,
         )
+        if inspect.isawaitable(job_result):
+            job_result = await job_result
         if job_result.urls:
             await _validate_result_urls(
                 job_result.urls,

@@ -4,7 +4,7 @@
 """
 
 import logging
-from telegram import Update, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ def get_handlers_map():
         "handle_show_models": handle_show_models,
         "handle_show_all_models_list": handle_show_all_models_list,
         
-        # TODO: Добавить остальные обработчики по мере миграции
+        # Остальные обработчики можно добавлять по мере миграции
     }
 
 
