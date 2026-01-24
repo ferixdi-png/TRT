@@ -19,6 +19,7 @@ from app.observability.structured_logs import log_structured_event
 from app.observability.task_lifecycle import log_task_lifecycle
 from app.observability.request_logger import log_request_event
 from app.observability.error_catalog import ERROR_CATALOG
+from app.observability.correlation_store import register_correlation_ids
 from app.kie_catalog import get_model_map, ModelSpec
 from app.kie_contract.payload_builder import build_kie_payload, PayloadBuildError
 from app.utils.url_normalizer import normalize_result_urls, ResultUrlNormalizationError
@@ -593,6 +594,16 @@ async def wait_job_result(
     validate_result_fn = validate_result_fn or _validate_result_urls
     waiting_timeout_s = waiting_timeout_s or WAITING_TIMEOUT_SECONDS
     progress_interval_s = progress_interval_s or POLL_PROGRESS_INTERVAL_SECONDS
+    await register_correlation_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=task_id,
+        job_id=job_id,
+        user_id=user_id,
+        model_id=model_id,
+        storage=storage,
+        source="wait_job_result.start",
+    )
     while True:
         elapsed = time.monotonic() - start
         if elapsed >= timeout or attempt >= max_attempts:
@@ -608,6 +619,7 @@ async def wait_job_result(
                 attempt=attempt,
                 error_code="ERR_KIE_TIMEOUT",
                 error_msg="timeout",
+                correlation_id=correlation_id,
             )
             if storage and job_id:
                 await storage.update_job_status(
@@ -650,6 +662,7 @@ async def wait_job_result(
                 attempt=attempt,
                 error_code="KIE_POLL_EXCEPTION",
                 error_msg=str(exc),
+                correlation_id=correlation_id,
             )
             await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
             delay = min(max_delay, delay * 2)
@@ -672,6 +685,7 @@ async def wait_job_result(
             attempt=attempt,
             error_code=None,
             error_msg=None,
+            correlation_id=correlation_id,
         )
         await _watchdog_store(
             storage,
@@ -685,11 +699,13 @@ async def wait_job_result(
 
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_POLL",
             action_path="universal_engine.wait_job_result",
             model_id=model_id,
             task_id=task_id,
+            job_id=job_id,
             stage="KIE_POLL",
             outcome=state,
             poll_attempt=attempt,
@@ -740,11 +756,13 @@ async def wait_job_result(
                 retry_task_id = await on_waiting_timeout(retry_count)
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     user_id=user_id,
                     action="KIE_WAITING_TIMEOUT",
                     action_path="universal_engine.wait_job_result",
                     model_id=model_id,
                     task_id=task_id,
+                    job_id=job_id,
                     stage="KIE_POLL",
                     outcome="waiting_timeout",
                     poll_attempt=attempt,
@@ -757,6 +775,16 @@ async def wait_job_result(
                 record["taskId"] = task_id
                 if task_ref is not None:
                     task_ref["task_id"] = task_id
+                await register_correlation_ids(
+                    correlation_id=correlation_id,
+                    request_id=request_id,
+                    task_id=task_id,
+                    job_id=job_id,
+                    user_id=user_id,
+                    model_id=model_id,
+                    storage=storage,
+                    source="wait_job_result.retry_task",
+                )
                 waiting_since = None
                 delay = base_delay
                 continue
@@ -865,12 +893,24 @@ async def run_generation(
     if not spec:
         raise ValueError(f"Model '{model_id}' not found in catalog")
 
-    request_id = request_id or str(uuid.uuid4())
+    request_id = request_id or correlation_id or str(uuid.uuid4())
+    if not job_id:
+        job_id = f"job-{uuid.uuid4().hex[:12]}"
     chat_id = chat_id or user_id
     if prompt_hash is None:
         prompt_hash = prompt_summary(prompt or session_params.get("prompt") or session_params.get("text")).get("prompt_hash")
 
     storage = get_storage()
+    await register_correlation_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=None,
+        job_id=job_id,
+        user_id=user_id,
+        model_id=model_id,
+        storage=storage,
+        source="run_generation.start",
+    )
     watchdog_lock = await _watchdog_lock(prompt_hash or "", timeout)
     watchdog_started_ts = time.time()
     await _watchdog_store(
@@ -912,25 +952,30 @@ async def run_generation(
             attempt=0,
             error_code=None,
             error_msg=None,
+            correlation_id=correlation_id,
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_SUBMIT",
             action_path="universal_engine.run_generation",
             model_id=model_id,
             gen_type=spec.model_mode,
+            job_id=job_id,
             stage="KIE_SUBMIT",
             waiting_for="KIE_CREATE",
             outcome="start",
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_CREATE",
             action_path="universal_engine.run_generation",
             model_id=model_id,
             gen_type=spec.model_mode,
+            job_id=job_id,
             stage="KIE_CREATE",
             outcome="start",
         )
@@ -953,14 +998,17 @@ async def run_generation(
                 attempt=0,
                 error_code=created.get("error_code") or "KIE_CREATE_FAILED",
                 error_msg=created.get("error"),
+                correlation_id=correlation_id,
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 action="KIE_CREATE",
                 action_path="universal_engine.run_generation",
                 model_id=model_id,
                 gen_type=spec.model_mode,
+                job_id=job_id,
                 stage="KIE_CREATE",
                 outcome="failed",
                 error_code=created.get("error_code") or "KIE_CREATE_FAILED",
@@ -969,11 +1017,13 @@ async def run_generation(
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 action="KIE_SUBMIT",
                 action_path="universal_engine.run_generation",
                 model_id=model_id,
                 gen_type=spec.model_mode,
+                job_id=job_id,
                 stage="KIE_SUBMIT",
                 outcome="failed",
                 error_code="KIE_CREATE_FAILED",
@@ -988,6 +1038,22 @@ async def run_generation(
             )
         task_id = created.get("taskId")
         task_ref["task_id"] = task_id
+        await register_correlation_ids(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            task_id=task_id,
+            job_id=job_id,
+            user_id=user_id,
+            model_id=model_id,
+            storage=storage,
+            source="run_generation.task_created",
+        )
+        from app.generations.request_dedupe_store import set_job_task_mapping
+
+        try:
+            await set_job_task_mapping(job_id, task_id)
+        except Exception as exc:
+            logger.warning("set_job_task_mapping_failed job_id=%s task_id=%s error=%s", job_id, task_id, exc)
         if task_id and on_task_created:
             try:
                 await on_task_created(task_id)
@@ -1005,6 +1071,7 @@ async def run_generation(
             attempt=0,
             error_code=None,
             error_msg=None,
+            correlation_id=correlation_id,
         )
         log_task_lifecycle(
             state="created",
@@ -1017,6 +1084,7 @@ async def run_generation(
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             chat_id=chat_id,
             action="TASK_CREATED",
@@ -1039,7 +1107,7 @@ async def run_generation(
             },
         )
         if storage:
-            await storage.add_generation_job(
+            job_id = await storage.add_generation_job(
                 user_id=user_id,
                 model_id=model_id,
                 model_name=spec.name or model_id,
@@ -1048,6 +1116,7 @@ async def run_generation(
                 task_id=task_id,
                 status="queued",
                 job_id=job_id,
+                correlation_id=correlation_id,
                 request_id=request_id,
                 prompt=prompt or session_params.get("prompt") or session_params.get("text"),
                 prompt_hash=prompt_hash,
@@ -1056,6 +1125,16 @@ async def run_generation(
                 is_admin_user=is_admin_user,
                 chat_id=chat_id,
                 message_id=message_id,
+            )
+            await register_correlation_ids(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                task_id=task_id,
+                job_id=job_id,
+                user_id=user_id,
+                model_id=model_id,
+                storage=storage,
+                source="run_generation.job_persisted",
             )
             await _enqueue_delivery_tracking(
                 storage,
@@ -1083,42 +1162,49 @@ async def run_generation(
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_CREATE",
             action_path="universal_engine.run_generation",
             model_id=model_id,
             gen_type=spec.model_mode,
             task_id=task_id,
+            job_id=job_id,
             stage="KIE_CREATE",
             outcome="success",
             duration_ms=create_duration_ms,
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_TASK_CREATED",
             action_path="universal_engine.run_generation",
             model_id=model_id,
             gen_type=spec.model_mode,
             task_id=task_id,
+            job_id=job_id,
             stage="KIE_CREATE",
             outcome="created",
             duration_ms=create_duration_ms,
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_SUBMIT",
             action_path="universal_engine.run_generation",
             model_id=model_id,
             gen_type=spec.model_mode,
             task_id=task_id,
+            job_id=job_id,
             stage="KIE_SUBMIT",
             outcome="created",
             duration_ms=create_duration_ms,
         )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             chat_id=chat_id,
             action="DELIVERY_PENDING",
@@ -1164,12 +1250,14 @@ async def run_generation(
             retry_payload = build_kie_payload(spec, session_params)
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 action="KIE_WAITING_TIMEOUT",
                 action_path="universal_engine.run_generation",
                 model_id=model_id,
                 gen_type=spec.model_mode,
                 task_id=task_ref.get("task_id"),
+                job_id=job_id,
                 stage="KIE_POLL",
                 outcome="waiting_timeout",
                 retry_count=retry_count,
@@ -1187,6 +1275,16 @@ async def run_generation(
                     correlation_id=created_retry.get("correlation_id") or correlation_id,
                 )
             new_task_id = created_retry.get("taskId")
+            await register_correlation_ids(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                task_id=new_task_id,
+                job_id=job_id,
+                user_id=user_id,
+                model_id=model_id,
+                storage=storage,
+                source="run_generation.retry_task",
+            )
             await _watchdog_store(
                 storage,
                 prompt_hash,
@@ -1209,6 +1307,7 @@ async def run_generation(
                 attempt=retry_count,
                 error_code=None,
                 error_msg=None,
+                correlation_id=correlation_id,
             )
             if new_task_id and on_task_created:
                 try:
@@ -1271,12 +1370,14 @@ async def run_generation(
                 )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 action="KIE_POLL",
                 action_path="universal_engine.run_generation",
                 model_id=model_id,
                 gen_type=spec.model_mode,
                 task_id=task_id,
+                job_id=job_id,
                 stage="KIE_POLL",
                 outcome="failed",
                 duration_ms=poll_duration_ms,
@@ -1321,12 +1422,14 @@ async def run_generation(
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 action="KIE_PARSE",
                 action_path="universal_engine.run_generation",
                 model_id=model_id,
                 gen_type=spec.model_mode,
                 task_id=task_id,
+                job_id=job_id,
                 stage="KIE_PARSE",
                 outcome="success",
                 duration_ms=int((time.monotonic() - parse_start) * 1000),
@@ -1335,12 +1438,14 @@ async def run_generation(
         except Exception:
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 action="KIE_PARSE",
                 action_path="universal_engine.run_generation",
                 model_id=model_id,
                 gen_type=spec.model_mode,
                 task_id=task_id,
+                job_id=job_id,
                 stage="KIE_PARSE",
                 outcome="failed",
                 duration_ms=int((time.monotonic() - parse_start) * 1000),
@@ -1366,11 +1471,13 @@ async def run_generation(
             )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             action="KIE_CANCEL",
             action_path="universal_engine.run_generation",
             model_id=model_id,
             task_id=current_task_id,
+            job_id=job_id,
             stage="KIE_CANCEL",
             outcome="canceled",
         )

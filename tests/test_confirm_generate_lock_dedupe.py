@@ -1,3 +1,6 @@
+import json
+import logging
+
 import pytest
 from telegram.ext import CallbackQueryHandler
 
@@ -9,6 +12,8 @@ from app.generations.request_dedupe_store import (
     set_job_task_mapping,
 )
 from app.generations.universal_engine import JobResult
+from app.observability.correlation_store import reset_correlation_store
+from app.storage.factory import get_storage, reset_storage
 from bot_kie import confirm_generation
 
 
@@ -256,3 +261,87 @@ async def test_confirm_generate_broken_dedupe_restarts_generation(harness, monke
     entry = await get_dedupe_entry(user_id, "sora-2-text-to-video", prompt_hash)
     assert entry and entry.task_id == new_task_id
     assert entry.job_id and entry.job_id != dangling_job_id
+
+
+@pytest.mark.asyncio
+async def test_confirm_generate_double_click_does_not_spawn_new_job_or_pending(
+    harness,
+    monkeypatch,
+    tmp_path,
+    caplog,
+):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BOT_INSTANCE_ID", "double-click-tenant")
+    reset_storage()
+    reset_correlation_store()
+    caplog.set_level(logging.INFO, logger="app.observability.structured_logs")
+
+    user_id = 5656
+    task_id = "task-double-5656"
+    prompt_hash = "prompt-double-5656"
+    bot_kie.user_sessions[user_id] = {
+        "model_id": "sora-2-text-to-video",
+        "params": {"prompt": "double"},
+        "model_info": {"name": "Sora 2"},
+        "gen_type": "video",
+    }
+
+    async def fake_check_available(*_args, **_kwargs):
+        return {"status": "ok"}
+
+    async def fake_free_counter(*_args, **_kwargs):
+        return ""
+
+    def fake_normalize(_model_id, params):
+        return params, []
+
+    def fake_price(*_args, **_kwargs):
+        return {"price_rub": 0}
+
+    calls = {"run_generation": 0}
+
+    async def fake_run_generation(*_args, **kwargs):
+        calls["run_generation"] += 1
+        on_task_created = kwargs.get("on_task_created")
+        if on_task_created:
+            await on_task_created(task_id)
+        return JobResult(
+            task_id=task_id,
+            state="queued",
+            media_type="pending",
+            urls=[],
+            text=None,
+            raw={},
+        )
+
+    monkeypatch.setattr("kie_input_adapter.normalize_for_generation", fake_normalize)
+    monkeypatch.setattr(bot_kie, "check_free_generation_available", fake_check_available)
+    monkeypatch.setattr(bot_kie, "_update_price_quote", fake_price)
+    monkeypatch.setattr(bot_kie, "get_free_counter_line", fake_free_counter)
+    monkeypatch.setattr(bot_kie, "prompt_summary", lambda *_args, **_kwargs: {"prompt_hash": prompt_hash})
+    monkeypatch.setattr("app.generations.universal_engine.run_generation", fake_run_generation)
+    monkeypatch.setattr(bot_kie, "is_dry_run", lambda: False)
+    monkeypatch.setattr(bot_kie, "allow_real_generation", lambda: True)
+
+    harness.add_handler(CallbackQueryHandler(confirm_generation, pattern="^confirm_generate$"))
+    await harness.process_callback("confirm_generate", user_id=user_id)
+
+    caplog.clear()
+    await harness.process_callback("confirm_generate", user_id=user_id)
+
+    assert calls["run_generation"] == 1
+
+    storage = get_storage()
+    jobs = await storage.read_json_file("generation_jobs.json", default={})
+    assert len(jobs) == 1
+
+    actions = []
+    for record in caplog.records:
+        if record.name != "app.observability.structured_logs":
+            continue
+        message = record.getMessage()
+        if "STRUCTURED_LOG " not in message:
+            continue
+        payload = json.loads(message.split("STRUCTURED_LOG ", 1)[1])
+        actions.append(payload.get("action"))
+    assert "DELIVERY_PENDING" not in actions
