@@ -10,7 +10,7 @@ import os
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from app.kie.kie_client import KIEClient
 from app.observability.trace import trace_event, url_summary, prompt_summary
@@ -98,11 +98,11 @@ async def _watchdog_store(
                 await redis.set(key, json.dumps(payload, ensure_ascii=False), ex=WATCHDOG_TTL_SECONDS)
         except Exception as exc:
             logger.warning("Failed to update watchdog redis state: %s", exc)
-    if not storage:
+    if not storage or not hasattr(storage, "update_json_file"):
         return
 
     def _update(data: Dict[str, Any]) -> Dict[str, Any]:
-        next_data = dict(data)
+        next_data = dict(data or {})
         if payload is None:
             next_data.pop(prompt_hash, None)
         else:
@@ -570,14 +570,18 @@ async def wait_job_result(
         attempt += 1
         poll_call_start = time.monotonic()
         try:
-            if "correlation_id" in inspect.signature(client.get_task_status).parameters:
-                record = await client.get_task_status(
-                    task_id,
-                    correlation_id=correlation_id,
-                    poll_attempt=attempt,
-                    total_wait_ms=int(elapsed * 1000),
-                    retry_count=retry_count,
-                )
+            status_params = inspect.signature(client.get_task_status).parameters
+            status_kwargs: Dict[str, Any] = {}
+            if "correlation_id" in status_params:
+                status_kwargs["correlation_id"] = correlation_id
+            if "poll_attempt" in status_params:
+                status_kwargs["poll_attempt"] = attempt
+            if "total_wait_ms" in status_params:
+                status_kwargs["total_wait_ms"] = int(elapsed * 1000)
+            if "retry_count" in status_params:
+                status_kwargs["retry_count"] = retry_count
+            if status_kwargs:
+                record = await client.get_task_status(task_id, **status_kwargs)
             else:
                 record = await client.get_task_status(task_id)
         except Exception as exc:
@@ -793,6 +797,7 @@ async def run_generation(
     prompt_hash: Optional[str] = None,
     prompt: Optional[str] = None,
     job_id: Optional[str] = None,
+    on_task_created: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> JobResult:
     """Execute the full generation pipeline for any model."""
     catalog = get_model_map()
@@ -922,6 +927,11 @@ async def run_generation(
             )
         task_id = created.get("taskId")
         task_ref["task_id"] = task_id
+        if task_id and on_task_created:
+            try:
+                await on_task_created(task_id)
+            except Exception as exc:
+                logger.warning("on_task_created_failed task_id=%s error=%s", task_id, exc)
         log_request_event(
             request_id=request_id,
             user_id=user_id,
@@ -1069,6 +1079,11 @@ async def run_generation(
                 error_code=None,
                 error_msg=None,
             )
+            if new_task_id and on_task_created:
+                try:
+                    await on_task_created(new_task_id)
+                except Exception as exc:
+                    logger.warning("on_task_created_failed task_id=%s error=%s", new_task_id, exc)
             return new_task_id
 
         record = await wait_job_result(
