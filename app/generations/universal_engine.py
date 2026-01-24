@@ -254,7 +254,14 @@ def _extract_urls(record: Dict[str, Any], result_json: Dict[str, Any]) -> List[s
         urls.extend([url for url in json_urls if url])
     elif isinstance(json_urls, str):
         urls.append(json_urls)
-    return [url for url in urls if url]
+    seen = set()
+    unique_urls: List[str] = []
+    for url in urls:
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        unique_urls.append(url)
+    return unique_urls
 
 
 def _extract_text(record: Dict[str, Any], result_json: Dict[str, Any]) -> Optional[str]:
@@ -512,6 +519,24 @@ async def _validate_result_urls(
             error_code="KIE_RESULT_EMPTY",
             fix_hint=ERROR_CATALOG.get("KIE_RESULT_EMPTY", "Empty result URL list."),
         )
+    stub_mode = os.getenv("KIE_STUB", "").strip().lower() in {"1", "true", "yes"}
+    test_mode = os.getenv("TEST_MODE", "").strip().lower() in {"1", "true", "yes"}
+    if stub_mode or test_mode:
+        log_request_event(
+            request_id=request_id,
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=prompt_hash,
+            task_id=task_id,
+            job_id=job_id,
+            status="result_validation_skipped_stub",
+            latency_ms=None,
+            attempt=None,
+            error_code=None,
+            error_msg=None,
+            correlation_id=correlation_id,
+        )
+        return
     timeout = aiohttp.ClientTimeout(total=timeout_s)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         last_error: Optional[str] = None

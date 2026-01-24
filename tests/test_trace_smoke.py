@@ -21,6 +21,7 @@ async def test_trace_smoke_callbacks_and_input(monkeypatch, test_env):
     calls, collector = _trace_collector()
     monkeypatch.setattr("app.observability.trace.trace_event", collector)
     monkeypatch.setattr("app.observability.no_silence_guard.trace_event", collector)
+    monkeypatch.setattr("bot_kie.trace_event", collector)
 
     harness = PTBHarness()
     await harness.setup()
