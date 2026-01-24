@@ -138,6 +138,11 @@ class BaseStorage(ABC):
         request_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
+        sku_id: Optional[str] = None,
+        is_free: bool = False,
+        is_admin_user: bool = False,
+        chat_id: Optional[int] = None,
+        message_id: Optional[int] = None,
         result_url: Optional[str] = None,
         error_code: Optional[str] = None,
     ) -> str:

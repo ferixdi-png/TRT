@@ -607,7 +607,7 @@ class KIEClient:
         result = await self._request_json(
             "POST",
             "/api/v1/jobs/cancelTask",
-            json={"taskId": task_id},
+            payload={"taskId": task_id},
             correlation_id=correlation_id,
         )
         if not result.get("ok"):

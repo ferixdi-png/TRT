@@ -10,6 +10,7 @@ import os
 import random
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from app.kie.kie_client import KIEClient
@@ -113,6 +114,58 @@ async def _watchdog_store(
         return next_data
 
     await storage.update_json_file(WATCHDOG_FILE, _update)
+
+
+async def _enqueue_delivery_tracking(
+    storage: Optional[Any],
+    *,
+    user_id: int,
+    task_id: Optional[str],
+    job_id: Optional[str],
+    model_id: str,
+    request_id: Optional[str],
+    prompt_hash: Optional[str],
+    chat_id: Optional[int],
+    message_id: Optional[int],
+    sku_id: Optional[str],
+    price: float,
+    is_free: bool,
+    is_admin_user: bool,
+) -> None:
+    """Persist delivery tracking so background workers can complete the flow."""
+    if not storage or not task_id or not hasattr(storage, "update_json_file"):
+        return
+
+    now_iso = datetime.now().isoformat()
+    delivery_key = f"{user_id}:{task_id}"
+
+    def _update_delivery(data: Dict[str, Any]) -> Dict[str, Any]:
+        next_data = dict(data or {})
+        existing = next_data.get(delivery_key, {})
+        record = dict(existing) if isinstance(existing, dict) else {}
+        record.update(
+            {
+                "user_id": user_id,
+                "task_id": task_id,
+                "job_id": job_id,
+                "model_id": model_id,
+                "request_id": request_id,
+                "prompt_hash": prompt_hash,
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "sku_id": sku_id,
+                "price": price,
+                "is_free": bool(is_free),
+                "is_admin_user": bool(is_admin_user),
+                "status": record.get("status") or "pending",
+                "created_at": record.get("created_at", now_iso),
+                "updated_at": now_iso,
+            }
+        )
+        next_data[delivery_key] = record
+        return next_data
+
+    await storage.update_json_file("delivery_records.json", _update_delivery)
 
 
 @dataclass(frozen=True)
@@ -791,12 +844,19 @@ async def run_generation(
     *,
     timeout: int = 900,
     poll_interval: int = 3,
+    wait_for_result: bool = True,
     correlation_id: Optional[str] = None,
     progress_callback: Optional[Any] = None,
     request_id: Optional[str] = None,
     prompt_hash: Optional[str] = None,
     prompt: Optional[str] = None,
     job_id: Optional[str] = None,
+    sku_id: Optional[str] = None,
+    price: float = 0.0,
+    is_free: bool = False,
+    is_admin_user: bool = False,
+    chat_id: Optional[int] = None,
+    message_id: Optional[int] = None,
     on_task_created: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> JobResult:
     """Execute the full generation pipeline for any model."""
@@ -806,6 +866,7 @@ async def run_generation(
         raise ValueError(f"Model '{model_id}' not found in catalog")
 
     request_id = request_id or str(uuid.uuid4())
+    chat_id = chat_id or user_id
     if prompt_hash is None:
         prompt_hash = prompt_summary(prompt or session_params.get("prompt") or session_params.get("text")).get("prompt_hash")
 
@@ -954,6 +1015,19 @@ async def run_generation(
             correlation_id=correlation_id,
             source="universal_engine.run_generation",
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="TASK_CREATED",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            task_id=task_id,
+            job_id=job_id,
+            stage="KIE_CREATE",
+            outcome="created",
+            duration_ms=create_duration_ms,
+        )
         await _watchdog_store(
             storage,
             prompt_hash,
@@ -970,13 +1044,33 @@ async def run_generation(
                 model_id=model_id,
                 model_name=spec.name or model_id,
                 params=session_params,
-                price=0.0,
+                price=price,
                 task_id=task_id,
                 status="queued",
                 job_id=job_id,
                 request_id=request_id,
                 prompt=prompt or session_params.get("prompt") or session_params.get("text"),
                 prompt_hash=prompt_hash,
+                sku_id=sku_id,
+                is_free=is_free,
+                is_admin_user=is_admin_user,
+                chat_id=chat_id,
+                message_id=message_id,
+            )
+            await _enqueue_delivery_tracking(
+                storage,
+                user_id=user_id,
+                task_id=task_id,
+                job_id=job_id,
+                model_id=model_id,
+                request_id=request_id,
+                prompt_hash=prompt_hash,
+                chat_id=chat_id,
+                message_id=message_id,
+                sku_id=sku_id,
+                price=price,
+                is_free=is_free,
+                is_admin_user=is_admin_user,
             )
         log_task_lifecycle(
             state="queued",
@@ -1023,6 +1117,43 @@ async def run_generation(
             outcome="created",
             duration_ms=create_duration_ms,
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="DELIVERY_PENDING",
+            action_path="universal_engine.run_generation",
+            model_id=model_id,
+            task_id=task_id,
+            job_id=job_id,
+            stage="DELIVERY_PENDING",
+            outcome="pending",
+            param={"message_id": message_id},
+        )
+        if not wait_for_result:
+            await _watchdog_store(
+                storage,
+                prompt_hash,
+                {
+                    "task_id": task_id,
+                    "job_id": job_id,
+                    "status": "delivery_pending",
+                    "started_ts": watchdog_started_ts,
+                },
+            )
+            return JobResult(
+                task_id=task_id or "",
+                state="queued",
+                media_type="pending",
+                urls=[],
+                text=None,
+                raw={
+                    "taskId": task_id,
+                    "state": "queued",
+                    "jobId": job_id,
+                    "delivery_pending": True,
+                },
+            )
         if progress_callback:
             await progress_callback({"stage": "KIE_CREATE", "task_id": task_id})
 
