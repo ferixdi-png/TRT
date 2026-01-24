@@ -172,6 +172,11 @@ class HybridStorage(BaseStorage):
         request_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
+        sku_id: Optional[str] = None,
+        is_free: bool = False,
+        is_admin_user: bool = False,
+        chat_id: Optional[int] = None,
+        message_id: Optional[int] = None,
         result_url: Optional[str] = None,
         error_code: Optional[str] = None,
     ) -> str:
@@ -187,6 +192,11 @@ class HybridStorage(BaseStorage):
             request_id=request_id,
             prompt=prompt,
             prompt_hash=prompt_hash,
+            sku_id=sku_id,
+            is_free=is_free,
+            is_admin_user=is_admin_user,
+            chat_id=chat_id,
+            message_id=message_id,
             result_url=result_url,
             error_code=error_code,
         )
