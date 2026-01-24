@@ -497,6 +497,11 @@ class JsonStorage(BaseStorage):
         request_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
+        sku_id: Optional[str] = None,
+        is_free: bool = False,
+        is_admin_user: bool = False,
+        chat_id: Optional[int] = None,
+        message_id: Optional[int] = None,
         result_url: Optional[str] = None,
         error_code: Optional[str] = None,
     ) -> str:
@@ -512,11 +517,16 @@ class JsonStorage(BaseStorage):
             'model_name': model_name,
             'prompt': prompt,
             'prompt_hash': prompt_hash,
+            'sku_id': sku_id,
+            'is_free': bool(is_free),
+            'is_admin_user': bool(is_admin_user),
             'params': params,
             'price': price,
             'status': status,
             'task_id': task_id,  # external_task_id от KIE
             'external_task_id': task_id,  # alias для совместимости
+            'chat_id': chat_id,
+            'message_id': message_id,
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat(),
             'result_urls': [],

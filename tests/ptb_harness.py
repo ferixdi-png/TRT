@@ -48,6 +48,11 @@ class PTBHarness:
         self.application: Optional[Application] = None
         self.outbox = MessageOutbox()
         self._patches: List[Any] = []
+        self._message_id_counter: int = 1000
+
+    def _next_message_id(self) -> int:
+        self._message_id_counter += 1
+        return self._message_id_counter
     
     async def setup(self):
         """Инициализирует Application и настраивает моки."""
@@ -56,23 +61,8 @@ class PTBHarness:
         
         # Мокаем bot.send_message
         async def mock_send_message(chat_id, text, **kwargs):
+            message_id = self._next_message_id()
             self.outbox.messages.append({
-                'chat_id': chat_id,
-                'text': text,
-                'parse_mode': kwargs.get('parse_mode'),
-                'reply_markup': kwargs.get('reply_markup'),
-                **kwargs
-            })
-            # Возвращаем моковое сообщение
-            mock_msg = MagicMock(spec=Message)
-            mock_msg.chat_id = chat_id
-            mock_msg.text = text
-            mock_msg.reply_markup = kwargs.get('reply_markup')
-            return mock_msg
-        
-        # Мокаем bot.edit_message_text
-        async def mock_edit_message_text(chat_id=None, message_id=None, text=None, **kwargs):
-            self.outbox.edited_messages.append({
                 'chat_id': chat_id,
                 'message_id': message_id,
                 'text': text,
@@ -83,6 +73,26 @@ class PTBHarness:
             # Возвращаем моковое сообщение
             mock_msg = MagicMock(spec=Message)
             mock_msg.chat_id = chat_id
+            mock_msg.message_id = message_id
+            mock_msg.text = text
+            mock_msg.reply_markup = kwargs.get('reply_markup')
+            return mock_msg
+        
+        # Мокаем bot.edit_message_text
+        async def mock_edit_message_text(chat_id=None, message_id=None, text=None, **kwargs):
+            resolved_message_id = message_id or self._next_message_id()
+            self.outbox.edited_messages.append({
+                'chat_id': chat_id,
+                'message_id': resolved_message_id,
+                'text': text,
+                'parse_mode': kwargs.get('parse_mode'),
+                'reply_markup': kwargs.get('reply_markup'),
+                **kwargs
+            })
+            # Возвращаем моковое сообщение
+            mock_msg = MagicMock(spec=Message)
+            mock_msg.chat_id = chat_id
+            mock_msg.message_id = resolved_message_id
             mock_msg.text = text
             mock_msg.reply_markup = kwargs.get('reply_markup')
             return mock_msg
