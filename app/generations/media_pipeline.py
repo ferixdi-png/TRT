@@ -81,14 +81,18 @@ def _media_method_from_type(media_kind: str, content_type: str, url: str) -> str
             return "send_photo"
         if extension in {".mp4", ".mov", ".webm"}:
             return "send_video"
-        if extension in {".mp3", ".wav", ".ogg"}:
+        if extension in {".mp3", ".wav"}:
             return "send_audio"
+        if extension == ".ogg":
+            return "send_voice" if media_kind in {"audio", "voice"} else "send_audio"
         return "send_document"
     if normalized.startswith("image/"):
         return "send_photo"
     if normalized.startswith("video/"):
         return "send_video"
     if normalized.startswith("audio/"):
+        if normalized in {"audio/ogg", "audio/opus"}:
+            return "send_voice"
         return "send_audio" if media_kind != "voice" else "send_voice"
     if media_kind in {"image", "video", "audio", "voice"}:
         return {
@@ -223,16 +227,69 @@ async def _resolve_single_media(
     filename_prefix: Optional[str] = None,
 ) -> ResolvedMedia:
     resolved_url = url
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="MEDIA_PIPELINE",
+        action_path="media_pipeline._resolve_single_media",
+        stage="MEDIA_RESOLVE",
+        waiting_for="RESOLVE",
+        outcome="start",
+        param={"media_kind": media_kind, "resolved_domain": _safe_domain(url)},
+    )
     if _is_kie_url(url, kie_client):
         resolved_url = await _resolve_kie_download_url(url, kie_client, correlation_id)
 
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="MEDIA_PIPELINE",
+        action_path="media_pipeline._resolve_single_media",
+        stage="MEDIA_RESOLVE",
+        waiting_for="DOWNLOAD",
+        outcome="start",
+        param={"resolved_domain": _safe_domain(resolved_url)},
+    )
     data, dl_type, dl_length = await _download_with_retries(http_client, resolved_url)
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="MEDIA_PIPELINE",
+        action_path="media_pipeline._resolve_single_media",
+        stage="MEDIA_RESOLVE",
+        waiting_for="DOWNLOAD",
+        outcome="success",
+        param={
+            "resolved_domain": _safe_domain(resolved_url),
+            "content_type": (dl_type or "").lower(),
+            "content_length": dl_length,
+        },
+    )
     sniffed_type = _sniff_content_type(data, dl_type, resolved_url)
     if _is_probably_html(data, sniffed_type):
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="MEDIA_PIPELINE",
+            action_path="media_pipeline._resolve_single_media",
+            stage="MEDIA_VALIDATE",
+            waiting_for="VALIDATE",
+            outcome="failed",
+            error_code="KIE_MEDIA_URL_HTML",
+            fix_hint="Result URL returned HTML instead of media.",
+            param={"resolved_domain": _safe_domain(resolved_url), "content_type": sniffed_type},
+        )
         raise MediaNotMediaError(resolved_url, sniffed_type, "HTML payload returned")
     too_large = bool(dl_length and dl_length > TELEGRAM_MAX_BYTES)
     method = _media_method_from_type(media_kind, sniffed_type, resolved_url)
     if too_large:
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="MEDIA_PIPELINE",
+            action_path="media_pipeline._resolve_single_media",
+            stage="MEDIA_VALIDATE",
+            waiting_for="SIZE_CHECK",
+            outcome="failed",
+            error_code="TG_MEDIA_TOO_LARGE",
+            fix_hint="Telegram size limit exceeded; falling back to URL delivery.",
+            param={"content_length": dl_length, "telegram_limit": TELEGRAM_MAX_BYTES},
+        )
         if TELEGRAM_URL_DIRECT:
             return ResolvedMedia(
                 url=resolved_url,
@@ -259,6 +316,19 @@ async def _resolve_single_media(
 
     filename = _infer_filename(resolved_url, sniffed_type, media_kind, filename_prefix)
     payload = InputFile(io.BytesIO(data), filename=filename)
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="MEDIA_PIPELINE",
+        action_path="media_pipeline._resolve_single_media",
+        stage="MEDIA_VALIDATE",
+        waiting_for="VALIDATE",
+        outcome="success",
+        param={
+            "content_type": sniffed_type,
+            "content_length": dl_length,
+            "tg_method": method,
+        },
+    )
     return ResolvedMedia(
         url=resolved_url,
         payload=payload,
@@ -296,6 +366,14 @@ async def resolve_and_prepare_telegram_payload(
         text = getattr(result, "text", None)
 
     media_kind = (media_kind or "").lower()
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="MEDIA_PIPELINE",
+        action_path="media_pipeline.resolve_and_prepare_telegram_payload",
+        stage="MEDIA_RESOLVE",
+        outcome="start",
+        param={"media_kind": media_kind, "urls_count": len(urls)},
+    )
     if media_kind in {"text", "json"} or (text and not urls):
         return "send_message", {"text": text or "", "parse_mode": "HTML"}
 
@@ -383,6 +461,14 @@ async def resolve_and_prepare_telegram_payload(
                 media_group.append(InputMediaPhoto(media=item.payload, caption=caption if idx == 0 else None))
             else:
                 media_group.append(InputMediaVideo(media=item.payload, caption=caption if idx == 0 else None))
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="MEDIA_PIPELINE",
+            action_path="media_pipeline.resolve_and_prepare_telegram_payload",
+            stage="TG_DELIVER",
+            outcome="selected",
+            param={"tg_method": "send_media_group", "items": len(media_group)},
+        )
         return "send_media_group", {"media": media_group}
 
     first_item = resolved_items[0]
@@ -394,6 +480,14 @@ async def resolve_and_prepare_telegram_payload(
         "send_voice": "voice",
         "send_animation": "animation",
     }.get(first_item.method, "document")
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="MEDIA_PIPELINE",
+        action_path="media_pipeline.resolve_and_prepare_telegram_payload",
+        stage="TG_DELIVER",
+        outcome="selected",
+        param={"tg_method": first_item.method, "payload_key": payload_key},
+    )
     return first_item.method, {payload_key: first_item.payload, "caption": caption}
 
 

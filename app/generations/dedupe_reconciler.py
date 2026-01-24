@@ -18,7 +18,19 @@ from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-ORPHAN_STATES = {"pending", "queued", "deduped", "running"}
+ORPHAN_STATES = {
+    "create_start",
+    "task_created",
+    "pending",
+    "queued",
+    "waiting",
+    "success",
+    "result_validated",
+    "tg_deliver",
+    "delivery_pending",
+    "deduped",
+    "running",
+}
 
 
 def _entry_age_seconds(entry: DedupeEntry, *, now_ts: float) -> float:
@@ -115,7 +127,7 @@ async def reconcile_dedupe_orphans(
                 entry.model_id,
                 entry.prompt_hash,
                 task_id=recovered_task_id,
-                status="running",
+                status="waiting",
                 last_recovery_ts=now_ts,
                 recovery_attempts=recovery_attempts,
             )
