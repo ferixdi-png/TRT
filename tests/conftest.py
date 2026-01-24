@@ -100,7 +100,7 @@ def test_env():
         'TELEGRAM_BOT_TOKEN': 'test_token_12345',
         'KIE_API_KEY': 'test_api_key',
         'ADMIN_ID': '12345',
-        'STORAGE_MODE': 'db',
+        'STORAGE_MODE': 'json',
         'BOT_INSTANCE_ID': 'test-instance',
     }
     
@@ -121,7 +121,15 @@ def test_env():
         reset_gateway()
     except ImportError:
         pass
-    
+
+    from app.storage.factory import reset_storage
+    from app.generations.request_dedupe_store import reset_memory_entries
+    from app.observability.dedupe_metrics import reset_metrics as reset_dedupe_metrics
+
+    reset_storage()
+    reset_memory_entries()
+    reset_dedupe_metrics()
+
     yield
     
     # Снова сбрасываем singleton'ы в teardown
@@ -136,6 +144,8 @@ def test_env():
         reset_gateway()
     except ImportError:
         pass
+
+    reset_storage()
     
     # Восстанавливаем старые значения
     for key, value in old_env.items():
