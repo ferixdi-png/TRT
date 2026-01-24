@@ -212,6 +212,29 @@ def start_delivery_reconciler(bot) -> None:
     )
 
 
+def start_dedupe_reconciler(bot) -> None:
+    global _dedupe_reconciler_task
+    if _dedupe_reconciler_task and not _dedupe_reconciler_task.done():
+        return
+    from app.integrations.kie_stub import get_kie_client_or_stub
+    from app.generations.dedupe_reconciler import run_dedupe_reconciler_loop
+
+    kie_client = get_kie_client_or_stub()
+    _dedupe_reconciler_task = _create_background_task(
+        run_dedupe_reconciler_loop(
+            bot,
+            kie_client,
+            resolve_task_id=_resolve_task_id_from_job,
+            get_user_language=get_user_language,
+            interval_seconds=DEDUPE_RECONCILE_INTERVAL_SECONDS,
+            batch_limit=DEDUPE_RECONCILE_BATCH_LIMIT,
+            orphan_max_age_seconds=DEDUPE_ORPHAN_MAX_AGE_SECONDS,
+            orphan_alert_threshold=DEDUPE_ORPHAN_ALERT_THRESHOLD,
+        ),
+        action="dedupe_reconciler",
+    )
+
+
 LONG_CALLBACK_PREFIXES = (
     "gen_type:",
     "category:",
@@ -2191,15 +2214,23 @@ async def cancel_active_generation(user_id: int) -> bool:
 pending_deliveries: Dict[tuple[int, str], Dict[str, Any]] = {}
 pending_deliveries_lock = asyncio.Lock()
 _delivery_reconciler_task: Optional[asyncio.Task] = None
+_dedupe_reconciler_task: Optional[asyncio.Task] = None
 DELIVERY_RECONCILE_INTERVAL_SECONDS = int(os.getenv("DELIVERY_RECONCILE_INTERVAL_SECONDS", "15"))
 DELIVERY_RECONCILE_BATCH_LIMIT = int(os.getenv("DELIVERY_RECONCILE_BATCH_LIMIT", "200"))
 DELIVERY_PENDING_AGE_ALERT_SECONDS = int(os.getenv("DELIVERY_PENDING_AGE_ALERT_SECONDS", "600"))
 DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD = int(os.getenv("DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD", "200"))
+DEDUPE_RECONCILE_INTERVAL_SECONDS = int(os.getenv("DEDUPE_RECONCILE_INTERVAL_SECONDS", "30"))
+DEDUPE_RECONCILE_BATCH_LIMIT = int(os.getenv("DEDUPE_RECONCILE_BATCH_LIMIT", "400"))
+DEDUPE_ORPHAN_MAX_AGE_SECONDS = int(os.getenv("DEDUPE_ORPHAN_MAX_AGE_SECONDS", "90"))
+DEDUPE_ORPHAN_ALERT_THRESHOLD = int(os.getenv("DEDUPE_ORPHAN_ALERT_THRESHOLD", "3"))
 
 # Generation submit locks to prevent double confirm clicks
 generation_submit_locks: dict[int, float] = {}
 GENERATION_SUBMIT_LOCK_TTL_SECONDS = 20
 REQUEST_DEDUPE_WINDOW_SECONDS = int(os.getenv("GENERATION_DEDUPE_WINDOW_SECONDS", "15"))
+DEDUPE_LOCK_WAIT_SECONDS = float(os.getenv("GEN_DEDUPE_LOCK_WAIT_SECONDS", "30"))
+DEDUPE_TASK_RESOLUTION_ATTEMPTS = int(os.getenv("GEN_DEDUPE_TASK_RESOLUTION_ATTEMPTS", "20"))
+DEDUPE_TASK_RESOLUTION_DELAY_SECONDS = float(os.getenv("GEN_DEDUPE_TASK_RESOLUTION_DELAY_SECONDS", "0.5"))
 _request_tracker = RequestTracker(ttl_seconds=REQUEST_DEDUPE_WINDOW_SECONDS)
 _pending_result_checks: Dict[int, float] = {}
 
@@ -3416,6 +3447,37 @@ def _get_job_record(job_id: Optional[str]) -> Optional[dict]:
         return None
     data = _load_jobs_registry()
     return data.get(job_id)
+
+
+async def _resolve_task_id_from_job(job_id: str) -> Optional[str]:
+    from app.generations.request_dedupe_store import get_task_id_for_job, set_job_task_mapping
+
+    mapped_task_id = await get_task_id_for_job(job_id)
+    if mapped_task_id:
+        return mapped_task_id
+    job_record = _get_job_record(job_id)
+    task_id = None
+    if job_record:
+        task_id = job_record.get("task_id") or job_record.get("external_task_id")
+        if task_id:
+            await set_job_task_mapping(job_id, task_id)
+            return task_id
+    from app.storage import get_storage
+
+    storage_instance = get_storage()
+    try:
+        storage_job = await storage_instance.get_job(job_id)
+    except Exception as exc:
+        logger.warning("dedupe_job_lookup_failed job_id=%s error=%s", job_id, exc)
+        return None
+    if not storage_job:
+        return None
+    task_id = storage_job.get("task_id") or storage_job.get("external_task_id")
+    if task_id and job_record:
+        _update_job_record(job_id, task_id=task_id, updated_ts_ms=_now_ms())
+    if task_id:
+        await set_job_task_mapping(job_id, task_id)
+    return task_id
 
 
 def _set_user_ui_action(user_id: int, action: str, ts_ms: int) -> None:
@@ -18752,255 +18814,12 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     ).format(model_name=model_name)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
     request_key = None
-    if prompt_hash:
-        from app.generations.request_dedupe_store import (
-            DedupeEntry,
-            get_dedupe_entry,
-            set_dedupe_entry,
-            update_dedupe_entry,
-        )
-        from app.utils.distributed_lock import distributed_lock
+    task_created_event: Optional[asyncio.Event] = None
 
-        request_key = build_request_key(user_id, model_id, prompt_hash)
-        dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
-        if dedupe_entry:
-            existing_task_id = dedupe_entry.task_id
-            log_request_event(
-                request_id=request_id,
-                user_id=user_id,
-                model=model_id,
-                prompt_hash=prompt_hash,
-                task_id=dedupe_entry.task_id,
-                job_id=dedupe_entry.job_id,
-                status="deduped",
-                latency_ms=0,
-                attempt=0,
-                error_code="DUPLICATE_REQUEST",
-                error_msg="dedupe_store_hit",
-            )
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                action="CONFIRM_GENERATE",
-                action_path="confirm_generate",
-                model_id=model_id,
-                outcome="dedup_joined",
-                dedup_hit=True,
-                existing_task_id=existing_task_id,
-                job_id=dedupe_entry.job_id,
-            )
-            if dedupe_entry.status in {"completed", "finished"} and (
-                dedupe_entry.result_urls or dedupe_entry.result_text
-            ):
-                try:
-                    from app.generations.telegram_sender import send_result_file
-
-                    delivered = False
-                    if dedupe_entry.media_type and dedupe_entry.result_urls:
-                        delivered = bool(
-                            await send_result_file(
-                                context.bot,
-                                user_id,
-                                dedupe_entry.media_type,
-                                dedupe_entry.result_urls,
-                                dedupe_entry.result_text,
-                                model_id=model_id,
-                                gen_type=session.get("gen_type"),
-                                correlation_id=correlation_id,
-                                request_id=request_id,
-                                prompt_hash=prompt_hash,
-                                params=params,
-                                model_label=model_name,
-                            )
-                        )
-                    if not delivered:
-                        result_text = dedupe_entry.result_text or ""
-                        urls_text = "\n".join(dedupe_entry.result_urls or [])
-                        await send_or_edit_message(
-                            (
-                                "✅ <b>Готовый результат</b>\n\n"
-                                f"{result_text}\n{urls_text}"
-                                if user_lang == "ru"
-                                else f"✅ <b>Result</b>\n\n{result_text}\n{urls_text}"
-                            ),
-                            parse_mode="HTML",
-                            reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
-                        )
-                except Exception as exc:
-                    logger.warning("Failed to re-send deduped result: %s", exc)
-                    await send_or_edit_message(
-                        (
-                            "✅ <b>Результат готов</b>\n\n"
-                            "Нажмите «Статус», чтобы открыть список генераций."
-                            if user_lang == "ru"
-                            else "✅ <b>Result ready</b>\n\nTap Status to view your generations."
-                        ),
-                        parse_mode="HTML",
-                        reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
-                    )
-            else:
-                await send_or_edit_message(
-                    (
-                        "⏳ <b>Генерация уже идёт</b>\n\n"
-                        f"Task ID: <code>{existing_task_id or 'pending'}</code>\n"
-                        "Нажмите «Статус», чтобы посмотреть прогресс."
-                        if user_lang == "ru"
-                        else (
-                            "⏳ <b>Generation already running</b>\n\n"
-                            f"Task ID: <code>{existing_task_id or 'pending'}</code>\n"
-                            "Tap Status to view progress."
-                        )
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
-                )
-            return ConversationHandler.END
-        existing = _request_tracker.get(request_key)
-        if existing:
-            await update_dedupe_entry(
-                user_id,
-                model_id,
-                prompt_hash,
-                job_id=existing.job_id,
-                task_id=existing.task_id,
-                status="running",
-            )
-            log_request_event(
-                request_id=request_id,
-                user_id=user_id,
-                model=model_id,
-                prompt_hash=prompt_hash,
-                task_id=existing.task_id,
-                job_id=existing.job_id,
-                status="deduped",
-                latency_ms=0,
-                attempt=0,
-                error_code="DUPLICATE_REQUEST",
-                error_msg="duplicate_within_window",
-            )
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                action="CONFIRM_GENERATE",
-                action_path="confirm_generate",
-                model_id=model_id,
-                outcome="dedup_joined",
-                dedup_hit=True,
-                existing_task_id=existing.task_id,
-                job_id=existing.job_id,
-            )
-            await send_or_edit_message(
-                (
-                    "⚠️ <b>Генерация уже запущена</b>\n\n"
-                    f"Текущий Task ID: <code>{existing.task_id or 'pending'}</code>\n"
-                    "Жду результат текущей задачи."
-                    if user_lang == "ru"
-                    else (
-                        "⚠️ <b>Generation already running</b>\n\n"
-                        f"Current Task ID: <code>{existing.task_id or 'pending'}</code>\n"
-                        "Waiting for the current result."
-                    )
-                ),
-                parse_mode="HTML",
-                reply_markup=_build_generation_status_keyboard(user_lang, existing.job_id),
-            )
-            return ConversationHandler.END
-        lock_key = f"gen:{user_id}:{model_id}:{prompt_hash}"
-        async with distributed_lock(
-            lock_key,
-            ttl_seconds=180,
-            wait_seconds=12,
-            max_attempts=4,
-            backoff_base=0.5,
-            backoff_cap=2.0,
-            jitter=0.25,
-        ) as lock_result:
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                action="CONFIRM_GENERATE",
-                action_path="confirm_generate",
-                model_id=model_id,
-                lock_key=lock_key,
-                lock_wait_ms_total=lock_result.wait_ms_total,
-                lock_attempts=lock_result.attempts,
-                lock_ttl_s=lock_result.ttl_seconds,
-                lock_acquired=bool(lock_result),
-                dedup_hit=False,
-                existing_task_id=None,
-                outcome="locked_wait" if lock_result.wait_ms_total > 0 else "started",
-            )
-            if not lock_result:
-                dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
-                if dedupe_entry:
-                    await send_or_edit_message(
-                        (
-                            "⏳ <b>Генерация уже идёт</b>\n\n"
-                            f"Task ID: <code>{dedupe_entry.task_id or 'pending'}</code>\n"
-                            "Нажмите «Статус», чтобы посмотреть прогресс."
-                            if user_lang == "ru"
-                            else (
-                                "⏳ <b>Generation already running</b>\n\n"
-                                f"Task ID: <code>{dedupe_entry.task_id or 'pending'}</code>\n"
-                                "Tap Status to view progress."
-                            )
-                        ),
-                        parse_mode="HTML",
-                        reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
-                    )
-                    log_structured_event(
-                        correlation_id=correlation_id,
-                        user_id=user_id,
-                        chat_id=chat_id,
-                        action="CONFIRM_GENERATE",
-                        action_path="confirm_generate",
-                        model_id=model_id,
-                        outcome="dedup_joined",
-                        dedup_hit=True,
-                        existing_task_id=dedupe_entry.task_id,
-                        job_id=dedupe_entry.job_id,
-                    )
-                    return ConversationHandler.END
-                await send_or_edit_message(
-                    (
-                        "⏳ <b>Идёт параллельная генерация</b>\n\n"
-                        "Подождите немного или нажмите «Статус»."
-                        if user_lang == "ru"
-                        else "⏳ <b>Parallel generation in progress</b>\n\nPlease wait or tap Status."
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=_build_generation_status_keyboard(user_lang, None),
-                )
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    action="CONFIRM_GENERATE",
-                    action_path="confirm_generate",
-                    model_id=model_id,
-                    outcome="locked_timeout",
-                    lock_key=lock_key,
-                    lock_wait_ms_total=lock_result.wait_ms_total,
-                    lock_attempts=lock_result.attempts,
-                    lock_ttl_s=lock_result.ttl_seconds,
-                    lock_acquired=False,
-                    fix_hint="Идёт параллельная генерация, дождись или нажми Статус.",
-                )
-                return ConversationHandler.END
-            await set_dedupe_entry(
-                DedupeEntry(
-                    user_id=user_id,
-                    model_id=model_id,
-                    prompt_hash=prompt_hash,
-                    job_id=None,
-                    task_id=None,
-                    status="queued",
-                )
-            )
-    if not job_id:
+    async def _ensure_job_created() -> bool:
+        nonlocal job_id
+        if job_id:
+            return False
         job_id = f"job-{uuid.uuid4().hex[:12]}"
         session["job_id"] = job_id
         session["job_state"] = "queued"
@@ -19032,14 +18851,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         if request_key:
             _request_tracker.set(request_key, job_id)
-            if prompt_hash:
-                await update_dedupe_entry(
-                    user_id,
-                    model_id,
-                    prompt_hash,
-                    job_id=job_id,
-                    status="queued",
-                )
+        from app.generations.request_dedupe_store import set_job_task_mapping
+
+        await set_job_task_mapping(job_id, None)
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -19050,6 +18864,379 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             job_id=job_id,
             outcome="started",
         )
+        return True
+
+    async def _on_task_created(task_id: str) -> None:
+        nonlocal task_created_event
+        session["task_id"] = task_id
+        try:
+            from app.generations.request_dedupe_store import set_job_task_mapping, update_dedupe_entry
+
+            if job_id:
+                _update_job_record(job_id, task_id=task_id, updated_ts_ms=_now_ms())
+                await set_job_task_mapping(job_id, task_id)
+            if request_key:
+                _request_tracker.update_task_id(request_key, task_id)
+            if prompt_hash and job_id:
+                await update_dedupe_entry(
+                    user_id,
+                    model_id,
+                    prompt_hash,
+                    job_id=job_id,
+                    task_id=task_id,
+                    status="running",
+                    last_recovery_ts=time.time(),
+                )
+        except Exception as exc:
+            logger.warning("dedupe_on_task_created_failed task_id=%s error=%s", task_id, exc)
+        if task_created_event:
+            task_created_event.set()
+    if prompt_hash:
+        from app.generations.request_dedupe_store import (
+            DedupeEntry,
+            delete_dedupe_entry,
+            delete_job_task_mapping,
+            get_dedupe_entry,
+            get_task_id_for_job,
+            set_dedupe_entry,
+            set_job_task_mapping,
+            update_dedupe_entry,
+        )
+        from app.utils.distributed_lock import distributed_lock
+
+        request_key = build_request_key(user_id, model_id, prompt_hash)
+        failed_dedupe_states = {"failed", "cancelled", "canceled", "timeout", "timed_out"}
+
+        async def _mark_dedupe_broken(entry: Optional[DedupeEntry], reason: str) -> None:
+            job_id_value = entry.job_id if entry else None
+            log_request_event(
+                request_id=request_id,
+                user_id=user_id,
+                model=model_id,
+                prompt_hash=prompt_hash,
+                task_id=entry.task_id if entry else None,
+                job_id=job_id_value,
+                status="dedupe_broken",
+                latency_ms=0,
+                attempt=0,
+                error_code="DEDUPE_BROKEN",
+                error_msg=reason,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CONFIRM_GENERATE",
+                action_path="confirm_generate",
+                model_id=model_id,
+                job_id=job_id_value,
+                outcome="dedupe_broken",
+                dedup_hit=True,
+                existing_task_id=None,
+                error_code="DEDUPE_BROKEN",
+                fix_hint=reason,
+            )
+            if job_id_value:
+                await delete_job_task_mapping(job_id_value)
+            await delete_dedupe_entry(user_id, model_id, prompt_hash)
+            _request_tracker.delete(request_key)
+
+        async def _resolve_task_id_for_entry(entry: DedupeEntry) -> tuple[Optional[str], Optional[DedupeEntry]]:
+            current = entry
+            for attempt in range(max(1, DEDUPE_TASK_RESOLUTION_ATTEMPTS)):
+                status_value = (current.status or "").lower()
+                if status_value in failed_dedupe_states:
+                    return None, current
+                candidate = current.task_id
+                tracker_entry = _request_tracker.get(request_key)
+                job_id_value = current.job_id or (tracker_entry.job_id if tracker_entry else None)
+                if not candidate and tracker_entry and tracker_entry.task_id:
+                    candidate = tracker_entry.task_id
+                if not candidate and job_id_value:
+                    mapped_task_id = await get_task_id_for_job(job_id_value)
+                    candidate = mapped_task_id or await _resolve_task_id_from_job(job_id_value)
+                if candidate and job_id_value:
+                    await set_job_task_mapping(job_id_value, candidate)
+                    updated = await update_dedupe_entry(
+                        user_id,
+                        model_id,
+                        prompt_hash,
+                        job_id=job_id_value,
+                        task_id=candidate,
+                        status="running",
+                        last_recovery_ts=time.time(),
+                    )
+                    _request_tracker.update_task_id(request_key, candidate)
+                    return candidate, updated
+                if attempt < DEDUPE_TASK_RESOLUTION_ATTEMPTS - 1:
+                    await asyncio.sleep(DEDUPE_TASK_RESOLUTION_DELAY_SECONDS)
+                    refreshed = await get_dedupe_entry(user_id, model_id, prompt_hash)
+                    if refreshed:
+                        current = refreshed
+            return current.task_id, current
+        dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
+        if dedupe_entry:
+            existing_task_id, dedupe_entry = await _resolve_task_id_for_entry(dedupe_entry)
+            if not existing_task_id:
+                await _mark_dedupe_broken(dedupe_entry, "dedupe_store_missing_task_id")
+            else:
+                log_request_event(
+                    request_id=request_id,
+                    user_id=user_id,
+                    model=model_id,
+                    prompt_hash=prompt_hash,
+                    task_id=existing_task_id,
+                    job_id=dedupe_entry.job_id,
+                    status="deduped",
+                    latency_ms=0,
+                    attempt=0,
+                    error_code="DUPLICATE_REQUEST",
+                    error_msg="dedupe_store_hit",
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="CONFIRM_GENERATE",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    outcome="dedup_joined",
+                    dedup_hit=True,
+                    existing_task_id=existing_task_id,
+                    job_id=dedupe_entry.job_id,
+                )
+                if dedupe_entry.status in {"completed", "finished"} and (
+                    dedupe_entry.result_urls or dedupe_entry.result_text
+                ):
+                    try:
+                        from app.generations.telegram_sender import send_result_file
+
+                        delivered = False
+                        if dedupe_entry.media_type and dedupe_entry.result_urls:
+                            delivered = bool(
+                                await send_result_file(
+                                    context.bot,
+                                    user_id,
+                                    dedupe_entry.media_type,
+                                    dedupe_entry.result_urls,
+                                    dedupe_entry.result_text,
+                                    model_id=model_id,
+                                    gen_type=session.get("gen_type"),
+                                    correlation_id=correlation_id,
+                                    request_id=request_id,
+                                    prompt_hash=prompt_hash,
+                                    params=params,
+                                    model_label=model_name,
+                                )
+                            )
+                        if not delivered:
+                            result_text = dedupe_entry.result_text or ""
+                            urls_text = "\n".join(dedupe_entry.result_urls or [])
+                            await send_or_edit_message(
+                                (
+                                    "✅ <b>Готовый результат</b>\n\n"
+                                    f"{result_text}\n{urls_text}"
+                                    if user_lang == "ru"
+                                    else f"✅ <b>Result</b>\n\n{result_text}\n{urls_text}"
+                                ),
+                                parse_mode="HTML",
+                                reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                            )
+                    except Exception as exc:
+                        logger.warning("Failed to re-send deduped result: %s", exc)
+                        await send_or_edit_message(
+                            (
+                                "✅ <b>Результат готов</b>\n\n"
+                                "Нажмите «Статус», чтобы открыть список генераций."
+                                if user_lang == "ru"
+                                else "✅ <b>Result ready</b>\n\nTap Status to view your generations."
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                        )
+                else:
+                    await send_or_edit_message(
+                        (
+                            "⏳ <b>Генерация уже идёт</b>\n\n"
+                            f"Task ID: <code>{existing_task_id}</code>\n"
+                            "Нажмите «Статус», чтобы посмотреть прогресс."
+                            if user_lang == "ru"
+                            else (
+                                "⏳ <b>Generation already running</b>\n\n"
+                                f"Task ID: <code>{existing_task_id}</code>\n"
+                                "Tap Status to view progress."
+                            )
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                    )
+                return ConversationHandler.END
+        existing = _request_tracker.get(request_key)
+        if existing:
+            existing_task_id = existing.task_id or await _resolve_task_id_from_job(existing.job_id)
+            if not existing_task_id:
+                broken_entry = DedupeEntry(
+                    user_id=user_id,
+                    model_id=model_id,
+                    prompt_hash=prompt_hash,
+                    job_id=existing.job_id,
+                    task_id=existing.task_id,
+                    status="running",
+                )
+                await _mark_dedupe_broken(broken_entry, "request_tracker_missing_task_id")
+            else:
+                await set_job_task_mapping(existing.job_id, existing_task_id)
+                await update_dedupe_entry(
+                    user_id,
+                    model_id,
+                    prompt_hash,
+                    job_id=existing.job_id,
+                    task_id=existing_task_id,
+                    status="running",
+                    last_recovery_ts=time.time(),
+                )
+                _request_tracker.update_task_id(request_key, existing_task_id)
+                log_request_event(
+                    request_id=request_id,
+                    user_id=user_id,
+                    model=model_id,
+                    prompt_hash=prompt_hash,
+                    task_id=existing_task_id,
+                    job_id=existing.job_id,
+                    status="deduped",
+                    latency_ms=0,
+                    attempt=0,
+                    error_code="DUPLICATE_REQUEST",
+                    error_msg="duplicate_within_window",
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="CONFIRM_GENERATE",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    outcome="dedup_joined",
+                    dedup_hit=True,
+                    existing_task_id=existing_task_id,
+                    job_id=existing.job_id,
+                )
+                await send_or_edit_message(
+                    (
+                        "⚠️ <b>Генерация уже запущена</b>\n\n"
+                        f"Текущий Task ID: <code>{existing_task_id}</code>\n"
+                        "Жду результат текущей задачи."
+                        if user_lang == "ru"
+                        else (
+                            "⚠️ <b>Generation already running</b>\n\n"
+                            f"Current Task ID: <code>{existing_task_id}</code>\n"
+                            "Waiting for the current result."
+                        )
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=_build_generation_status_keyboard(user_lang, existing.job_id),
+                )
+                return ConversationHandler.END
+        lock_key = f"gen:{user_id}:{model_id}:{prompt_hash}"
+        async with distributed_lock(
+            lock_key,
+            ttl_seconds=180,
+            wait_seconds=DEDUPE_LOCK_WAIT_SECONDS,
+            max_attempts=4,
+            backoff_base=0.5,
+            backoff_cap=2.0,
+            jitter=0.25,
+        ) as lock_result:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="CONFIRM_GENERATE",
+                action_path="confirm_generate",
+                model_id=model_id,
+                lock_key=lock_key,
+                lock_wait_ms_total=lock_result.wait_ms_total,
+                lock_attempts=lock_result.attempts,
+                lock_ttl_s=lock_result.ttl_seconds,
+                lock_acquired=bool(lock_result),
+                dedup_hit=False,
+                existing_task_id=None,
+                outcome="locked_wait" if lock_result.wait_ms_total > 0 else "started",
+            )
+            if not lock_result:
+                dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
+                if dedupe_entry:
+                    existing_task_id, dedupe_entry = await _resolve_task_id_for_entry(dedupe_entry)
+                    if existing_task_id:
+                        await send_or_edit_message(
+                            (
+                                "⏳ <b>Генерация уже идёт</b>\n\n"
+                                f"Task ID: <code>{existing_task_id}</code>\n"
+                                "Нажмите «Статус», чтобы посмотреть прогресс."
+                                if user_lang == "ru"
+                                else (
+                                    "⏳ <b>Generation already running</b>\n\n"
+                                    f"Task ID: <code>{existing_task_id}</code>\n"
+                                    "Tap Status to view progress."
+                                )
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                        )
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            user_id=user_id,
+                            chat_id=chat_id,
+                            action="CONFIRM_GENERATE",
+                            action_path="confirm_generate",
+                            model_id=model_id,
+                            outcome="dedup_joined",
+                            dedup_hit=True,
+                            existing_task_id=existing_task_id,
+                            job_id=dedupe_entry.job_id,
+                        )
+                        return ConversationHandler.END
+                    await _mark_dedupe_broken(dedupe_entry, "lock_timeout_missing_task_id")
+                await send_or_edit_message(
+                    (
+                        "⏳ <b>Идёт параллельная генерация</b>\n\n"
+                        "Подождите немного или нажмите «Статус»."
+                        if user_lang == "ru"
+                        else "⏳ <b>Parallel generation in progress</b>\n\nPlease wait or tap Status."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=_build_generation_status_keyboard(user_lang, None),
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    action="CONFIRM_GENERATE",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    outcome="locked_timeout",
+                    lock_key=lock_key,
+                    lock_wait_ms_total=lock_result.wait_ms_total,
+                    lock_attempts=lock_result.attempts,
+                    lock_ttl_s=lock_result.ttl_seconds,
+                    lock_acquired=False,
+                    fix_hint="Идёт параллельная генерация, дождись или нажми Статус.",
+                )
+                return ConversationHandler.END
+            await _ensure_job_created()
+            if job_id:
+                await set_job_task_mapping(job_id, None)
+                await set_dedupe_entry(
+                    DedupeEntry(
+                        user_id=user_id,
+                        model_id=model_id,
+                        prompt_hash=prompt_hash,
+                        job_id=job_id,
+                        task_id=None,
+                        status="pending",
+                    )
+                )
+    await _ensure_job_created()
     status_keyboard = _build_generation_status_keyboard(user_lang, job_id)
     status_message = await send_or_edit_message(loading_msg, reply_markup=status_keyboard)
 
@@ -19250,10 +19437,14 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             prompt_hash=prompt_hash,
             prompt=prompt_value,
             job_id=job_id,
+            on_task_created=_on_task_created,
         )
         task_id = job_result.task_id
         session["task_id"] = task_id
         if job_id:
+            from app.generations.request_dedupe_store import set_job_task_mapping
+
+            await set_job_task_mapping(job_id, task_id)
             _update_job_record(job_id, task_id=task_id, updated_ts_ms=_now_ms())
         if request_key:
             _request_tracker.update_task_id(request_key, task_id)
@@ -19262,6 +19453,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     user_id,
                     model_id,
                     prompt_hash,
+                    job_id=job_id,
                     task_id=task_id,
                     status="running",
                 )
@@ -22107,6 +22299,7 @@ async def _run_webhook_initialization(
     await application.initialize()
     logger.info("✅ Application initialized for webhook mode")
     start_delivery_reconciler(application.bot)
+    start_dedupe_reconciler(application.bot)
 
     # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
     try:
@@ -23512,6 +23705,7 @@ async def main():
         await application.initialize()
         await application.start()
         start_delivery_reconciler(application.bot)
+        start_dedupe_reconciler(application.bot)
         
         # Регистрируем команды в меню Telegram
         logger.info("📋 Setting up bot commands menu...")
