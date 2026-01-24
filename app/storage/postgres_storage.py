@@ -18,6 +18,7 @@ import asyncpg
 
 from app.storage.base import BaseStorage
 from app.observability.trace import get_correlation_id
+from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
 
@@ -576,6 +577,7 @@ class PostgresStorage(BaseStorage):
         *,
         job_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
         sku_id: Optional[str] = None,
@@ -593,6 +595,7 @@ class PostgresStorage(BaseStorage):
         job = {
             "job_id": job_id,
             "request_id": request_id,
+            "correlation_id": correlation_id or request_id,
             "user_id": user_id,
             "model_id": model_id,
             "model_name": model_name,
@@ -632,6 +635,16 @@ class PostgresStorage(BaseStorage):
         if job_id not in data:
             raise ValueError(f"Job {job_id} not found")
         job = data[job_id]
+        current_status = str(job.get("status") or "").lower()
+        new_status = str(status or "").lower()
+        if current_status == "delivered" and new_status != "delivered":
+            logger.warning(
+                "Skipping status regression for delivered job: job_id=%s current=%s next=%s",
+                job_id,
+                current_status,
+                new_status,
+            )
+            return
         job["status"] = status
         job["updated_at"] = datetime.now().isoformat()
         if result_urls is not None:
@@ -1018,6 +1031,23 @@ class PostgresStorage(BaseStorage):
                     filename,
                     lock_duration_ms,
                     correlation_id,
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="STORAGE_LOCK",
+                    action_path="postgres_storage.update_json_file",
+                    stage="STORAGE_LOCK",
+                    outcome="acquired",
+                    lock_key=f"{self.partner_id}:{filename}",
+                    lock_wait_ms_total=lock_duration_ms,
+                    lock_attempts=1,
+                    lock_acquired=True,
+                    param={
+                        "lock_mode": "pg_advisory_xact_lock",
+                        "filename": filename,
+                        "lock_key_pair": [lock_key.key_a, lock_key.key_b],
+                    },
+                    skip_correlation_store=True,
                 )
                 row = await conn.fetchrow(
                     "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",

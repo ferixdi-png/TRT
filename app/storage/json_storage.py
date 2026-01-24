@@ -495,6 +495,7 @@ class JsonStorage(BaseStorage):
         *,
         job_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
         sku_id: Optional[str] = None,
@@ -512,6 +513,7 @@ class JsonStorage(BaseStorage):
         job = {
             'job_id': job_id,
             'request_id': request_id,
+            'correlation_id': correlation_id or request_id,
             'user_id': user_id,
             'model_id': model_id,
             'model_name': model_name,
@@ -554,6 +556,16 @@ class JsonStorage(BaseStorage):
             raise ValueError(f"Job {job_id} not found")
         
         job = data[job_id]
+        current_status = str(job.get('status') or '').lower()
+        new_status = str(status or '').lower()
+        if current_status == 'delivered' and new_status != 'delivered':
+            logger.warning(
+                "Skipping status regression for delivered job: job_id=%s current=%s next=%s",
+                job_id,
+                current_status,
+                new_status,
+            )
+            return
         job['status'] = status
         job['updated_at'] = datetime.now().isoformat()
         

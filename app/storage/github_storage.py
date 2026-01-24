@@ -22,6 +22,8 @@ import aiohttp
 from app.storage.base import BaseStorage
 from app.config_env import resolve_storage_prefix
 from app.utils.distributed_lock import distributed_lock
+from app.observability.structured_logs import log_structured_event
+from app.observability.trace import get_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -1061,6 +1063,7 @@ class GitHubStorage(BaseStorage):
         *,
         job_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
         sku_id: Optional[str] = None,
@@ -1079,6 +1082,7 @@ class GitHubStorage(BaseStorage):
             data[job_id] = {
                 "job_id": job_id,
                 "request_id": request_id,
+                "correlation_id": correlation_id or request_id,
                 "user_id": user_id,
                 "model_id": model_id,
                 "model_name": model_name,
@@ -1115,6 +1119,16 @@ class GitHubStorage(BaseStorage):
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
             job = data.get(job_id)
             if not job:
+                return data
+            current_status = str(job.get("status") or "").lower()
+            new_status = str(status or "").lower()
+            if current_status == "delivered" and new_status != "delivered":
+                logger.warning(
+                    "Skipping status regression for delivered job: job_id=%s current=%s next=%s",
+                    job_id,
+                    current_status,
+                    new_status,
+                )
                 return data
             job["status"] = status
             job["updated_at"] = datetime.now().isoformat()
@@ -1345,8 +1359,23 @@ class GitHubStorage(BaseStorage):
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
         lock = self._get_write_lock(filename)
         lock_key = f"{self.config.bot_instance_id}:{filename}"
-        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
-            if not acquired:
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as lock_result:
+            correlation_id = get_correlation_id()
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="STORAGE_LOCK",
+                action_path="github_storage.write_json_file",
+                stage="STORAGE_LOCK",
+                outcome="acquired" if lock_result else "timeout",
+                lock_key=lock_key,
+                lock_wait_ms_total=lock_result.wait_ms_total,
+                lock_attempts=lock_result.attempts,
+                lock_ttl_s=lock_result.ttl_seconds,
+                lock_acquired=bool(lock_result),
+                param={"filename": filename, "lock_mode": "distributed_lock"},
+                skip_correlation_store=True,
+            )
+            if not lock_result:
                 logger.error("[GITHUB] distributed_lock failed for %s", lock_key)
                 raise RuntimeError(f"Failed to acquire distributed lock for {filename}")
             async with lock:
@@ -1380,8 +1409,23 @@ class GitHubStorage(BaseStorage):
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
         lock_key = f"{self.config.bot_instance_id}:{filename}"
-        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as acquired:
-            if not acquired:
+        async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as lock_result:
+            correlation_id = get_correlation_id()
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="STORAGE_LOCK",
+                action_path="github_storage.update_json_file",
+                stage="STORAGE_LOCK",
+                outcome="acquired" if lock_result else "timeout",
+                lock_key=lock_key,
+                lock_wait_ms_total=lock_result.wait_ms_total,
+                lock_attempts=lock_result.attempts,
+                lock_ttl_s=lock_result.ttl_seconds,
+                lock_acquired=bool(lock_result),
+                param={"filename": filename, "lock_mode": "distributed_lock"},
+                skip_correlation_store=True,
+            )
+            if not lock_result:
                 logger.error("[GITHUB] distributed_lock failed for %s", lock_key)
                 raise RuntimeError(f"Failed to acquire distributed lock for {filename}")
             return await self._update_json(filename, update_fn)

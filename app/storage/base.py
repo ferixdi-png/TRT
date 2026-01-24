@@ -136,6 +136,7 @@ class BaseStorage(ABC):
         *,
         job_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
         prompt: Optional[str] = None,
         prompt_hash: Optional[str] = None,
         sku_id: Optional[str] = None,

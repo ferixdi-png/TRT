@@ -102,6 +102,7 @@ def test_env():
         'ADMIN_ID': '12345',
         'STORAGE_MODE': 'json',
         'BOT_INSTANCE_ID': 'test-instance',
+        'DATA_DIR': temp_dir,
     }
     
     # Сохраняем старые значения
@@ -125,10 +126,12 @@ def test_env():
     from app.storage.factory import reset_storage
     from app.generations.request_dedupe_store import reset_memory_entries
     from app.observability.dedupe_metrics import reset_metrics as reset_dedupe_metrics
+    from app.observability.correlation_store import reset_correlation_store
 
     reset_storage()
     reset_memory_entries()
     reset_dedupe_metrics()
+    reset_correlation_store()
 
     yield
     
@@ -146,6 +149,7 @@ def test_env():
         pass
 
     reset_storage()
+    reset_correlation_store()
     
     # Восстанавливаем старые значения
     for key, value in old_env.items():
