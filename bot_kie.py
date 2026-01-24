@@ -1769,6 +1769,108 @@ def _build_param_order(input_params: Dict[str, Any]) -> List[str]:
     return media_params + text_params + required_params + optional_params
 
 
+def _enum_values(param_info: Dict[str, Any]) -> List[Any]:
+    enum_values = param_info.get("enum")
+    if isinstance(enum_values, list):
+        return enum_values
+    choices = param_info.get("choices")
+    if isinstance(choices, list):
+        return choices
+    return []
+
+
+def _enum_allows(param_info: Dict[str, Any], value: Any) -> bool:
+    enum_values = _enum_values(param_info)
+    if not enum_values:
+        return True
+    candidates = [value, str(value)]
+    try:
+        candidates.append(int(value))
+    except (TypeError, ValueError):
+        pass
+    return any(candidate in enum_values for candidate in candidates)
+
+
+def _coerce_enum_value(param_info: Dict[str, Any], value: Any) -> Any:
+    enum_values = _enum_values(param_info)
+    if not enum_values:
+        return value
+    for candidate in (value, str(value)):
+        if candidate in enum_values:
+            return candidate
+    try:
+        int_value = int(value)
+    except (TypeError, ValueError):
+        int_value = None
+    if int_value is not None and int_value in enum_values:
+        return int_value
+    return value
+
+
+def _resolve_gen_type(model_spec: Optional["ModelSpec"], session_gen_type: Optional[str]) -> str:
+    spec_type = ""
+    if model_spec:
+        spec_type = str(model_spec.model_type or model_spec.model_mode or model_spec.model_category or "")
+    return (session_gen_type or spec_type or "").strip().lower()
+
+
+def _is_visual_gen_type(gen_type: str) -> bool:
+    normalized = (gen_type or "").lower()
+    if not normalized:
+        return False
+    return "image" in normalized or "video" in normalized
+
+
+def _resolve_unified_default(
+    param_name: str,
+    param_info: Dict[str, Any],
+    *,
+    model_spec: Optional["ModelSpec"],
+    session_gen_type: Optional[str],
+) -> Optional[Any]:
+    required = bool(param_info.get("required"))
+    gen_type = _resolve_gen_type(model_spec, session_gen_type)
+
+    if param_name == "seed" and not required:
+        # Seed должен оставаться опциональным и не подставляться автоматически
+        return None
+
+    desired: Optional[Any] = None
+    if param_name == "aspect_ratio" and _is_visual_gen_type(gen_type):
+        desired = "9:16"
+    elif param_name == "num_images":
+        desired = 1
+
+    if desired is not None:
+        if not _enum_allows(param_info, desired):
+            return param_info.get("default")
+        return _coerce_enum_value(param_info, desired)
+
+    return param_info.get("default")
+
+
+def _apply_unified_param_defaults(
+    input_params: Dict[str, Any],
+    *,
+    model_spec: Optional["ModelSpec"],
+    session_gen_type: Optional[str],
+) -> Dict[str, Any]:
+    for param_name, param_info in input_params.items():
+        if not isinstance(param_info, dict):
+            continue
+        default_value = _resolve_unified_default(
+            param_name,
+            param_info,
+            model_spec=model_spec,
+            session_gen_type=session_gen_type,
+        )
+        if default_value is None:
+            continue
+        if param_info.get("default") != default_value:
+            param_info["default"] = default_value
+    return input_params
+
+
 def _is_image_only_model(properties: Dict[str, Any]) -> bool:
     if not properties:
         return False
@@ -2146,8 +2248,17 @@ active_generations_lock = asyncio.Lock()
 active_generation_tasks: Dict[int, asyncio.Task] = {}
 active_generation_tasks_lock = asyncio.Lock()
 
-ACTIVE_JOB_STATES_TERMINAL = {"cancelled", "finished", "failed", "timed_out"}
-ACTIVE_JOB_STATES_ACTIVE = {"queued", "running", "cancel_requested"}
+ACTIVE_JOB_STATES_TERMINAL = {"cancelled", "finished", "failed", "timed_out", "delivered"}
+ACTIVE_JOB_STATES_ACTIVE = {
+    "queued",
+    "waiting",
+    "success",
+    "result_validated",
+    "tg_deliver",
+    "delivery_pending",
+    "running",
+    "cancel_requested",
+}
 
 
 def _now_ms() -> int:
@@ -3579,7 +3690,7 @@ def _recover_jobs_on_startup() -> None:
     updated = False
     for job_id, record in data.items():
         state = record.get("state")
-        if state not in {"running", "cancel_requested"}:
+        if state not in ACTIVE_JOB_STATES_ACTIVE:
             continue
         increment_metric("worker_restart_detected_total")
         start_ts = record.get("start_ts_ms") or now_ms
@@ -3609,6 +3720,125 @@ def _recover_jobs_on_startup() -> None:
         _save_jobs_registry(data)
 
 
+async def _build_referral_info_text(user_id: int, user_lang: str) -> tuple[str, dict]:
+    """Build referral info payload and metrics for structured logging."""
+    referral_link = get_user_referral_link(user_id)
+    stats = await get_referral_stats(user_id)
+    remaining_free = await get_user_free_generations_remaining(user_id)
+
+    def _format_stat(value: int) -> str:
+        return str(value) if value > 0 else "—"
+
+    invited_count = int(stats.get("invited", 0))
+    activated_count = int(stats.get("activated", 0))
+    bonus_total = int(stats.get("bonus_total", 0))
+    bonus_total_display = _format_stat(bonus_total)
+
+    referral_text = (
+        f'{t("msg_referral_title", lang=user_lang)}\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'{t("msg_referral_how_it_works", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'{t("msg_referral_stats", lang=user_lang, invited=_format_stat(invited_count), activated=_format_stat(activated_count), bonus_total=bonus_total_display, remaining=remaining_free)}\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'{t("msg_referral_important", lang=user_lang)}\n\n'
+        f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        f'{t("msg_referral_link_title", lang=user_lang)}\n\n'
+        f'<code>{referral_link}</code>\n\n'
+        f'📋 <i>Нажмите на ссылку выше, чтобы скопировать</i>\n\n'
+        f'{t("msg_referral_send", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}'
+    )
+    metrics = {
+        "invited": invited_count,
+        "activated": activated_count,
+        "bonus_total": bonus_total,
+        "remaining_free": remaining_free,
+    }
+    return referral_text, metrics
+
+
+async def handle_referral_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Route handler for the referral/partner button with safe fallback."""
+    correlation_id = ensure_correlation_id(update, context)
+    query = update.callback_query if update else None
+    if not query or not query.from_user:
+        return ConversationHandler.END
+    user_id = query.from_user.id
+    user_lang = get_user_language(user_id)
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update and update.effective_chat else None,
+        action="REFERRAL_INFO",
+        action_path="handle_referral_info",
+        outcome="start",
+    )
+    try:
+        try:
+            await query.answer()
+        except Exception:
+            pass
+        reset_session_on_navigation(user_id, reason="referral_info")
+        referral_text, metrics = await _build_referral_info_text(user_id, user_lang)
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(t("btn_back_to_menu", lang=user_lang), callback_data="back_to_menu")]]
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update and update.effective_chat else None,
+            action="REFERRAL_LINK_SHOWN",
+            action_path="ui:referral_info",
+            outcome="shown",
+            param={
+                "referrer_id": user_id,
+                "bonus_value": REFERRAL_BONUS_GENERATIONS,
+                **metrics,
+            },
+        )
+        try:
+            await query.edit_message_text(
+                referral_text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+        except Exception as exc:
+            logger.warning("referral_info_edit_failed user_id=%s error=%s", user_id, exc)
+            await query.message.reply_text(
+                referral_text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+        return ConversationHandler.END
+    except Exception as exc:
+        logger.error("referral_info_failed user_id=%s error=%s", user_id, exc, exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update and update.effective_chat else None,
+            action="REFERRAL_INFO",
+            action_path="handle_referral_info",
+            outcome="failed",
+            error_code="REFERRAL_INFO_FAILED",
+            fix_hint=str(exc),
+        )
+        try:
+            fallback_text = build_error_message(correlation_id, lang=user_lang)
+            await query.answer(fallback_text.replace("<b>", "").replace("</b>", ""), show_alert=False)
+        except Exception:
+            pass
+        try:
+            await ensure_main_menu(
+                update,
+                context,
+                source="referral_info_fallback",
+                prefer_edit=True,
+            )
+        except Exception:
+            pass
+        return ConversationHandler.END
+
+
 async def _check_and_deliver_pending_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Check for timed-out/running jobs and attempt late delivery."""
     user_id = update.effective_user.id if update and update.effective_user else None
@@ -3622,12 +3852,24 @@ async def _check_and_deliver_pending_results(update: Update, context: ContextTyp
     from app.storage import get_storage
     from app.integrations.kie_stub import get_kie_client_or_stub
     from app.delivery.reconciler import deliver_job_result
+    from app.generations.state_machine import normalize_provider_state
 
     storage = get_storage()
     jobs = await storage.list_jobs(user_id=user_id, limit=10)
     pending_jobs = [
         job for job in jobs
-        if job.get("status") in {"timeout", "queued", "running", "pending"}
+        if job.get("status")
+        in {
+            "timeout",
+            "pending",
+            "queued",
+            "waiting",
+            "success",
+            "result_validated",
+            "tg_deliver",
+            "delivery_pending",
+            "running",
+        }
     ]
     if not pending_jobs:
         return
@@ -3636,37 +3878,29 @@ async def _check_and_deliver_pending_results(update: Update, context: ContextTyp
         task_id = job.get("task_id") or job.get("external_task_id")
         if not task_id:
             continue
+        correlation_id = job.get("correlation_id") or job.get("request_id")
         try:
-            status = await client.get_task_status(task_id)
+            status = await client.get_task_status(task_id, correlation_id=correlation_id)
         except Exception:
             continue
-        state_raw = status.get("state") or ""
-        state = state_raw.lower()
-        if state in {"success", "completed", "succeeded"}:
-            status["taskId"] = task_id
-            delivered = await deliver_job_result(
+        resolution = normalize_provider_state(status.get("state"))
+        state = resolution.canonical_state
+        status["_raw_state"] = resolution.raw_state
+        status["state"] = state
+        status["taskId"] = task_id
+        if state == "success":
+            await deliver_job_result(
                 context.bot,
                 storage,
                 job=job,
                 status_record=status,
                 notify_user=True,
                 source="pending_result_check",
+                get_user_language=get_user_language,
             )
-            if delivered:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="✅ <b>Готово</b>",
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [InlineKeyboardButton("🔁 Повторить", callback_data="retry_generate:")],
-                            [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")],
-                        ]
-                    ),
-                )
-        elif state in {"failed", "fail", "error", "canceled", "cancelled", "canceled"}:
+        elif state in {"failed", "canceled"}:
             await storage.update_job_status(
-                job.get("job_id"),
+                job.get("job_id") or task_id,
                 "failed",
                 error_message=status.get("failMsg"),
                 error_code=status.get("failCode") or "KIE_FAIL_STATE",
@@ -8315,6 +8549,11 @@ async def _button_callback_impl(
                 )
             else:
                 required_params = [p for p, info in input_params.items() if info.get('required', False)]
+            input_params = _apply_unified_param_defaults(
+                input_params,
+                model_spec=model_spec,
+                session_gen_type=session.get("gen_type") or model_info.get("generation_type"),
+            )
             
             if not input_params:
                 # If no params defined, ask for simple text input
@@ -8335,6 +8574,9 @@ async def _button_callback_impl(
             session['required_forced_media'] = forced_media_required
             session['skipped_params'] = set()
             session['current_param'] = None
+            if model_spec:
+                session['model_type'] = model_spec.model_type or model_spec.model_mode
+                session['model_mode'] = model_spec.model_mode
             # NOTE: model_id and model_info are already stored above at lines 8449-8450
             
             primary_input = _determine_primary_input(model_info, input_params)
@@ -9807,13 +10049,22 @@ async def _button_callback_impl(
             param_order = session.get('param_order', list(properties.keys()))
             skipped_params = session.get('skipped_params', set())
             user_lang = get_user_language(user_id)
+            from app.kie_catalog import get_model
+
+            model_spec = session.get("model_spec") or get_model(session.get("model_id"))
+            session_gen_type = session.get("gen_type") or (model_spec.model_type if model_spec else None)
             keyboard = []
 
             for param_name in param_order:
                 if param_name not in properties:
                     continue
                 param_info = properties.get(param_name, {})
-                default_value = param_info.get('default')
+                default_value = _resolve_unified_default(
+                    param_name,
+                    param_info,
+                    model_spec=model_spec,
+                    session_gen_type=session_gen_type,
+                )
                 if param_name in params:
                     value_text = str(params[param_name])
                 elif param_name in skipped_params:
@@ -11856,78 +12107,7 @@ async def _button_callback_impl(
             return ConversationHandler.END
         
         if data == "referral_info":
-            # Answer callback immediately to show button was pressed
-            try:
-                await query.answer()
-            except:
-                pass
-            reset_session_on_navigation(user_id, reason="referral_info")
-            
-            # Show referral information
-            referral_link = get_user_referral_link(user_id)
-            stats = await get_referral_stats(user_id)
-            remaining_free = await get_user_free_generations_remaining(user_id)
-            
-            user_lang = get_user_language(user_id)
-
-            def _format_stat(value: int) -> str:
-                return str(value) if value > 0 else "—"
-
-            invited_count = int(stats.get("invited", 0))
-            activated_count = int(stats.get("activated", 0))
-            bonus_total = int(stats.get("bonus_total", 0))
-            bonus_total_display = _format_stat(bonus_total)
-            
-            referral_text = (
-                f'{t("msg_referral_title", lang=user_lang)}\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'{t("msg_referral_how_it_works", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'{t("msg_referral_stats", lang=user_lang, invited=_format_stat(invited_count), activated=_format_stat(activated_count), bonus_total=bonus_total_display, remaining=remaining_free)}\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'{t("msg_referral_important", lang=user_lang)}\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'{t("msg_referral_link_title", lang=user_lang)}\n\n'
-                f'<code>{referral_link}</code>\n\n'
-                f'📋 <i>Нажмите на ссылку выше, чтобы скопировать</i>\n\n'
-                f'{t("msg_referral_send", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}'
-            )
-            keyboard = [
-                [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
-            ]
-
-            log_structured_event(
-                correlation_id=get_correlation_id(),
-                user_id=user_id,
-                action="REFERRAL_LINK_SHOWN",
-                action_path="ui:referral_info",
-                outcome="shown",
-                param={
-                    "referrer_id": user_id,
-                    "invited": invited_count,
-                    "activated": activated_count,
-                    "bonus_total": bonus_total,
-                    "bonus_value": REFERRAL_BONUS_GENERATIONS,
-                },
-            )
-            
-            try:
-                await query.edit_message_text(
-                    referral_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except Exception as e:
-                logger.error(f"Error editing message in referral_info: {e}", exc_info=True)
-                try:
-                    await query.message.reply_text(
-                        referral_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                except:
-                    pass
-            return ConversationHandler.END
+            return await handle_referral_info(update, context)
         
         if data == "my_generations":
             # Answer callback immediately to show button was pressed
@@ -13319,12 +13499,29 @@ async def _button_callback_impl(
                 return ConversationHandler.END
 
             session = ensure_session_cached(context, session_store, user_id, update_id)
+            session_gen_type = _resolve_session_gen_type(session, None)
+            model_gen_type = _derive_model_gen_type(model_spec)
+            registry_gen_type = session.get("gen_type") or session_gen_type
             registry_entry = await _get_registry_model_entry(
                 model_id,
                 correlation_id=correlation_id,
                 user_id=user_id,
-                gen_type=session.get("gen_type"),
+                gen_type=registry_gen_type,
             )
+            if not registry_entry and model_gen_type and registry_gen_type != model_gen_type:
+                registry_entry = await _get_registry_model_entry(
+                    model_id,
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    gen_type=model_gen_type,
+                )
+            if not registry_entry and registry_gen_type is not None:
+                registry_entry = await _get_registry_model_entry(
+                    model_id,
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    gen_type=None,
+                )
             registry_kie_model = registry_entry.get("kie_model") if registry_entry else None
             if not registry_entry or (
                 registry_kie_model and registry_kie_model != model_spec.kie_model
@@ -13364,8 +13561,6 @@ async def _button_callback_impl(
                     await _safe_edit_or_reply(query, notice_text, reply_markup=reply_markup)
                 return ConversationHandler.END
 
-            session_gen_type = _resolve_session_gen_type(session, None)
-            model_gen_type = _derive_model_gen_type(model_spec)
             if session_gen_type and model_gen_type and session_gen_type != model_gen_type:
                 log_structured_event(
                     correlation_id=correlation_id,
@@ -13388,6 +13583,13 @@ async def _button_callback_impl(
 
             mode_index = user_sessions.get(user_id, {}).get("mode_index")
             if model_spec.modes and len(model_spec.modes) > 1 and mode_index is None:
+                session["model_id"] = model_id
+                session["model_info"] = model_info
+                session["active_model_id"] = model_id
+                if model_gen_type:
+                    session["active_gen_type"] = model_gen_type
+                    session["gen_type"] = model_gen_type
+                session["waiting_for"] = "mode_index"
                 user_lang = get_user_language(user_id)
                 model_name = model_info.get("name", model_id)
                 await query.edit_message_text(
@@ -13641,6 +13843,11 @@ async def _button_callback_impl(
                 list(input_params.keys()),
                 user_id,
             )
+            input_params = _apply_unified_param_defaults(
+                input_params,
+                model_spec=model_spec,
+                session_gen_type=session.get("gen_type") or model_spec.model_type,
+            )
 
             # Store session data
             session['params'] = {}
@@ -13649,6 +13856,8 @@ async def _button_callback_impl(
             session['required_original'] = (model_spec.schema_required or []).copy()
             session['required_forced_media'] = forced_media_required
             session['current_param'] = None
+            session['model_type'] = model_spec.model_type or model_spec.model_mode
+            session['model_mode'] = model_spec.model_mode
             session['param_history'] = []
             session['model_spec'] = model_spec
             session['param_order'] = _build_param_order(input_params)
@@ -17405,13 +17614,22 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                 params = session.get('params', {})
                 properties = session.get('properties', {})
                 model_info = session.get('model_info', {})
-                input_params = model_info.get('input_params', {})
+                from app.kie_catalog import get_model
+
+                model_spec = session.get("model_spec") or (get_model(model_id) if model_id else None)
+                session_gen_type = session.get("gen_type") or (model_spec.model_type if model_spec else None)
+                input_params = properties or model_info.get('input_params', {})
                 
                 # CRITICAL: Apply default values BEFORE checking missing parameters
                 # This ensures parameters with default values are automatically applied
                 for param_name, param_info in input_params.items():
                     if param_name not in params:
-                        default_value = param_info.get('default')
+                        default_value = _resolve_unified_default(
+                            param_name,
+                            param_info,
+                            model_spec=model_spec,
+                            session_gen_type=session_gen_type,
+                        )
                         if default_value is not None:
                             params[param_name] = default_value
                             logger.info(f"✅ Applied default value for {param_name}={default_value} for {model_id}")
@@ -18922,9 +19140,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             existing_status = str(record.get("status") or "").lower()
             if existing_status in {"delivered", "completed"} and status_value in {
                 "queued",
-                "running",
+                "waiting",
+                "success",
+                "result_validated",
+                "tg_deliver",
                 "timeout",
                 "delivery_pending",
+                "running",
             }:
                 next_status = existing_status
             else:
@@ -18973,7 +19195,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             existing = next_data.get(delivery_key, {})
             record = dict(existing) if isinstance(existing, dict) else {}
             existing_status = str(record.get("status") or "").lower()
-            pending_transition = status_value in {"queued", "running", "timeout", "delivery_pending"}
+            pending_transition = status_value in {
+                "queued",
+                "waiting",
+                "success",
+                "result_validated",
+                "tg_deliver",
+                "timeout",
+                "delivery_pending",
+                "running",
+            }
             if existing_status == "delivered":
                 already_delivered = True
                 next_status = "delivered"
@@ -19167,7 +19398,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     prompt_hash,
                     job_id=job_id,
                     task_id=task_id,
-                    status="running",
+                    status="task_created",
+                    request_id=request_id,
                     last_recovery_ts=time.time(),
                 )
         except Exception as exc:
@@ -19190,6 +19422,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             delete_dedupe_entry,
             delete_job_task_mapping,
             get_dedupe_entry,
+            get_dedupe_entry_by_request_id,
             get_task_id_for_job,
             set_dedupe_entry,
             set_job_task_mapping,
@@ -19254,6 +19487,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 job_id=effective_job_id,
                 task_id=task_id_value,
                 status=status_value,
+                request_id=request_id,
                 last_recovery_ts=time.time(),
             )
             return effective_job_id
@@ -19315,7 +19549,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         prompt_hash,
                         job_id=job_id_value,
                         task_id=candidate,
-                        status="running",
+                        status="waiting",
+                        request_id=request_id,
                         last_recovery_ts=time.time(),
                     )
                     _request_tracker.update_task_id(request_key, candidate)
@@ -19326,7 +19561,41 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     if refreshed:
                         current = refreshed
             return current.task_id, current
-        dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
+        dedupe_entry = await get_dedupe_entry_by_request_id(request_id)
+        if dedupe_entry and (
+            dedupe_entry.prompt_hash != prompt_hash or dedupe_entry.model_id != model_id
+        ):
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="DEDUPE_REQUEST_ID",
+                action_path="confirm_generate",
+                model_id=model_id,
+                outcome="mismatch",
+                param={
+                    "mapped_model_id": dedupe_entry.model_id,
+                    "mapped_prompt_hash": dedupe_entry.prompt_hash,
+                    "current_prompt_hash": prompt_hash,
+                },
+            )
+            dedupe_entry = None
+        if not dedupe_entry:
+            dedupe_entry = await get_dedupe_entry(user_id, model_id, prompt_hash)
+        elif dedupe_entry.task_id or dedupe_entry.job_id:
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                action="DEDUPE_REQUEST_ID",
+                action_path="confirm_generate",
+                model_id=model_id,
+                job_id=dedupe_entry.job_id,
+                existing_task_id=dedupe_entry.task_id,
+                outcome="hit",
+            )
         if dedupe_entry:
             existing_task_id, dedupe_entry = await _resolve_task_id_for_entry(dedupe_entry)
             if not existing_task_id:
@@ -19361,19 +19630,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 effective_job_id = await _bind_existing_task(
                     task_id_value=existing_task_id,
                     job_id_value=dedupe_entry.job_id,
-                    status_value="running",
+                    status_value="waiting",
                 )
                 if effective_job_id:
                     dedupe_entry.job_id = effective_job_id
                 await _persist_delivery_tracking(
                     task_id_value=existing_task_id,
                     job_id_value=dedupe_entry.job_id,
-                    status_value="running",
+                    status_value="waiting",
                     message_id_value=None,
                     dedup_join=True,
                 )
                 status_keyboard = _build_generation_status_keyboard(user_lang, dedupe_entry.job_id)
-                if dedupe_entry.status in {"completed", "finished"} and (
+                if dedupe_entry.status in {"success", "result_validated", "completed", "finished", "delivered"} and (
                     dedupe_entry.result_urls or dedupe_entry.result_text
                 ):
                     try:
@@ -19434,7 +19703,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     await _persist_delivery_tracking(
                         task_id_value=existing_task_id,
                         job_id_value=dedupe_entry.job_id,
-                        status_value="running",
+                        status_value="waiting",
                         message_id_value=accept_message.message_id if accept_message else None,
                         dedup_join=True,
                     )
@@ -19449,20 +19718,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     prompt_hash=prompt_hash,
                     job_id=existing.job_id,
                     task_id=existing.task_id,
-                    status="running",
+                    status="waiting",
+                    request_id=request_id,
                 )
                 await _mark_dedupe_broken(broken_entry, "request_tracker_missing_task_id")
             else:
                 effective_job_id = await _bind_existing_task(
                     task_id_value=existing_task_id,
                     job_id_value=existing.job_id,
-                    status_value="running",
+                    status_value="waiting",
                 )
                 job_id_value = effective_job_id or existing.job_id
                 await _persist_delivery_tracking(
                     task_id_value=existing_task_id,
                     job_id_value=job_id_value,
-                    status_value="running",
+                    status_value="waiting",
                     message_id_value=None,
                     dedup_join=True,
                 )
@@ -19501,7 +19771,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await _persist_delivery_tracking(
                     task_id_value=existing_task_id,
                     job_id_value=job_id_value,
-                    status_value="running",
+                    status_value="waiting",
                     message_id_value=accept_message.message_id if accept_message else None,
                     dedup_join=True,
                 )
@@ -19542,7 +19812,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         effective_job_id = await _bind_existing_task(
                             task_id_value=existing_task_id,
                             job_id_value=dedupe_entry.job_id,
-                            status_value="running",
+                            status_value="waiting",
                         )
                         job_id_value = effective_job_id or dedupe_entry.job_id
                         if effective_job_id:
@@ -19550,7 +19820,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         await _persist_delivery_tracking(
                             task_id_value=existing_task_id,
                             job_id_value=job_id_value,
-                            status_value="running",
+                            status_value="waiting",
                             message_id_value=None,
                             dedup_join=True,
                         )
@@ -19563,7 +19833,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         await _persist_delivery_tracking(
                             task_id_value=existing_task_id,
                             job_id_value=job_id_value,
-                            status_value="running",
+                            status_value="waiting",
                             message_id_value=accept_message.message_id if accept_message else None,
                             dedup_join=True,
                         )
@@ -19619,7 +19889,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         prompt_hash=prompt_hash,
                         job_id=job_id,
                         task_id=None,
-                        status="pending",
+                        status="create_start",
+                        request_id=request_id,
                     )
                 )
     await _ensure_job_created()
@@ -19631,6 +19902,14 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         task_id_value=session.get("task_id"),
         status_value="queued",
         message_id_value=status_message_id,
+    )
+
+    from app.generations.user_messages import (
+        build_delivery_message,
+        build_error_message,
+        build_queued_message,
+        build_start_message,
+        build_waiting_message,
     )
 
     # Progress tracking state
@@ -19657,57 +19936,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         # Build progress message based on stage
         if stage == "KIE_CREATE":
-            if user_lang == "ru":
-                progress_msg = (
-                    "🚀 <b>Генерация началась…</b>\n\n"
-                    f"🤖 <b>Модель:</b> {model_name}\n"
-                    "⏳ Создаю задачу в KIE AI..."
-                )
-            else:
-                progress_msg = (
-                    "🚀 <b>Generation started…</b>\n\n"
-                    f"🤖 <b>Model:</b> {model_name}\n"
-                    "⏳ Creating task in KIE AI..."
-                )
+            progress_msg = build_start_message(model_name, correlation_id, lang=user_lang)
         elif stage == "KIE_POLL":
-            elapsed = int(event.get("elapsed") or 0)
             state_raw = event.get("state") or ""
-            retry_count = int(event.get("retry_count") or 0)
-            status_line = ""
-            retry_line = ""
-            if state_raw:
-                status_label = "📊 Статус" if user_lang == "ru" else "📊 Status"
-                status_line = f"\n{status_label}: {state_raw}"
-            if retry_count:
-                retry_label = "🔁 Повтор" if user_lang == "ru" else "🔁 Retry"
-                retry_line = f"\n{retry_label}: {retry_count}"
-            if user_lang == "ru":
-                progress_msg = (
-                    "⚙️ <b>Готовлю результат…</b>\n\n"
-                    f"🤖 <b>Модель:</b> {model_name}\n"
-                    f"⏱️ Прошло: {elapsed} сек{status_line}{retry_line}\n"
-                    "💡 Обрабатываю ваш запрос..."
-                )
-            else:
-                progress_msg = (
-                    "⚙️ <b>Preparing result…</b>\n\n"
-                    f"🤖 <b>Model:</b> {model_name}\n"
-                    f"⏱️ Elapsed: {elapsed}s{status_line}{retry_line}\n"
-                    "💡 Processing your request..."
-                )
+            progress_msg = build_waiting_message(
+                model_name,
+                correlation_id,
+                lang=user_lang,
+                state_hint=state_raw or None,
+            )
         elif stage == "KIE_COMPLETE":
-            if user_lang == "ru":
-                progress_msg = (
-                    "📤 <b>Отправляю файл…</b>\n\n"
-                    f"🤖 <b>Модель:</b> {model_name}\n"
-                    "✅ Генерация завершена, загружаю результат..."
-                )
-            else:
-                progress_msg = (
-                    "📤 <b>Sending file…</b>\n\n"
-                    f"🤖 <b>Model:</b> {model_name}\n"
-                    "✅ Generation complete, uploading result..."
-                )
+            progress_msg = build_delivery_message(model_name, correlation_id, lang=user_lang)
         else:
             return
         
@@ -19776,7 +20015,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     model_id,
                     prompt_hash,
                     task_id=task_id,
-                    status="completed",
+                    status="delivered",
+                    request_id=request_id,
                     media_type="video" if is_video else "image",
                     result_urls=[mock_url],
                 )
@@ -19794,7 +20034,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             outcome="start",
         )
         log_task_lifecycle(
-            state="running",
+            state="create_start",
             user_id=user_id,
             task_id=session.get("task_id"),
             job_id=job_id,
@@ -19804,8 +20044,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         if job_id:
             state_before = session.get("job_state")
-            session["job_state"] = "running"
-            _update_job_record(job_id, state="running", updated_ts_ms=_now_ms())
+            session["job_state"] = "create_start"
+            _update_job_record(job_id, state="create_start", updated_ts_ms=_now_ms())
             _log_job_state_update(
                 correlation_id=correlation_id,
                 update_id=update.update_id,
@@ -19816,7 +20056,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 callback_data=query.data if query else None,
                 job_id=job_id,
                 state_before=state_before,
-                state_after="running",
+                state_after="create_start",
             )
         job_result = await run_generation(
             user_id,
@@ -19855,7 +20095,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     prompt_hash,
                     job_id=job_id,
                     task_id=task_id,
-                    status="running",
+                    status="queued",
+                    request_id=request_id,
                 )
 
         if user_id not in saved_generations:
@@ -19877,7 +20118,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             message_id_value=status_message_id,
         )
         accept_message = await send_or_edit_message(
-            _build_accept_text(task_id),
+            build_queued_message(model_name, correlation_id, lang=user_lang),
             parse_mode="HTML",
             reply_markup=status_keyboard,
         )
@@ -19924,6 +20165,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             error_code=None,
             error_msg=None,
             correlation_id=correlation_id,
+        )
+        log_task_lifecycle(
+            state="queued",
+            user_id=user_id,
+            task_id=task_id,
+            job_id=job_id,
+            model_id=model_id,
+            correlation_id=correlation_id,
+            source="confirm_generate",
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20028,7 +20278,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 try:
                     await storage_instance.update_job_status(
                         job_id,
-                        "completed",
+                        "delivered",
                         result_urls=job_result.urls,
                     )
                 except Exception as storage_exc:
@@ -20039,7 +20289,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         model_id,
                         prompt_hash,
                         task_id=job_result.task_id,
-                        status="completed",
+                        status="delivered",
+                        request_id=request_id,
                         media_type=job_result.media_type,
                         result_urls=job_result.urls,
                         result_text=job_result.text,
@@ -20257,6 +20508,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=session.get("task_id"),
                 job_id=job_id,
                 status="failed",
+                request_id=request_id,
             )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20425,6 +20677,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=session.get("task_id"),
                 job_id=job_id,
                 status="timed_out",
+                request_id=request_id,
             )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20539,6 +20792,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=session.get("task_id"),
                 job_id=job_id,
                 status="failed",
+                request_id=request_id,
             )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20638,6 +20892,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=session.get("task_id"),
                 job_id=job_id,
                 status="failed",
+                request_id=request_id,
             )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20747,6 +21002,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=session.get("task_id"),
                 job_id=job_id,
                 status="cancelled",
+                request_id=request_id,
             )
         now_ms = _now_ms()
         job_record = _get_job_record(job_id)
@@ -20793,6 +21049,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 task_id=session.get("task_id"),
                 job_id=job_id,
                 status="failed",
+                request_id=request_id,
             )
         log_structured_event(
             correlation_id=correlation_id,

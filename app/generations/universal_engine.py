@@ -20,6 +20,8 @@ from app.observability.task_lifecycle import log_task_lifecycle
 from app.observability.request_logger import log_request_event
 from app.observability.error_catalog import ERROR_CATALOG
 from app.observability.correlation_store import register_correlation_ids
+from app.generations.state_machine import normalize_provider_state
+from app.observability.generation_metrics import record_create_latency, record_wait_latency
 from app.kie_catalog import get_model_map, ModelSpec
 from app.kie_contract.payload_builder import build_kie_payload, PayloadBuildError
 from app.utils.url_normalizer import normalize_result_urls, ResultUrlNormalizationError
@@ -458,20 +460,8 @@ def parse_record_info(
 
 
 def _normalize_kie_state(raw_state: Optional[str]) -> str:
-    if not raw_state:
-        return "unknown"
-    state = raw_state.lower()
-    if state in {"success", "completed", "succeeded"}:
-        return "succeeded"
-    if state in {"failed", "fail", "error"}:
-        return "failed"
-    if state in {"cancel", "cancelled", "canceled"}:
-        return "canceled"
-    if state in {"pending", "queued", "waiting", "queuing"}:
-        return "queued"
-    if state in {"processing", "running", "generating"}:
-        return "running"
-    return "unknown"
+    resolution = normalize_provider_state(raw_state)
+    return resolution.canonical_state
 
 
 def _guess_media_type_from_url(url: str) -> Optional[str]:
@@ -513,6 +503,7 @@ async def _validate_result_urls(
     prompt_hash: Optional[str],
     task_id: Optional[str],
     job_id: Optional[str],
+    correlation_id: Optional[str] = None,
     timeout_s: float = 12.0,
 ) -> None:
     if not urls:
@@ -550,6 +541,7 @@ async def _validate_result_urls(
                         attempt=None,
                         error_code=None,
                         error_msg=None,
+                        correlation_id=correlation_id,
                     )
                     return
             except Exception as exc:
@@ -672,7 +664,11 @@ async def wait_job_result(
         record["taskId"] = task_id
         record["elapsed"] = elapsed
         raw_state = record.get("state")
-        state = _normalize_kie_state(raw_state)
+        resolution = normalize_provider_state(raw_state)
+        state = resolution.canonical_state
+        raw_state_norm = resolution.raw_state or (raw_state or "")
+        record["_raw_state"] = raw_state_norm
+        record["state"] = state
         log_request_event(
             request_id=request_id,
             user_id=user_id,
@@ -711,7 +707,7 @@ async def wait_job_result(
             poll_attempt=attempt,
             poll_latency_ms=poll_latency_ms,
             total_wait_ms=int(elapsed * 1000),
-            task_state=raw_state,
+            task_state=raw_state_norm,
             retry_count=retry_count,
         )
 
@@ -722,7 +718,7 @@ async def wait_job_result(
                     {
                         "stage": "KIE_POLL",
                         "task_id": task_id,
-                        "state": raw_state,
+                        "state": raw_state_norm,
                         "elapsed": elapsed,
                         "poll_attempt": attempt,
                         "retry_count": retry_count,
@@ -747,7 +743,7 @@ async def wait_job_result(
                 correlation_id=record.get("correlation_id") or correlation_id,
             )
 
-        if raw_state and raw_state.lower() == "waiting":
+        if raw_state_norm == "waiting":
             if waiting_since is None:
                 waiting_since = time.monotonic()
             waiting_elapsed = time.monotonic() - waiting_since
@@ -768,7 +764,7 @@ async def wait_job_result(
                     poll_attempt=attempt,
                     poll_latency_ms=poll_latency_ms,
                     total_wait_ms=int(elapsed * 1000),
-                    task_state=raw_state,
+                    task_state=raw_state_norm,
                     retry_count=retry_count,
                 )
                 task_id = retry_task_id
@@ -791,27 +787,45 @@ async def wait_job_result(
         else:
             waiting_since = None
 
-        if state in {"queued", "running"}:
+        if state in {"queued", "waiting"}:
             if storage and job_id:
                 await storage.update_job_status(job_id, state)
             await asyncio.sleep(delay + random.uniform(0, delay * 0.2))
             delay = min(max_delay, delay * 2)
             continue
 
-        if state == "succeeded":
+        if state == "success":
             urls = _extract_urls(record, _parse_result_json(record.get("resultJson")))
+            record_wait_latency(int(elapsed * 1000))
+            if storage and job_id:
+                await storage.update_job_status(job_id, "success", result_urls=urls)
+            validate_params = inspect.signature(validate_result_fn).parameters
+            validate_kwargs: Dict[str, Any] = {
+                "media_type": None,
+                "request_id": request_id,
+                "user_id": user_id,
+                "model_id": model_id,
+                "prompt_hash": prompt_hash,
+                "task_id": task_id,
+                "job_id": job_id,
+            }
+            if "correlation_id" in validate_params:
+                validate_kwargs["correlation_id"] = correlation_id
             await validate_result_fn(
                 urls,
-                media_type=None,
-                request_id=request_id,
-                user_id=user_id,
-                model_id=model_id,
-                prompt_hash=prompt_hash,
-                task_id=task_id,
-                job_id=job_id,
+                **validate_kwargs,
             )
             if storage and job_id:
-                await storage.update_job_status(job_id, "succeeded", result_urls=urls)
+                await storage.update_job_status(job_id, "result_validated", result_urls=urls)
+            log_task_lifecycle(
+                state="success",
+                user_id=user_id,
+                task_id=task_id,
+                job_id=job_id,
+                model_id=model_id,
+                correlation_id=correlation_id,
+                source="universal_engine.wait_job_result",
+            )
             log_task_lifecycle(
                 state="done",
                 user_id=user_id,
@@ -821,6 +835,7 @@ async def wait_job_result(
                 correlation_id=correlation_id,
                 source="universal_engine.wait_job_result",
             )
+            record["result_validated"] = True
             return record
 
         if state == "failed":
@@ -1073,6 +1088,7 @@ async def run_generation(
             error_msg=None,
             correlation_id=correlation_id,
         )
+        record_create_latency(create_duration_ms)
         log_task_lifecycle(
             state="created",
             user_id=user_id,
@@ -1352,7 +1368,7 @@ async def run_generation(
             )
         if progress_callback:
             await progress_callback({"stage": "KIE_DONE", "task_id": task_id, "state": state})
-        if state not in {"success", "completed"}:
+        if state not in {"success", "result_validated", "completed"}:
             fail_code = record.get("failCode")
             fail_msg = record.get("failMsg") or record.get("errorMessage")
             if correlation_id:
@@ -1410,16 +1426,20 @@ async def run_generation(
                 correlation_id=correlation_id,
                 base_url=base_url,
             )
-            await _validate_result_urls(
-                result.urls,
-                media_type=result.media_type,
-                request_id=request_id,
-                user_id=user_id,
-                model_id=model_id,
-                prompt_hash=prompt_hash,
-                task_id=task_id,
-                job_id=job_id,
-            )
+            if not record.get("result_validated"):
+                await _validate_result_urls(
+                    result.urls,
+                    media_type=result.media_type,
+                    request_id=request_id,
+                    user_id=user_id,
+                    model_id=model_id,
+                    prompt_hash=prompt_hash,
+                    task_id=task_id,
+                    job_id=job_id,
+                    correlation_id=correlation_id,
+                )
+                if storage and job_id:
+                    await storage.update_job_status(job_id, "result_validated", result_urls=result.urls)
             log_structured_event(
                 correlation_id=correlation_id,
                 request_id=request_id,

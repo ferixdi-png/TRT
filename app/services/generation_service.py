@@ -11,6 +11,7 @@ from datetime import datetime
 from app.utils.logging_config import get_logger
 from app.integrations.kie_stub import get_kie_client_or_stub
 from app.storage import get_storage
+from app.generations.state_machine import normalize_provider_state
 
 logger = get_logger(__name__)
 
@@ -132,7 +133,11 @@ class GenerationService:
                         await asyncio.sleep(poll_interval)
                         continue
                     
-                    state = status.get('state', 'pending')
+                    state_raw = status.get('state', 'pending')
+                    resolution = normalize_provider_state(state_raw)
+                    state = resolution.canonical_state
+                    status['_raw_state'] = resolution.raw_state
+                    status['state'] = state
                     
                     # Обновляем статус в storage
                     await self.storage.update_job_status(
@@ -145,21 +150,25 @@ class GenerationService:
                     # Вызываем callback прогресса
                     if on_progress:
                         progress_messages = {
-                            'pending': 'В очереди',
-                            'processing': 'В работе',
-                            'completed': 'Готово',
-                            'failed': 'Ошибка'
+                            'queued': 'В очереди',
+                            'waiting': 'В работе',
+                            'success': 'Готово',
+                            'result_validated': 'Проверено',
+                            'tg_deliver': 'Доставка',
+                            'delivered': 'Доставлено',
+                            'failed': 'Ошибка',
+                            'canceled': 'Отменено',
                         }
                         message = progress_messages.get(state, state)
                         await on_progress(state, message)
                     
-                    if state == 'completed':
+                    if state in {'success', 'result_validated', 'delivered', 'completed'}:
                         result_urls = status.get('resultUrls', [])
                         if on_complete:
                             await on_complete(result_urls)
                         break
                     
-                    if state == 'failed':
+                    if state in {'failed', 'canceled'}:
                         error_msg = status.get('failMsg', 'Unknown error')
                         if on_error:
                             await on_error(error_msg)
