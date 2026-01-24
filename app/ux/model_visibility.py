@@ -1,8 +1,10 @@
 """Model visibility rules based on model registry and pricing SSOT."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from functools import lru_cache
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.kie_contract.schema_loader import get_model_schema
 from app.models.registry_validator import get_invalid_model_ids, get_model_issues
@@ -14,6 +16,27 @@ STATUS_HIDDEN_NO_INSTRUCTIONS = "HIDDEN_NO_INSTRUCTIONS"
 STATUS_BLOCKED_NO_PRICE = "BLOCKED_NO_PRICE"
 STATUS_BLOCKED_REQUIRED_MISSING = "BLOCKED_REQUIRED_MISSING"
 STATUS_BLOCKED_INVALID_REGISTRY = "BLOCKED_INVALID_REGISTRY"
+STATUS_BLOCKED_UNSUPPORTED = "BLOCKED_UNSUPPORTED"
+
+
+DEFAULT_UNSUPPORTED_MODELS = {
+    # KIE currently rejects this model id with 422 validation_error.
+    "openai/4o-image",
+}
+
+
+def _parse_env_models(value: str) -> Iterable[str]:
+    for raw in value.split(","):
+        model_id = raw.strip()
+        if model_id:
+            yield model_id
+
+
+@lru_cache(maxsize=1)
+def _unsupported_models() -> set[str]:
+    env_value = os.getenv("KIE_UNSUPPORTED_MODELS", "")
+    env_models = set(_parse_env_models(env_value)) if env_value else set()
+    return set(DEFAULT_UNSUPPORTED_MODELS) | env_models
 
 
 @dataclass(frozen=True)
@@ -54,6 +77,16 @@ def _enum_values(spec: Dict[str, Any]) -> List[str]:
 
 
 def evaluate_model_visibility(model_id: str) -> ModelVisibilityResult:
+    if model_id in _unsupported_models():
+        return ModelVisibilityResult(
+            model_id=model_id,
+            status=STATUS_BLOCKED_UNSUPPORTED,
+            issues=["Модель временно не поддерживается KIE API."],
+            required_fields=[],
+            optional_fields=[],
+            defaults={},
+        )
+
     invalid_ids = get_invalid_model_ids()
     if model_id in invalid_ids:
         issues = get_model_issues(model_id) or ["Registry validation failed for model."]
