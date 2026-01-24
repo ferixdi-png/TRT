@@ -64,6 +64,7 @@ class GenerationService:
             task_id=task_id,  # external_task_id будет сохранен как task_id
             status="pending",
             request_id=request_id,
+            correlation_id=request_id,
             prompt=prompt,
             prompt_hash=prompt_hash,
         )

@@ -25,6 +25,7 @@ from app.observability.request_logger import log_request_event
 from app.observability.structured_logs import log_structured_event
 from app.observability.delivery_metrics import record_delivery_attempt
 from app.observability.task_lifecycle import log_task_lifecycle
+from app.observability.correlation_store import register_ids, resolve_correlation_ids
 
 logger = logging.getLogger(__name__)
 
@@ -114,8 +115,29 @@ async def deliver_result(
     model_label: Optional[str] = None,
     request_id: Optional[str] = None,
     prompt_hash: Optional[str] = None,
+    task_id: Optional[str] = None,
+    job_id: Optional[str] = None,
 ) -> bool:
     """Deliver generation result to Telegram with unified delivery."""
+    resolved_ids = resolve_correlation_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=task_id,
+        job_id=job_id,
+    )
+    correlation_id = resolved_ids.get("correlation_id") or correlation_id or request_id
+    request_id = resolved_ids.get("request_id") or request_id or correlation_id
+    task_id = resolved_ids.get("task_id") or task_id
+    job_id = resolved_ids.get("job_id") or job_id
+    register_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=task_id,
+        job_id=job_id,
+        user_id=chat_id,
+        model_id=model_id,
+        source="telegram_sender.deliver_result",
+    )
     media_type = (media_type or "").lower()
     label = model_label or model_id or "model"
     caption_text = text
@@ -150,12 +172,15 @@ async def deliver_result(
 
     log_structured_event(
         correlation_id=correlation_id,
+        request_id=request_id,
         user_id=chat_id,
         chat_id=chat_id,
         model_id=model_id,
         gen_type=gen_type or media_type,
         action="TG_DELIVER",
         action_path="telegram_sender.deliver_result",
+        task_id=task_id,
+        job_id=job_id,
         stage="TG_DELIVER",
         outcome="start",
         param={"media_type": media_type, "urls_count": len(normalized_urls)},
@@ -164,12 +189,15 @@ async def deliver_result(
     if invalid_urls:
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=chat_id,
             chat_id=chat_id,
             model_id=model_id,
             gen_type=gen_type or media_type,
             action="TG_DELIVER",
             action_path="telegram_sender.deliver_result",
+            task_id=task_id,
+            job_id=job_id,
             stage="TG_DELIVER",
             waiting_for="URL_VALIDATE",
             outcome="failed",
@@ -195,12 +223,15 @@ async def deliver_result(
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="TG_DELIVER",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="success",
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
@@ -208,12 +239,15 @@ async def deliver_result(
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="RESULT_DELIVERED",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="success",
                 param={"media_type": media_type, "tg_method": "send_message"},
@@ -221,12 +255,15 @@ async def deliver_result(
         except Exception as exc:
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="TG_DELIVER",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="failed",
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
@@ -249,12 +286,15 @@ async def deliver_result(
             await getattr(bot, tg_method)(chat_id=chat_id, **payload)
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="TG_DELIVER",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="success",
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
@@ -262,12 +302,15 @@ async def deliver_result(
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="RESULT_DELIVERED",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="success",
                 param={"media_type": media_type, "tg_method": tg_method},
@@ -276,12 +319,15 @@ async def deliver_result(
             fallback_urls = ", ".join(normalized_urls[:3]) if normalized_urls else "URL missing"
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="TG_DELIVER",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="failed",
                 duration_ms=int((time.monotonic() - start_ts) * 1000),
@@ -299,12 +345,15 @@ async def deliver_result(
             )
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=chat_id,
                 chat_id=chat_id,
                 model_id=model_id,
                 gen_type=gen_type or media_type,
                 action="TG_DELIVER_FALLBACK",
                 action_path="telegram_sender.deliver_result",
+                task_id=task_id,
+                job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="sent",
                 error_code="TG_DELIVER_FALLBACK_URL",
@@ -328,8 +377,29 @@ async def send_result_file(
     prompt_hash: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
     model_label: Optional[str] = None,
+    task_id: Optional[str] = None,
+    job_id: Optional[str] = None,
 ) -> bool:
     """Download and send generation results with request-scoped logging."""
+    resolved_ids = resolve_correlation_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=task_id,
+        job_id=job_id,
+    )
+    correlation_id = resolved_ids.get("correlation_id") or correlation_id or request_id
+    request_id = resolved_ids.get("request_id") or request_id or correlation_id
+    task_id = resolved_ids.get("task_id") or task_id
+    job_id = resolved_ids.get("job_id") or job_id
+    register_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=task_id,
+        job_id=job_id,
+        user_id=chat_id,
+        model_id=model_id,
+        source="telegram_sender.send_result_file",
+    )
     ok = False
     error_msg = None
     try:
@@ -347,6 +417,8 @@ async def send_result_file(
                 model_label=model_label,
                 request_id=request_id,
                 prompt_hash=prompt_hash,
+                task_id=task_id,
+                job_id=job_id,
             )
         )
     except Exception as exc:
@@ -354,12 +426,15 @@ async def send_result_file(
         ok = False
     log_structured_event(
         correlation_id=correlation_id,
+        request_id=request_id,
         user_id=chat_id,
         chat_id=chat_id,
         model_id=model_id,
         gen_type=gen_type or media_type,
         action="TG_DELIVER",
         action_path="telegram_sender.send_result_file",
+        task_id=task_id,
+        job_id=job_id,
         stage="TG_DELIVER",
         outcome="success" if ok else "failed",
         param={"telegram_send_ok": ok, "error": error_msg},
@@ -369,7 +444,8 @@ async def send_result_file(
         log_task_lifecycle(
             state="delivered",
             user_id=chat_id,
-            task_id=None,
+            task_id=task_id,
+            job_id=job_id,
             model_id=model_id,
             correlation_id=correlation_id,
             source="telegram_sender.send_result_file",
@@ -381,13 +457,14 @@ async def send_result_file(
             user_id=chat_id,
             model=model_id,
             prompt_hash=prompt_hash,
-            task_id=None,
-            job_id=None,
+            task_id=task_id,
+            job_id=job_id,
             status="telegram_send_ok" if ok else "telegram_send_failed",
             latency_ms=None,
             attempt=None,
             error_code=None if ok else "TG_DELIVER_FAILED",
             error_msg=error_msg,
+            correlation_id=correlation_id,
         )
     return ok
 
@@ -403,10 +480,14 @@ async def send_job_result(
     user_lang: str = "ru",
     correlation_id: Optional[str] = None,
     kie_client: Optional[object] = None,
+    request_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    job_id: Optional[str] = None,
 ) -> None:
     """Send generation output to Telegram based on media_type."""
     media_type = spec.output_media_type or job_result.media_type
     urls = job_result.urls
+    task_id = task_id or job_result.task_id
 
     caption_text = job_result.text
     filename_prefix = None
@@ -422,8 +503,11 @@ async def send_job_result(
         model_id=spec.id,
         gen_type=spec.model_mode,
         correlation_id=correlation_id,
+        request_id=request_id,
         params=None,
         model_label=spec.name or spec.id,
+        task_id=task_id,
+        job_id=job_id,
     )
 
     price_text = ""
@@ -475,10 +559,13 @@ async def send_job_result(
         summary = f"{summary}\n\n{free_counter_line}"
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=chat_id,
             chat_id=chat_id,
             action="FREE_COUNTER_VIEW",
             action_path="telegram_sender.send_job_result",
+            task_id=task_id,
+            job_id=job_id,
             outcome="shown",
             error_code="FREE_COUNTER_VIEW_OK",
             fix_hint="Показан счетчик бесплатных генераций после результата.",
@@ -487,9 +574,12 @@ async def send_job_result(
 
     log_structured_event(
         correlation_id=correlation_id,
+        request_id=request_id,
         action="TG_SEND_ATTEMPT",
         action_path="telegram_sender.send_job_result",
         model_id=spec.id,
+        task_id=task_id,
+        job_id=job_id,
         stage="TG_SEND",
         outcome="attempt",
         error_code="TG_SEND_SUMMARY_ATTEMPT",
@@ -514,9 +604,12 @@ async def send_job_result(
     )
     log_structured_event(
         correlation_id=correlation_id,
+        request_id=request_id,
         action="GEN_COMPLETE",
         action_path="telegram_sender.send_job_result",
         model_id=spec.id,
+        task_id=task_id,
+        job_id=job_id,
         stage="GEN_COMPLETE",
         outcome="sent",
         error_code="TG_SUMMARY_SENT",

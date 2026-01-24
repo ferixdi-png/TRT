@@ -8737,6 +8737,8 @@ async def _button_callback_impl(
                         prompt_hash=payload.get("prompt_hash"),
                         params=payload.get("params"),
                         model_label=payload.get("model_label"),
+                        task_id=payload.get("task_id"),
+                        job_id=payload.get("job_id"),
                     )
                 )
             except Exception as exc:
@@ -18591,9 +18593,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     prompt_value = params.get("prompt") or params.get("text") or params.get("caption")
     prompt_hash = prompt_summary(prompt_value).get("prompt_hash")
-    request_id = session.get("request_id") or str(uuid.uuid4())
+    request_id = session.get("request_id") or correlation_id or str(uuid.uuid4())
     session["request_id"] = request_id
     session["prompt_hash"] = prompt_hash
+    from app.observability.correlation_store import register_correlation_ids
+
+    await register_correlation_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=session.get("task_id"),
+        job_id=session.get("job_id"),
+        user_id=user_id,
+        model_id=model_id,
+        storage=storage_instance,
+        source="confirm_generate.start",
+    )
     log_request_event(
         request_id=request_id,
         user_id=user_id,
@@ -18606,6 +18620,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         attempt=0,
         error_code=None,
         error_msg=None,
+        correlation_id=correlation_id,
     )
     
     logger.info(
@@ -18859,6 +18874,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     "model_name": model_name,
                     "prompt": prompt_value,
                     "prompt_hash": prompt_hash,
+                    "correlation_id": correlation_id,
                     "params": params,
                     "price": price,
                     "sku_id": sku_id,
@@ -18887,6 +18903,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     "external_task_id": task_id_value or record.get("external_task_id"),
                     "status": next_status,
                     "request_id": request_id,
+                    "correlation_id": correlation_id,
                     "prompt": prompt_value,
                     "prompt_hash": prompt_hash,
                     "chat_id": chat_id_value,
@@ -18910,21 +18927,28 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         job_id_value: Optional[str],
         status_value: str,
         message_id_value: Optional[int],
-    ) -> None:
+    ) -> tuple[bool, bool]:
         if not task_id_value or not hasattr(storage_instance, "update_json_file"):
-            return
+            return False, False
         now_iso = datetime.now().isoformat()
         delivery_key = f"{user_id}:{task_id_value}"
+        already_delivered = False
+        already_pending = False
 
         def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+            nonlocal already_delivered, already_pending
             next_data = dict(data or {})
             existing = next_data.get(delivery_key, {})
             record = dict(existing) if isinstance(existing, dict) else {}
             existing_status = str(record.get("status") or "").lower()
+            pending_transition = status_value in {"queued", "running", "timeout", "delivery_pending"}
             if existing_status == "delivered":
+                already_delivered = True
                 next_status = "delivered"
-            elif status_value in {"queued", "running", "timeout", "delivery_pending"}:
+            elif pending_transition:
                 next_status = "pending"
+                if existing_status in {"pending", "delivering"}:
+                    already_pending = True
             else:
                 next_status = status_value
             record.update(
@@ -18934,6 +18958,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     "job_id": job_id_value,
                     "model_id": model_id,
                     "request_id": request_id,
+                    "correlation_id": correlation_id,
                     "prompt_hash": prompt_hash,
                     "chat_id": chat_id_value,
                     "message_id": message_id_value or record.get("message_id"),
@@ -18950,6 +18975,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return next_data
 
         await storage_instance.update_json_file("delivery_records.json", updater)
+        return already_delivered, already_pending
 
     async def _persist_delivery_tracking(
         *,
@@ -18967,14 +18993,57 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             status_value=status_value,
             message_id_value=message_id_value,
         )
-        await _upsert_delivery_record(
+        already_delivered, already_pending = await _upsert_delivery_record(
             task_id_value=task_id_value,
             job_id_value=job_id_value,
             status_value=status_value,
             message_id_value=message_id_value,
         )
+        await register_correlation_ids(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            task_id=task_id_value,
+            job_id=job_id_value,
+            user_id=user_id,
+            model_id=model_id,
+            storage=storage_instance,
+            source="confirm_generate.delivery_tracking",
+        )
+        if already_delivered:
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=user_id,
+                chat_id=chat_id_value,
+                action="DELIVERY_PENDING_SKIPPED",
+                action_path="confirm_generate",
+                model_id=model_id,
+                task_id=task_id_value,
+                job_id=job_id_value,
+                stage="DELIVERY_PENDING",
+                outcome="skipped",
+                param={"reason": "delivery_already_delivered"},
+            )
+            return
+        if already_pending:
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=user_id,
+                chat_id=chat_id_value,
+                action="DELIVERY_PENDING_SKIPPED",
+                action_path="confirm_generate",
+                model_id=model_id,
+                task_id=task_id_value,
+                job_id=job_id_value,
+                stage="DELIVERY_PENDING",
+                outcome="skipped",
+                param={"reason": "delivery_already_pending"},
+            )
+            return
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             chat_id=chat_id_value,
             action="DELIVERY_PENDING",
@@ -19025,8 +19094,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from app.generations.request_dedupe_store import set_job_task_mapping
 
         await set_job_task_mapping(job_id, None)
+        await register_correlation_ids(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            task_id=None,
+            job_id=job_id,
+            user_id=user_id,
+            model_id=model_id,
+            storage=storage_instance,
+            source="confirm_generate.job_created",
+        )
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             chat_id=chat_id,
             action="CONFIRM_GENERATE",
@@ -19060,6 +19140,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
         except Exception as exc:
             logger.warning("dedupe_on_task_created_failed task_id=%s error=%s", task_id, exc)
+        await register_correlation_ids(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            task_id=task_id,
+            job_id=job_id,
+            user_id=user_id,
+            model_id=model_id,
+            storage=storage_instance,
+            source="confirm_generate.task_created",
+        )
         if task_created_event:
             task_created_event.set()
     if prompt_hash:
@@ -19150,6 +19240,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 attempt=0,
                 error_code="DEDUPE_BROKEN",
                 error_msg=reason,
+                correlation_id=correlation_id,
             )
             log_structured_event(
                 correlation_id=correlation_id,
@@ -19221,6 +19312,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     attempt=0,
                     error_code="DUPLICATE_REQUEST",
                     error_msg="dedupe_store_hit",
+                    correlation_id=correlation_id,
                 )
                 log_structured_event(
                     correlation_id=correlation_id,
@@ -19271,6 +19363,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                     prompt_hash=prompt_hash,
                                     params=params,
                                     model_label=model_name,
+                                    task_id=existing_task_id,
+                                    job_id=dedupe_entry.job_id,
                                 )
                             )
                         if not delivered:
@@ -19352,6 +19446,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     attempt=0,
                     error_code="DUPLICATE_REQUEST",
                     error_msg="duplicate_within_window",
+                    correlation_id=correlation_id,
                 )
                 log_structured_event(
                     correlation_id=correlation_id,
@@ -19391,11 +19486,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ) as lock_result:
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 chat_id=chat_id,
                 action="CONFIRM_GENERATE",
                 action_path="confirm_generate",
                 model_id=model_id,
+                job_id=job_id,
                 lock_key=lock_key,
                 lock_wait_ms_total=lock_result.wait_ms_total,
                 lock_attempts=lock_result.attempts,
@@ -19464,11 +19561,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     user_id=user_id,
                     chat_id=chat_id,
                     action="CONFIRM_GENERATE",
                     action_path="confirm_generate",
                     model_id=model_id,
+                    job_id=job_id,
                     outcome="locked_timeout",
                     lock_key=lock_key,
                     lock_wait_ms_total=lock_result.wait_ms_total,
@@ -19792,6 +19891,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             attempt=0,
             error_code=None,
             error_msg=None,
+            correlation_id=correlation_id,
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -19823,6 +19923,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "params": params,
                 "model_label": model_name_display,
                 "task_id": job_result.task_id,
+                "job_id": job_id,
                 "sku_id": sku_id,
                 "price": price,
                 "is_free": is_free,
@@ -19869,6 +19970,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         prompt_hash=prompt_hash,
                         params=params,
                         model_label=model_name_display,
+                        task_id=job_result.task_id,
+                        job_id=job_id,
                     )
                 )
             except Exception as exc:
@@ -20171,6 +20274,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             attempt=None,
             error_code=exc.error_code or "KIE_REQUEST_FAILED",
             error_msg=exc.user_message or str(exc),
+            correlation_id=correlation_id,
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20339,6 +20443,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             attempt=None,
             error_code="ERR_KIE_TIMEOUT",
             error_msg=str(exc),
+            correlation_id=correlation_id,
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -20451,6 +20556,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             attempt=None,
             error_code=exc.fail_code or "KIE_FAIL_STATE",
             error_msg=exc.fail_msg or str(exc),
+            correlation_id=correlation_id,
         )
         redacted_record = redact_payload(exc.record_info or {})
         log_structured_event(
@@ -20549,6 +20655,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             attempt=None,
             error_code=getattr(exc, "error_code", "KIE_RESULT_ERROR"),
             error_msg=error_text,
+            correlation_id=correlation_id,
         )
         log_structured_event(
             correlation_id=correlation_id,
@@ -21037,6 +21144,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             "params": params,
                             "model_label": model_name_display,
                             "task_id": task_id,
+                            "job_id": job_id,
                             "sku_id": sku_id,
                             "price": price,
                             "is_free": is_free,
@@ -21061,6 +21169,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                     prompt_hash=prompt_hash,
                                     params=params,
                                     model_label=model_name_display,
+                                    task_id=task_id,
+                                    job_id=job_id,
                                 )
                             )
                         except Exception as exc:
@@ -21121,6 +21231,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                 attempt=None,
                                 error_code=None,
                                 error_msg=None,
+                                correlation_id=correlation_id,
                             )
                             last_message = await _send_with_log(
                                 "send_message",
