@@ -207,6 +207,7 @@ def start_delivery_reconciler(bot) -> None:
             batch_limit=DELIVERY_RECONCILE_BATCH_LIMIT,
             pending_age_alert_seconds=DELIVERY_PENDING_AGE_ALERT_SECONDS,
             queue_tail_alert_threshold=DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD,
+            get_user_language=get_user_language,
         ),
         action="delivery_reconciler",
     )
@@ -18815,6 +18816,176 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
     request_key = None
     task_created_event: Optional[asyncio.Event] = None
+    jobs_filename = os.path.basename(str(getattr(storage_instance, "jobs_file", "generation_jobs.json")))
+    chat_id_value = chat_id or user_id
+
+    def _build_accept_text(task_id_value: str, *, dedup_join: bool = False) -> str:
+        if user_lang == "ru":
+            join_line = "🔁 Это повторный запрос — подписываю на уже созданную задачу.\n\n" if dedup_join else ""
+            return (
+                "✅ <b>Задача принята</b>\n\n"
+                f"{join_line}"
+                f"Task ID: <code>{task_id_value}</code>\n"
+                "Пришлю результат сюда, как только он будет готов."
+            )
+        join_line = "🔁 This is a duplicate request — joining the existing task.\n\n" if dedup_join else ""
+        return (
+            "✅ <b>Task accepted</b>\n\n"
+            f"{join_line}"
+            f"Task ID: <code>{task_id_value}</code>\n"
+            "I'll send the result here as soon as it's ready."
+        )
+
+    async def _upsert_generation_job_meta(
+        *,
+        job_id_value: Optional[str],
+        task_id_value: Optional[str],
+        status_value: str,
+        message_id_value: Optional[int],
+    ) -> None:
+        if not job_id_value or not hasattr(storage_instance, "update_json_file"):
+            return
+        now_iso = datetime.now().isoformat()
+
+        def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+            next_data = dict(data or {})
+            existing = next_data.get(job_id_value, {})
+            record = dict(existing) if isinstance(existing, dict) else {}
+            if not record:
+                record = {
+                    "job_id": job_id_value,
+                    "user_id": user_id,
+                    "model_id": model_id,
+                    "model_name": model_name,
+                    "prompt": prompt_value,
+                    "prompt_hash": prompt_hash,
+                    "params": params,
+                    "price": price,
+                    "sku_id": sku_id,
+                    "is_free": bool(is_free),
+                    "is_admin_user": bool(is_admin_user),
+                    "task_id": task_id_value,
+                    "external_task_id": task_id_value,
+                    "status": status_value,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "result_urls": [],
+                }
+            existing_status = str(record.get("status") or "").lower()
+            if existing_status in {"delivered", "completed"} and status_value in {
+                "queued",
+                "running",
+                "timeout",
+                "delivery_pending",
+            }:
+                next_status = existing_status
+            else:
+                next_status = status_value
+            record.update(
+                {
+                    "task_id": task_id_value or record.get("task_id"),
+                    "external_task_id": task_id_value or record.get("external_task_id"),
+                    "status": next_status,
+                    "request_id": request_id,
+                    "prompt": prompt_value,
+                    "prompt_hash": prompt_hash,
+                    "chat_id": chat_id_value,
+                    "message_id": message_id_value or record.get("message_id"),
+                    "sku_id": sku_id or record.get("sku_id"),
+                    "price": price,
+                    "is_free": bool(is_free),
+                    "is_admin_user": bool(is_admin_user),
+                    "updated_at": now_iso,
+                }
+            )
+            record.setdefault("created_at", now_iso)
+            next_data[job_id_value] = record
+            return next_data
+
+        await storage_instance.update_json_file(jobs_filename, updater)
+
+    async def _upsert_delivery_record(
+        *,
+        task_id_value: Optional[str],
+        job_id_value: Optional[str],
+        status_value: str,
+        message_id_value: Optional[int],
+    ) -> None:
+        if not task_id_value or not hasattr(storage_instance, "update_json_file"):
+            return
+        now_iso = datetime.now().isoformat()
+        delivery_key = f"{user_id}:{task_id_value}"
+
+        def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+            next_data = dict(data or {})
+            existing = next_data.get(delivery_key, {})
+            record = dict(existing) if isinstance(existing, dict) else {}
+            existing_status = str(record.get("status") or "").lower()
+            if existing_status == "delivered":
+                next_status = "delivered"
+            elif status_value in {"queued", "running", "timeout", "delivery_pending"}:
+                next_status = "pending"
+            else:
+                next_status = status_value
+            record.update(
+                {
+                    "user_id": user_id,
+                    "task_id": task_id_value,
+                    "job_id": job_id_value,
+                    "model_id": model_id,
+                    "request_id": request_id,
+                    "prompt_hash": prompt_hash,
+                    "chat_id": chat_id_value,
+                    "message_id": message_id_value or record.get("message_id"),
+                    "sku_id": sku_id or record.get("sku_id"),
+                    "price": price,
+                    "is_free": bool(is_free),
+                    "is_admin_user": bool(is_admin_user),
+                    "status": next_status,
+                    "created_at": record.get("created_at", now_iso),
+                    "updated_at": now_iso,
+                }
+            )
+            next_data[delivery_key] = record
+            return next_data
+
+        await storage_instance.update_json_file("delivery_records.json", updater)
+
+    async def _persist_delivery_tracking(
+        *,
+        task_id_value: Optional[str],
+        job_id_value: Optional[str],
+        status_value: str,
+        message_id_value: Optional[int],
+        dedup_join: bool = False,
+    ) -> None:
+        if not task_id_value:
+            return
+        await _upsert_generation_job_meta(
+            job_id_value=job_id_value,
+            task_id_value=task_id_value,
+            status_value=status_value,
+            message_id_value=message_id_value,
+        )
+        await _upsert_delivery_record(
+            task_id_value=task_id_value,
+            job_id_value=job_id_value,
+            status_value=status_value,
+            message_id_value=message_id_value,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id_value,
+            action="DELIVERY_PENDING",
+            action_path="confirm_generate",
+            model_id=model_id,
+            task_id=task_id_value,
+            job_id=job_id_value,
+            stage="DELIVERY_PENDING",
+            outcome="dedup_join" if dedup_join else "pending",
+            param={"message_id": message_id_value},
+        )
 
     async def _ensure_job_created() -> bool:
         nonlocal job_id
@@ -18905,7 +19076,65 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from app.utils.distributed_lock import distributed_lock
 
         request_key = build_request_key(user_id, model_id, prompt_hash)
-        failed_dedupe_states = {"failed", "cancelled", "canceled", "timeout", "timed_out"}
+        failed_dedupe_states = {"failed", "cancelled", "canceled"}
+
+        async def _bind_existing_task(
+            *,
+            task_id_value: str,
+            job_id_value: Optional[str],
+            status_value: str = "queued",
+        ) -> Optional[str]:
+            nonlocal job_id
+            effective_job_id = job_id_value
+            if not effective_job_id:
+                await _ensure_job_created()
+                effective_job_id = job_id
+            else:
+                job_id = effective_job_id
+                session["job_id"] = effective_job_id
+                if not _get_job_record(effective_job_id):
+                    _create_job_record(
+                        job_id=effective_job_id,
+                        user_id=user_id,
+                        chat_id=chat_id_value,
+                        message_id=query.message.message_id if query and query.message else None,
+                        model_id=session.get("model_id"),
+                        correlation_id=correlation_id,
+                        state=status_value,
+                        start_ts_ms=_now_ms(),
+                        request_id=request_id,
+                        prompt=prompt_value,
+                        prompt_hash=prompt_hash,
+                    )
+            session["task_id"] = task_id_value
+            session["job_state"] = status_value
+            if effective_job_id:
+                _update_job_record(
+                    effective_job_id,
+                    task_id=task_id_value,
+                    external_task_id=task_id_value,
+                    state=status_value,
+                    updated_ts_ms=_now_ms(),
+                )
+                await set_job_task_mapping(effective_job_id, task_id_value)
+            if request_key:
+                tracker_entry = _request_tracker.get(request_key)
+                if effective_job_id and (
+                    not tracker_entry or tracker_entry.job_id != effective_job_id
+                ):
+                    _request_tracker.set(request_key, effective_job_id, task_id=task_id_value)
+                else:
+                    _request_tracker.update_task_id(request_key, task_id_value)
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                job_id=effective_job_id,
+                task_id=task_id_value,
+                status=status_value,
+                last_recovery_ts=time.time(),
+            )
+            return effective_job_id
 
         async def _mark_dedupe_broken(entry: Optional[DedupeEntry], reason: str) -> None:
             job_id_value = entry.job_id if entry else None
@@ -19005,6 +19234,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     existing_task_id=existing_task_id,
                     job_id=dedupe_entry.job_id,
                 )
+                effective_job_id = await _bind_existing_task(
+                    task_id_value=existing_task_id,
+                    job_id_value=dedupe_entry.job_id,
+                    status_value="running",
+                )
+                if effective_job_id:
+                    dedupe_entry.job_id = effective_job_id
+                await _persist_delivery_tracking(
+                    task_id_value=existing_task_id,
+                    job_id_value=dedupe_entry.job_id,
+                    status_value="running",
+                    message_id_value=None,
+                    dedup_join=True,
+                )
+                status_keyboard = _build_generation_status_keyboard(user_lang, dedupe_entry.job_id)
                 if dedupe_entry.status in {"completed", "finished"} and (
                     dedupe_entry.result_urls or dedupe_entry.result_text
                 ):
@@ -19016,7 +19260,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             delivered = bool(
                                 await send_result_file(
                                     context.bot,
-                                    user_id,
+                                    chat_id_value,
                                     dedupe_entry.media_type,
                                     dedupe_entry.result_urls,
                                     dedupe_entry.result_text,
@@ -19032,15 +19276,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         if not delivered:
                             result_text = dedupe_entry.result_text or ""
                             urls_text = "\n".join(dedupe_entry.result_urls or [])
+                            task_line = f"Task ID: <code>{existing_task_id}</code>\n\n"
                             await send_or_edit_message(
                                 (
                                     "✅ <b>Готовый результат</b>\n\n"
-                                    f"{result_text}\n{urls_text}"
+                                    f"{task_line}{result_text}\n{urls_text}"
                                     if user_lang == "ru"
-                                    else f"✅ <b>Result</b>\n\n{result_text}\n{urls_text}"
+                                    else f"✅ <b>Result</b>\n\n{task_line}{result_text}\n{urls_text}"
                                 ),
                                 parse_mode="HTML",
-                                reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                                reply_markup=status_keyboard,
                             )
                     except Exception as exc:
                         logger.warning("Failed to re-send deduped result: %s", exc)
@@ -19052,23 +19297,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                 else "✅ <b>Result ready</b>\n\nTap Status to view your generations."
                             ),
                             parse_mode="HTML",
-                            reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                            reply_markup=status_keyboard,
                         )
                 else:
-                    await send_or_edit_message(
-                        (
-                            "⏳ <b>Генерация уже идёт</b>\n\n"
-                            f"Task ID: <code>{existing_task_id}</code>\n"
-                            "Нажмите «Статус», чтобы посмотреть прогресс."
-                            if user_lang == "ru"
-                            else (
-                                "⏳ <b>Generation already running</b>\n\n"
-                                f"Task ID: <code>{existing_task_id}</code>\n"
-                                "Tap Status to view progress."
-                            )
-                        ),
+                    accept_message = await send_or_edit_message(
+                        _build_accept_text(existing_task_id, dedup_join=True),
                         parse_mode="HTML",
-                        reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                        reply_markup=status_keyboard,
+                    )
+                    await _persist_delivery_tracking(
+                        task_id_value=existing_task_id,
+                        job_id_value=dedupe_entry.job_id,
+                        status_value="running",
+                        message_id_value=accept_message.message_id if accept_message else None,
+                        dedup_join=True,
                     )
                 return ConversationHandler.END
         existing = _request_tracker.get(request_key)
@@ -19085,24 +19327,26 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
                 await _mark_dedupe_broken(broken_entry, "request_tracker_missing_task_id")
             else:
-                await set_job_task_mapping(existing.job_id, existing_task_id)
-                await update_dedupe_entry(
-                    user_id,
-                    model_id,
-                    prompt_hash,
-                    job_id=existing.job_id,
-                    task_id=existing_task_id,
-                    status="running",
-                    last_recovery_ts=time.time(),
+                effective_job_id = await _bind_existing_task(
+                    task_id_value=existing_task_id,
+                    job_id_value=existing.job_id,
+                    status_value="running",
                 )
-                _request_tracker.update_task_id(request_key, existing_task_id)
+                job_id_value = effective_job_id or existing.job_id
+                await _persist_delivery_tracking(
+                    task_id_value=existing_task_id,
+                    job_id_value=job_id_value,
+                    status_value="running",
+                    message_id_value=None,
+                    dedup_join=True,
+                )
                 log_request_event(
                     request_id=request_id,
                     user_id=user_id,
                     model=model_id,
                     prompt_hash=prompt_hash,
                     task_id=existing_task_id,
-                    job_id=existing.job_id,
+                    job_id=job_id_value,
                     status="deduped",
                     latency_ms=0,
                     attempt=0,
@@ -19119,22 +19363,20 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     outcome="dedup_joined",
                     dedup_hit=True,
                     existing_task_id=existing_task_id,
-                    job_id=existing.job_id,
+                    job_id=job_id_value,
                 )
-                await send_or_edit_message(
-                    (
-                        "⚠️ <b>Генерация уже запущена</b>\n\n"
-                        f"Текущий Task ID: <code>{existing_task_id}</code>\n"
-                        "Жду результат текущей задачи."
-                        if user_lang == "ru"
-                        else (
-                            "⚠️ <b>Generation already running</b>\n\n"
-                            f"Current Task ID: <code>{existing_task_id}</code>\n"
-                            "Waiting for the current result."
-                        )
-                    ),
+                status_keyboard = _build_generation_status_keyboard(user_lang, job_id_value)
+                accept_message = await send_or_edit_message(
+                    _build_accept_text(existing_task_id, dedup_join=True),
                     parse_mode="HTML",
-                    reply_markup=_build_generation_status_keyboard(user_lang, existing.job_id),
+                    reply_markup=status_keyboard,
+                )
+                await _persist_delivery_tracking(
+                    task_id_value=existing_task_id,
+                    job_id_value=job_id_value,
+                    status_value="running",
+                    message_id_value=accept_message.message_id if accept_message else None,
+                    dedup_join=True,
                 )
                 return ConversationHandler.END
         lock_key = f"gen:{user_id}:{model_id}:{prompt_hash}"
@@ -19168,20 +19410,33 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if dedupe_entry:
                     existing_task_id, dedupe_entry = await _resolve_task_id_for_entry(dedupe_entry)
                     if existing_task_id:
-                        await send_or_edit_message(
-                            (
-                                "⏳ <b>Генерация уже идёт</b>\n\n"
-                                f"Task ID: <code>{existing_task_id}</code>\n"
-                                "Нажмите «Статус», чтобы посмотреть прогресс."
-                                if user_lang == "ru"
-                                else (
-                                    "⏳ <b>Generation already running</b>\n\n"
-                                    f"Task ID: <code>{existing_task_id}</code>\n"
-                                    "Tap Status to view progress."
-                                )
-                            ),
+                        effective_job_id = await _bind_existing_task(
+                            task_id_value=existing_task_id,
+                            job_id_value=dedupe_entry.job_id,
+                            status_value="running",
+                        )
+                        job_id_value = effective_job_id or dedupe_entry.job_id
+                        if effective_job_id:
+                            dedupe_entry.job_id = effective_job_id
+                        await _persist_delivery_tracking(
+                            task_id_value=existing_task_id,
+                            job_id_value=job_id_value,
+                            status_value="running",
+                            message_id_value=None,
+                            dedup_join=True,
+                        )
+                        status_keyboard = _build_generation_status_keyboard(user_lang, job_id_value)
+                        accept_message = await send_or_edit_message(
+                            _build_accept_text(existing_task_id, dedup_join=True),
                             parse_mode="HTML",
-                            reply_markup=_build_generation_status_keyboard(user_lang, dedupe_entry.job_id),
+                            reply_markup=status_keyboard,
+                        )
+                        await _persist_delivery_tracking(
+                            task_id_value=existing_task_id,
+                            job_id_value=job_id_value,
+                            status_value="running",
+                            message_id_value=accept_message.message_id if accept_message else None,
+                            dedup_join=True,
                         )
                         log_structured_event(
                             correlation_id=correlation_id,
@@ -19193,7 +19448,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             outcome="dedup_joined",
                             dedup_hit=True,
                             existing_task_id=existing_task_id,
-                            job_id=dedupe_entry.job_id,
+                            job_id=job_id_value,
                         )
                         return ConversationHandler.END
                     await _mark_dedupe_broken(dedupe_entry, "lock_timeout_missing_task_id")
@@ -19239,6 +19494,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await _ensure_job_created()
     status_keyboard = _build_generation_status_keyboard(user_lang, job_id)
     status_message = await send_or_edit_message(loading_msg, reply_markup=status_keyboard)
+    status_message_id = status_message.message_id if status_message else None
+    await _upsert_generation_job_meta(
+        job_id_value=job_id,
+        task_id_value=session.get("task_id"),
+        status_value="queued",
+        message_id_value=status_message_id,
+    )
 
     # Progress tracking state
     last_progress_ts = 0.0
@@ -19433,10 +19695,17 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             progress_callback=progress_callback,
             timeout=timeout_seconds,
             poll_interval=poll_interval,
+            wait_for_result=False,
             request_id=request_id,
             prompt_hash=prompt_hash,
             prompt=prompt_value,
             job_id=job_id,
+            chat_id=chat_id_value,
+            message_id=status_message_id,
+            sku_id=sku_id,
+            price=price,
+            is_free=is_free,
+            is_admin_user=is_admin_user,
             on_task_created=_on_task_created,
         )
         task_id = job_result.task_id
@@ -19469,6 +19738,74 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "request_id": request_id,
             "prompt_hash": prompt_hash,
         }
+
+        await _persist_delivery_tracking(
+            task_id_value=task_id,
+            job_id_value=job_id,
+            status_value="queued",
+            message_id_value=status_message_id,
+        )
+        accept_message = await send_or_edit_message(
+            _build_accept_text(task_id),
+            parse_mode="HTML",
+            reply_markup=status_keyboard,
+        )
+        accept_message_id = accept_message.message_id if accept_message else status_message_id
+        await _persist_delivery_tracking(
+            task_id_value=task_id,
+            job_id_value=job_id,
+            status_value="queued",
+            message_id_value=accept_message_id,
+        )
+        if job_id:
+            state_before = session.get("job_state")
+            session["job_state"] = "queued"
+            _update_job_record(
+                job_id,
+                state="queued",
+                task_id=task_id,
+                external_task_id=task_id,
+                message_id=accept_message_id,
+                updated_ts_ms=_now_ms(),
+            )
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id_value,
+                message_id=accept_message_id or status_message_id,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="queued",
+            )
+        log_request_event(
+            request_id=request_id,
+            user_id=user_id,
+            model=model_id,
+            prompt_hash=prompt_hash,
+            task_id=task_id,
+            job_id=job_id,
+            status="queued",
+            latency_ms=int((time.time() - start_time) * 1000),
+            attempt=0,
+            error_code=None,
+            error_msg=None,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id_value,
+            action="GENERATION_QUEUED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            task_id=task_id,
+            job_id=job_id,
+            stage="GEN_START",
+            outcome="queued",
+        )
+        return ConversationHandler.END
 
         delivered = False
         if job_result.urls or job_result.text:
