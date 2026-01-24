@@ -127,11 +127,21 @@ def test_env():
     from app.generations.request_dedupe_store import reset_memory_entries
     from app.observability.dedupe_metrics import reset_metrics as reset_dedupe_metrics
     from app.observability.correlation_store import reset_correlation_store
+    from app.observability.generation_metrics import reset_metrics as reset_generation_metrics
 
     reset_storage()
     reset_memory_entries()
     reset_dedupe_metrics()
+    reset_generation_metrics()
     reset_correlation_store()
+    import bot_kie
+
+    bot_kie._update_deduper._entries.clear()
+    bot_kie._callback_deduper._entries.clear()
+    bot_kie._processed_update_ids.clear()
+    bot_kie._message_rate_limiter._buckets.clear()
+    bot_kie._callback_rate_limiter._buckets.clear()
+    bot_kie._callback_data_rate_limiter._buckets.clear()
 
     yield
     
@@ -149,7 +159,18 @@ def test_env():
         pass
 
     reset_storage()
+    try:
+        from app.observability.generation_metrics import reset_metrics as reset_generation_metrics
+        reset_generation_metrics()
+    except ImportError:
+        pass
     reset_correlation_store()
+    bot_kie._update_deduper._entries.clear()
+    bot_kie._callback_deduper._entries.clear()
+    bot_kie._processed_update_ids.clear()
+    bot_kie._message_rate_limiter._buckets.clear()
+    bot_kie._callback_rate_limiter._buckets.clear()
+    bot_kie._callback_data_rate_limiter._buckets.clear()
     
     # Восстанавливаем старые значения
     for key, value in old_env.items():

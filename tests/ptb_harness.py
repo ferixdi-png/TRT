@@ -49,10 +49,15 @@ class PTBHarness:
         self.outbox = MessageOutbox()
         self._patches: List[Any] = []
         self._message_id_counter: int = 1000
+        self._update_id_counter: int = 0
 
     def _next_message_id(self) -> int:
         self._message_id_counter += 1
         return self._message_id_counter
+
+    def _next_update_id(self) -> int:
+        self._update_id_counter += 1
+        return self._update_id_counter
     
     async def setup(self):
         """Инициализирует Application и настраивает моки."""
@@ -202,37 +207,40 @@ class PTBHarness:
         self,
         command: str = "/start",
         user_id: int = 12345,
-        update_id: int = 1,
+        update_id: Optional[int] = None,
     ) -> Update:
         """Создает моковый Update для команды."""
         message = self.create_mock_message(text=command, user_id=user_id)
-        return Update(update_id=update_id, message=message)
+        resolved_update_id = update_id if update_id is not None else self._next_update_id()
+        return Update(update_id=resolved_update_id, message=message)
     
     def create_mock_update_callback(
         self,
         callback_data: str,
         user_id: int = 12345,
-        update_id: int = 1,
+        update_id: Optional[int] = None,
     ) -> Update:
         """Создает моковый Update для callback."""
         callback_query = self.create_mock_callback_query(callback_data, user_id=user_id)
-        return Update(update_id=update_id, callback_query=callback_query)
+        resolved_update_id = update_id if update_id is not None else self._next_update_id()
+        return Update(update_id=resolved_update_id, callback_query=callback_query)
 
     def create_mock_update_message(
         self,
         text: Optional[str],
         user_id: int = 12345,
-        update_id: int = 1,
+        update_id: Optional[int] = None,
     ) -> Update:
         """Создает моковый Update для текстового сообщения."""
         message = self.create_mock_message(text=text, user_id=user_id)
-        return Update(update_id=update_id, message=message)
+        resolved_update_id = update_id if update_id is not None else self._next_update_id()
+        return Update(update_id=resolved_update_id, message=message)
     
     async def process_command(
         self,
         command: str,
         user_id: int = 12345,
-        update_id: int = 1,
+        update_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Обрабатывает команду и возвращает результат.
@@ -273,7 +281,7 @@ class PTBHarness:
         self,
         callback_data: str,
         user_id: int = 12345,
-        update_id: int = 1,
+        update_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Обрабатывает callback и возвращает результат.
@@ -314,7 +322,7 @@ class PTBHarness:
         self,
         text: Optional[str],
         user_id: int = 12345,
-        update_id: int = 1,
+        update_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Обрабатывает текстовое сообщение и возвращает результат.

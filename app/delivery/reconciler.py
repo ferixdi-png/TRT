@@ -16,16 +16,24 @@ from app.generations.universal_engine import (
     parse_record_info,
 )
 from app.kie_catalog import get_model
-from app.observability.delivery_metrics import metrics_snapshot, record_pending_age
+from app.observability.delivery_metrics import metrics_snapshot as delivery_metrics_snapshot, record_pending_age
 from app.observability.structured_logs import log_structured_event
 from app.observability.task_lifecycle import log_task_lifecycle
 from app.observability.correlation_store import register_correlation_ids
+from app.generations.state_machine import CANONICAL_PENDING_STATES, normalize_provider_state
+from app.generations.user_messages import build_delivery_message, build_error_message, build_waiting_message
+from app.observability.generation_metrics import (
+    metrics_snapshot as generation_metrics_snapshot,
+    record_delivery_latency,
+    record_end_to_end_latency,
+    record_wait_latency,
+)
 
 logger = logging.getLogger(__name__)
 
-PENDING_STATES = {"pending", "queued", "running", "timeout", "delivery_pending"}
-SUCCESS_STATES = {"success", "completed", "succeeded"}
-FAILED_STATES = {"failed", "fail", "error", "canceled", "cancelled", "canceled"}
+PENDING_STATES = set(CANONICAL_PENDING_STATES) | {"running", "succeeded", "completed"}
+SUCCESS_STATES = {"success"}
+FAILED_STATES = {"failed", "canceled"}
 DELIVERED_STATES = {"delivered"}
 DELIVERY_POLL_TIMEOUT_SECONDS = int(os.getenv("DELIVERY_POLL_TIMEOUT_SECONDS", "300"))
 DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS = int(os.getenv("DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS", "60"))
@@ -388,6 +396,32 @@ def _jobs_filename(storage: Any) -> str:
     return os.path.basename(str(jobs_file))
 
 
+async def _mark_waiting_notified(storage: Any, job: Dict[str, Any], *, raw_state: str) -> None:
+    if not hasattr(storage, "update_json_file"):
+        return
+    job_id = job.get("job_id") or job.get("task_id")
+    if not job_id:
+        return
+    now_iso = datetime.now().isoformat()
+    jobs_filename = _jobs_filename(storage)
+
+    def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+        next_data = dict(data or {})
+        record = dict(next_data.get(job_id) or {})
+        record.update(
+            {
+                "status": "waiting",
+                "waiting_notified_at": record.get("waiting_notified_at") or now_iso,
+                "last_provider_state": raw_state,
+                "updated_at": now_iso,
+            }
+        )
+        next_data[job_id] = record
+        return next_data
+
+    await storage.update_json_file(jobs_filename, updater)
+
+
 async def _mark_timeout_notified(storage: Any, job: Dict[str, Any], *, timeout_seconds: int) -> None:
     if not hasattr(storage, "update_json_file"):
         return
@@ -465,6 +499,54 @@ async def _maybe_notify_timeout(
     )
 
 
+async def _maybe_notify_waiting(
+    bot,
+    storage: Any,
+    job: Dict[str, Any],
+    *,
+    raw_state: str,
+    get_user_language: Optional[Callable[[int], str]] = None,
+) -> None:
+    if job.get("waiting_notified_at"):
+        return
+    user_id = job.get("user_id")
+    if user_id is None:
+        return
+    model_id = job.get("model_id")
+    model_spec = get_model(model_id) if model_id else None
+    if not model_spec:
+        return
+    chat_id = job.get("chat_id") or user_id
+    lang = get_user_language(user_id) if get_user_language else "ru"
+    correlation_id = job.get("correlation_id") or job.get("request_id")
+    message = build_waiting_message(
+        model_spec.name or model_id,
+        correlation_id,
+        lang=lang,
+        state_hint=raw_state or None,
+    )
+    try:
+        await bot.send_message(chat_id=chat_id, text=message, parse_mode="HTML")
+    except Exception as exc:
+        logger.warning("delivery_waiting_notify_failed job_id=%s error=%s", job.get("job_id"), exc)
+        return
+    await _mark_waiting_notified(storage, job, raw_state=raw_state)
+    log_structured_event(
+        correlation_id=correlation_id,
+        request_id=job.get("request_id") or correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        action="WAITING_NOTIFIED",
+        action_path="delivery_reconciler",
+        model_id=model_id,
+        job_id=job.get("job_id"),
+        task_id=job.get("task_id"),
+        stage="KIE_POLL",
+        outcome="notified",
+        param={"raw_state": raw_state},
+    )
+
+
 async def deliver_job_result(
     bot,
     storage,
@@ -473,6 +555,7 @@ async def deliver_job_result(
     status_record: Dict[str, Any],
     notify_user: bool,
     source: str,
+    get_user_language: Optional[Callable[[int], str]] = None,
 ) -> bool:
     user_id = job.get("user_id")
     if user_id is None:
@@ -584,6 +667,7 @@ async def deliver_job_result(
                 prompt_hash=prompt_hash,
                 task_id=task_id,
                 job_id=job_id,
+                correlation_id=correlation_id,
             )
     except KIEResultError as exc:
         try:
@@ -607,6 +691,20 @@ async def deliver_job_result(
         )
         return False
 
+    try:
+        await storage.update_job_status(job_id, "result_validated", result_urls=job_result.urls)
+    except Exception as storage_exc:
+        logger.warning("Failed to update result_validated status: %s", storage_exc)
+    log_task_lifecycle(
+        state="result_validated",
+        user_id=user_id,
+        task_id=task_id,
+        job_id=job_id,
+        model_id=model_id,
+        correlation_id=correlation_id,
+        source=source,
+    )
+
     if prompt_hash and model_id:
         try:
             from app.generations.request_dedupe_store import update_dedupe_entry
@@ -617,7 +715,8 @@ async def deliver_job_result(
                 prompt_hash,
                 job_id=job_id,
                 task_id=task_id,
-                status="completed",
+                status="result_validated",
+                request_id=request_id,
                 media_type=job_result.media_type,
                 result_urls=job_result.urls,
                 result_text=job_result.text,
@@ -656,6 +755,9 @@ async def deliver_job_result(
             )
         except Exception as charge_exc:
             logger.warning("delivery_charge_commit_failed task_id=%s error=%s", task_id, charge_exc)
+        age_s = _job_age_seconds(job, now_ts=time.time())
+        if age_s is not None:
+            record_end_to_end_latency(int(age_s * 1000))
         log_task_lifecycle(
             state="delivered",
             user_id=user_id,
@@ -688,16 +790,47 @@ async def deliver_job_result(
 
     if notify_user:
         try:
+            lang = get_user_language(user_id) if get_user_language else "ru"
+            delivery_msg = build_delivery_message(model_spec.name or model_id, correlation_id, lang=lang)
             await bot.send_message(
                 chat_id=chat_id,
-                text="✅ Результат готов, отправляю повторно.",
+                text=delivery_msg,
+                parse_mode="HTML",
             )
         except Exception:
             pass
 
+    try:
+        await storage.update_job_status(job_id, "tg_deliver", result_urls=job_result.urls)
+    except Exception as storage_exc:
+        logger.warning("Failed to update tg_deliver status: %s", storage_exc)
+    log_task_lifecycle(
+        state="tg_deliver",
+        user_id=user_id,
+        task_id=task_id,
+        job_id=job_id,
+        model_id=model_id,
+        correlation_id=correlation_id,
+        source=source,
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        action="TG_DELIVER",
+        action_path=source,
+        model_id=model_id,
+        task_id=task_id,
+        job_id=job_id,
+        stage="TG_DELIVER",
+        outcome="start",
+    )
+
     delivered = False
     delivery_error_code: Optional[str] = None
     delivery_error_hint: Optional[str] = None
+    delivery_start_ts = time.monotonic()
     try:
         delivered = bool(
             await send_result_file(
@@ -721,6 +854,8 @@ async def deliver_job_result(
         delivery_error_code = "TG_DELIVER_EXCEPTION"
         delivery_error_hint = str(exc)
 
+    delivery_duration_ms = int((time.monotonic() - delivery_start_ts) * 1000)
+    record_delivery_latency(delivery_duration_ms)
     log_structured_event(
         correlation_id=correlation_id,
         request_id=request_id,
@@ -733,6 +868,7 @@ async def deliver_job_result(
         job_id=job_id,
         stage="TG_DELIVER",
         outcome="success" if delivered else "failed",
+        duration_ms=delivery_duration_ms,
         error_code=None if delivered else (delivery_error_code or "TG_DELIVER_FALSE"),
         fix_hint=delivery_error_hint,
         param={"message_id": message_id},
@@ -851,15 +987,29 @@ async def reconcile_pending_results(
             timeout_seconds=DELIVERY_POLL_TIMEOUT_SECONDS,
             get_user_language=get_user_language,
         )
+        correlation_id = job.get("correlation_id") or job.get("request_id")
+        request_id = job.get("request_id") or correlation_id
+        job_id_value = job.get("job_id") or task_id
         try:
-            status = await kie_client.get_task_status(task_id)
-        except Exception:
+            status = await kie_client.get_task_status(task_id, correlation_id=correlation_id)
+        except Exception as exc:
+            logger.warning("delivery_status_poll_failed task_id=%s error=%s", task_id, exc)
             continue
         if not status.get("ok"):
             continue
-        status_state = (status.get("state") or "").lower()
+        resolution = normalize_provider_state(status.get("state"))
+        status_state = resolution.canonical_state
+        raw_state = resolution.raw_state or str(status.get("state") or "")
+        status["_raw_state"] = raw_state
+        status["state"] = status_state
+        status["taskId"] = task_id
         if status_state in SUCCESS_STATES:
-            status["taskId"] = task_id
+            if age_s is not None:
+                record_wait_latency(int(age_s * 1000))
+            try:
+                await storage.update_job_status(job_id_value, "success")
+            except Exception as storage_exc:
+                logger.warning("Failed to update job success status: %s", storage_exc)
             await deliver_job_result(
                 bot,
                 storage,
@@ -867,11 +1017,39 @@ async def reconcile_pending_results(
                 status_record=status,
                 notify_user=True,
                 source="delivery_reconciler",
+                get_user_language=get_user_language,
             )
+        elif status_state in {"queued", "waiting"}:
+            try:
+                await storage.update_job_status(job_id_value, status_state)
+            except Exception as storage_exc:
+                logger.warning("Failed to update job state=%s: %s", status_state, storage_exc)
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=job.get("user_id"),
+                chat_id=job.get("chat_id") or job.get("user_id"),
+                action="KIE_POLL",
+                action_path="delivery_reconciler",
+                model_id=job.get("model_id"),
+                task_id=task_id,
+                job_id=job_id_value,
+                stage="KIE_POLL",
+                outcome=status_state,
+                param={"raw_state": raw_state},
+            )
+            if status_state == "waiting":
+                await _maybe_notify_waiting(
+                    bot,
+                    storage,
+                    job,
+                    raw_state=raw_state,
+                    get_user_language=get_user_language,
+                )
         elif status_state in FAILED_STATES:
             try:
                 await storage.update_job_status(
-                    job.get("job_id") or task_id,
+                    job_id_value,
                     "failed",
                     error_message=status.get("failMsg"),
                     error_code=status.get("failCode") or "KIE_FAIL_STATE",
@@ -892,22 +1070,52 @@ async def reconcile_pending_results(
                         job_id=job.get("job_id"),
                         task_id=task_id,
                         status="failed",
+                        request_id=request_id,
                         result_text=status.get("failMsg"),
                     )
                 except Exception as dedupe_exc:
                     logger.warning("delivery_dedupe_fail_update_failed task_id=%s error=%s", task_id, dedupe_exc)
+            if user_id is not None:
+                lang = get_user_language(user_id) if get_user_language else "ru"
+                fail_hint = (status.get("failMsg") or "").strip()
+                if len(fail_hint) > 140:
+                    fail_hint = f"{fail_hint[:137]}…"
+                error_text = build_error_message(correlation_id, lang=lang, hint=fail_hint or None)
+                try:
+                    await bot.send_message(chat_id=job.get("chat_id") or user_id, text=error_text, parse_mode="HTML")
+                except Exception as exc:
+                    logger.warning("delivery_error_notify_failed task_id=%s error=%s", task_id, exc)
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=user_id,
+                chat_id=job.get("chat_id") or user_id,
+                action="KIE_POLL",
+                action_path="delivery_reconciler",
+                model_id=model_id,
+                task_id=task_id,
+                job_id=job_id_value,
+                stage="KIE_POLL",
+                outcome="failed",
+                error_code=status.get("failCode") or "KIE_FAIL_STATE",
+                fix_hint=status.get("failMsg"),
+                param={"raw_state": raw_state},
+            )
             log_task_lifecycle(
                 state="failed",
-                user_id=job.get("user_id"),
+                user_id=user_id,
                 task_id=task_id,
                 job_id=job.get("job_id"),
-                model_id=job.get("model_id"),
-                correlation_id=job.get("correlation_id") or job.get("request_id"),
+                model_id=model_id,
+                correlation_id=correlation_id,
                 source="delivery_reconciler",
                 detail={"reason": "provider_failed"},
             )
 
-    snapshot = metrics_snapshot()
+    snapshot = {
+        "delivery": delivery_metrics_snapshot(),
+        "generation": generation_metrics_snapshot(),
+    }
     log_structured_event(
         action="DELIVERY_METRICS",
         action_path="delivery_reconciler",
