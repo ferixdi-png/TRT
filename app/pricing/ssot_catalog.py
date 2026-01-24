@@ -149,6 +149,7 @@ def format_pricing_blocked_message(model_id: str, *, user_lang: str) -> str:
         issues_text = "\n".join(f"• {issue}" for issue in issues) if issues else "• Причина не указана"
         return (
             "⛔️ <b>Модель заблокирована</b>\n\n"
+            "Модель временно недоступна.\n\n"
             f"Причина: <code>{status_display}</code>\n"
             f"{issues_text}\n\n"
             f"Подробнее: <code>{link}</code>"
@@ -156,6 +157,7 @@ def format_pricing_blocked_message(model_id: str, *, user_lang: str) -> str:
     issues_text = "\n".join(f"• {issue}" for issue in issues) if issues else "• No details available"
     return (
         "⛔️ <b>Model blocked</b>\n\n"
+        "Model is temporarily unavailable.\n\n"
         f"Reason: <code>{status_display}</code>\n"
         f"{issues_text}\n\n"
         f"Details: <code>{link}</code>"
