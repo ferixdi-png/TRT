@@ -94,6 +94,7 @@ KNOWN_CALLBACK_PREFIXES = (
     "tutorial_step",
     "retry_generate:",
     "retry_delivery:",
+    "open_result:",
     "cancel:",
 )
 
@@ -2370,7 +2371,8 @@ DEDUPE_ORPHAN_ALERT_THRESHOLD = int(os.getenv("DEDUPE_ORPHAN_ALERT_THRESHOLD", "
 
 # Generation submit locks to prevent double confirm clicks
 generation_submit_locks: dict[int, float] = {}
-GENERATION_SUBMIT_LOCK_TTL_SECONDS = 20
+_generation_submit_lock_ttl_raw = float(os.getenv("GENERATION_SUBMIT_LOCK_TTL_SECONDS", "5"))
+GENERATION_SUBMIT_LOCK_TTL_SECONDS = max(3.0, min(5.0, _generation_submit_lock_ttl_raw))
 REQUEST_DEDUPE_WINDOW_SECONDS = int(os.getenv("GENERATION_DEDUPE_WINDOW_SECONDS", "15"))
 DEDUPE_LOCK_WAIT_SECONDS = float(os.getenv("GEN_DEDUPE_LOCK_WAIT_SECONDS", "30"))
 DEDUPE_TASK_RESOLUTION_ATTEMPTS = int(os.getenv("GEN_DEDUPE_TASK_RESOLUTION_ATTEMPTS", "20"))
@@ -4155,6 +4157,167 @@ def clear_user_session(user_id: int, *, reason: str) -> None:
     session.clear()
     session["last_activity"] = time.time()
     logger.info("🧹 SESSION_RESET_FULL: action_path=%s user_id=%s", reason, user_id)
+
+
+def _generation_submit_lock_remaining(user_id: int) -> float:
+    last = generation_submit_locks.get(user_id)
+    if not last:
+        return 0.0
+    elapsed = time.time() - last
+    return max(0.0, GENERATION_SUBMIT_LOCK_TTL_SECONDS - elapsed)
+
+
+def _build_request_fingerprint(model_id: str, params: Optional[Dict[str, Any]]) -> str:
+    payload = {
+        "model_id": model_id or "",
+        "params": params or {},
+    }
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    except Exception:
+        serialized = f"{model_id}:{str(params)}"
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
+
+
+def _is_terminal_job_status(status: Optional[str]) -> bool:
+    if not status:
+        return False
+    return status in ACTIVE_JOB_STATES_TERMINAL
+
+
+def _clear_session_task_id(
+    session: Optional[Dict[str, Any]],
+    *,
+    reason: str,
+    task_id: Optional[str] = None,
+    allow_mismatch: bool = False,
+) -> bool:
+    if not isinstance(session, dict):
+        return False
+    current_task_id = session.get("task_id")
+    if current_task_id is None:
+        return False
+    if task_id and current_task_id != task_id and not allow_mismatch:
+        logger.info(
+            "🧹 TASK_CONTEXT_SKIP_CLEAR: reason=%s task_id=%s current_task_id=%s",
+            reason,
+            task_id,
+            current_task_id,
+        )
+        return False
+    session.pop("task_id", None)
+    session.pop("task_terminal_state", None)
+    session["last_activity"] = time.time()
+    logger.info(
+        "🧹 TASK_CONTEXT_CLEARED: reason=%s task_id=%s",
+        reason,
+        current_task_id,
+    )
+    return True
+
+
+def _clear_user_task_context(
+    user_id: int,
+    *,
+    reason: str,
+    task_id: Optional[str] = None,
+    allow_mismatch: bool = False,
+) -> None:
+    session = user_sessions.get(user_id)
+    cleared = _clear_session_task_id(
+        session,
+        reason=reason,
+        task_id=task_id,
+        allow_mismatch=allow_mismatch,
+    )
+    if not cleared:
+        logger.debug(
+            "TASK_CONTEXT_NOT_CLEARED: reason=%s user_id=%s task_id=%s",
+            reason,
+            user_id,
+            task_id,
+        )
+
+
+def _build_task_already_started_keyboard(
+    user_lang: str,
+    *,
+    task_id: str,
+    job_id: Optional[str],
+) -> InlineKeyboardMarkup:
+    status_label = "📊 Статус" if user_lang == "ru" else "📊 Status"
+    open_label = "📂 Открыть результат" if user_lang == "ru" else "📂 Open result"
+    cancel_label = "🛑 Отмена" if user_lang == "ru" else "🛑 Cancel"
+    cancel_callback = _build_cancel_callback(job_id) if job_id else "cancel"
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(status_label, callback_data="my_generations"),
+                InlineKeyboardButton(open_label, callback_data=f"open_result:{task_id}"),
+            ],
+            [
+                InlineKeyboardButton(cancel_label, callback_data=cancel_callback),
+                InlineKeyboardButton(t("btn_home", lang=user_lang), callback_data="back_to_menu"),
+            ],
+        ]
+    )
+
+
+def _build_task_already_started_text(user_lang: str, task_id: str) -> str:
+    if user_lang == "ru":
+        return (
+            "ℹ️ <b>Задача уже запущена</b>\n\n"
+            "Мы уже обрабатываем этот запрос. Вы можете проверить статус, открыть результат "
+            "или отменить задачу.\n\n"
+            f"Task ID: <code>{task_id}</code>"
+        )
+    return (
+        "ℹ️ <b>Task already started</b>\n\n"
+        "This request is already running. You can check the status, open the result, "
+        "or cancel the task.\n\n"
+        f"Task ID: <code>{task_id}</code>"
+    )
+
+
+async def _show_task_already_started(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    user_lang: str,
+    task_id: str,
+    job_id: Optional[str],
+    reason: str,
+    correlation_id: Optional[str],
+) -> None:
+    query = update.callback_query
+    chat_id = query.message.chat_id if query and query.message else None
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=update.effective_user.id if update.effective_user else None,
+        chat_id=chat_id,
+        action="CONFIRM_GENERATE",
+        action_path="confirm_generate",
+        outcome=reason,
+        task_id=task_id,
+        job_id=job_id,
+        dedup_hit=True,
+    )
+    text = _build_task_already_started_text(user_lang, task_id)
+    keyboard = _build_task_already_started_keyboard(user_lang, task_id=task_id, job_id=job_id)
+    if query and query.message:
+        try:
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+            return
+        except Exception:
+            pass
+        await query.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    chat = update.effective_chat
+    if chat:
+        try:
+            await context.bot.send_message(chat_id=chat.id, text=text, parse_mode="HTML", reply_markup=keyboard)
+        except Exception as exc:
+            logger.warning("task_already_started_notify_failed chat_id=%s error=%s", chat.id, exc)
 
 
 def _acquire_generation_submit_lock(user_id: int) -> bool:
@@ -8372,6 +8535,7 @@ async def _button_callback_impl(
                 await query.answer()
             except:
                 pass
+            _clear_user_task_context(user_id, reason="back_to_menu", allow_mismatch=True)
             await ensure_main_menu(update, context, source="back", prefer_edit=True)
             return ConversationHandler.END
         
@@ -8976,6 +9140,129 @@ async def _button_callback_impl(
                 parse_mode='HTML'
             )
             return CONFIRMING_GENERATION
+
+        if data.startswith("open_result:"):
+            task_id = data.split(":", 1)[1].strip() if ":" in data else ""
+            await query.answer("Проверяю результат..." if user_lang == "ru" else "Checking result...")
+            if not task_id:
+                await query.edit_message_text(
+                    "❌ Не удалось определить task_id. Откройте статус через меню."
+                    if user_lang == "ru"
+                    else "❌ Could not determine task_id. Open status from the menu.",
+                    parse_mode="HTML",
+                    reply_markup=build_back_to_menu_keyboard(user_lang),
+                )
+                return ConversationHandler.END
+
+            from app.delivery.reconciler import FAILED_STATES, SUCCESS_STATES, deliver_job_result
+            from app.integrations.kie_stub import get_kie_client_or_stub
+            from app.storage import get_storage
+
+            storage_instance = get_storage()
+            job = await _find_job_by_task_id(storage_instance, task_id)
+            if not job:
+                await query.edit_message_text(
+                    "❌ Не нашёл задачу. Проверьте статус в меню «Мои генерации»."
+                    if user_lang == "ru"
+                    else "❌ Task not found. Check status in “My generations”.",
+                    parse_mode="HTML",
+                    reply_markup=build_back_to_menu_keyboard(user_lang),
+                )
+                return ConversationHandler.END
+            job_user_id = job.get("user_id")
+            if job_user_id is not None and job_user_id != user_id and not get_is_admin(user_id):
+                await query.edit_message_text(
+                    "❌ У вас нет доступа к этой задаче."
+                    if user_lang == "ru"
+                    else "❌ You don't have access to this task.",
+                    parse_mode="HTML",
+                    reply_markup=build_back_to_menu_keyboard(user_lang),
+                )
+                return ConversationHandler.END
+
+            job_id_value = job.get("job_id") or task_id
+            job_id_for_keyboard = job.get("job_id")
+            status_record: Dict[str, Any] = {}
+            provider_state = "unknown"
+            try:
+                status_record = await get_kie_client_or_stub().get_task_status(task_id)
+                provider_state = (status_record.get("state") or "unknown").lower()
+            except Exception as exc:
+                logger.warning("open_result_status_fetch_failed task_id=%s error=%s", task_id, exc)
+            status_record["taskId"] = task_id
+            task_keyboard = _build_task_already_started_keyboard(
+                user_lang,
+                task_id=task_id,
+                job_id=job_id_for_keyboard,
+            )
+
+            if provider_state in SUCCESS_STATES:
+                delivered = await deliver_job_result(
+                    context.bot,
+                    storage_instance,
+                    job=job,
+                    status_record=status_record,
+                    notify_user=True,
+                    source="open_result",
+                    get_user_language=get_user_language,
+                )
+                if delivered:
+                    _clear_user_task_context(
+                        user_id,
+                        reason="terminal_success_open_result",
+                        task_id=task_id,
+                        allow_mismatch=True,
+                    )
+                await query.edit_message_text(
+                    (
+                        "✅ <b>Результат готов</b>\n\n"
+                        "Я отправил его выше в чате."
+                        if user_lang == "ru"
+                        else "✅ <b>Result is ready</b>\n\nI've sent it above in the chat."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=task_keyboard,
+                )
+                return ConversationHandler.END
+
+            if provider_state in FAILED_STATES:
+                await storage_instance.update_job_status(
+                    job_id_value,
+                    "failed",
+                    error_message=status_record.get("failMsg"),
+                    error_code=status_record.get("failCode") or "KIE_FAIL_STATE",
+                )
+                _clear_user_task_context(
+                    user_id,
+                    reason="terminal_fail_open_result",
+                    task_id=task_id,
+                    allow_mismatch=True,
+                )
+                await query.edit_message_text(
+                    (
+                        "❌ <b>Задача завершилась с ошибкой</b>\n\n"
+                        "Можно запустить новую генерацию."
+                        if user_lang == "ru"
+                        else "❌ <b>The task failed</b>\n\nYou can start a new generation."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=build_back_to_menu_keyboard(user_lang),
+                )
+                return ConversationHandler.END
+
+            wait_text = (
+                "⏳ <b>Результат ещё готовится</b>\n\n"
+                f"Текущий статус: <b>{provider_state}</b>\n"
+                "Вы можете проверить статус позже или отменить задачу."
+                if user_lang == "ru"
+                else (
+                    "⏳ <b>The result is still processing</b>\n\n"
+                    f"Current status: <b>{provider_state}</b>\n"
+                    "You can check again later or cancel the task."
+                )
+            )
+            await query.edit_message_text(wait_text, parse_mode="HTML", reply_markup=task_keyboard)
+            return ConversationHandler.END
 
         if data.startswith("retry_delivery:"):
             task_id = data.split(":", 1)[1] if ":" in data else ""
@@ -18646,11 +18933,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not _acquire_generation_submit_lock(user_id):
         user_lang = get_user_language(user_id) if user_id else "ru"
+        remaining_seconds = max(1, int(math.ceil(_generation_submit_lock_remaining(user_id))))
         throttle_text = (
             "⏳ <b>Генерация уже запускается</b>\n\n"
-            "Пожалуйста, подождите несколько секунд и попробуйте снова."
+            f"Подождите {remaining_seconds} сек и попробуйте снова."
             if user_lang == "ru"
-            else "⏳ <b>Generation already starting</b>\n\nPlease wait a few seconds and try again."
+            else (
+                "⏳ <b>Generation already starting</b>\n\n"
+                f"Please wait {remaining_seconds}s and try again."
+            )
         )
 
         await send_or_edit_message(
@@ -18689,17 +18980,43 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     job_id = session.get("job_id")
     
-    # CRITICAL: Check if task_id already exists in session (prevent duplicate)
-    if 'task_id' in session:
-        task_id_existing = session.get('task_id')
-        logger.warning(f"⚠️⚠️⚠️ Task {task_id_existing} already exists in session for user {user_id}, preventing duplicate")
-        await send_or_edit_message(
-            f"⚠️ <b>Генерация уже запущена</b>\n\n"
-            f"Задача уже создана.\n"
-            f"Task ID: <code>{task_id_existing}</code>",
-            parse_mode='HTML'
-        )
-        return ConversationHandler.END
+    # CRITICAL: If task_id already exists in session, show actionable screen instead of silence
+    task_id_existing = session.get("task_id")
+    if task_id_existing:
+        existing_job_id = job_id
+        job_status = None
+        job_record = await storage_instance.get_job(existing_job_id) if existing_job_id else None
+        if not job_record:
+            job_record = await _find_job_by_task_id(storage_instance, task_id_existing)
+            if job_record and not existing_job_id:
+                existing_job_id = job_record.get("job_id") or task_id_existing
+                session["job_id"] = existing_job_id
+        if job_record:
+            job_status = job_record.get("status")
+        if _is_terminal_job_status(job_status):
+            session["task_terminal_state"] = job_status
+            _clear_user_task_context(
+                user_id,
+                reason=f"terminal_{job_status}_precheck",
+                task_id=task_id_existing,
+                allow_mismatch=True,
+            )
+        else:
+            logger.warning(
+                "⚠️⚠️⚠️ Task %s already exists in session for user %s, showing already-started screen",
+                task_id_existing,
+                user_id,
+            )
+            await _show_task_already_started(
+                update,
+                context,
+                user_lang=user_lang,
+                task_id=task_id_existing,
+                job_id=existing_job_id,
+                reason="task_exists_session",
+                correlation_id=correlation_id,
+            )
+            return ConversationHandler.END
     model_id = session.get('model_id')
     params = session.get('params', {})
     model_info = session.get('model_info', {})
@@ -18791,6 +19108,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
     # CRITICAL: Check if task already exists in active_generations to prevent duplicate
+    duplicate_task_id = None
+    duplicate_job_id = None
     async with active_generations_lock:
         user_active_generations = [(uid, tid) for (uid, tid) in active_generations.keys() if uid == user_id]
         if user_active_generations:
@@ -18802,14 +19121,26 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if gen_session and gen_session.get('model_id') == model_id:
                     created_time = gen_session.get('created_at', current_time)
                     if current_time - created_time < 10:  # Within 10 seconds
-                        logger.warning(f"⚠️⚠️⚠️ Duplicate generation detected! Task {tid} was created recently for user {user_id}, model {model_id}")
-                        await send_or_edit_message(
-                            f"⚠️ <b>Генерация уже запущена</b>\n\n"
-                            f"Задача уже создана и обрабатывается.\n"
-                            f"Task ID: <code>{tid}</code>",
-                            parse_mode='HTML'
+                        duplicate_task_id = tid
+                        duplicate_job_id = gen_session.get("job_id") if gen_session else None
+                        logger.warning(
+                            "⚠️⚠️⚠️ Duplicate generation detected! Task %s was created recently for user %s, model %s",
+                            tid,
+                            user_id,
+                            model_id,
                         )
-                        return ConversationHandler.END
+                        break
+    if duplicate_task_id:
+        await _show_task_already_started(
+            update,
+            context,
+            user_lang=user_lang,
+            task_id=duplicate_task_id,
+            job_id=duplicate_job_id,
+            reason="task_exists_active",
+            correlation_id=correlation_id,
+        )
+        return ConversationHandler.END
     
     # Используем адаптер для нормализации параметров
     from kie_input_adapter import normalize_for_generation
@@ -18843,6 +19174,14 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     prompt_value = params.get("prompt") or params.get("text") or params.get("caption")
     prompt_hash = prompt_summary(prompt_value).get("prompt_hash")
+    if not prompt_hash:
+        prompt_hash = _build_request_fingerprint(model_id, params)
+        logger.info(
+            "prompt_hash_fallback_used: model_id=%s prompt_hash=%s request_id=%s",
+            model_id,
+            prompt_hash,
+            session.get("request_id"),
+        )
     request_id = session.get("request_id") or correlation_id or str(uuid.uuid4())
     session["request_id"] = request_id
     session["prompt_hash"] = prompt_hash
@@ -21227,6 +21566,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 async with active_generations_lock:
                     if generation_key in active_generations:
                         del active_generations[generation_key]
+                _clear_user_task_context(user_id, reason="status_error", task_id=task_id, allow_mismatch=True)
                 break
             
             state = status_result.get('state')
@@ -21602,6 +21942,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 async with active_generations_lock:
                     if generation_key in active_generations:
                         del active_generations[generation_key]
+                _clear_user_task_context(user_id, reason="terminal_success", task_id=task_id, allow_mismatch=True)
                 break
             
             elif state == 'fail':
@@ -21694,7 +22035,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                     text=_append_free_counter_text(user_message, free_counter_line),
                     parse_mode='HTML'
                 )
-                
+                _clear_user_task_context(user_id, reason="terminal_fail", task_id=task_id, allow_mismatch=True)
                 break
             
             elif state in ['waiting', 'queuing', 'generating']:
@@ -21735,7 +22076,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                                 logger.error(f"❌ Failed to refund user {user_id} for timeout task {task_id}: {refund_error}")
                         
                         del active_generations[generation_key]
-                
+                _clear_user_task_context(user_id, reason="terminal_timeout_exception", task_id=task_id, allow_mismatch=True)
                 await _send_with_log(
                     "send_message",
                     chat_id=chat_id,
@@ -21770,7 +22111,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         logger.error(f"❌ Failed to refund user {user_id} for timeout task {task_id}: {refund_error}")
                 
                 del active_generations[generation_key]
-        
+        _clear_user_task_context(user_id, reason="terminal_timeout_final", task_id=task_id, allow_mismatch=True)
         await _send_with_log(
             "send_message",
             chat_id=chat_id,
@@ -22026,6 +22367,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state_source="command",
         )
         if accepted:
+            _clear_user_task_context(user_id, reason="cancel_accepted", task_id=session.get("task_id"), allow_mismatch=True)
             await ensure_main_menu(update, context, source="cancel_generation", prefer_edit=False)
             return ConversationHandler.END
     
@@ -22045,12 +22387,14 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("❌ Операция отменена.")
             except:
                 pass
+        _clear_user_task_context(user_id, reason="cancel_callback", task_id=session.get("task_id"), allow_mismatch=True)
         await ensure_main_menu(update, context, source="cancel", prefer_edit=False)
         return ConversationHandler.END
     
     # Handle command
     if update.message:
         await update.message.reply_text("❌ Операция отменена.")
+        _clear_user_task_context(user_id, reason="cancel_command", task_id=session.get("task_id"), allow_mismatch=True)
         await ensure_main_menu(update, context, source="cancel", prefer_edit=False)
         return ConversationHandler.END
 
