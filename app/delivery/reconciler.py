@@ -19,12 +19,14 @@ from app.kie_catalog import get_model
 from app.observability.delivery_metrics import metrics_snapshot, record_pending_age
 from app.observability.structured_logs import log_structured_event
 from app.observability.task_lifecycle import log_task_lifecycle
+from app.observability.correlation_store import register_correlation_ids
 
 logger = logging.getLogger(__name__)
 
 PENDING_STATES = {"pending", "queued", "running", "timeout", "delivery_pending"}
 SUCCESS_STATES = {"success", "completed", "succeeded"}
 FAILED_STATES = {"failed", "fail", "error", "canceled", "cancelled", "canceled"}
+DELIVERED_STATES = {"delivered"}
 DELIVERY_POLL_TIMEOUT_SECONDS = int(os.getenv("DELIVERY_POLL_TIMEOUT_SECONDS", "300"))
 DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS = int(os.getenv("DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS", "60"))
 
@@ -445,7 +447,11 @@ async def _maybe_notify_timeout(
     except Exception as exc:
         logger.warning("delivery_timeout_notify_failed job_id=%s error=%s", job.get("job_id"), exc)
     await _mark_timeout_notified(storage, job, timeout_seconds=timeout_seconds)
+    correlation_id = job.get("correlation_id") or job.get("request_id")
+    request_id = job.get("request_id") or correlation_id
     log_structured_event(
+        correlation_id=correlation_id,
+        request_id=request_id,
         user_id=user_id,
         chat_id=chat_id,
         action="DELIVERY_TIMEOUT",
@@ -476,10 +482,83 @@ async def deliver_job_result(
         return False
     model_id = job.get("model_id")
     job_id = job.get("job_id") or task_id
-    request_id = job.get("request_id")
+    correlation_id = job.get("correlation_id") or job.get("request_id")
+    request_id = job.get("request_id") or correlation_id
     prompt_hash = job.get("prompt_hash")
     chat_id = job.get("chat_id") or user_id
     message_id = job.get("message_id")
+
+    await register_correlation_ids(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        task_id=task_id,
+        job_id=job_id,
+        user_id=user_id,
+        model_id=model_id,
+        storage=storage,
+        source=f"{source}.start",
+    )
+
+    delivery_record = await _get_delivery_record(storage, user_id=user_id, task_id=task_id)
+    current_status = str(job.get("status") or "").lower()
+    if current_status in DELIVERED_STATES:
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="DELIVERY_ALREADY_DELIVERED",
+            action_path=source,
+            model_id=model_id,
+            task_id=task_id,
+            job_id=job_id,
+            stage="TG_DELIVER",
+            outcome="skipped",
+            param={"reason": "job_status_delivered"},
+        )
+        return True
+    if str(delivery_record.get("status") or "").lower() in DELIVERED_STATES:
+        try:
+            await storage.update_job_status(job_id, "delivered", result_urls=delivery_record.get("result_urls"))
+        except Exception as storage_exc:
+            logger.warning("Failed to mark delivered job from record: %s", storage_exc)
+        try:
+            await _commit_delivery_charge(
+                storage,
+                job=job,
+                user_id=user_id,
+                task_id=task_id,
+                chat_id=chat_id,
+                request_id=request_id,
+                model_id=model_id,
+            )
+        except Exception as charge_exc:
+            logger.warning("delivery_charge_commit_failed task_id=%s error=%s", task_id, charge_exc)
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="DELIVERY_ALREADY_DELIVERED",
+            action_path=source,
+            model_id=model_id,
+            task_id=task_id,
+            job_id=job_id,
+            stage="TG_DELIVER",
+            outcome="skipped",
+            param={"reason": "delivery_record_delivered"},
+        )
+        log_task_lifecycle(
+            state="delivered",
+            user_id=user_id,
+            task_id=task_id,
+            job_id=job_id,
+            model_id=model_id,
+            correlation_id=correlation_id,
+            source=source,
+            detail={"reason": "delivery_record_delivered"},
+        )
+        return True
 
     model_spec = get_model(model_id) if model_id else None
     if not model_spec:
@@ -492,7 +571,7 @@ async def deliver_job_result(
             status_record,
             model_spec.output_media_type,
             model_id,
-            correlation_id=job.get("request_id"),
+            correlation_id=correlation_id,
             base_url=base_url,
         )
         if job_result.urls:
@@ -522,6 +601,7 @@ async def deliver_job_result(
             task_id=task_id,
             job_id=job_id,
             model_id=model_id,
+            correlation_id=correlation_id,
             source=source,
             detail={"reason": "result_validation_failed"},
         )
@@ -544,23 +624,6 @@ async def deliver_job_result(
             )
         except Exception as dedupe_exc:
             logger.warning("delivery_dedupe_update_failed task_id=%s error=%s", task_id, dedupe_exc)
-
-    try:
-        await storage.update_job_status(
-            job_id,
-            "delivery_pending",
-            result_urls=job_result.urls,
-        )
-    except Exception as storage_exc:
-        logger.warning("Failed to update job completion: %s", storage_exc)
-    log_task_lifecycle(
-        state="done",
-        user_id=user_id,
-        task_id=task_id,
-        job_id=job_id,
-        model_id=model_id,
-        source=source,
-    )
 
     already_delivered = await _reserve_delivery(
         storage,
@@ -599,10 +662,29 @@ async def deliver_job_result(
             task_id=task_id,
             job_id=job_id,
             model_id=model_id,
+            correlation_id=correlation_id,
             source=source,
             detail={"reason": "already_delivered"},
         )
         return True
+
+    try:
+        await storage.update_job_status(
+            job_id,
+            "delivery_pending",
+            result_urls=job_result.urls,
+        )
+    except Exception as storage_exc:
+        logger.warning("Failed to update job completion: %s", storage_exc)
+    log_task_lifecycle(
+        state="done",
+        user_id=user_id,
+        task_id=task_id,
+        job_id=job_id,
+        model_id=model_id,
+        correlation_id=correlation_id,
+        source=source,
+    )
 
     if notify_user:
         try:
@@ -626,11 +708,13 @@ async def deliver_job_result(
                 job_result.text,
                 model_id=model_id,
                 gen_type=model_spec.model_mode,
-                correlation_id=job.get("request_id"),
+                correlation_id=correlation_id,
                 request_id=request_id,
                 prompt_hash=prompt_hash,
                 params={"prompt": job.get("prompt")} if job.get("prompt") else None,
                 model_label=model_spec.name or model_id,
+                task_id=task_id,
+                job_id=job_id,
             )
         )
     except Exception as exc:
@@ -638,7 +722,8 @@ async def deliver_job_result(
         delivery_error_hint = str(exc)
 
     log_structured_event(
-        correlation_id=job.get("request_id"),
+        correlation_id=correlation_id,
+        request_id=request_id,
         user_id=user_id,
         chat_id=chat_id,
         action="DELIVERY_SEND_OK" if delivered else "DELIVERY_SEND_FAIL",
@@ -666,6 +751,16 @@ async def deliver_job_result(
             await storage.update_job_status(job_id, "delivered", result_urls=job_result.urls)
         except Exception as storage_exc:
             logger.warning("Failed to update delivered status: %s", storage_exc)
+        await register_correlation_ids(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            task_id=task_id,
+            job_id=job_id,
+            user_id=user_id,
+            model_id=model_id,
+            storage=storage,
+            source=f"{source}.delivered",
+        )
         try:
             await _commit_delivery_charge(
                 storage,
@@ -684,6 +779,7 @@ async def deliver_job_result(
             task_id=task_id,
             job_id=job_id,
             model_id=model_id,
+            correlation_id=correlation_id,
             source=source,
         )
     return delivered
@@ -806,6 +902,7 @@ async def reconcile_pending_results(
                 task_id=task_id,
                 job_id=job.get("job_id"),
                 model_id=job.get("model_id"),
+                correlation_id=job.get("correlation_id") or job.get("request_id"),
                 source="delivery_reconciler",
                 detail={"reason": "provider_failed"},
             )

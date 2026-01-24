@@ -93,4 +93,6 @@ async def send_result_to_user(
         parsed_result.urls,
         parsed_result.text,
         correlation_id=correlation_id,
+        request_id=correlation_id,
+        task_id=parsed_result.task_id,
     )
