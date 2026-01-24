@@ -1025,6 +1025,7 @@ from app.models.registry import (
     get_models_cached_only,
 )
 from app.models.canonical import canonicalize_model_id
+from app.utils.singleton_lock import get_lock_mode, is_lock_degraded, is_lock_acquired
 from app.services.free_tools_service import (
     add_referral_free_bonus,
     check_and_consume_free_generation,
@@ -1162,6 +1163,37 @@ GEN_TYPE_MODELS_CACHE_TTL_SECONDS = float(os.getenv("GEN_TYPE_MODELS_CACHE_TTL_S
 GEN_TYPE_MODELS_CACHE_STALE_TTL_SECONDS = float(
     os.getenv("GEN_TYPE_MODELS_CACHE_STALE_TTL_SECONDS", "180")
 )
+BOT_HEARTBEAT_INTERVAL_SECONDS = float(os.getenv("BOT_HEARTBEAT_INTERVAL_SECONDS", "60"))
+
+
+def _normalize_heartbeat_interval(interval_seconds: float) -> float:
+    """Clamp heartbeat interval to a sane range while allowing explicit disable."""
+    if interval_seconds <= 0:
+        return 0.0
+    if interval_seconds < 15:
+        return 15.0
+    return interval_seconds
+
+
+async def _bot_heartbeat_loop(stop_event: asyncio.Event, interval_seconds: float) -> None:
+    """Emit periodic liveness logs so idle polling does not look stuck."""
+    logger.info("💓 BOT_HEARTBEAT task_started interval_s=%s", interval_seconds)
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+            break
+        except asyncio.TimeoutError:
+            models_cached = get_models_cached_only()
+            models_cached_count = len(models_cached) if models_cached is not None else 0
+            logger.info(
+                "💓 BOT_HEARTBEAT status=alive lock_mode=%s lock_degraded=%s lock_acquired=%s models_cached=%s gen_type_cache=%s",
+                get_lock_mode(),
+                is_lock_degraded(),
+                is_lock_acquired(),
+                models_cached_count,
+                len(_GEN_TYPE_MODELS_CACHE),
+            )
+    logger.info("💓 BOT_HEARTBEAT task_stopped")
 
 
 def _get_visible_model_ids() -> Set[str]:
@@ -24255,8 +24287,20 @@ async def main():
         else:
             logger.warning(f"⚠️ Preflight warning (continuing): {e}")
     
+    heartbeat_stop_event = asyncio.Event()
+    heartbeat_interval = _normalize_heartbeat_interval(BOT_HEARTBEAT_INTERVAL_SECONDS)
+    heartbeat_task: Optional[asyncio.Task] = None
+
     # Запускаем polling через единую точку входа
     await safe_start_polling(application, drop_updates=True)
+
+    if heartbeat_interval > 0:
+        heartbeat_task = asyncio.create_task(
+            _bot_heartbeat_loop(heartbeat_stop_event, heartbeat_interval),
+            name="bot-heartbeat",
+        )
+    else:
+        logger.info("💓 BOT_HEARTBEAT disabled interval_s=%s", BOT_HEARTBEAT_INTERVAL_SECONDS)
     
     # Ждём бесконечно (polling работает в фоне)
     # Advisory lock будет освобожден через atexit handler при завершении процесса
@@ -24267,6 +24311,19 @@ async def main():
     except KeyboardInterrupt:
         logger.info("🛑 Shutting down bot (KeyboardInterrupt)...")
     finally:
+        if heartbeat_task is not None:
+            heartbeat_stop_event.set()
+            try:
+                await asyncio.wait_for(heartbeat_task, timeout=5)
+            except asyncio.TimeoutError:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+            except Exception as e:
+                logger.warning("💓 BOT_HEARTBEAT stop_failed error=%s", e)
+
         # Останавливаем application
         try:
             await application.stop()
