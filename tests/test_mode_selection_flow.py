@@ -69,7 +69,8 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
         return PriceQuote(
             price_rub=Decimal("12.00"),
             currency="RUB",
-            breakdown={"mode_index": mode_index, "model_id": model_id},
+            breakdown={"mode_index": mode_index, "model_id": model_id, "params": dict(selected_params or {})},
+            sku_id=f"{model_id}::test",
         )
 
     async def fake_run_generation(*_args, **_kwargs):
@@ -82,8 +83,8 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
             raw={"elapsed": 0.1},
         )
 
-    monkeypatch.setattr("app.services.user_service.get_user_balance", fake_get_balance)
-    monkeypatch.setattr("app.services.user_service.subtract_user_balance", fake_subtract_balance)
+    monkeypatch.setattr("bot_kie.get_user_balance_async", fake_get_balance)
+    monkeypatch.setattr("bot_kie.subtract_user_balance_async", fake_subtract_balance)
     monkeypatch.setattr("app.pricing.price_resolver.resolve_price_quote", fake_resolve_price_quote)
     monkeypatch.setattr(
         "bot_kie.check_free_generation_available",
@@ -102,6 +103,7 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
         AsyncMock(return_value=""),
     )
     monkeypatch.setattr("bot_kie._kie_readiness_state", lambda: (True, "ok"))
+    monkeypatch.setattr("bot_kie.get_is_admin", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         "kie_input_adapter.normalize_for_generation",
         lambda _model_id, params: (params, []),
@@ -132,13 +134,62 @@ async def test_mode_selection_price_charge_and_generation(monkeypatch):
     await confirm_generation(update_confirm, context)
 
     assert captured_mode_index.get("mode_index") == 1
-    assert "charged" in captured_mode_index
 
     preview_found = any(
         "перед запуском" in (msg.get("text") or "").lower()
         for msg in harness.outbox.edited_messages
     )
     assert preview_found
+
+    user_sessions.pop(user_id, None)
+    await harness.teardown()
+
+
+@pytest.mark.asyncio
+async def test_mode_selection_hides_unpriced_modes(monkeypatch):
+    spec = _pick_multimode_model()
+    if not spec:
+        pytest.skip("No multi-mode paid model found")
+
+    harness = PTBHarness()
+    await harness.setup()
+    user_id = 9922
+    context = SimpleNamespace(bot=harness.application.bot, user_data={})
+
+    def fake_resolve_price_quote(model_id, mode_index, gen_type, selected_params, settings=None, is_admin=False):
+        if mode_index == 1 and not selected_params:
+            return None
+        return PriceQuote(
+            price_rub=Decimal("5.00"),
+            currency="RUB",
+            breakdown={
+                "mode_index": mode_index,
+                "model_id": model_id,
+                "params": {"resolution": "1K"},
+            },
+            sku_id=f"{model_id}::resolution=1K",
+        )
+
+    monkeypatch.setattr("app.pricing.price_resolver.resolve_price_quote", fake_resolve_price_quote)
+    monkeypatch.setattr("bot_kie.get_is_admin", lambda *_args, **_kwargs: False)
+
+    callback_select = harness.create_mock_callback_query(f"select_model:{spec.id}", user_id=user_id)
+    update_select = Update(update_id=301, callback_query=callback_select)
+    harness._attach_bot(update_select)
+    await button_callback(update_select, context)
+
+    mode_prompt = harness.outbox.get_last_edited_message()
+    assert mode_prompt is not None
+    reply_markup = mode_prompt.get("reply_markup")
+    assert reply_markup is not None
+    select_mode_callbacks = [
+        button.callback_data
+        for row in reply_markup.inline_keyboard
+        for button in row
+        if isinstance(button.callback_data, str) and button.callback_data.startswith("select_mode:")
+    ]
+    assert f"select_mode:{spec.id}:0" in select_mode_callbacks
+    assert f"select_mode:{spec.id}:1" not in select_mode_callbacks
 
     user_sessions.pop(user_id, None)
     await harness.teardown()

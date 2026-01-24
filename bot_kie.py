@@ -2662,7 +2662,6 @@ def _resolve_price_for_display(
     chat_id: Optional[int],
 ) -> tuple[Optional[float], str, Optional[str]]:
     from app.config import get_settings
-    from app.pricing.price_ssot import list_model_skus
 
     settings = get_settings()
     quote = _update_price_quote(
@@ -2681,19 +2680,7 @@ def _resolve_price_for_display(
     if quote:
         price_value = float(quote["price_rub"])
         return price_value, _build_price_line(price_value, settings, is_admin, user_lang), None
-
-    skus = list_model_skus(model_id)
-    if not skus:
-        return None, _build_price_unavailable_line(user_lang), None
-
-    min_sku = min(skus, key=lambda sku: sku.price_rub)
-    price_value = float(min_sku.price_rub)
-    note = (
-        "ℹ️ Итоговая цена зависит от параметров."
-        if user_lang == "ru"
-        else "ℹ️ Final price depends on parameters."
-    )
-    return price_value, _build_price_line(price_value, settings, is_admin, user_lang, is_from=True), note
+    return None, _build_price_unavailable_line(user_lang), None
 
 
 def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> str:
@@ -2883,6 +2870,25 @@ def _update_price_quote(
                 user_id=user_id,
                 chat_id=chat_id,
                 update_id=update_id,
+                action="pricing_miss",
+                action_path=action_path,
+                model_id=model_id,
+                gen_type=gen_type,
+                stage="PRICE_RESOLVE",
+                outcome="blocked",
+                error_code="MISSING_PRICE",
+                fix_hint="Добавьте SKU в pricing SSOT.",
+                param={
+                    "mode_index": mode_index,
+                    "params": params or {},
+                    "expected_sku": expected_sku,
+                },
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
                 action="PRICE_MISSING_RULE",
                 action_path=action_path,
                 model_id=model_id,
@@ -2897,43 +2903,39 @@ def _update_price_quote(
                 },
             )
             return None
-        
-        # FALLBACK: Если экзактный SKU не найден, используем минимальную цену из доступных SKUs
-        if not quote:
-            min_sku = min(skus, key=lambda sku: float(sku.price_rub))
-            session["price_quote"] = {
-                "price_rub": f"{min_sku.price_rub:.2f}",
-                "currency": "RUB",
-                "breakdown": {
-                    "model_id": model_id,
-                    "mode_index": mode_index,
-                    "gen_type": gen_type,
-                    "params": dict(params or {}),
-                    "sku_id": min_sku.sku_key,
-                    "unit": min_sku.unit,
-                    "fallback_min_price": True,
-                },
-            }
-            session["sku_id"] = min_sku.sku_key
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                update_id=update_id,
-                action="PRICE_RESOLVED",
-                action_path=action_path,
-                model_id=model_id,
-                gen_type=gen_type,
-                stage="PRICE_RESOLVE",
-                outcome="resolved_fallback",
-                param={
-                    "price_rub": f"{min_sku.price_rub:.2f}",
-                    "mode_index": mode_index,
-                    "params": params or {},
-                    "fallback_min_price": True,
-                },
-            )
-            return session["price_quote"]
+
+        expected_sku = _build_expected_sku_key(model_id, params)
+        available_skus = [sku.sku_key for sku in skus]
+        logger.warning(
+            "pricing_miss model_id=%s mode_index=%s expected_sku=%s available=%s params=%s",
+            model_id,
+            mode_index,
+            expected_sku,
+            available_skus,
+            params,
+        )
+        _log_model_blocked("NO_PRICE_FOR_PARAMS")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="pricing_miss",
+            action_path=action_path,
+            model_id=model_id,
+            gen_type=gen_type,
+            stage="PRICE_RESOLVE",
+            outcome="blocked",
+            error_code="NO_PRICE_FOR_PARAMS",
+            fix_hint="Добавьте недостающий SKU/маппинг или скройте пресет.",
+            param={
+                "mode_index": mode_index,
+                "params": params or {},
+                "expected_sku": expected_sku,
+                "available_skus": available_skus,
+            },
+        )
+        return None
     session["price_quote"] = {
         "price_rub": f"{quote.price_rub:.2f}",
         "currency": quote.currency,
@@ -3146,9 +3148,44 @@ def _build_mode_selection_text(model_name: str, user_lang: str) -> str:
     )
 
 
-def _build_mode_selection_keyboard(model_id: str, modes: List[Any], user_lang: str) -> InlineKeyboardMarkup:
+def _resolve_mode_price_quote(model_id: str, mode_index: int, gen_type: Optional[str]) -> Optional["PriceQuote"]:
+    from app.config import get_settings
+    from app.pricing.price_resolver import resolve_price_quote
+
+    settings = get_settings()
+    return resolve_price_quote(
+        model_id=model_id,
+        mode_index=mode_index,
+        gen_type=gen_type,
+        selected_params={},
+        settings=settings,
+        is_admin=False,
+    )
+
+
+def _prefill_params_from_quote(session: dict, model_id: str, quote: Optional["PriceQuote"]) -> None:
+    if not quote:
+        return
+    breakdown = quote.breakdown if isinstance(quote.breakdown, dict) else {}
+    default_params = breakdown.get("params")
+    if not isinstance(default_params, dict) or not default_params:
+        return
+    from app.kie_contract.schema_loader import get_model_schema
+
+    schema = get_model_schema(model_id) or {}
+    allowed_keys = set(schema.keys()) if isinstance(schema, dict) else set()
+    existing = session.get("prefill_params")
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    for key, value in default_params.items():
+        if allowed_keys and key not in allowed_keys:
+            continue
+        merged.setdefault(key, value)
+    session["prefill_params"] = merged
+
+
+def _build_mode_selection_keyboard(model_id: str, mode_entries: List[tuple[int, Any]], user_lang: str) -> InlineKeyboardMarkup:
     buttons: List[List[InlineKeyboardButton]] = []
-    for index, mode in enumerate(modes):
+    for index, mode in mode_entries:
         label = _resolve_mode_label(mode, index, user_lang)
         buttons.append([InlineKeyboardButton(label, callback_data=f"select_mode:{model_id}:{index}")])
     buttons.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
@@ -7331,15 +7368,45 @@ async def respond_price_undefined(
         },
     )
 
+    pricing_error_code = (
+        "NO_PRICE_FOR_PARAMS"
+        if reason_code in {"MODEL_HAS_NO_SKU", "PAID_NO_QUOTE", "PRICE_MAP_MISSING_FOR_SKU"}
+        else reason_code
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="pricing_miss",
+        action_path=action_path,
+        model_id=model_id,
+        gen_type=gen_type,
+        sku_id=sku_id,
+        stage="PRICE_RESOLVE",
+        outcome="blocked",
+        error_code=pricing_error_code,
+        fix_hint=fix_hint,
+        param={
+            "reason_code": reason_code,
+            "param_snapshot": param_snapshot,
+            "free_remaining": free_remaining_value,
+        },
+    )
+
     message_text = (
-        "❌ <b>Цена не определена</b>\n\n"
-        "Причина: цена для модели не найдена.\n"
-        "Пожалуйста, выберите другую модель или попробуйте позже."
-        if user_lang == "ru"
+        format_pricing_blocked_message(model_id, user_lang=user_lang)
+        if model_id
         else (
-            "❌ <b>Price is unavailable</b>\n\n"
-            "Reason: pricing for this model is missing.\n"
-            "Please select another model or try again later."
+            "❌ <b>Цена не определена</b>\n\n"
+            "Причина: цена для модели не найдена.\n"
+            "Пожалуйста, выберите другую модель или попробуйте позже."
+            if user_lang == "ru"
+            else (
+                "❌ <b>Price is unavailable</b>\n\n"
+                "Reason: pricing for this model is missing.\n"
+                "Please select another model or try again later."
+            )
         )
     )
 
@@ -10506,7 +10573,7 @@ async def _button_callback_impl(
             )
             model_id = session.get("model_id", "")
             mode_index = _resolve_mode_index(model_id, session.get("params", {}), user_id)
-            _update_price_quote(
+            price_quote = _update_price_quote(
                 session,
                 model_id=model_id,
                 mode_index=mode_index,
@@ -10519,6 +10586,10 @@ async def _button_callback_impl(
                 chat_id=query.message.chat_id if query.message else None,
                 is_admin=get_is_admin(user_id),
             )
+            if not price_quote:
+                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                await query.edit_message_text(blocked_text, parse_mode="HTML")
+                return ConversationHandler.END
 
             required = session.get('required', [])
             params = session.get('params', {})
@@ -13674,7 +13745,36 @@ async def _button_callback_impl(
                 return ConversationHandler.END
             if user_id not in user_sessions:
                 user_sessions[user_id] = {}
+            from app.kie_catalog import get_model as get_catalog_model
+
+            model_spec = get_catalog_model(model_id)
+            model_gen_type = _derive_model_gen_type(model_spec)
+            mode_quote = _resolve_mode_price_quote(model_id, mode_index, model_gen_type)
+            if not mode_quote:
+                user_lang = get_user_language(user_id)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    action="pricing_miss",
+                    action_path=build_action_path(data),
+                    model_id=model_id,
+                    gen_type=model_gen_type,
+                    stage="MODE_SELECTION",
+                    outcome="blocked",
+                    error_code="NO_PRICE_FOR_PARAMS",
+                    fix_hint="Добавьте SKU/маппинг или скройте пресет.",
+                    param={
+                        "mode_index": mode_index,
+                        "params": {},
+                    },
+                )
+                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                await query.edit_message_text(blocked_text, parse_mode="HTML")
+                return ConversationHandler.END
             user_sessions[user_id]["mode_index"] = mode_index
+            _prefill_params_from_quote(user_sessions[user_id], model_id, mode_quote)
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -13938,9 +14038,39 @@ async def _button_callback_impl(
                 session["waiting_for"] = "mode_index"
                 user_lang = get_user_language(user_id)
                 model_name = model_info.get("name", model_id)
+                available_mode_entries: List[tuple[int, Any]] = []
+                for idx, mode in enumerate(model_spec.modes):
+                    mode_quote = _resolve_mode_price_quote(model_id, idx, model_gen_type)
+                    if not mode_quote:
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            user_id=user_id,
+                            chat_id=query.message.chat_id if query.message else None,
+                            update_id=update_id,
+                            action="pricing_miss",
+                            action_path="mode_selection",
+                            model_id=model_id,
+                            gen_type=model_gen_type,
+                            stage="MODE_SELECTION",
+                            outcome="blocked",
+                            error_code="NO_PRICE_FOR_PARAMS",
+                            fix_hint="Добавьте SKU/маппинг или скройте пресет.",
+                            param={
+                                "mode_index": idx,
+                                "mode_notes": getattr(mode, "notes", None),
+                                "params": {},
+                            },
+                        )
+                        continue
+                    available_mode_entries.append((idx, mode))
+
+                if not available_mode_entries:
+                    blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                    await query.edit_message_text(blocked_text, parse_mode="HTML")
+                    return ConversationHandler.END
                 await query.edit_message_text(
                     _build_mode_selection_text(model_name, user_lang),
-                    reply_markup=_build_mode_selection_keyboard(model_id, model_spec.modes, user_lang),
+                    reply_markup=_build_mode_selection_keyboard(model_id, available_mode_entries, user_lang),
                     parse_mode="HTML",
                 )
                 return ConversationHandler.END
@@ -13981,6 +14111,10 @@ async def _button_callback_impl(
                 user_id=user_id,
                 chat_id=query.message.chat_id if query.message else None,
             )
+            if price_value is None:
+                blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
+                await query.edit_message_text(blocked_text, parse_mode="HTML")
+                return ConversationHandler.END
             
             # Calculate how many generations available
             if is_admin:
