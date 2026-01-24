@@ -47,3 +47,6 @@ class RequestTracker:
         if not entry:
             return
         self._entries[key] = RequestEntry(job_id=entry.job_id, task_id=task_id, created_ts=entry.created_ts)
+
+    def delete(self, key: RequestKey) -> None:
+        self._entries.pop(key, None)
