@@ -127,6 +127,7 @@ def format_boot_report(report: Dict[str, Any]) -> str:
         "STORAGE",
         "REDIS",
         "TELEGRAM",
+        "WEBHOOK",
         "AI",
         "UX",
         "DATA_INTEGRITY",
@@ -313,6 +314,19 @@ def _check_no_silence_guard() -> Dict[str, Any]:
     if not hasattr(guard, "check_and_ensure_response"):
         return _status_entry(STATUS_DEGRADED, details="guard missing methods", hint="Update no_silence_guard")
     return _status_entry(STATUS_OK, details="guard ok")
+
+
+def _check_webhook_handler() -> Dict[str, Any]:
+    try:
+        import bot_kie
+    except Exception as exc:
+        return _status_entry(STATUS_FAIL, details="bot_kie import failed", hint=str(exc)[:120])
+    handler = getattr(bot_kie, "create_webhook_handler", None)
+    if handler is None:
+        return _status_entry(STATUS_DEGRADED, details="create_webhook_handler missing")
+    if not callable(handler):
+        return _status_entry(STATUS_FAIL, details="create_webhook_handler not callable")
+    return _status_entry(STATUS_OK, details="handler available")
 
 
 async def _persist_boot_report(storage: Any, report: Dict[str, Any]) -> None:
@@ -565,6 +579,23 @@ async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = No
     }
     _record_summary("TELEGRAM", telegram_section, summary)
 
+    webhook_checks: Dict[str, Dict[str, Any]] = {}
+    if webhook_required:
+        webhook_checks["base_url"] = _status_entry(
+            STATUS_OK if _is_https_url(webhook_base_raw) else STATUS_FAIL,
+            details="https" if _is_https_url(webhook_base_raw) else "invalid",
+            hint="Set https WEBHOOK_BASE_URL" if not _is_https_url(webhook_base_raw) else "",
+        )
+        webhook_checks["handler"] = _check_webhook_handler()
+    else:
+        webhook_checks["base_url"] = _status_entry(STATUS_OK, details="polling/auto")
+        webhook_checks["handler"] = _status_entry(STATUS_OK, details="not required")
+    webhook_section = {
+        "status": _section_status(webhook_checks),
+        "checks": webhook_checks,
+    }
+    _record_summary("WEBHOOK", webhook_section, summary)
+
     ai_checks = {
         "KIE": _status_entry(
             STATUS_OK if kie_api_key else STATUS_DEGRADED,
@@ -619,6 +650,7 @@ async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = No
             "STORAGE": storage_section,
             "REDIS": redis_section,
             "TELEGRAM": telegram_section,
+            "WEBHOOK": webhook_section,
             "AI": ai_section,
             "UX": ux_section,
             "DATA_INTEGRITY": data_section,
