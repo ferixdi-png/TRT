@@ -1289,6 +1289,9 @@ def get_visible_models_by_generation_type_cached(gen_type: str) -> tuple[List[Di
 
 GEN_TYPE_MENU_WARMUP_DEGRADED = False
 GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "3.0"))
+PRICING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("PRICING_PREFLIGHT_TIMEOUT_SECONDS", "2.5"))
+BILLING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("BILLING_PREFLIGHT_TIMEOUT_SECONDS", "6.0"))
+MODEL_CACHE_WARMUP_TIMEOUT_SECONDS = float(os.getenv("MODEL_CACHE_WARMUP_TIMEOUT_SECONDS", "1.5"))
 
 
 async def warm_generation_type_menu_cache(
@@ -6749,6 +6752,7 @@ async def upload_image_with_fallback(image_data: bytes, filename: str = "image.j
 
 MAIN_MENU_TEXT_FALLBACK = "Главное меню"
 MINIMAL_MENU_TEXT = "Главное меню"
+MAIN_MENU_TOTAL_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_TOTAL_TIMEOUT_SECONDS", "1.6"))
 MAIN_MENU_BUILD_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BUILD_TIMEOUT_SECONDS", "2.5"))
 MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS", "1.0"))
 START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
@@ -7488,7 +7492,7 @@ async def show_main_menu(
                 update_id=update.update_id,
                 chat_id=chat_id,
             )
-        try:
+        async def _build_menu_payload() -> tuple[InlineKeyboardMarkup, str]:
             reply_markup = InlineKeyboardMarkup(
                 await asyncio.wait_for(
                     build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False),
@@ -7499,7 +7503,14 @@ async def show_main_menu(
                 _build_main_menu_sections(update, correlation_id=correlation_id, user_lang=user_lang),
                 timeout=MAIN_MENU_BUILD_TIMEOUT_SECONDS,
             )
-        except asyncio.TimeoutError as exc:
+            return reply_markup, header_text
+
+        try:
+            reply_markup, header_text = await asyncio.wait_for(
+                _build_menu_payload(),
+                timeout=MAIN_MENU_TOTAL_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
             logger.warning(
                 "MAIN_MENU_BUILD_TIMEOUT source=%s correlation_id=%s user_id=%s chat_id=%s",
                 source,
@@ -8052,6 +8063,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 exc,
                 exc_info=True,
             )
+            trace_error(
+                correlation_id or uuid.uuid4().hex,
+                "ERR_TG_START_HANDLER",
+                ERROR_CATALOG.get("ERR_TG_START_HANDLER", "Проверьте обработчик /start и доступность меню."),
+                exc,
+                force_stacktrace=True,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="COMMAND_START",
+                action_path="command:/start",
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -8100,6 +8123,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fallback_correlation_id,
             exc,
             exc_info=True,
+        )
+        trace_error(
+            fallback_correlation_id,
+            "INTERNAL_EXCEPTION",
+            ERROR_CATALOG.get("INTERNAL_EXCEPTION", "Проверьте stacktrace и логи."),
+            exc,
+            force_stacktrace=True,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="COMMAND_START",
+            action_path="command:/start",
         )
         try:
             fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {fallback_correlation_id}."
@@ -14540,7 +14575,44 @@ async def _button_callback_impl(
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
-            from app.pricing.coverage_guard import get_disabled_model_info, DISABLED_REASON_NO_PRICE
+            from app.pricing.coverage_guard import (
+                DISABLED_REASON_NO_PRICE,
+                get_disabled_model_info,
+                get_pricing_preflight_status,
+            )
+            preflight_status = get_pricing_preflight_status()
+            if preflight_status.get("degraded"):
+                user_lang = get_user_language(user_id)
+                pricing_error = preflight_status.get("error") or "unknown"
+                message_text = (
+                    "⚠️ <b>Прайс временно недоступен</b>\n\n"
+                    "Мы не успели прогреть прайс. Попробуйте позже или выберите другую модель.\n\n"
+                    f"Лог: <code>{correlation_id}</code>"
+                    if user_lang == "ru"
+                    else (
+                        "⚠️ <b>Pricing temporarily unavailable</b>\n\n"
+                        "We are still warming up pricing data. Please try again later.\n\n"
+                        f"Log: <code>{correlation_id}</code>"
+                    )
+                )
+                keyboard = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Модели/Главное меню", callback_data="back_to_menu")]]
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    action="PRICING_PREFLIGHT_DEGRADED",
+                    action_path="select_model",
+                    model_id=model_id,
+                    stage="MODEL_SELECT",
+                    outcome="blocked",
+                    error_code="PRICING_PREFLIGHT_DEGRADED",
+                    param={"error": pricing_error},
+                )
+                await query.edit_message_text(message_text, reply_markup=keyboard, parse_mode="HTML")
+                return ConversationHandler.END
             from app.ux.model_visibility import (
                 evaluate_model_visibility,
                 STATUS_BLOCKED_NO_PRICE,
@@ -19067,6 +19139,22 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             
         except Exception as e:
             logger.error(f"❌ Критическая ошибка в fallback обработке текста: {e}", exc_info=True)
+            try:
+                correlation_id = ensure_correlation_id(update, context)
+                trace_error(
+                    correlation_id,
+                    "INTERNAL_EXCEPTION",
+                    ERROR_CATALOG.get("INTERNAL_EXCEPTION", "Проверьте stacktrace и логи."),
+                    e,
+                    force_stacktrace=True,
+                    user_id=user_id,
+                    chat_id=update.effective_chat.id if update.effective_chat else None,
+                    update_id=update.update_id if update else None,
+                    action="INPUT_PARAMETERS_FALLBACK",
+                    action_path="input_parameters:fallback",
+                )
+            except Exception:
+                logger.debug("input_parameters trace_error failed", exc_info=True)
             # В случае ошибки всё равно отвечаем пользователю
             try:
                 user_lang = get_user_language(user_id)
@@ -23594,9 +23682,23 @@ async def create_bot_application(settings) -> Application:
     
     ensure_source_of_truth()
     try:
-        from app.pricing.coverage_guard import refresh_pricing_coverage_guard
+        from app.pricing.coverage_guard import (
+            mark_pricing_preflight_degraded,
+            refresh_pricing_coverage_guard,
+        )
 
-        disabled_models = refresh_pricing_coverage_guard()
+        try:
+            disabled_models = await asyncio.wait_for(
+                asyncio.to_thread(refresh_pricing_coverage_guard),
+                timeout=PRICING_PREFLIGHT_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            mark_pricing_preflight_degraded("timeout")
+            disabled_models = {}
+            logger.warning(
+                "PRICING_PREFLIGHT_TIMEOUT timeout_s=%s",
+                PRICING_PREFLIGHT_TIMEOUT_SECONDS,
+            )
         if disabled_models:
             logger.warning(
                 "PRICING_PREFLIGHT_BLOCKED_COUNT=%s models=%s",
@@ -23606,6 +23708,10 @@ async def create_bot_application(settings) -> Application:
         else:
             logger.info("PRICING_PREFLIGHT_OK models=all")
     except Exception as exc:
+        try:
+            mark_pricing_preflight_degraded(str(exc))
+        except Exception:
+            logger.debug("PRICING_PREFLIGHT degraded marker failed", exc_info=True)
         logger.error("PRICING_PREFLIGHT_FAILED error=%s", exc, exc_info=True)
     _recover_jobs_on_startup()
 
@@ -23652,7 +23758,10 @@ async def create_bot_application(settings) -> Application:
         try:
             from app.diagnostics.billing_preflight import run_billing_preflight
 
-            preflight_report = await run_billing_preflight(storage, db_pool=None)
+            preflight_report = await asyncio.wait_for(
+                run_billing_preflight(storage, db_pool=None),
+                timeout=BILLING_PREFLIGHT_TIMEOUT_SECONDS,
+            )
             sections = preflight_report.get("sections", {})
             users_count = sections.get("users", {}).get("meta", {}).get("records")
             balances_count = sections.get("balances", {}).get("meta", {}).get("records")
@@ -23664,6 +23773,11 @@ async def create_bot_application(settings) -> Application:
                 balances_count if balances_count is not None else "n/a",
                 payments_count if payments_count is not None else "n/a",
                 free_limits_count if free_limits_count is not None else "n/a",
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "BOOT_STATUS db_storage=degraded preflight_timeout=true timeout_s=%s",
+                BILLING_PREFLIGHT_TIMEOUT_SECONDS,
             )
         except Exception:
             logger.warning("BOOT_STATUS db_storage=unavailable preflight_failed=true", exc_info=True)
@@ -24530,7 +24644,10 @@ async def main():
         try:
             from app.diagnostics.billing_preflight import run_billing_preflight
 
-            preflight_report = await run_billing_preflight(storage, db_pool=None)
+            preflight_report = await asyncio.wait_for(
+                run_billing_preflight(storage, db_pool=None),
+                timeout=BILLING_PREFLIGHT_TIMEOUT_SECONDS,
+            )
             sections = preflight_report.get("sections", {})
             users_count = sections.get("users", {}).get("meta", {}).get("records")
             balances_count = sections.get("balances", {}).get("meta", {}).get("records")
@@ -24542,6 +24659,11 @@ async def main():
                 balances_count if balances_count is not None else "n/a",
                 payments_count if payments_count is not None else "n/a",
                 free_limits_count if free_limits_count is not None else "n/a",
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "BOOT_STATUS db_storage=degraded preflight_timeout=true timeout_s=%s",
+                BILLING_PREFLIGHT_TIMEOUT_SECONDS,
             )
         except Exception:
             logger.warning("BOOT_STATUS db_storage=unavailable preflight_failed=true", exc_info=True)
@@ -24557,14 +24679,26 @@ async def main():
     
     # Принудительно загружаем модели (это установит _model_cache)
     from app.models.registry import get_models_sync, _model_cache, _model_source
-    warmup_models = get_models_sync()
-    warmup_elapsed_ms = int((time_module.monotonic() - warmup_start) * 1000)
-    
-    logger.info(
-        f"✅ Models cache warmed up: {len(warmup_models)} models loaded in {warmup_elapsed_ms}ms "
-        f"(source={_model_source})"
-    )
-    logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
+    try:
+        warmup_models = await asyncio.wait_for(
+            asyncio.to_thread(get_models_sync),
+            timeout=MODEL_CACHE_WARMUP_TIMEOUT_SECONDS,
+        )
+        warmup_elapsed_ms = int((time_module.monotonic() - warmup_start) * 1000)
+        logger.info(
+            "✅ Models cache warmed up: %s models loaded in %sms (source=%s)",
+            len(warmup_models),
+            warmup_elapsed_ms,
+            _model_source,
+        )
+        logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
+    except asyncio.TimeoutError:
+        warmup_elapsed_ms = int((time_module.monotonic() - warmup_start) * 1000)
+        logger.warning(
+            "MODELS_CACHE_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s",
+            warmup_elapsed_ms,
+            MODEL_CACHE_WARMUP_TIMEOUT_SECONDS,
+        )
     # ==================== END P1 FIX ====================
 
     # ==================== GEN TYPE MENU CACHE WARMUP ====================

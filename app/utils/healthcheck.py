@@ -4,6 +4,7 @@ Healthcheck endpoint для Render
 """
 
 import time
+import os
 import logging
 import json
 import asyncio
@@ -92,12 +93,16 @@ async def billing_preflight_handler(request):
     from app.storage.factory import get_storage
 
     try:
+        timeout_seconds = float(os.getenv("BILLING_PREFLIGHT_HTTP_TIMEOUT_SECONDS", "5.0"))
         storage = get_storage()
         db_pool = None
         if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
             db_pool = await storage._get_pool()
 
-        report = await run_billing_preflight(storage, db_pool, emit_logs=False)
+        report = await asyncio.wait_for(
+            run_billing_preflight(storage, db_pool, emit_logs=False),
+            timeout=timeout_seconds,
+        )
         payload = build_billing_preflight_log_payload(report)
         logger.info(
             "BILLING_PREFLIGHT_RUNTIME %s",
@@ -107,6 +112,18 @@ async def billing_preflight_handler(request):
             text=json.dumps(payload),
             content_type="application/json",
             status=200,
+        )
+    except asyncio.TimeoutError:
+        payload = {
+            "ok": False,
+            "status": "timeout",
+            "error": "billing_preflight_timeout",
+        }
+        logger.warning("[BILLING_PREFLIGHT] runtime_timeout timeout_s=%s", timeout_seconds)
+        return web.Response(
+            text=json.dumps(payload, ensure_ascii=False),
+            content_type="application/json",
+            status=503,
         )
     except Exception as exc:
         payload = {

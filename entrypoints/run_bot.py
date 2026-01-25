@@ -220,7 +220,19 @@ async def main() -> None:
         else:
             logger.info("DB connection OK, running billing preflight.")
 
-        boot_report = await run_boot_diagnostics(os.environ, storage=storage, redis_client=None)
+        boot_timeout = _read_float_env("BOOT_DIAGNOSTICS_TIMEOUT_SECONDS", 5.0)
+        try:
+            boot_report = await asyncio.wait_for(
+                run_boot_diagnostics(os.environ, storage=storage, redis_client=None),
+                timeout=boot_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("BOOT_DIAGNOSTICS_TIMEOUT timeout_s=%s", boot_timeout)
+            boot_report = {
+                "meta": {"bot_mode": os.getenv("BOT_MODE", ""), "port": port},
+                "summary": {},
+                "result": "DEGRADED",
+            }
         log_boot_report(boot_report)
         if boot_report.get("result") == "FAIL":
             logger.error("Boot diagnostics reported FAIL.")
@@ -231,7 +243,15 @@ async def main() -> None:
             logger.warning("Boot diagnostics strict mode disabled; continuing startup.")
 
         if db_ok:
-            preflight_report = await run_billing_preflight(storage, db_pool=None)
+            preflight_timeout = _read_float_env("BILLING_PREFLIGHT_TIMEOUT_SECONDS", 6.0)
+            try:
+                preflight_report = await asyncio.wait_for(
+                    run_billing_preflight(storage, db_pool=None),
+                    timeout=preflight_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("BILLING_PREFLIGHT_TIMEOUT timeout_s=%s", preflight_timeout)
+                preflight_report = {"result": "DEGRADED", "how_to_fix": ["Preflight timeout"], "sections": {}}
             preflight_result = preflight_report.get("result")
             logger.info("Billing preflight result: %s", preflight_result)
             if preflight_result == "FAIL":
