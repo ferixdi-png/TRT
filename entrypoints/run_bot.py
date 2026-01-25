@@ -35,6 +35,53 @@ def _read_bool_env(name: str, default: bool) -> bool:
 def is_preflight_strict() -> bool:
     return _read_bool_env("BILLING_PREFLIGHT_STRICT", True)
 
+def is_storage_preflight_strict() -> bool:
+    return _read_bool_env("STORAGE_PREFLIGHT_STRICT", True)
+
+def _read_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+
+def _read_float_env(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return float(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+
+async def _check_storage_connectivity(storage) -> bool:
+    if storage is None:
+        return False
+    if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
+        return await storage.ping()
+    if hasattr(storage, "test_connection"):
+        return await asyncio.to_thread(storage.test_connection)
+    return True
+
+async def _wait_for_storage(storage) -> bool:
+    retries = max(0, _read_int_env("DB_STARTUP_RETRIES", 2))
+    base_delay = max(0.0, _read_float_env("DB_STARTUP_RETRY_DELAY", 1.5))
+    attempt = 0
+    while True:
+        attempt += 1
+        db_ok = await _check_storage_connectivity(storage)
+        if db_ok:
+            return True
+        if attempt > retries:
+            return False
+        delay = base_delay * (2 ** (attempt - 1))
+        logger.warning("DB connectivity check failed, retrying in %.1fs (attempt %s/%s)", delay, attempt, retries + 1)
+        await asyncio.sleep(delay)
+
 def configure_logging() -> None:
     """Configure root logger if it was not configured earlier."""
     if logging.getLogger().handlers:
@@ -155,33 +202,36 @@ async def main() -> None:
         storage = get_storage()
         db_ok = False
         try:
-            if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
-                db_ok = await storage.ping()
-            elif hasattr(storage, "test_connection"):
-                db_ok = await asyncio.to_thread(storage.test_connection)
+            db_ok = await _wait_for_storage(storage)
         except Exception as exc:
             logger.error("DB connectivity check failed: %s", exc, exc_info=True)
             db_ok = False
 
         if not db_ok:
-            logger.error("DB connection failed, aborting startup before Telegram updates.")
-            await stop_healthcheck(health_started)
-            sys.exit(1)
-        logger.info("DB connection OK, running billing preflight.")
-
-        preflight_report = await run_billing_preflight(storage, db_pool=None)
-        preflight_result = preflight_report.get("result")
-        logger.info("Billing preflight result: %s", preflight_result)
-        if preflight_result == "FAIL":
-            logger.error("Billing preflight failed: %s", format_billing_preflight_report(preflight_report))
-            how_to_fix = preflight_report.get("how_to_fix") or []
-            if how_to_fix:
-                logger.error("Billing preflight suggested fixes: %s", "; ".join(how_to_fix))
-            if is_preflight_strict():
-                logger.error("Billing preflight strict mode enabled; aborting startup before Telegram updates.")
+            if is_storage_preflight_strict():
+                logger.error("DB connection failed, aborting startup before Telegram updates.")
                 await stop_healthcheck(health_started)
                 sys.exit(1)
-            logger.warning("Billing preflight strict mode disabled; continuing startup.")
+            logger.warning("DB connection failed, continuing startup in degraded mode.")
+        else:
+            logger.info("DB connection OK, running billing preflight.")
+
+        if db_ok:
+            preflight_report = await run_billing_preflight(storage, db_pool=None)
+            preflight_result = preflight_report.get("result")
+            logger.info("Billing preflight result: %s", preflight_result)
+            if preflight_result == "FAIL":
+                logger.error("Billing preflight failed: %s", format_billing_preflight_report(preflight_report))
+                how_to_fix = preflight_report.get("how_to_fix") or []
+                if how_to_fix:
+                    logger.error("Billing preflight suggested fixes: %s", "; ".join(how_to_fix))
+                if is_preflight_strict():
+                    logger.error("Billing preflight strict mode enabled; aborting startup before Telegram updates.")
+                    await stop_healthcheck(health_started)
+                    sys.exit(1)
+                logger.warning("Billing preflight strict mode disabled; continuing startup.")
+        else:
+            logger.warning("Billing preflight skipped due to failed DB connectivity.")
 
         for sig in (signal.SIGINT, signal.SIGTERM):
             with suppress(NotImplementedError):
