@@ -24702,7 +24702,24 @@ _application_for_webhook: Optional[Application] = None
 _webhook_app_ready_event = asyncio.Event()
 _webhook_init_lock = asyncio.Lock()
 _webhook_init_task: Optional[asyncio.Task] = None
-_webhook_ready_guard_started_at: Optional[float] = None
+_webhook_early_update_log_last_ts: Optional[float] = None
+
+
+def _webhook_is_application_initialized(application: Optional[Application]) -> bool:
+    if application is None:
+        return False
+    initialized_attr = getattr(application, "initialized", None)
+    if isinstance(initialized_attr, bool):
+        return initialized_attr
+    return bool(getattr(application, "_initialized", False))
+
+
+def _should_log_webhook_early_update(now: float, throttle_seconds: float) -> bool:
+    global _webhook_early_update_log_last_ts
+    if _webhook_early_update_log_last_ts is None or (now - _webhook_early_update_log_last_ts) >= throttle_seconds:
+        _webhook_early_update_log_last_ts = now
+        return True
+    return False
 
 
 async def _register_webhook_application(application: Application) -> None:
@@ -24725,11 +24742,8 @@ async def create_webhook_handler():
     process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
-    ready_guard_seconds = float(os.getenv("WEBHOOK_READY_GUARD_SECONDS", "6.0"))
-
-    global _webhook_ready_guard_started_at
-    if _webhook_ready_guard_started_at is None:
-        _webhook_ready_guard_started_at = time.monotonic()
+    early_update_retry_after = int(os.getenv("WEBHOOK_EARLY_UPDATE_RETRY_AFTER", "2"))
+    early_update_log_throttle_seconds = float(os.getenv("WEBHOOK_EARLY_UPDATE_LOG_THROTTLE_SECONDS", "30"))
 
     ip_rate_limiter = (
         PerKeyRateLimiter(ip_rate_limit_per_sec, ip_rate_limit_burst)
@@ -24757,41 +24771,26 @@ async def create_webhook_handler():
                 else request.headers.get("X-Real-IP") or request.remote or "unknown"
             )
 
-            if not _webhook_app_ready_event.is_set() or _application_for_webhook is None:
+            if not _webhook_app_ready_event.is_set() or not _webhook_is_application_initialized(_application_for_webhook):
                 update_id = None
                 try:
                     payload = await request.json()
                     if isinstance(payload, dict):
                         update_id = payload.get("update_id")
-                except Exception as exc:
-                    logger.warning(
-                        "action=WEBHOOK_EARLY_UPDATE correlation_id=%s ready=false outcome=reject_503 "
-                        "dropped=true parse_error=%s",
+                except Exception:
+                    update_id = None
+                if _should_log_webhook_early_update(time.monotonic(), early_update_log_throttle_seconds):
+                    logger.info(
+                        "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
+                        "outcome=defer retry_after=%s",
                         correlation_id,
-                        exc,
+                        update_id,
+                        early_update_retry_after,
                     )
-                elapsed_since_guard = (
-                    time.monotonic() - _webhook_ready_guard_started_at
-                    if _webhook_ready_guard_started_at is not None
-                    else 0.0
+                return web.Response(
+                    status=204,
+                    headers={"Retry-After": str(early_update_retry_after)},
                 )
-                guard_active = elapsed_since_guard < ready_guard_seconds
-                retry_after = random.randint(1, 3)
-                logger.warning(
-                    "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
-                    "outcome=%s dropped=true retry_after=%s elapsed_guard_s=%.2f",
-                    correlation_id,
-                    update_id,
-                    "reject_503" if guard_active else "pass_through",
-                    retry_after,
-                    elapsed_since_guard,
-                )
-                if guard_active or _application_for_webhook is None:
-                    return web.Response(
-                        status=503,
-                        text="Bot not ready",
-                        headers={"Retry-After": str(retry_after)},
-                    )
 
             content_length = request.content_length
             if content_length is not None and content_length > max_payload_bytes:
@@ -24930,21 +24929,6 @@ async def _run_webhook_initialization(
     start_delivery_reconciler(application.bot)
     start_dedupe_reconciler(application.bot)
 
-    # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
-    try:
-        from app.utils.healthcheck import start_health_server
-
-        port_str = os.getenv("PORT", "10000").strip()
-        try:
-            port = int(port_str)
-        except ValueError:
-            port = 10000
-        webhook_handler = await create_webhook_handler()
-        started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
-        logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
-    except Exception as health_exc:
-        logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
-
     # Устанавливаем webhook
     try:
         from telegram import Bot
@@ -24959,6 +24943,21 @@ async def _run_webhook_initialization(
     except Exception as e:
         logger.error(f"❌ Error in webhook mode: {e}")
         return
+
+    # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
+    try:
+        from app.utils.healthcheck import start_health_server
+
+        port_str = os.getenv("PORT", "10000").strip()
+        try:
+            port = int(port_str)
+        except ValueError:
+            port = 10000
+        webhook_handler = await create_webhook_handler()
+        started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
+        logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
+    except Exception as health_exc:
+        logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
 
     init_ms = int((time.monotonic() - init_started) * 1000)
     _webhook_app_ready_event.set()

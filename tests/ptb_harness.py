@@ -63,6 +63,7 @@ class PTBHarness:
         """Инициализирует Application и настраивает моки."""
         # Создаем Application
         self.application = Application.builder().token(self.bot_token).build()
+        object.__setattr__(self.application, "_initialized", True)
         
         # Мокаем bot.send_message
         async def mock_send_message(chat_id, text, **kwargs):
