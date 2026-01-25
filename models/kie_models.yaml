@@ -1745,12 +1745,36 @@ models:
         required: true
     model_mode: text_to_image
   sora-2-pro-storyboard:
-    model_type: text_to_image
+    model_type: image_to_video
     input:
       prompt:
         type: string
         required: true
-    model_mode: text_to_image
+      image_input:
+        type: array
+        item_type: string
+        required: true
+      n_frames:
+        type: enum
+        required: true
+        values:
+        - '10'
+        - '15'
+        - '25'
+      duration:
+        type: enum
+        required: false
+        values:
+        - '10'
+        - '15'
+        - '25'
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - portrait
+        - landscape
+    model_mode: image_to_video
   kling/v2-5-turbo:
     model_type: text_to_image
     input:
@@ -1759,12 +1783,28 @@ models:
         required: true
     model_mode: text_to_image
   hailuo/2.3:
-    model_type: text_to_image
+    model_type: image_to_video
     input:
       prompt:
         type: string
         required: true
-    model_mode: text_to_image
+      image_input:
+        type: array
+        item_type: string
+        required: true
+      duration:
+        type: enum
+        required: true
+        values:
+        - '6'
+        - '10'
+      resolution:
+        type: enum
+        required: true
+        values:
+        - 768p
+        - 1080p
+    model_mode: image_to_video
   infinitalk/from-audio:
     model_type: lip_sync
     input:
@@ -1780,6 +1820,12 @@ models:
         type: string
         required: true
         max: 5000
+      resolution:
+        type: enum
+        required: false
+        values:
+        - 480p
+        - 720p
     model_mode: lip_sync
   elevenlabs/audio-isolation:
     model_type: audio_to_audio
@@ -1810,12 +1856,24 @@ models:
         required: true
     model_mode: text_to_image
   runway/gen-4:
-    model_type: text_to_image
+    model_type: text_to_video
     input:
       prompt:
         type: string
         required: true
-    model_mode: text_to_image
+      duration:
+        type: enum
+        required: true
+        values:
+        - '5'
+        - '10'
+      resolution:
+        type: enum
+        required: true
+        values:
+        - 720p
+        - 1080p
+    model_mode: text_to_video
   suno/v5:
     model_type: text_to_image
     input:

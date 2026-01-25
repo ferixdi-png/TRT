@@ -72,6 +72,26 @@ def _safe_state(context: ContextTypes.DEFAULT_TYPE) -> Optional[str]:
     return None
 
 
+def _build_main_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
+    if user_lang == "en":
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("Models", callback_data="show_models")],
+                [InlineKeyboardButton("Balance / Payment", callback_data="check_balance")],
+                [InlineKeyboardButton("Help", callback_data="help_menu")],
+                [InlineKeyboardButton("Profile", callback_data="my_generations")],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Модели", callback_data="show_models")],
+            [InlineKeyboardButton("Баланс / Оплата", callback_data="check_balance")],
+            [InlineKeyboardButton("Помощь", callback_data="help_menu")],
+            [InlineKeyboardButton("Профиль", callback_data="my_generations")],
+        ]
+    )
+
+
 async def handle_update_exception(
     update: Any,
     context: ContextTypes.DEFAULT_TYPE,
@@ -132,9 +152,10 @@ async def handle_update_exception(
         }
     )
 
-    menu_keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Главное меню", callback_data="back_to_menu")]]
-    )
+    user_lang = "ru"
+    if isinstance(update, Update) and update.effective_user:
+        user_lang = update.effective_user.language_code or "ru"
+    menu_keyboard = _build_main_menu_keyboard("en" if user_lang.lower().startswith("en") else "ru")
     user_message = (
         "⚠️ Временный сбой, вернул в меню."
         f" Лог: {correlation_id}."
@@ -155,6 +176,18 @@ async def handle_update_exception(
                     track_outgoing_action(update_id)
         except Exception:
             logger.debug("ROUTER_FAIL message send failed", exc_info=True)
+        try:
+            from bot_kie import ensure_main_menu
+
+            await ensure_main_menu(
+                update,
+                context,
+                source="router_exception",
+                correlation_id=correlation_id,
+                prefer_edit=False,
+            )
+        except Exception:
+            logger.debug("ROUTER_FAIL ensure_main_menu failed", exc_info=True)
         return correlation_id
 
     if isinstance(update, Update) and update.message:
@@ -168,6 +201,18 @@ async def handle_update_exception(
                 track_outgoing_action(update_id)
         except Exception:
             logger.debug("ROUTER_FAIL message send failed", exc_info=True)
+        try:
+            from bot_kie import ensure_main_menu
+
+            await ensure_main_menu(
+                update,
+                context,
+                source="router_exception",
+                correlation_id=correlation_id,
+                prefer_edit=False,
+            )
+        except Exception:
+            logger.debug("ROUTER_FAIL ensure_main_menu failed", exc_info=True)
 
     return correlation_id
 

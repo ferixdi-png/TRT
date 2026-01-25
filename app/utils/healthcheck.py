@@ -20,6 +20,7 @@ _health_runner: Optional[web.AppRunner] = None
 _start_time: Optional[float] = None
 _health_server_running: bool = False
 _webhook_route_registered: bool = False
+_health_lock: Optional[asyncio.Lock] = None
 
 
 def set_start_time():
@@ -147,75 +148,79 @@ async def start_health_server(
     **kwargs,
 ):
     """Запустить healthcheck сервер в том же event loop"""
-    global _health_server, _health_runner, _health_server_running, _webhook_route_registered
-    
+    global _health_server, _health_runner, _health_server_running, _webhook_route_registered, _health_lock
+
+    if _health_lock is None:
+        _health_lock = asyncio.Lock()
+
     if port == 0:
         logger.info("[HEALTH] PORT not set, skipping healthcheck server")
         return False
 
-    if _health_runner is not None:
-        logger.info("[HEALTH] server_already_running=true port=%s", port)
-        return True
-    
-    try:
-        set_start_time()  # Устанавливаем время старта
-        
-        app = web.Application()
-        app.router.add_get('/health', health_handler)
-        app.router.add_get('/', health_handler)  # Для совместимости
-        app.router.add_get('/__diag/billing_preflight', billing_preflight_handler)
-        if webhook_handler is not None:
-            try:
-                app.router.add_post('/webhook', webhook_handler)
-                _webhook_route_registered = True
-                logger.info("[WEBHOOK] route_registered=true path=/webhook")
-            except Exception as exc:
-                _webhook_route_registered = False
-                logger.warning(
-                    "[WEBHOOK] route_registered=false path=/webhook reason=registration_error error=%s",
-                    exc,
-                )
-        else:
-            _webhook_route_registered = False
-            logger.warning("[WEBHOOK] route_registered=false path=/webhook reason=handler_missing")
-        
-        runner = web.AppRunner(app)
-        await runner.setup()
-        
-        site = web.TCPSite(runner, '0.0.0.0', port)
-        await site.start()
+    async with _health_lock:
+        if _health_runner is not None:
+            logger.info("[HEALTH] server_already_running=true port=%s", port)
+            return True
 
-        logger.info("[HEALTH] port_bound=true host=0.0.0.0 port=%s", port)
-        if self_check:
-            try:
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection("127.0.0.1", port),
-                    timeout=0.5,
-                )
-                writer.close()
-                if hasattr(writer, "wait_closed"):
-                    await writer.wait_closed()
-                logger.info("[HEALTH] self_check_ok=true host=127.0.0.1 port=%s", port)
-            except Exception as exc:
-                logger.warning(
-                    "[HEALTH] self_check_ok=false host=127.0.0.1 port=%s error=%s",
-                    port,
-                    exc,
-                )
-        
-        _health_server = app
-        _health_runner = runner
-        _health_server_running = True
-        
-        logger.info(f"[HEALTH] Healthcheck server started on port {port}")
-        logger.info(f"[HEALTH] Endpoints: /health, /")
-        
-        return True
-    except Exception as e:
-        _health_server_running = False
-        logger.warning(f"[HEALTH] Failed to start healthcheck server: {e}")
-        logger.warning("[HEALTH] Continuing without healthcheck (Render may mark service as unhealthy)")
-        return False
+        try:
+            set_start_time()  # Устанавливаем время старта
+
+            app = web.Application()
+            app.router.add_get('/health', health_handler)
+            app.router.add_get('/', health_handler)  # Для совместимости
+            app.router.add_get('/__diag/billing_preflight', billing_preflight_handler)
+            if webhook_handler is not None:
+                try:
+                    app.router.add_post('/webhook', webhook_handler)
+                    _webhook_route_registered = True
+                    logger.info("[WEBHOOK] route_registered=true path=/webhook")
+                except Exception as exc:
+                    _webhook_route_registered = False
+                    logger.warning(
+                        "[WEBHOOK] route_registered=false path=/webhook reason=registration_error error=%s",
+                        exc,
+                    )
+            else:
+                _webhook_route_registered = False
+                logger.warning("[WEBHOOK] route_registered=false path=/webhook reason=handler_missing")
+
+            runner = web.AppRunner(app)
+            await runner.setup()
+
+            site = web.TCPSite(runner, '0.0.0.0', port)
+            await site.start()
+
+            logger.info("[HEALTH] port_bound=true host=0.0.0.0 port=%s", port)
+            if self_check:
+                try:
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection("127.0.0.1", port),
+                        timeout=0.5,
+                    )
+                    writer.close()
+                    if hasattr(writer, "wait_closed"):
+                        await writer.wait_closed()
+                    logger.info("[HEALTH] self_check_ok=true host=127.0.0.1 port=%s", port)
+                except Exception as exc:
+                    logger.warning(
+                        "[HEALTH] self_check_ok=false host=127.0.0.1 port=%s error=%s",
+                        port,
+                        exc,
+                    )
+
+            _health_server = app
+            _health_runner = runner
+            _health_server_running = True
+
+            logger.info(f"[HEALTH] Healthcheck server started on port {port}")
+            logger.info(f"[HEALTH] Endpoints: /health, /")
+
+            return True
+        except Exception as e:
+            _health_server_running = False
+            logger.warning(f"[HEALTH] Failed to start healthcheck server: {e}")
+            logger.warning("[HEALTH] Continuing without healthcheck (Render may mark service as unhealthy)")
+            return False
 
 
 async def stop_health_server():

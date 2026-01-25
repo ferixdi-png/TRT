@@ -150,25 +150,25 @@ class NoSilenceGuard:
             if user_lang == 'en':
                 fallback_text = (
                     "⚠️ <b>I couldn't process your input.</b>\n\n"
-                    "Please return to the main menu and try again."
+                    "Showing the main menu so you can continue."
                 )
-                btn_home_text = "🏠 Main Menu"
-                btn_retry_text = "🔄 Try Again"
+                keyboard = [
+                    [InlineKeyboardButton("Models", callback_data="show_models")],
+                    [InlineKeyboardButton("Balance / Payment", callback_data="check_balance")],
+                    [InlineKeyboardButton("Help", callback_data="help_menu")],
+                    [InlineKeyboardButton("Profile", callback_data="my_generations")],
+                ]
             else:
                 fallback_text = (
                     "💡 <b>Выберите действие из меню</b>\n\n"
-                    "Чтобы продолжить:\n"
-                    "• Нажмите кнопку в главном меню\n"
-                    "• Или выберите модель для генерации\n\n"
-                    "Я помогу вам на каждом шаге ✨"
+                    "Показываю главное меню — продолжим отсюда."
                 )
-                btn_home_text = "🏠 Главное меню"
-                btn_retry_text = "🔄 Повторить"
-            
-            keyboard = [
-                [InlineKeyboardButton(btn_home_text, callback_data="back_to_menu")],
-                [InlineKeyboardButton(btn_retry_text, callback_data="back_to_menu")]
-            ]
+                keyboard = [
+                    [InlineKeyboardButton("Модели", callback_data="show_models")],
+                    [InlineKeyboardButton("Баланс / Оплата", callback_data="check_balance")],
+                    [InlineKeyboardButton("Помощь", callback_data="help_menu")],
+                    [InlineKeyboardButton("Профиль", callback_data="my_generations")],
+                ]
             
             # Отправляем fallback
             if update.callback_query:

@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 import logging
+import os
 import re
 from typing import Any, Dict, Optional
 
@@ -195,8 +196,29 @@ def resolve_price_quote(
     canonical_model_id = canonicalize_model_id(model_id)
     effective_params = _apply_pricing_defaults(canonical_model_id, selected_params or {}, mode_index)
     sku = resolve_sku_for_params(canonical_model_id, effective_params)
+    fallback_used = False
     if not sku:
-        return None
+        audit_mode = os.getenv("PRICING_AUDIT_MODE", "0").strip().lower() in {"1", "true", "yes"}
+        available_skus = list_model_skus(canonical_model_id)
+        if not available_skus:
+            logger.warning(
+                "PRICING_SKU_MISSING model_id=%s params=%s",
+                canonical_model_id,
+                effective_params,
+            )
+            return None
+        if audit_mode:
+            raise RuntimeError(
+                f"PRICING_AUDIT_MODE: SKU mismatch for {canonical_model_id} params={effective_params}"
+            )
+        sku = min(available_skus, key=lambda candidate: candidate.price_rub)
+        fallback_used = True
+        logger.warning(
+            "PRICING_SKU_FALLBACK model_id=%s sku_id=%s params=%s reason=sku_not_resolved",
+            canonical_model_id,
+            sku.sku_key,
+            effective_params,
+        )
 
     if sku.price_rub == Decimal("0") and not sku.is_free_sku:
         logger.warning(
@@ -230,5 +252,6 @@ def resolve_price_quote(
         "unit": sku.unit,
         "free_sku": sku.is_free_sku,
         "admin_free": is_admin,
+        "fallback_sku": fallback_used,
     }
     return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_key)
