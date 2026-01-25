@@ -1,5 +1,23 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-08 TRT: Free tools menu dedupe + fast fallback response
+
+### Причина регресса
+- **Источник дублей** — генератор клавиатуры FREE TOOLS: агрессивное усечение текста кнопки до 25 символов превращало разные SKU (например, Z-Image с разными aspect_ratio) в одинаковый label, а дедуп по callback/label отсутствовал. Это выглядело как дубли в меню (особенно на Z-Image). (bot_kie.py)
+- **Повторный render welcome** — отсутствие фиксации `welcome_version` в session приводило к лишним перерендерам одинакового welcome при повторных callback. (bot_kie.py)
+- **Риск молчания при деградации прайса/хранилища** — часть меню ожидала долгий I/O без ограничения времени. (bot_kie.py)
+
+### Что сделано
+- Детерминированная сборка FREE TOOLS: компактный summary (AR/speed), сохранение уникальности label и дедупликация по `(callback_data, label)`; сортировка по (model_name, summary, sku_id). (bot_kie.py)
+- Включен контроль `welcome_version` в session + skip повторной отрисовки при одинаковой версии (меню стабилизировано). (bot_kie.py)
+- Таймауты на получение free counter line в FREE TOOLS и GEN TYPE меню, чтобы ответ гарантированно уходил <2s при деградации storage/pricing. (bot_kie.py)
+
+### Тесты
+- `pytest -q` — ✅
+
+### Итог
+**GO** — дубли устранены, меню детерминировано, повторная отрисовка при одинаковом welcome подавлена, быстрый ответ гарантирован даже при деградации зависимостей.
+
 ## ✅ 2026-02-07 TRT: Release-manager end-to-end audit (webhook/polling + abuse + resiliency)
 
 ### Checklist “проверено”
