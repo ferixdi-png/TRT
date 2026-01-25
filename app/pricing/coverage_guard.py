@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
+import time
 from typing import Dict, List, Optional, Tuple
 
 from app.kie_contract.schema_loader import get_model_schema, list_model_ids
@@ -25,6 +26,35 @@ class DisabledModelInfo:
 
 
 _disabled_models: Dict[str, DisabledModelInfo] = {}
+_pricing_preflight_ready = False
+_pricing_preflight_degraded = False
+_pricing_preflight_error: Optional[str] = None
+_pricing_preflight_updated_at: Optional[float] = None
+
+
+def _mark_pricing_preflight_ready() -> None:
+    global _pricing_preflight_ready, _pricing_preflight_degraded, _pricing_preflight_error, _pricing_preflight_updated_at
+    _pricing_preflight_ready = True
+    _pricing_preflight_degraded = False
+    _pricing_preflight_error = None
+    _pricing_preflight_updated_at = time.time()
+
+
+def mark_pricing_preflight_degraded(reason: str) -> None:
+    global _pricing_preflight_ready, _pricing_preflight_degraded, _pricing_preflight_error, _pricing_preflight_updated_at
+    _pricing_preflight_ready = False
+    _pricing_preflight_degraded = True
+    _pricing_preflight_error = reason
+    _pricing_preflight_updated_at = time.time()
+
+
+def get_pricing_preflight_status() -> Dict[str, Optional[str]]:
+    return {
+        "ready": _pricing_preflight_ready,
+        "degraded": _pricing_preflight_degraded,
+        "error": _pricing_preflight_error,
+        "updated_at": _pricing_preflight_updated_at,
+    }
 
 
 def _required_enum_params(schema: dict) -> List[str]:
@@ -124,6 +154,7 @@ def run_pricing_coverage_preflight() -> Dict[str, DisabledModelInfo]:
                 disabled[info.model_id] = info
     except Exception as exc:
         logger.error("PRICING_PREFLIGHT_FAILED error=%s", exc, exc_info=True)
+        mark_pricing_preflight_degraded(str(exc))
         return {}
 
     if disabled:
@@ -131,21 +162,23 @@ def run_pricing_coverage_preflight() -> Dict[str, DisabledModelInfo]:
             "PRICING_PREFLIGHT_BLOCKED models=%s",
             {key: value.reason for key, value in disabled.items()},
         )
+    _mark_pricing_preflight_ready()
     return disabled
 
 
 def refresh_pricing_coverage_guard() -> Dict[str, DisabledModelInfo]:
     disabled = run_pricing_coverage_preflight()
-    _disabled_models.clear()
-    _disabled_models.update(disabled)
-    get_pricing_coverage_guard_snapshot.cache_clear()
+    if not _pricing_preflight_degraded:
+        _disabled_models.clear()
+        _disabled_models.update(disabled)
+        get_pricing_coverage_guard_snapshot.cache_clear()
     return disabled
 
 
 def get_disabled_model_info(model_id: str) -> Optional[DisabledModelInfo]:
     canonical_id = canonicalize_model_id(model_id)
-    if not _disabled_models:
-        refresh_pricing_coverage_guard()
+    if not _disabled_models and not _pricing_preflight_ready:
+        return None
     return _disabled_models.get(canonical_id)
 
 
@@ -154,7 +187,12 @@ def is_model_disabled(model_id: str) -> bool:
 
 
 def reset_pricing_coverage_guard() -> None:
+    global _pricing_preflight_ready, _pricing_preflight_degraded, _pricing_preflight_error, _pricing_preflight_updated_at
     _disabled_models.clear()
+    _pricing_preflight_ready = False
+    _pricing_preflight_degraded = False
+    _pricing_preflight_error = None
+    _pricing_preflight_updated_at = None
     get_pricing_coverage_guard_snapshot.cache_clear()
 
 
