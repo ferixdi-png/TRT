@@ -69,7 +69,10 @@ SKU diagnostics:
 **flux-2/pro-image-to-image** — `READY`
 
 ### model-flux-2-pro-text-to-image
-**flux-2/pro-text-to-image** — `READY`
+**flux-2/pro-text-to-image** — `NO_PRICE_FOR_PARAMS`
+
+Issues:
+- Нет SKU маппинга для обязательных параметров: aspect_ratio.
 
 ### model-flux-kontext
 **flux/kontext** — `MISSING_PARAM_SCHEMA`

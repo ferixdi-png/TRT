@@ -6,6 +6,10 @@ User service - чистые функции для работы с пользов
 import logging
 import asyncio
 from typing import Optional, Dict
+
+import asyncpg
+
+from app.utils.retry import retry_with_backoff
 from app.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -13,6 +17,14 @@ logger = logging.getLogger(__name__)
 # Глобальный кэш для admin проверок (чтобы не обращаться к storage каждый раз)
 _admin_cache: dict[int, bool] = {}
 _user_locks: Dict[int, asyncio.Lock] = {}
+_TRANSIENT_EXCEPTIONS = (
+    asyncpg.exceptions.DeadlockDetectedError,
+    asyncpg.exceptions.SerializationError,
+    asyncpg.exceptions.CannotConnectNowError,
+    asyncpg.exceptions.ConnectionDoesNotExistError,
+    ConnectionResetError,
+    TimeoutError,
+)
 
 
 def _get_user_lock(user_id: int) -> asyncio.Lock:
@@ -28,31 +40,42 @@ def _get_storage():
     return get_storage()
 
 
+async def _call_with_retry(func, *args):
+    return await retry_with_backoff(
+        func,
+        *args,
+        max_attempts=3,
+        base_delay=0.1,
+        max_delay=1.0,
+        exceptions=_TRANSIENT_EXCEPTIONS,
+    )
+
+
 async def get_user_balance(user_id: int) -> float:
     """Получить баланс пользователя"""
     storage = _get_storage()
-    return await storage.get_user_balance(user_id)
+    return await _call_with_retry(storage.get_user_balance, user_id)
 
 
 async def set_user_balance(user_id: int, amount: float) -> None:
     """Установить баланс пользователя"""
     storage = _get_storage()
     async with _get_user_lock(user_id):
-        await storage.set_user_balance(user_id, amount)
+        await _call_with_retry(storage.set_user_balance, user_id, amount)
 
 
 async def add_user_balance(user_id: int, amount: float) -> float:
     """Добавить к балансу пользователя"""
     storage = _get_storage()
     async with _get_user_lock(user_id):
-        return await storage.add_user_balance(user_id, amount)
+        return await _call_with_retry(storage.add_user_balance, user_id, amount)
 
 
 async def subtract_user_balance(user_id: int, amount: float) -> bool:
     """Вычесть из баланса пользователя"""
     storage = _get_storage()
     async with _get_user_lock(user_id):
-        return await storage.subtract_user_balance(user_id, amount)
+        return await _call_with_retry(storage.subtract_user_balance, user_id, amount)
 
 
 async def get_user_language(user_id: int) -> str:
