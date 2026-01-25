@@ -6749,6 +6749,94 @@ async def upload_image_with_fallback(image_data: bytes, filename: str = "image.j
 
 MAIN_MENU_TEXT_FALLBACK = "Главное меню"
 MINIMAL_MENU_TEXT = "Главное меню"
+MAIN_MENU_BUILD_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BUILD_TIMEOUT_SECONDS", "2.5"))
+MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS", "1.0"))
+START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
+
+
+class MenuDependencyTimeout(RuntimeError):
+    """Raised when a main menu dependency times out."""
+
+
+async def _await_with_timeout(
+    coro,
+    *,
+    timeout: float,
+    label: str,
+    correlation_id: Optional[str],
+    user_id: Optional[int],
+    chat_id: Optional[int],
+    update_id: Optional[int],
+    default=None,
+    raise_on_timeout: bool = False,
+) -> Any:
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except asyncio.TimeoutError as exc:
+        logger.warning(
+            "MENU_DEP_TIMEOUT label=%s correlation_id=%s user_id=%s chat_id=%s update_id=%s",
+            label,
+            correlation_id,
+            user_id,
+            chat_id,
+            update_id,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="MENU_DEP_TIMEOUT",
+            action_path=f"menu:{label}",
+            stage="UI_ROUTER",
+            outcome="timeout",
+            error_code="MENU_DEP_TIMEOUT",
+            fix_hint="dependency_timeout",
+        )
+        if raise_on_timeout:
+            raise MenuDependencyTimeout(label) from exc
+        return default
+    except Exception as exc:
+        logger.warning(
+            "MENU_DEP_ERROR label=%s correlation_id=%s user_id=%s chat_id=%s update_id=%s error=%s",
+            label,
+            correlation_id,
+            user_id,
+            chat_id,
+            update_id,
+            exc,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="MENU_DEP_ERROR",
+            action_path=f"menu:{label}",
+            stage="UI_ROUTER",
+            outcome="error",
+            error_code="MENU_DEP_ERROR",
+            fix_hint=str(exc),
+        )
+        return default
+
+
+async def _send_menu_error_notice(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    correlation_id: str,
+) -> None:
+    try:
+        notice_text = f"⚠️ Временный сбой, показываю меню. Лог: {correlation_id}."
+        if update.message:
+            await update.message.reply_text(notice_text)
+        elif update.callback_query and update.callback_query.message:
+            await update.callback_query.message.reply_text(notice_text)
+        elif update.effective_chat:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=notice_text)
+    except Exception:
+        logger.debug("menu error notice failed", exc_info=True)
 
 
 def _get_release_version() -> str:
@@ -6818,17 +6906,34 @@ def _build_release_block(user_lang: str) -> str:
     )
 
 
-async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[str] = None) -> tuple[str, str]:
+async def _build_main_menu_sections(
+    update: Update,
+    *,
+    correlation_id: Optional[str] = None,
+    user_lang: Optional[str] = None,
+) -> tuple[str, str]:
     user = update.effective_user
     user_id = user.id if user else None
-    user_lang = "ru"
-    if user_id:
+    resolved_lang = user_lang or "ru"
+    if user_id and user_lang is None:
         try:
             from app.services.user_service import get_user_language as get_user_language_async
-            user_lang = await get_user_language_async(user_id)
+            resolved_lang = await _await_with_timeout(
+                get_user_language_async(user_id),
+                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                label="user_language",
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update.update_id,
+                default="ru",
+                raise_on_timeout=True,
+            )
+        except MenuDependencyTimeout:
+            raise
         except Exception as exc:
             logger.warning("Failed to resolve user language: %s", exc)
-            user_lang = "ru"
+            resolved_lang = "ru"
 
     generation_types = get_generation_types()
     total_models = len(get_models_sync())
@@ -6836,21 +6941,60 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     if user_id:
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
-            remaining_free = await get_free_remaining_async(user_id)
+            remaining_free = await _await_with_timeout(
+                get_free_remaining_async(user_id),
+                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                label="free_remaining",
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update.update_id,
+                default=FREE_GENERATIONS_PER_DAY,
+                raise_on_timeout=True,
+            )
+        except MenuDependencyTimeout:
+            raise
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
 
-    is_new = await is_new_user_async(user_id) if user_id else True
+    if user_id:
+        is_new = await _await_with_timeout(
+            is_new_user_async(user_id),
+            timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+            label="is_new_user",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update.update_id,
+            default=True,
+            raise_on_timeout=True,
+        )
+    else:
+        is_new = True
     referral_link = get_user_referral_link(user_id) if user_id else ""
-    referrals_count = len(await get_user_referrals(user_id)) if user_id else 0
+    if user_id:
+        referrals = await _await_with_timeout(
+            get_user_referrals(user_id),
+            timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+            label="referrals_list",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update.update_id,
+            default=[],
+            raise_on_timeout=True,
+        )
+        referrals_count = len(referrals)
+    else:
+        referrals_count = 0
     online_count = get_fake_online_count()
 
-    if user_lang == "en":
+    if resolved_lang == "en":
         name = user.mention_html() if user else "friend"
     else:
         name = user.mention_html() if user else "друг"
 
-    if user_lang == "ru":
+    if resolved_lang == "ru":
         header_text = (
             "🔥 FERIXDI AI — Ultra Creative Suite\n"
             "Премиальная AI-студия в Telegram для маркетинга / SMM / арбитража.\n"
@@ -6874,7 +7018,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
         if is_new:
             header_text = t(
                 "welcome_new",
-                lang=user_lang,
+                lang=resolved_lang,
                 name=name,
                 free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
                 free_limit=FREE_GENERATIONS_PER_DAY,
@@ -6890,14 +7034,14 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
             if referrals_count > 0:
                 referral_bonus_text = t(
                     "msg_referral_bonus",
-                    lang=user_lang,
+                    lang=resolved_lang,
                     count=referrals_count,
                     bonus=referrals_count * REFERRAL_BONUS_GENERATIONS,
                 )
 
             header_text = t(
                 "welcome_returning",
-                lang=user_lang,
+                lang=resolved_lang,
                 name=name,
                 online=online_count,
                 free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
@@ -6906,7 +7050,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
                 types=len(generation_types),
             )
 
-        if user_lang == "en":
+        if resolved_lang == "en":
             header_text += "\n👇 Select a section from the menu below."
         else:
             header_text += "\n👇 Выберите раздел в меню ниже."
@@ -6914,7 +7058,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     from app.utils.singleton_lock import get_lock_admin_notice, get_lock_mode, is_lock_degraded
 
     is_admin_user = get_is_admin(user_id) if user_id else False
-    admin_lock_notice = get_lock_admin_notice(user_lang) if is_admin_user else ""
+    admin_lock_notice = get_lock_admin_notice(resolved_lang) if is_admin_user else ""
     if admin_lock_notice:
         header_text += f"\n\n{admin_lock_notice}"
     log_structured_event(
@@ -6939,7 +7083,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
     details_parts.append(
         t(
             "msg_full_functionality",
-            lang=user_lang,
+            lang=resolved_lang,
             remaining=remaining_free,
             total=FREE_GENERATIONS_PER_DAY,
             ref_bonus=REFERRAL_BONUS_GENERATIONS,
@@ -6948,7 +7092,7 @@ async def _build_main_menu_sections(update: Update, *, correlation_id: Optional[
             types=len(generation_types),
         )
     )
-    details_parts.append(_build_release_block(user_lang))
+    details_parts.append(_build_release_block(resolved_lang))
     details_text = "\n\n".join(part for part in details_parts if part)
 
     return header_text, details_text
@@ -7297,13 +7441,26 @@ async def show_main_menu(
 ) -> dict:
     """Показывает единое главное меню для всех входов."""
     correlation_id = correlation_id or ensure_correlation_id(update, context)
+    menu_start_ts = time.monotonic()
     try:
         user_id = update.effective_user.id if update.effective_user else None
         user_lang = "ru"
         if user_id:
             try:
                 from app.services.user_service import get_user_language as get_user_language_async
-                user_lang = await get_user_language_async(user_id)
+                user_lang = await _await_with_timeout(
+                    get_user_language_async(user_id),
+                    timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                    label="user_language_main",
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=update.effective_chat.id if update.effective_chat else None,
+                    update_id=update.update_id,
+                    default="ru",
+                    raise_on_timeout=True,
+                )
+            except MenuDependencyTimeout:
+                raise
             except Exception as exc:
                 logger.warning("Failed to resolve user language: %s", exc)
         chat_id = None
@@ -7331,10 +7488,55 @@ async def show_main_menu(
                 update_id=update.update_id,
                 chat_id=chat_id,
             )
-        reply_markup = InlineKeyboardMarkup(
-            await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
-        )
-        header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
+        try:
+            reply_markup = InlineKeyboardMarkup(
+                await asyncio.wait_for(
+                    build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False),
+                    timeout=MAIN_MENU_BUILD_TIMEOUT_SECONDS,
+                )
+            )
+            header_text, _details_text = await asyncio.wait_for(
+                _build_main_menu_sections(update, correlation_id=correlation_id, user_lang=user_lang),
+                timeout=MAIN_MENU_BUILD_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                "MAIN_MENU_BUILD_TIMEOUT source=%s correlation_id=%s user_id=%s chat_id=%s",
+                source,
+                correlation_id,
+                user_id,
+                chat_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="MENU_BUILD_TIMEOUT",
+                action_path=f"menu:{source}",
+                stage="UI_ROUTER",
+                outcome="timeout",
+                error_code="MENU_BUILD_TIMEOUT",
+                fix_hint="menu_build_timeout",
+            )
+            await _send_menu_error_notice(update, context, correlation_id=correlation_id)
+            return await _show_minimal_menu(
+                update,
+                context,
+                source=source,
+                correlation_id=correlation_id,
+                prefer_edit=prefer_edit,
+            )
+        except MenuDependencyTimeout:
+            await _send_menu_error_notice(update, context, correlation_id=correlation_id)
+            return await _show_minimal_menu(
+                update,
+                context,
+                source=source,
+                correlation_id=correlation_id,
+                prefer_edit=prefer_edit,
+            )
+        menu_build_ms = int((time.monotonic() - menu_start_ts) * 1000)
         welcome_hash = _safe_text_hash(header_text)
         log_structured_event(
             correlation_id=correlation_id,
@@ -7352,6 +7554,25 @@ async def show_main_menu(
                 "welcome_version": welcome_hash,
             },
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="MENU_BUILT",
+            action_path=f"menu:{source}",
+            stage="UI_ROUTER",
+            outcome="ok",
+            param={"duration_ms": menu_build_ms},
+        )
+        if source == "/start":
+            logger.info(
+                "START_MENU_BUILT correlation_id=%s user_id=%s chat_id=%s duration_ms=%s",
+                correlation_id,
+                user_id,
+                chat_id,
+                menu_build_ms,
+            )
         logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
 
         used_edit = False
@@ -7397,6 +7618,26 @@ async def show_main_menu(
                         outcome="ok",
                         text_hash=welcome_hash,
                     )
+                    reply_sent_ms = int((time.monotonic() - menu_start_ts) * 1000)
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        update_id=update.update_id,
+                        action="MENU_REPLY_SENT",
+                        action_path=f"menu:{source}",
+                        stage="UI_ROUTER",
+                        outcome="ok",
+                        param={"duration_ms": reply_sent_ms},
+                    )
+                    if source == "/start":
+                        logger.info(
+                            "START_REPLY_SENT correlation_id=%s user_id=%s chat_id=%s duration_ms=%s",
+                            correlation_id,
+                            user_id,
+                            chat_id,
+                            reply_sent_ms,
+                        )
                     return {
                         "correlation_id": correlation_id,
                         "user_id": user_id,
@@ -7463,6 +7704,26 @@ async def show_main_menu(
                 outcome="ok",
                 text_hash=welcome_hash,
             )
+            reply_sent_ms = int((time.monotonic() - menu_start_ts) * 1000)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="MENU_REPLY_SENT",
+                action_path=f"menu:{source}",
+                stage="UI_ROUTER",
+                outcome="ok",
+                param={"duration_ms": reply_sent_ms},
+            )
+            if source == "/start":
+                logger.info(
+                    "START_REPLY_SENT correlation_id=%s user_id=%s chat_id=%s duration_ms=%s",
+                    correlation_id,
+                    user_id,
+                    chat_id,
+                    reply_sent_ms,
+                )
         return {
             "correlation_id": correlation_id,
             "user_id": user_id,
@@ -7482,6 +7743,7 @@ async def show_main_menu(
             exc,
             exc_info=True,
         )
+        await _send_menu_error_notice(update, context, correlation_id=correlation_id)
         return await _show_minimal_menu(
             update,
             context,
@@ -7667,6 +7929,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     correlation_id: Optional[str] = None
     user_id: Optional[int] = None
     chat_id: Optional[int] = None
+    partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
     try:
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
@@ -7680,6 +7943,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             correlation_id = uuid.uuid4().hex
             logger.error("❌ Failed to build correlation_id in /start: %s", exc, exc_info=True)
         try:
+            logger.info(
+                "START_HANDLER_ENTER correlation_id=%s user_id=%s chat_id=%s",
+                correlation_id,
+                user_id,
+                chat_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="START_ENTER",
+                action_path="command:/start",
+                stage="HANDLER",
+                outcome="enter",
+                param={"duration_ms": 0},
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -7694,7 +7974,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ref_param = context.args[0] if context.args else None
         referral_parse = parse_referral_param(ref_param)
         if ref_param is not None:
-            partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
             try:
                 log_structured_event(
                     correlation_id=correlation_id,
@@ -7722,6 +8001,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
             chat_id=chat_id,
         ):
+            logger.info(
+                "START_DEDUP_REPLAY correlation_id=%s user_id=%s chat_id=%s",
+                correlation_id,
+                user_id,
+                chat_id,
+            )
+            await ensure_main_menu(update, context, source="/start-dedup", correlation_id=correlation_id, prefer_edit=False)
             return
         logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
         try:
@@ -7746,16 +8032,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 outcome="ok",
             )
             if referral_parse.valid and referral_parse.referrer_id and user_id:
-                await award_referral_bonus(
-                    referrer_id=referral_parse.referrer_id,
-                    referred_user_id=user_id,
-                    ref_param=ref_param,
-                    correlation_id=correlation_id,
-                    partner_id=(os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default"),
-                    bonus=REFERRAL_BONUS_GENERATIONS,
+                await asyncio.wait_for(
+                    award_referral_bonus(
+                        referrer_id=referral_parse.referrer_id,
+                        referred_user_id=user_id,
+                        ref_param=ref_param,
+                        correlation_id=correlation_id,
+                        partner_id=partner_id,
+                        bonus=REFERRAL_BONUS_GENERATIONS,
+                    ),
+                    timeout=START_REFERRAL_TIMEOUT_SECONDS,
                 )
         except Exception as exc:
-            logger.error("❌ /start handler failed: %s", exc, exc_info=True)
+            logger.error(
+                "❌ /start handler failed handler=start user_id=%s partner_id=%s correlation_id=%s error=%s",
+                user_id,
+                partner_id,
+                correlation_id,
+                exc,
+                exc_info=True,
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -7767,6 +8063,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 outcome="failed",
                 error_code="ERR_TG_START_HANDLER",
                 fix_hint="Проверьте обработчик /start и доступность меню.",
+                param={"handler": "start", "partner_id": partner_id},
             )
             log_structured_event(
                 correlation_id=correlation_id,
@@ -7777,6 +8074,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action_path="command:/start",
                 stage="UI_ROUTER",
                 outcome="degraded",
+                param={"handler": "start", "partner_id": partner_id},
             )
             try:
                 fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {correlation_id}."
@@ -7795,7 +8093,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as exc:
         fallback_correlation_id = correlation_id or uuid.uuid4().hex
-        logger.error("❌ /start unexpected failure: %s", exc, exc_info=True)
+        logger.error(
+            "❌ /start unexpected failure handler=start user_id=%s partner_id=%s correlation_id=%s error=%s",
+            user_id,
+            partner_id,
+            fallback_correlation_id,
+            exc,
+            exc_info=True,
+        )
         try:
             fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {fallback_correlation_id}."
             if update.message:
@@ -8952,8 +9257,28 @@ async def _button_callback_impl(
                 await query.answer()
             except:
                 pass
-            _clear_user_task_context(user_id, reason="back_to_menu", allow_mismatch=True)
-            await ensure_main_menu(update, context, source="back", prefer_edit=True)
+            correlation_id = ensure_correlation_id(update, context)
+            partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
+            try:
+                _clear_user_task_context(user_id, reason="back_to_menu", allow_mismatch=True)
+                await ensure_main_menu(update, context, source="back", correlation_id=correlation_id, prefer_edit=True)
+            except Exception as exc:
+                logger.error(
+                    "BACK_TO_MENU_FAILED handler=back_to_menu user_id=%s partner_id=%s correlation_id=%s error=%s",
+                    user_id,
+                    partner_id,
+                    correlation_id,
+                    exc,
+                    exc_info=True,
+                )
+                await _send_menu_error_notice(update, context, correlation_id=correlation_id)
+                await _show_minimal_menu(
+                    update,
+                    context,
+                    source="back",
+                    correlation_id=correlation_id,
+                    prefer_edit=False,
+                )
             return ConversationHandler.END
         
     
