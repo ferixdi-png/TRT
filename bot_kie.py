@@ -19,7 +19,7 @@ import warnings
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Set
+from typing import Optional, Dict, Any, List, Set, Callable, Awaitable
 
 from app.utils.logging_config import setup_logging
 
@@ -1285,6 +1285,70 @@ def get_visible_models_by_generation_type_cached(gen_type: str) -> tuple[List[Di
     )
     _store_gen_type_models_cache(gen_type, models)
     return models, "miss"
+
+
+GEN_TYPE_MENU_WARMUP_DEGRADED = False
+GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "3.0"))
+
+
+async def warm_generation_type_menu_cache(
+    *,
+    correlation_id: str = "BOOT",
+    timeout_s: Optional[float] = None,
+    warmup_fn: Optional[Callable[[], Awaitable[Dict[str, Any]]]] = None,
+) -> None:
+    global GEN_TYPE_MENU_WARMUP_DEGRADED
+    timeout = GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    start = time.monotonic()
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="GEN_TYPE_MENU_WARMUP",
+        action_path="boot:warmup",
+        stage="BOOT",
+        outcome="start",
+        param={"timeout_s": timeout},
+    )
+
+    async def _warmup() -> Dict[str, Any]:
+        if warmup_fn is not None:
+            return await warmup_fn()
+        counts: Dict[str, Any] = {}
+        for gen_type in get_generation_types():
+            models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
+            counts[gen_type] = {"count": len(models), "cache": cache_status}
+            await asyncio.sleep(0)
+        return counts
+
+    try:
+        counts = await asyncio.wait_for(_warmup(), timeout=timeout)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="GEN_TYPE_MENU_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="done",
+            param={"elapsed_ms": elapsed_ms, "counts": counts},
+        )
+        logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms, counts)
+    except asyncio.TimeoutError:
+        GEN_TYPE_MENU_WARMUP_DEGRADED = True
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        logger.warning(
+            "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s correlation_id=%s",
+            elapsed_ms,
+            timeout,
+            correlation_id,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="GEN_TYPE_MENU_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="timeout",
+            error_code="GEN_TYPE_MENU_WARMUP_TIMEOUT",
+            param={"elapsed_ms": elapsed_ms, "timeout_s": timeout},
+        )
 
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
@@ -2804,15 +2868,42 @@ def _update_price_quote(
             if free_sku.split("::", 1)[0] == model_id:
                 return free_sku
         return None
-
-    quote = resolve_price_quote(
-        model_id=model_id,
-        mode_index=mode_index,
-        gen_type=gen_type,
-        selected_params=params or {},
-        settings=get_settings(),
-        is_admin=is_admin,
-    )
+    try:
+        quote = resolve_price_quote(
+            model_id=model_id,
+            mode_index=mode_index,
+            gen_type=gen_type,
+            selected_params=params or {},
+            settings=get_settings(),
+            is_admin=is_admin,
+        )
+    except Exception as exc:
+        logger.error(
+            "PRICE_CALC_FAIL model_id=%s mode_index=%s error=%s",
+            model_id,
+            mode_index,
+            exc,
+            exc_info=True,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="PRICE_CALC_FAIL",
+            action_path=action_path,
+            model_id=model_id,
+            gen_type=gen_type,
+            stage="PRICE_RESOLVE",
+            outcome="failed",
+            error_code=type(exc).__name__,
+            fix_hint="Проверьте pricing SSOT и параметры модели.",
+            param={
+                "mode_index": mode_index,
+                "params": params or {},
+            },
+        )
+        return None
     if quote is None:
         free_sku_id = _resolve_free_tool_sku_id()
         if free_sku_id:
@@ -6657,6 +6748,7 @@ async def upload_image_with_fallback(image_data: bytes, filename: str = "image.j
 
 
 MAIN_MENU_TEXT_FALLBACK = "Главное меню"
+MINIMAL_MENU_TEXT = "Главное меню"
 
 
 def _get_release_version() -> str:
@@ -7066,6 +7158,99 @@ async def send_long_message(
     return sent_messages
 
 
+def _build_minimal_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
+    if user_lang == "en":
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("Models", callback_data="show_models")],
+                [InlineKeyboardButton("Balance / Payment", callback_data="check_balance")],
+                [InlineKeyboardButton("Help", callback_data="help_menu")],
+                [InlineKeyboardButton("Profile", callback_data="my_generations")],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Модели", callback_data="show_models")],
+            [InlineKeyboardButton("Баланс / Оплата", callback_data="check_balance")],
+            [InlineKeyboardButton("Помощь", callback_data="help_menu")],
+            [InlineKeyboardButton("Профиль", callback_data="my_generations")],
+        ]
+    )
+
+
+async def _show_minimal_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    source: str,
+    correlation_id: Optional[str],
+    prefer_edit: bool = True,
+) -> dict:
+    user_id = update.effective_user.id if update.effective_user else None
+    user_lang = "ru"
+    try:
+        if update.effective_user and update.effective_user.language_code == "en":
+            user_lang = "en"
+    except Exception:
+        user_lang = "ru"
+    chat_id = update.effective_chat.id if update.effective_chat else user_id
+    reply_markup = _build_minimal_menu_keyboard(user_lang)
+    message_id = None
+    used_edit = False
+    fallback_send = False
+
+    if update.callback_query and prefer_edit:
+        try:
+            edit_result = await update.callback_query.edit_message_text(
+                MINIMAL_MENU_TEXT,
+                reply_markup=reply_markup,
+            )
+            used_edit = True
+            message_id = getattr(edit_result, "message_id", None) or (
+                update.callback_query.message.message_id if update.callback_query.message else None
+            )
+        except Exception:
+            fallback_send = True
+
+    if chat_id and not used_edit:
+        try:
+            send_result = await context.bot.send_message(
+                chat_id=chat_id,
+                text=MINIMAL_MENU_TEXT,
+                reply_markup=reply_markup,
+            )
+            message_id = getattr(send_result, "message_id", None)
+        except Exception:
+            logger.error("MINIMAL_MENU_SEND_FAILED", exc_info=True)
+
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        update_id=update.update_id,
+        action="MENU_RENDER_FAIL",
+        action_path=f"menu:{source}",
+        stage="UI_ROUTER",
+        outcome="degraded",
+        param={
+            "used_edit": used_edit,
+            "fallback_send": fallback_send,
+            "message_id": message_id,
+        },
+    )
+    return {
+        "correlation_id": correlation_id,
+        "user_id": user_id,
+        "chat_id": chat_id,
+        "update_id": update.update_id,
+        "ui_context_before": None,
+        "ui_context_after": UI_CONTEXT_MAIN_MENU,
+        "used_edit": used_edit,
+        "fallback_send": fallback_send,
+        "message_id": message_id,
+    }
+
+
 async def ensure_main_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -7111,135 +7296,46 @@ async def show_main_menu(
     prefer_edit: bool = True,
 ) -> dict:
     """Показывает единое главное меню для всех входов."""
-    user_id = update.effective_user.id if update.effective_user else None
-    user_lang = "ru"
-    if user_id:
-        try:
-            from app.services.user_service import get_user_language as get_user_language_async
-            user_lang = await get_user_language_async(user_id)
-        except Exception as exc:
-            logger.warning("Failed to resolve user language: %s", exc)
     correlation_id = correlation_id or ensure_correlation_id(update, context)
-    chat_id = None
-    if update.effective_chat:
-        chat_id = update.effective_chat.id
-    elif user_id:
-        chat_id = user_id
-    ui_context_before = None
-    if user_id and user_id in user_sessions:
-        ui_context_before = user_sessions[user_id].get("ui_context")
-    if user_id:
-        reset_session_context(
-            user_id,
-            reason=f"show_main_menu:{source}",
-            clear_gen_type=True,
-            correlation_id=correlation_id,
-            update_id=update.update_id,
-            chat_id=chat_id,
-        )
-        set_session_context(
-            user_id,
-            to_context=UI_CONTEXT_MAIN_MENU,
-            reason=f"show_main_menu:{source}",
-            correlation_id=correlation_id,
-            update_id=update.update_id,
-            chat_id=chat_id,
-        )
-    reply_markup = InlineKeyboardMarkup(
-        await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
-    )
-    header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
-    welcome_hash = _safe_text_hash(header_text)
-    log_structured_event(
-        correlation_id=correlation_id,
-        user_id=user_id,
-        chat_id=chat_id,
-        update_id=update.update_id,
-        action="MENU_RENDER",
-        action_path=f"menu:{source}",
-        stage="UI_ROUTER",
-        outcome="render",
-        text_length=len(header_text) if header_text else 0,
-        text_hash=welcome_hash,
-        param={
-            "ui_context": UI_CONTEXT_MAIN_MENU,
-            "welcome_version": welcome_hash,
-        },
-    )
-    logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
-
-    used_edit = False
-    fallback_send = False
-    message_id = None
-
-    if update.callback_query and prefer_edit:
-        query = update.callback_query
-        if len(header_text) <= TELEGRAM_TEXT_LIMIT:
+    try:
+        user_id = update.effective_user.id if update.effective_user else None
+        user_lang = "ru"
+        if user_id:
             try:
-                edit_result = await query.edit_message_text(
-                    header_text,
-                    reply_markup=reply_markup,
-                    parse_mode="HTML",
-                )
-                used_edit = True
-                message_id = getattr(edit_result, "message_id", None) or (
-                    query.message.message_id if query.message else None
-                )
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    update_id=update.update_id,
-                    action="MENU_RENDER",
-                    action_path=f"menu:{source}",
-                    stage="UI_ROUTER",
-                    outcome="edit_ok",
-                    text_hash=welcome_hash,
-                    param={
-                        "ui_context": UI_CONTEXT_MAIN_MENU,
-                        "welcome_version": welcome_hash,
-                    },
-                )
-                return {
-                    "correlation_id": correlation_id,
-                    "user_id": user_id,
-                    "chat_id": chat_id,
-                    "update_id": update.update_id,
-                    "ui_context_before": ui_context_before,
-                    "ui_context_after": UI_CONTEXT_MAIN_MENU,
-                    "used_edit": used_edit,
-                    "fallback_send": fallback_send,
-                    "message_id": message_id,
-                }
+                from app.services.user_service import get_user_language as get_user_language_async
+                user_lang = await get_user_language_async(user_id)
             except Exception as exc:
-                fallback_send = True
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    update_id=update.update_id,
-                    action="MENU_RENDER",
-                    action_path=f"menu:{source}",
-                    stage="UI_ROUTER",
-                    outcome="edit_failed",
-                    error_code="MENU_EDIT_FAIL",
-                    fix_hint=str(exc),
-                    text_hash=welcome_hash,
-                    param={
-                        "ui_context": UI_CONTEXT_MAIN_MENU,
-                        "welcome_version": welcome_hash,
-                    },
-                )
-
-    if chat_id:
-        send_result = await context.bot.send_message(
-            chat_id=chat_id,
-            text=header_text,
-            reply_markup=reply_markup,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
+                logger.warning("Failed to resolve user language: %s", exc)
+        chat_id = None
+        if update.effective_chat:
+            chat_id = update.effective_chat.id
+        elif user_id:
+            chat_id = user_id
+        ui_context_before = None
+        if user_id and user_id in user_sessions:
+            ui_context_before = user_sessions[user_id].get("ui_context")
+        if user_id:
+            reset_session_context(
+                user_id,
+                reason=f"show_main_menu:{source}",
+                clear_gen_type=True,
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                chat_id=chat_id,
+            )
+            set_session_context(
+                user_id,
+                to_context=UI_CONTEXT_MAIN_MENU,
+                reason=f"show_main_menu:{source}",
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                chat_id=chat_id,
+            )
+        reply_markup = InlineKeyboardMarkup(
+            await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
         )
-        message_id = getattr(send_result, "message_id", None)
+        header_text, _details_text = await _build_main_menu_sections(update, correlation_id=correlation_id)
+        welcome_hash = _safe_text_hash(header_text)
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
@@ -7248,24 +7344,151 @@ async def show_main_menu(
             action="MENU_RENDER",
             action_path=f"menu:{source}",
             stage="UI_ROUTER",
-            outcome="send_ok",
+            outcome="render",
+            text_length=len(header_text) if header_text else 0,
             text_hash=welcome_hash,
             param={
                 "ui_context": UI_CONTEXT_MAIN_MENU,
                 "welcome_version": welcome_hash,
             },
         )
-    return {
-        "correlation_id": correlation_id,
-        "user_id": user_id,
-        "chat_id": chat_id,
-        "update_id": update.update_id,
-        "ui_context_before": ui_context_before,
-        "ui_context_after": UI_CONTEXT_MAIN_MENU,
-        "used_edit": used_edit,
-        "fallback_send": fallback_send,
-        "message_id": message_id,
-    }
+        logger.info(f"MAIN_MENU_SHOWN source={source} user_id={user_id}")
+
+        used_edit = False
+        fallback_send = False
+        message_id = None
+
+        if update.callback_query and prefer_edit:
+            query = update.callback_query
+            if len(header_text) <= TELEGRAM_TEXT_LIMIT:
+                try:
+                    edit_result = await query.edit_message_text(
+                        header_text,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                    )
+                    used_edit = True
+                    message_id = getattr(edit_result, "message_id", None) or (
+                        query.message.message_id if query.message else None
+                    )
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        update_id=update.update_id,
+                        action="MENU_RENDER",
+                        action_path=f"menu:{source}",
+                        stage="UI_ROUTER",
+                        outcome="edit_ok",
+                        text_hash=welcome_hash,
+                        param={
+                            "ui_context": UI_CONTEXT_MAIN_MENU,
+                            "welcome_version": welcome_hash,
+                        },
+                    )
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        update_id=update.update_id,
+                        action="MENU_RENDER_OK",
+                        action_path=f"menu:{source}",
+                        stage="UI_ROUTER",
+                        outcome="ok",
+                        text_hash=welcome_hash,
+                    )
+                    return {
+                        "correlation_id": correlation_id,
+                        "user_id": user_id,
+                        "chat_id": chat_id,
+                        "update_id": update.update_id,
+                        "ui_context_before": ui_context_before,
+                        "ui_context_after": UI_CONTEXT_MAIN_MENU,
+                        "used_edit": used_edit,
+                        "fallback_send": fallback_send,
+                        "message_id": message_id,
+                    }
+                except Exception as exc:
+                    fallback_send = True
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        update_id=update.update_id,
+                        action="MENU_RENDER",
+                        action_path=f"menu:{source}",
+                        stage="UI_ROUTER",
+                        outcome="edit_failed",
+                        error_code="MENU_EDIT_FAIL",
+                        fix_hint=str(exc),
+                        text_hash=welcome_hash,
+                        param={
+                            "ui_context": UI_CONTEXT_MAIN_MENU,
+                            "welcome_version": welcome_hash,
+                        },
+                    )
+
+        if chat_id:
+            send_result = await context.bot.send_message(
+                chat_id=chat_id,
+                text=header_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            message_id = getattr(send_result, "message_id", None)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="MENU_RENDER",
+                action_path=f"menu:{source}",
+                stage="UI_ROUTER",
+                outcome="send_ok",
+                text_hash=welcome_hash,
+                param={
+                    "ui_context": UI_CONTEXT_MAIN_MENU,
+                    "welcome_version": welcome_hash,
+                },
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="MENU_RENDER_OK",
+                action_path=f"menu:{source}",
+                stage="UI_ROUTER",
+                outcome="ok",
+                text_hash=welcome_hash,
+            )
+        return {
+            "correlation_id": correlation_id,
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "update_id": update.update_id,
+            "ui_context_before": ui_context_before,
+            "ui_context_after": UI_CONTEXT_MAIN_MENU,
+            "used_edit": used_edit,
+            "fallback_send": fallback_send,
+            "message_id": message_id,
+        }
+    except Exception as exc:
+        logger.error(
+            "MAIN_MENU_DEGRADED source=%s correlation_id=%s error=%s",
+            source,
+            correlation_id,
+            exc,
+            exc_info=True,
+        )
+        return await _show_minimal_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=prefer_edit,
+        )
 
 
 async def respond_price_undefined(
@@ -7490,6 +7713,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                 )
             await show_main_menu(update, context, source="/start")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="START_OK",
+                action_path="command:/start",
+                stage="UI_ROUTER",
+                outcome="ok",
+            )
             if referral_parse.valid and referral_parse.referrer_id and user_id:
                 await award_referral_bonus(
                     referrer_id=referral_parse.referrer_id,
@@ -7513,16 +7746,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_code="ERR_TG_START_HANDLER",
                 fix_hint="Проверьте обработчик /start и доступность меню.",
             )
-            message = (
-                "❌ <b>Не удалось открыть меню</b>\n\n"
-                "Что случилось: ошибка обработки команды /start.\n"
-                "Что сделать: попробуйте снова через /start.\n"
-                "Код: <code>ERR_TG_START_HANDLER</code>"
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="START_DEGRADED",
+                action_path="command:/start",
+                stage="UI_ROUTER",
+                outcome="degraded",
             )
-            if update.message:
-                await update.message.reply_text(message, parse_mode="HTML")
-            elif update.callback_query and update.callback_query.message:
-                await update.callback_query.message.reply_text(message, parse_mode="HTML")
+            try:
+                fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {correlation_id}."
+                if update.message:
+                    await update.message.reply_text(fallback_text)
+                elif update.callback_query and update.callback_query.message:
+                    await update.callback_query.message.reply_text(fallback_text)
+            except Exception:
+                logger.debug("start fallback message failed", exc_info=True)
+            await _show_minimal_menu(
+                update,
+                context,
+                source="/start",
+                correlation_id=correlation_id,
+                prefer_edit=False,
+            )
     finally:
         _log_handler_latency("start", start_ts, update)
 
@@ -13924,10 +14172,45 @@ async def _button_callback_impl(
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
-            from app.ux.model_visibility import evaluate_model_visibility, STATUS_READY_VISIBLE
+            from app.pricing.coverage_guard import get_disabled_model_info, DISABLED_REASON_NO_PRICE
+            from app.ux.model_visibility import (
+                evaluate_model_visibility,
+                STATUS_BLOCKED_NO_PRICE,
+                STATUS_READY_VISIBLE,
+            )
             visibility = evaluate_model_visibility(model_id)
             if visibility.status != STATUS_READY_VISIBLE:
                 user_lang = get_user_language(user_id)
+                disabled_info = get_disabled_model_info(model_id)
+                if visibility.status == STATUS_BLOCKED_NO_PRICE or (
+                    disabled_info and disabled_info.reason == DISABLED_REASON_NO_PRICE
+                ):
+                    message_text = (
+                        "Модель временно отключена: отсутствует прайс для выбранных параметров. "
+                        "Выберите другую модель."
+                    )
+                    keyboard = InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("Модели/Главное меню", callback_data="back_to_menu")]]
+                    )
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=query.message.chat_id if query.message else None,
+                        update_id=update_id,
+                        action="MODEL_DISABLED",
+                        action_path="select_model",
+                        model_id=model_id,
+                        stage="MODEL_SELECT",
+                        outcome="blocked",
+                        error_code=DISABLED_REASON_NO_PRICE,
+                        param={
+                            "issues": disabled_info.issues if disabled_info else visibility.issues,
+                            "status": visibility.status,
+                        },
+                    )
+                    await query.edit_message_text(message_text, reply_markup=keyboard)
+                    return ConversationHandler.END
+
                 issues = "\n".join(f"• {issue}" for issue in visibility.issues) if visibility.issues else ""
                 if user_lang == "ru":
                     blocked_text = (
@@ -22317,17 +22600,35 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check user balance in rubles. Использует helpers для устранения дублирования."""
     user_id = update.effective_user.id
     user_lang = get_user_language(user_id)
-    
-    # Используем helpers для получения информации о балансе
-    balance_info = await get_balance_info(user_id, user_lang)
-    balance_text = await format_balance_message(balance_info, user_lang)
-    keyboard = get_balance_keyboard(balance_info, user_lang)
-    
-    await update.message.reply_text(
-        balance_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='HTML'
-    )
+
+    try:
+        # Используем helpers для получения информации о балансе
+        balance_info = await get_balance_info(user_id, user_lang)
+        balance_text = await format_balance_message(balance_info, user_lang)
+        keyboard = get_balance_keyboard(balance_info, user_lang)
+        await update.message.reply_text(
+            balance_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    except Exception as exc:
+        correlation_id = ensure_correlation_id(update, context)
+        logger.error(
+            "BALANCE_HANDLER_DEGRADED user_id=%s correlation_id=%s error=%s",
+            user_id,
+            correlation_id,
+            exc,
+            exc_info=True,
+        )
+        degraded_text = (
+            f"⚠️ Баланс временно недоступен. Лог: {correlation_id}."
+            if user_lang == "ru"
+            else f"⚠️ Balance temporarily unavailable. Log: {correlation_id}."
+        )
+        await update.message.reply_text(
+            degraded_text,
+            reply_markup=_build_minimal_menu_keyboard(user_lang),
+        )
 
 
 async def _find_job_by_task_id(storage, task_id: str) -> Optional[Dict[str, Any]]:
@@ -22924,6 +23225,20 @@ async def create_bot_application(settings) -> Application:
         raise ValueError("telegram_bot_token is required in settings")
     
     ensure_source_of_truth()
+    try:
+        from app.pricing.coverage_guard import refresh_pricing_coverage_guard
+
+        disabled_models = refresh_pricing_coverage_guard()
+        if disabled_models:
+            logger.warning(
+                "PRICING_PREFLIGHT_DISABLED_COUNT=%s models=%s",
+                len(disabled_models),
+                sorted(disabled_models.keys()),
+            )
+        else:
+            logger.info("PRICING_PREFLIGHT_OK models=all")
+    except Exception as exc:
+        logger.error("PRICING_PREFLIGHT_FAILED error=%s", exc, exc_info=True)
     _recover_jobs_on_startup()
 
     # Verify models are loaded correctly (using registry)
@@ -23885,15 +24200,11 @@ async def main():
     # ==================== END P1 FIX ====================
 
     # ==================== GEN TYPE MENU CACHE WARMUP ====================
-    logger.info("🔥 Warming up generation type menu cache...")
-    gen_type_counts = {}
-    for gen_type in get_generation_types():
-        models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
-        gen_type_counts[gen_type] = {
-            "count": len(models),
-            "cache": cache_status,
-        }
-    logger.info("✅ GEN_TYPE_MENU cache ready: %s", gen_type_counts)
+    logger.info("🔥 Warming up generation type menu cache (background)...")
+    _create_background_task(
+        warm_generation_type_menu_cache(correlation_id="BOOT"),
+        action="gen_type_menu_cache_warmup",
+    )
     # ==================== END GEN TYPE MENU CACHE WARMUP ====================
     
     # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
