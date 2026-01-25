@@ -3,6 +3,7 @@
 Проверяет, что /start не падает и возвращает корректное меню.
 """
 
+import asyncio
 import re
 
 import pytest
@@ -13,6 +14,7 @@ from bot_kie import (
     TELEGRAM_TEXT_LIMIT,
     _register_all_handlers_internal,
     button_callback,
+    MINIMAL_MENU_TEXT,
     start,
 )
 
@@ -179,3 +181,61 @@ async def test_language_handlers_not_registered():
     pattern_text = " ".join(str(pattern) for pattern in patterns)
     assert re.search("language_select", pattern_text) is None
     assert re.search("change_language", pattern_text) is None
+
+
+@pytest.mark.asyncio
+async def test_start_fallback_on_menu_exception(harness, monkeypatch):
+    """Если меню падает, /start должен вернуть fallback-меню."""
+    async def fake_build_main_menu_sections(update, correlation_id=None, user_lang=None):
+        raise RuntimeError("menu boom")
+
+    monkeypatch.setattr(bot_kie, "_build_main_menu_sections", fake_build_main_menu_sections)
+    harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
+
+    result = await harness.process_command('/start', user_id=22222)
+
+    assert result['success'], f"Command failed: {result.get('error')}"
+    messages = result['outbox']['messages']
+    assert any("Временный сбой" in message.get("text", "") for message in messages)
+    assert any(MINIMAL_MENU_TEXT in message.get("text", "") for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_start_fallback_on_menu_timeout(harness, monkeypatch):
+    """Если сбор меню таймаутится, /start должен вернуть fallback-меню."""
+    async def slow_build_main_menu_sections(update, correlation_id=None, user_lang=None):
+        await asyncio.sleep(0.2)
+        return "header", "details"
+
+    monkeypatch.setattr(bot_kie, "_build_main_menu_sections", slow_build_main_menu_sections)
+    monkeypatch.setattr(bot_kie, "MAIN_MENU_BUILD_TIMEOUT_SECONDS", 0.05)
+    harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
+
+    result = await harness.process_command('/start', user_id=33333)
+
+    assert result['success'], f"Command failed: {result.get('error')}"
+    messages = result['outbox']['messages']
+    assert any("Временный сбой" in message.get("text", "") for message in messages)
+    assert any(MINIMAL_MENU_TEXT in message.get("text", "") for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_start_fallback_on_dependency_timeout(harness, monkeypatch):
+    """Таймаут внешней зависимости приводит к fallback-меню."""
+    async def slow_get_user_language(user_id: int) -> str:
+        await asyncio.sleep(0.2)
+        return "ru"
+
+    monkeypatch.setattr(bot_kie, "MAIN_MENU_DEP_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("app.services.user_service.get_user_language", slow_get_user_language)
+    harness.add_handler(CommandHandler('start', start))
+    _reset_dedupe()
+
+    result = await harness.process_command('/start', user_id=44444)
+
+    assert result['success'], f"Command failed: {result.get('error')}"
+    messages = result['outbox']['messages']
+    assert any("Временный сбой" in message.get("text", "") for message in messages)
+    assert any(MINIMAL_MENU_TEXT in message.get("text", "") for message in messages)
