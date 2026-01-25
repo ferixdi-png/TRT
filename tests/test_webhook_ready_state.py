@@ -19,8 +19,10 @@ def _build_request(payload, *, request_id="corr-early-1"):
     return request
 
 
-async def test_webhook_handler_returns_503_until_ready(caplog, harness):
+async def test_webhook_handler_defers_until_ready(caplog, harness):
     main_render._app_ready_event.clear()
+    main_render._early_update_log_last_ts = None
+    main_render._early_update_count = 0
     handler = main_render.build_webhook_handler(harness.application, MagicMock())
 
     payload = {
@@ -34,11 +36,11 @@ async def test_webhook_handler_returns_503_until_ready(caplog, harness):
         },
     }
 
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.INFO)
     response = await handler(_build_request(payload, request_id="corr-early-42"))
     await asyncio.sleep(0)
 
-    assert response.status == 503
+    assert response.status in {200, 204}
     assert response.headers.get("Retry-After")
     assert any("action=WEBHOOK_EARLY_UPDATE" in message for message in caplog.messages)
 
@@ -67,9 +69,10 @@ async def test_webhook_handler_processes_update_when_ready(harness):
     assert process_update.call_count == 1
 
 
-async def test_bot_kie_webhook_handler_rejects_early_update(harness, monkeypatch):
+async def test_bot_kie_webhook_handler_defers_early_update(harness, monkeypatch):
     main_render._app_ready_event.set()
     bot_kie._webhook_app_ready_event.clear()
+    bot_kie._webhook_early_update_log_last_ts = None
     monkeypatch.setattr(bot_kie, "_application_for_webhook", harness.application)
 
     handler = await bot_kie.create_webhook_handler()
@@ -87,5 +90,32 @@ async def test_bot_kie_webhook_handler_rejects_early_update(harness, monkeypatch
     request = _build_request(payload, request_id="corr-early-bot-kie")
     response = await handler(request)
 
-    assert response.status == 503
+    assert response.status in {200, 204}
     assert response.headers.get("Retry-After")
+
+
+async def test_startup_smoke_log_info_only(caplog, harness):
+    main_render._app_ready_event.clear()
+    main_render._early_update_log_last_ts = None
+    main_render._early_update_count = 0
+    handler = main_render.build_webhook_handler(harness.application, MagicMock())
+
+    payload = {
+        "update_id": 77,
+        "message": {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 100, "type": "private"},
+            "from": {"id": 100, "is_bot": False, "first_name": "Tester"},
+            "text": "/start",
+        },
+    }
+
+    caplog.set_level(logging.INFO)
+    await handler(_build_request(payload, request_id="corr-early-77"))
+    await handler(_build_request(payload, request_id="corr-early-78"))
+    await asyncio.sleep(0)
+
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+    info_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
+    assert sum("action=WEBHOOK_EARLY_UPDATE" in message for message in info_messages) == 1
