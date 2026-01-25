@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from telegram.ext import CallbackQueryHandler, CommandHandler
 
@@ -69,3 +71,18 @@ def test_free_tools_exact_count_9_and_no_duplicates():
     callbacks = _collect_callback_data(markup)
     assert tool_count == 9
     assert len(callbacks) == len(set(callbacks))
+
+
+@pytest.mark.asyncio
+async def test_back_to_menu_idempotent(harness):
+    update = harness.create_mock_update_callback("back_to_menu", user_id=4545, update_id=9001)
+    harness._attach_bot(update)
+    context = SimpleNamespace(bot=harness.application.bot, user_data={})
+
+    await bot_kie.show_main_menu(update, context, source="back")
+    first_count = len(harness.outbox.messages) + len(harness.outbox.edited_messages)
+
+    await bot_kie.show_main_menu(update, context, source="back")
+    second_count = len(harness.outbox.messages) + len(harness.outbox.edited_messages)
+
+    assert first_count == second_count
