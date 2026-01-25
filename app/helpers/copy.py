@@ -112,7 +112,8 @@ def _resolve_sku_key(sku: Any) -> str | None:
 def _build_sku_placeholders(params: Dict[str, Any]) -> Dict[str, str | None]:
     duration = params.get("duration")
     n_frames = params.get("n_frames")
-    resolution = params.get("resolution") or params.get("size")
+    resolution = params.get("resolution") or params.get("size") or params.get("aspect_ratio")
+    aspect_ratio = params.get("aspect_ratio")
     sound = params.get("sound")
     rendering_speed = params.get("rendering_speed")
     quality = params.get("quality")
@@ -136,6 +137,7 @@ def _build_sku_placeholders(params: Dict[str, Any]) -> Dict[str, str | None]:
     return {
         "duration": duration_value,
         "resolution": str(resolution) if resolution is not None else None,
+        "aspect_ratio": str(aspect_ratio) if aspect_ratio is not None else None,
         "audio": audio_value,
         "mode": str(mode_value) if mode_value is not None else None,
         "scale": scale_value,
@@ -185,6 +187,11 @@ def _resolve_sku_short(
     rendered = _render_template(str(template), placeholders)
     if rendered:
         return rendered, False, None
+
+    sku_params = _normalize_sku_params(sku)
+    if sku_params:
+        summary = ", ".join(f"{key}={value}" for key, value in sorted(sku_params.items()))
+        return f"Параметры: {summary}", False, None
 
     reason = "missing_sku_params"
     fallback_text = "SKU: параметры не заданы"
