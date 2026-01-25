@@ -128,7 +128,7 @@ def run_pricing_coverage_preflight() -> Dict[str, DisabledModelInfo]:
 
     if disabled:
         logger.warning(
-            "PRICING_PREFLIGHT_DISABLED models=%s",
+            "PRICING_PREFLIGHT_BLOCKED models=%s",
             {key: value.reason for key, value in disabled.items()},
         )
     return disabled

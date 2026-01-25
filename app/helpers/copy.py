@@ -234,7 +234,7 @@ def build_step1_prompt_text(
         ]
         price_rub = 0
     else:
-        if is_free or str(price_rub) in {"0", "0.0", "0.00"}:
+        if is_free:
             price_lines = ["🎁 Бесплатно"]
         elif price_text:
             price_lines = [str(price_text)]

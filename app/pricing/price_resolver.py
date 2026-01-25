@@ -198,6 +198,14 @@ def resolve_price_quote(
     if not sku:
         return None
 
+    if sku.price_rub == Decimal("0") and not sku.is_free_sku:
+        logger.warning(
+            "PRICING_ZERO_PRICE_BLOCKED model_id=%s sku_id=%s",
+            canonical_model_id,
+            sku.sku_key,
+        )
+        return None
+
     if is_admin or sku.is_free_sku:
         price_rub = Decimal("0")
     else:
