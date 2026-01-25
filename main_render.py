@@ -34,6 +34,22 @@ _app_init_task: Optional[asyncio.Task] = None
 _handler_ready: bool = False
 _seen_update_ids: set[int] = set()
 _early_update_count: int = 0
+_early_update_log_last_ts: Optional[float] = None
+
+
+def _is_application_initialized(application) -> bool:
+    initialized_attr = getattr(application, "initialized", None)
+    if isinstance(initialized_attr, bool):
+        return initialized_attr
+    return bool(getattr(application, "_initialized", False))
+
+
+def _should_log_early_update(now: float, throttle_seconds: float) -> bool:
+    global _early_update_log_last_ts
+    if _early_update_log_last_ts is None or (now - _early_update_log_last_ts) >= throttle_seconds:
+        _early_update_log_last_ts = now
+        return True
+    return False
 
 
 def _resolve_correlation_id(request: web.Request) -> str:
@@ -76,6 +92,8 @@ def build_webhook_handler(
     process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
+    early_update_retry_after = int(os.getenv("WEBHOOK_EARLY_UPDATE_RETRY_AFTER", "2"))
+    early_update_log_throttle_seconds = float(os.getenv("WEBHOOK_EARLY_UPDATE_LOG_THROTTLE_SECONDS", "30"))
 
     ip_rate_limiter = (
         PerKeyRateLimiter(ip_rate_limit_per_sec, ip_rate_limit_burst)
@@ -90,34 +108,25 @@ def build_webhook_handler(
         correlation_id = _resolve_correlation_id(request)
         client_ip = _resolve_client_ip(request)
 
-        if not _app_ready_event.is_set():
+        if not _app_ready_event.is_set() or not _is_application_initialized(application):
             _early_update_count += 1
             update_id = None
             try:
                 payload = await request.json()
                 if isinstance(payload, dict):
                     update_id = payload.get("update_id")
-            except Exception as exc:
-                logger.warning(
-                    "action=WEBHOOK_EARLY_UPDATE correlation_id=%s ready=false outcome=reject_503 "
-                    "dropped=true parse_error=%s",
+            except Exception:
+                update_id = None
+            if _should_log_early_update(time.monotonic(), early_update_log_throttle_seconds):
+                logger.info(
+                    "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
+                    "outcome=defer early_update_count=%s retry_after=%s",
                     correlation_id,
-                    exc,
+                    update_id,
+                    _early_update_count,
+                    early_update_retry_after,
                 )
-            retry_after = 2
-            logger.warning(
-                "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
-                "outcome=reject_503 dropped=true early_update_count=%s retry_after=%s",
-                correlation_id,
-                update_id,
-                _early_update_count,
-                retry_after,
-            )
-            return web.json_response(
-                {"ok": False, "retry_after": retry_after},
-                status=503,
-                headers={"Retry-After": str(retry_after)},
-            )
+            return web.Response(status=204, headers={"Retry-After": str(early_update_retry_after)})
 
         logger.info("WEBHOOK correlation_id=%s update_received=true", correlation_id)
 
