@@ -1366,10 +1366,31 @@ def get_visible_models_by_generation_type_cached(gen_type: str) -> tuple[List[Di
 
 
 GEN_TYPE_MENU_WARMUP_DEGRADED = False
-GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "6.0"))
+GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "2.0"))
+GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS", "300.0"))
+GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS = int(os.getenv("GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS", "2"))
+GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS", "0.3"))
 PRICING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("PRICING_PREFLIGHT_TIMEOUT_SECONDS", "2.5"))
 BILLING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("BILLING_PREFLIGHT_TIMEOUT_SECONDS", "6.0"))
 MODEL_CACHE_WARMUP_TIMEOUT_SECONDS = float(os.getenv("MODEL_CACHE_WARMUP_TIMEOUT_SECONDS", "1.5"))
+BOOT_WARMUP_WATCHDOG_SECONDS = float(os.getenv("BOOT_WARMUP_WATCHDOG_SECONDS", "2.0"))
+
+_GEN_TYPE_MENU_WARMUP_STATE: Dict[str, Any] = {
+    "task": None,
+    "last_success_ts": None,
+    "last_counts": None,
+    "last_outcome": None,
+}
+
+
+def _get_generation_types_cached() -> Optional[List[str]]:
+    cached_models = get_models_cached_only()
+    if cached_models is None:
+        return None
+    from app.models.registry import _model_type_to_generation_type
+
+    model_types = sorted({model.get("model_type", "unknown") for model in cached_models if model})
+    return [_model_type_to_generation_type(model_type) for model_type in model_types]
 
 
 async def warm_generation_type_menu_cache(
@@ -1377,10 +1398,45 @@ async def warm_generation_type_menu_cache(
     correlation_id: str = "BOOT",
     timeout_s: Optional[float] = None,
     warmup_fn: Optional[Callable[[], Awaitable[Dict[str, Any]]]] = None,
+    retry_attempts: Optional[int] = None,
+    cache_ttl_seconds: Optional[float] = None,
+    force: bool = False,
 ) -> None:
     global GEN_TYPE_MENU_WARMUP_DEGRADED
     timeout = GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    cache_ttl = GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS if cache_ttl_seconds is None else cache_ttl_seconds
+    attempts = GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS if retry_attempts is None else retry_attempts
     start = time.monotonic()
+    now = time.monotonic()
+    current_task = asyncio.current_task()
+    if (
+        warmup_fn is None
+        and not force
+        and _GEN_TYPE_MENU_WARMUP_STATE.get("last_success_ts") is not None
+        and (now - _GEN_TYPE_MENU_WARMUP_STATE["last_success_ts"]) < cache_ttl
+    ):
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="GEN_TYPE_MENU_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="skip",
+            param={"reason": "cache_fresh", "cache_ttl_s": cache_ttl},
+        )
+        return
+    in_flight = _GEN_TYPE_MENU_WARMUP_STATE.get("task")
+    if warmup_fn is None and not force and in_flight and not in_flight.done():
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="GEN_TYPE_MENU_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="skip",
+            param={"reason": "in_flight"},
+        )
+        return
+    if current_task is not None:
+        _GEN_TYPE_MENU_WARMUP_STATE["task"] = current_task
     log_structured_event(
         correlation_id=correlation_id,
         action="GEN_TYPE_MENU_WARMUP",
@@ -1394,28 +1450,87 @@ async def warm_generation_type_menu_cache(
         if warmup_fn is not None:
             return await warmup_fn()
 
-        def _warmup_sync() -> Dict[str, Any]:
-            counts: Dict[str, Any] = {}
-            for gen_type in get_generation_types():
-                models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
-                counts[gen_type] = {"count": len(models), "cache": cache_status}
-            return counts
+        cached_types = _get_generation_types_cached()
+        if cached_types is None:
+            return {"skipped": "models_cache_empty"}
 
-        return await asyncio.to_thread(_warmup_sync)
+        counts: Dict[str, Any] = {}
+        for gen_type in cached_types:
+            models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
+            counts[gen_type] = {"count": len(models), "cache": cache_status}
+        return counts
 
     try:
-        warmup_task = asyncio.create_task(_warmup())
-        counts = await asyncio.wait_for(warmup_task, timeout=timeout)
-        elapsed_ms_real = int((time.monotonic() - start) * 1000)
-        log_structured_event(
-            correlation_id=correlation_id,
-            action="GEN_TYPE_MENU_WARMUP",
-            action_path="boot:warmup",
-            stage="BOOT",
-            outcome="done",
-            param={"elapsed_ms": elapsed_ms_real, "elapsed_ms_real": elapsed_ms_real, "counts": counts},
-        )
-        logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms_real, counts)
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, max(1, attempts) + 1):
+            try:
+                warmup_task = asyncio.create_task(_warmup())
+                counts = await asyncio.wait_for(warmup_task, timeout=timeout)
+                elapsed_ms_real = int((time.monotonic() - start) * 1000)
+                if counts.get("skipped"):
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="GEN_TYPE_MENU_WARMUP",
+                        action_path="boot:warmup",
+                        stage="BOOT",
+                        outcome="skip",
+                        param={"elapsed_ms": elapsed_ms_real, "reason": counts.get("skipped")},
+                    )
+                    logger.info(
+                        "GEN_TYPE_MENU_WARMUP_SKIP elapsed_ms=%s reason=%s correlation_id=%s",
+                        elapsed_ms_real,
+                        counts.get("skipped"),
+                        correlation_id,
+                    )
+                    return
+                GEN_TYPE_MENU_WARMUP_DEGRADED = False
+                _GEN_TYPE_MENU_WARMUP_STATE["last_success_ts"] = time.monotonic()
+                _GEN_TYPE_MENU_WARMUP_STATE["last_counts"] = counts
+                _GEN_TYPE_MENU_WARMUP_STATE["last_outcome"] = "done"
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="GEN_TYPE_MENU_WARMUP",
+                    action_path="boot:warmup",
+                    stage="BOOT",
+                    outcome="done",
+                    param={"elapsed_ms": elapsed_ms_real, "elapsed_ms_real": elapsed_ms_real, "counts": counts},
+                )
+                logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms_real, counts)
+                return
+            except asyncio.TimeoutError as exc:
+                last_exc = exc
+                try:
+                    warmup_task.cancel()
+                    await warmup_task
+                except asyncio.CancelledError:
+                    pass
+                GEN_TYPE_MENU_WARMUP_DEGRADED = True
+                elapsed_ms_real = int((time.monotonic() - start) * 1000)
+                logger.info(
+                    "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s attempt=%s correlation_id=%s",
+                    elapsed_ms_real,
+                    timeout,
+                    attempt,
+                    correlation_id,
+                )
+                if attempt < max(1, attempts):
+                    await asyncio.sleep(GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS)
+                    continue
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="GEN_TYPE_MENU_WARMUP",
+                    action_path="boot:warmup",
+                    stage="BOOT",
+                    outcome="timeout",
+                    error_code="GEN_TYPE_MENU_WARMUP_TIMEOUT",
+                    param={
+                        "elapsed_ms": elapsed_ms_real,
+                        "elapsed_ms_real": elapsed_ms_real,
+                        "timeout_s": timeout,
+                        "attempts": attempt,
+                    },
+                )
+                return
     except asyncio.CancelledError:
         elapsed_ms_real = int((time.monotonic() - start) * 1000)
         logger.info(
@@ -1432,29 +1547,101 @@ async def warm_generation_type_menu_cache(
             param={"elapsed_ms": elapsed_ms_real},
         )
         return
+    finally:
+        if _GEN_TYPE_MENU_WARMUP_STATE.get("task") is current_task:
+            _GEN_TYPE_MENU_WARMUP_STATE["task"] = None
+
+
+async def _warm_models_cache(
+    *,
+    correlation_id: str = "BOOT",
+    timeout_s: Optional[float] = None,
+) -> None:
+    timeout = MODEL_CACHE_WARMUP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    start = time.monotonic()
+    from app.models.registry import get_models_sync, _model_source
+
+    try:
+        warmup_models = await asyncio.wait_for(asyncio.to_thread(get_models_sync), timeout=timeout)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "✅ Models cache warmed up: %s models loaded in %sms (source=%s) correlation_id=%s",
+            len(warmup_models),
+            elapsed_ms,
+            _model_source,
+            correlation_id,
+        )
     except asyncio.TimeoutError:
-        GEN_TYPE_MENU_WARMUP_DEGRADED = True
-        elapsed_ms_real = int((time.monotonic() - start) * 1000)
-        try:
-            warmup_task.cancel()
-            await warmup_task
-        except asyncio.CancelledError:
-            pass
-        logger.warning(
-            "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s correlation_id=%s",
-            elapsed_ms_real,
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "MODELS_CACHE_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s correlation_id=%s",
+            elapsed_ms,
             timeout,
             correlation_id,
         )
+    except Exception:
+        logger.info("MODELS_CACHE_WARMUP_FAILED correlation_id=%s", correlation_id, exc_info=True)
+
+
+async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
+    start = time.monotonic()
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="BOOT_WARMUP",
+        action_path="boot:warmup",
+        stage="BOOT",
+        outcome="start",
+        param={"watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
+    )
+    models_task = asyncio.create_task(_warm_models_cache(correlation_id=correlation_id))
+    gen_type_task = asyncio.create_task(
+        warm_generation_type_menu_cache(
+            correlation_id=correlation_id,
+            retry_attempts=GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS,
+            cache_ttl_seconds=GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS,
+        )
+    )
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(models_task, gen_type_task, return_exceptions=True),
+            timeout=BOOT_WARMUP_WATCHDOG_SECONDS,
+        )
+        elapsed_ms = int((time.monotonic() - start) * 1000)
         log_structured_event(
             correlation_id=correlation_id,
-            action="GEN_TYPE_MENU_WARMUP",
+            action="BOOT_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="done",
+            param={"elapsed_ms": elapsed_ms},
+        )
+    except asyncio.TimeoutError:
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "BOOT_WARMUP_WATCHDOG_TIMEOUT elapsed_ms=%s watchdog_s=%s correlation_id=%s",
+            elapsed_ms,
+            BOOT_WARMUP_WATCHDOG_SECONDS,
+            correlation_id,
+        )
+        for task in (models_task, gen_type_task):
+            if task and not task.done():
+                task.cancel()
+        await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="BOOT_WARMUP",
             action_path="boot:warmup",
             stage="BOOT",
             outcome="timeout",
-            error_code="GEN_TYPE_MENU_WARMUP_TIMEOUT",
-            param={"elapsed_ms": elapsed_ms_real, "elapsed_ms_real": elapsed_ms_real, "timeout_s": timeout},
+            param={"elapsed_ms": elapsed_ms, "watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
         )
+
+
+def start_boot_warmups(*, correlation_id: str = "BOOT") -> asyncio.Task:
+    return _create_background_task(
+        _run_boot_warmups(correlation_id=correlation_id),
+        action="boot_warmups",
+    )
 
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
@@ -6878,10 +7065,13 @@ MAIN_MENU_TEXT_FALLBACK = "Главное меню"
 MINIMAL_MENU_TEXT = "Главное меню"
 MAIN_MENU_TOTAL_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_TOTAL_TIMEOUT_SECONDS", "4.0"))
 MAIN_MENU_BUILD_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BUILD_TIMEOUT_SECONDS", "4.0"))
-MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS", "2.0"))
+MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS", "0.6"))
 START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
 SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL_SECONDS", "45.0"))
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
+MAIN_MENU_DEP_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_DEP_CACHE_TTL_SECONDS", "30.0"))
+MAIN_MENU_LANG_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_LANG_CACHE_TTL_SECONDS", "300.0"))
+_MENU_DEP_CACHE_KEY = "_menu_dep_cache"
 
 
 class MenuDependencyTimeout(RuntimeError):
@@ -6926,6 +7116,62 @@ _safe_menu_renderer = SafeMenuRenderer(
 )
 
 
+def _get_menu_dep_cache(session: Optional[Dict[str, Any]], ttl_seconds: float) -> Optional[Dict[str, Any]]:
+    if not isinstance(session, dict):
+        return None
+    cache = session.get(_MENU_DEP_CACHE_KEY)
+    if not isinstance(cache, dict):
+        return None
+    timestamp = cache.get("timestamp")
+    if not isinstance(timestamp, (int, float)):
+        return None
+    if time.monotonic() - timestamp > ttl_seconds:
+        return None
+    return cache
+
+
+def _set_menu_dep_cache(session: Optional[Dict[str, Any]], **values: Any) -> None:
+    if not isinstance(session, dict):
+        return
+    cache = session.get(_MENU_DEP_CACHE_KEY)
+    if not isinstance(cache, dict):
+        cache = {}
+    cache.update(values)
+    cache["timestamp"] = time.monotonic()
+    session[_MENU_DEP_CACHE_KEY] = cache
+
+
+async def _refresh_menu_language_cache(
+    user_id: int,
+    *,
+    correlation_id: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+) -> None:
+    timeout = MAIN_MENU_DEP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    try:
+        from app.services.user_service import get_user_language as get_user_language_async
+
+        resolved_lang = await asyncio.wait_for(get_user_language_async(user_id), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.debug(
+            "MENU_LANG_REFRESH_TIMEOUT user_id=%s correlation_id=%s timeout_s=%s",
+            user_id,
+            correlation_id,
+            timeout,
+        )
+        return
+    except Exception as exc:
+        logger.debug(
+            "MENU_LANG_REFRESH_FAILED user_id=%s correlation_id=%s error=%s",
+            user_id,
+            correlation_id,
+            exc,
+        )
+        return
+    session = user_sessions.ensure(user_id)
+    _set_menu_dep_cache(session, user_lang=resolved_lang)
+
+
 async def _await_with_timeout(
     coro,
     *,
@@ -6937,30 +7183,32 @@ async def _await_with_timeout(
     update_id: Optional[int],
     default=None,
     raise_on_timeout: bool = False,
+    log_timeout: bool = True,
 ) -> Any:
     try:
         return await asyncio.wait_for(coro, timeout=timeout)
     except asyncio.TimeoutError as exc:
-        logger.warning(
-            "MENU_DEP_TIMEOUT label=%s correlation_id=%s user_id=%s chat_id=%s update_id=%s",
-            label,
-            correlation_id,
-            user_id,
-            chat_id,
-            update_id,
-        )
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            update_id=update_id,
-            action="MENU_DEP_TIMEOUT",
-            action_path=f"menu:{label}",
-            stage="UI_ROUTER",
-            outcome="timeout",
-            error_code="MENU_DEP_TIMEOUT",
-            fix_hint="dependency_timeout",
-        )
+        if log_timeout:
+            logger.warning(
+                "MENU_DEP_TIMEOUT label=%s correlation_id=%s user_id=%s chat_id=%s update_id=%s",
+                label,
+                correlation_id,
+                user_id,
+                chat_id,
+                update_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="MENU_DEP_TIMEOUT",
+                action_path=f"menu:{label}",
+                stage="UI_ROUTER",
+                outcome="timeout",
+                error_code="MENU_DEP_TIMEOUT",
+                fix_hint="dependency_timeout",
+            )
         if raise_on_timeout:
             raise MenuDependencyTimeout(label) from exc
         return default
@@ -7079,11 +7327,16 @@ async def _build_main_menu_sections(
     *,
     correlation_id: Optional[str] = None,
     user_lang: Optional[str] = None,
+    menu_session: Optional[Dict[str, Any]] = None,
 ) -> tuple[str, str]:
     user = update.effective_user
     user_id = user.id if user else None
     resolved_lang = user_lang or "ru"
-    if user_id and user_lang is None:
+    cached_menu = _get_menu_dep_cache(menu_session, MAIN_MENU_DEP_CACHE_TTL_SECONDS)
+    cached_lang = cached_menu.get("user_lang") if cached_menu else None
+    if cached_lang and user_lang is None:
+        resolved_lang = cached_lang
+    if user_id and user_lang is None and not cached_lang:
         try:
             from app.services.user_service import get_user_language as get_user_language_async
             resolved_lang = await _await_with_timeout(
@@ -7095,18 +7348,21 @@ async def _build_main_menu_sections(
                 chat_id=update.effective_chat.id if update.effective_chat else None,
                 update_id=update.update_id,
                 default="ru",
-                raise_on_timeout=True,
+                raise_on_timeout=False,
+                log_timeout=False,
             )
-        except MenuDependencyTimeout:
-            raise
         except Exception as exc:
             logger.warning("Failed to resolve user language: %s", exc)
             resolved_lang = "ru"
+        if user_id:
+            _set_menu_dep_cache(menu_session, user_lang=resolved_lang)
 
     generation_types = get_generation_types()
     total_models = len(get_models_sync())
-    remaining_free = FREE_GENERATIONS_PER_DAY
-    if user_id:
+    remaining_free = (
+        cached_menu.get("remaining_free") if cached_menu and "remaining_free" in cached_menu else FREE_GENERATIONS_PER_DAY
+    )
+    if user_id and (not cached_menu or "remaining_free" not in cached_menu):
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
             remaining_free = await _await_with_timeout(
@@ -7118,41 +7374,51 @@ async def _build_main_menu_sections(
                 chat_id=update.effective_chat.id if update.effective_chat else None,
                 update_id=update.update_id,
                 default=FREE_GENERATIONS_PER_DAY,
-                raise_on_timeout=True,
+                raise_on_timeout=False,
+                log_timeout=False,
             )
-        except MenuDependencyTimeout:
-            raise
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
+        _set_menu_dep_cache(menu_session, remaining_free=remaining_free)
 
     if user_id:
-        is_new = await _await_with_timeout(
-            is_new_user_async(user_id),
-            timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-            label="is_new_user",
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=update.effective_chat.id if update.effective_chat else None,
-            update_id=update.update_id,
-            default=True,
-            raise_on_timeout=True,
-        )
+        if cached_menu and "is_new" in cached_menu:
+            is_new = cached_menu["is_new"]
+        else:
+            is_new = await _await_with_timeout(
+                is_new_user_async(user_id),
+                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                label="is_new_user",
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update.update_id,
+                default=True,
+                raise_on_timeout=False,
+                log_timeout=False,
+            )
+            _set_menu_dep_cache(menu_session, is_new=is_new)
     else:
         is_new = True
     referral_link = get_user_referral_link(user_id) if user_id else ""
     if user_id:
-        referrals = await _await_with_timeout(
-            get_user_referrals(user_id),
-            timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-            label="referrals_list",
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=update.effective_chat.id if update.effective_chat else None,
-            update_id=update.update_id,
-            default=[],
-            raise_on_timeout=True,
-        )
-        referrals_count = len(referrals)
+        if cached_menu and "referrals_count" in cached_menu:
+            referrals_count = cached_menu["referrals_count"]
+        else:
+            referrals = await _await_with_timeout(
+                get_user_referrals(user_id),
+                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                label="referrals_list",
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update.update_id,
+                default=[],
+                raise_on_timeout=False,
+                log_timeout=False,
+            )
+            referrals_count = len(referrals)
+            _set_menu_dep_cache(menu_session, referrals_count=referrals_count)
     else:
         referrals_count = 0
     online_count = get_fake_online_count()
@@ -7644,6 +7910,7 @@ async def show_main_menu(
     user_lang = "ru"
     chat_id = update.effective_chat.id if update.effective_chat else user_id
     ui_context_before = None
+    session = user_sessions.ensure(user_id) if user_id else None
     if user_id and user_id in user_sessions:
         ui_context_before = user_sessions[user_id].get("ui_context")
     previous_welcome_version = None
@@ -7652,23 +7919,21 @@ async def show_main_menu(
 
     try:
         if user_id:
-            try:
-                from app.services.user_service import get_user_language as get_user_language_async
-
-                user_lang = await _await_with_timeout(
-                    get_user_language_async(user_id),
-                    timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-                    label="user_language_main",
-                    correlation_id=correlation_id,
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    update_id=update.update_id,
-                    default="ru",
-                    raise_on_timeout=False,
+            cached_lang = _get_menu_dep_cache(session, MAIN_MENU_LANG_CACHE_TTL_SECONDS)
+            if cached_lang and cached_lang.get("user_lang"):
+                user_lang = cached_lang["user_lang"]
+            else:
+                try:
+                    if update.effective_user and update.effective_user.language_code:
+                        lang_code = update.effective_user.language_code.lower()
+                        user_lang = "en" if lang_code.startswith("en") else "ru"
+                except Exception:
+                    user_lang = "ru"
+                _set_menu_dep_cache(session, user_lang=user_lang)
+                _create_background_task(
+                    _refresh_menu_language_cache(user_id, correlation_id=correlation_id),
+                    action="menu_lang_refresh",
                 )
-            except Exception as exc:
-                logger.warning("Failed to resolve user language: %s", exc)
-                user_lang = "ru"
 
         if user_id:
             reset_session_context(
@@ -7696,7 +7961,12 @@ async def show_main_menu(
                 )
             )
             header_text, _details_text = await asyncio.wait_for(
-                _build_main_menu_sections(update, correlation_id=correlation_id, user_lang=user_lang),
+                _build_main_menu_sections(
+                    update,
+                    correlation_id=correlation_id,
+                    user_lang=user_lang,
+                    menu_session=session,
+                ),
                 timeout=MAIN_MENU_BUILD_TIMEOUT_SECONDS,
             )
             return reply_markup, header_text
@@ -24992,44 +25262,10 @@ async def main():
     else:
         logger.warning("BOOT_STATUS db_storage=unavailable storage_instance=false")
     
-    # ==================== P1 FIX: ПРОГРЕВ КЕША МОДЕЛЕЙ ====================
-    # ПРОБЛЕМА: get_models_sync() при запущенном event loop читает YAML на каждый запрос
-    # РЕШЕНИЕ: прогреваем кеш _model_cache ВНУТРИ event loop при старте
-    logger.info("🔥 Warming up models cache inside event loop...")
-    import time as time_module
-    warmup_start = time_module.monotonic()
-    
-    # Принудительно загружаем модели (это установит _model_cache)
-    from app.models.registry import get_models_sync, _model_cache, _model_source
-    try:
-        warmup_models = await asyncio.wait_for(
-            asyncio.to_thread(get_models_sync),
-            timeout=MODEL_CACHE_WARMUP_TIMEOUT_SECONDS,
-        )
-        warmup_elapsed_ms = int((time_module.monotonic() - warmup_start) * 1000)
-        logger.info(
-            "✅ Models cache warmed up: %s models loaded in %sms (source=%s)",
-            len(warmup_models),
-            warmup_elapsed_ms,
-            _model_source,
-        )
-        logger.info("   Next get_models_sync() calls will use cached data (0ms latency)")
-    except asyncio.TimeoutError:
-        warmup_elapsed_ms = int((time_module.monotonic() - warmup_start) * 1000)
-        logger.warning(
-            "MODELS_CACHE_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s",
-            warmup_elapsed_ms,
-            MODEL_CACHE_WARMUP_TIMEOUT_SECONDS,
-        )
-    # ==================== END P1 FIX ====================
-
-    # ==================== GEN TYPE MENU CACHE WARMUP ====================
-    logger.info("🔥 Warming up generation type menu cache (background)...")
-    _create_background_task(
-        warm_generation_type_menu_cache(correlation_id="BOOT"),
-        action="gen_type_menu_cache_warmup",
-    )
-    # ==================== END GEN TYPE MENU CACHE WARMUP ====================
+    # ==================== BOOT WARMUPS (BACKGROUND + WATCHDOG) ====================
+    logger.info("🔥 Scheduling boot warmups in background (watchdog)...")
+    start_boot_warmups(correlation_id="BOOT")
+    # ==================== END BOOT WARMUPS ====================
     
     # ==================== NO-SILENCE GUARD (КРИТИЧЕСКИЙ ИНВАРИАНТ) ====================
     # Гарантирует ответ на каждый входящий update

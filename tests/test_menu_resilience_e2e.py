@@ -49,6 +49,36 @@ async def test_menu_survives_dependency_timeout(harness, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_start_menu_shows_main_even_when_deps_timeout(harness, monkeypatch):
+    async def slow_free_remaining(_user_id):
+        await asyncio.sleep(0.05)
+        return 0
+
+    async def slow_is_new(_user_id):
+        await asyncio.sleep(0.05)
+        return False
+
+    async def slow_referrals(_user_id):
+        await asyncio.sleep(0.05)
+        return []
+
+    monkeypatch.setattr("app.services.user_service.get_user_free_generations_remaining", slow_free_remaining)
+    monkeypatch.setattr("bot_kie.is_new_user_async", slow_is_new)
+    monkeypatch.setattr("bot_kie.get_user_referrals", slow_referrals)
+    monkeypatch.setattr("bot_kie.MAIN_MENU_DEP_TIMEOUT_SECONDS", 0.01)
+
+    update = harness.create_mock_update_command("/start", user_id=11003)
+    harness._attach_bot(update)
+    context = SimpleNamespace(bot=harness.application.bot, user_data={})
+
+    result = await bot_kie.show_main_menu(update, context, source="test_dep_timeout_main")
+
+    assert result["chat_id"] is not None
+    assert harness.outbox.messages
+    assert harness.outbox.messages[-1]["text"] != bot_kie.MINIMAL_MENU_TEXT
+
+
+@pytest.mark.asyncio
 async def test_warmup_cancelled_is_not_degraded(monkeypatch):
     async def cancelled():
         raise asyncio.CancelledError()

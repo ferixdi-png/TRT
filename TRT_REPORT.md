@@ -12,8 +12,9 @@
 - Автотесты: меню/sku/цены/генерация не рушатся при добавлении модели; e2e меню под нагрузкой. (tests/test_registry_menu_guard.py, tests/test_menu_resilience_e2e.py)
 
 ### STOP/GO чеклист
-- [x] ✅ GO: все тесты зелёные (локально).
-- [ ] ✅ GO: 0 критичных ошибок MENU_*_TIMEOUT в логах.
+- [ ] ✅ GO: pytest зелёный.
+- [ ] ✅ GO: warmup завершён/skip за <2s.
+- [ ] ✅ GO: 0 WARNING по MENU_DEP_TIMEOUT/GEN_TYPE_MENU_WARMUP_TIMEOUT в smoke-логах Render.
 - [ ] ✅ GO: меню никогда не пропадает (fallback с main menu кнопками).
 - [ ] ✅ GO: pricing/schema для проблемных моделей OK.
 - [ ] ✅ GO: healthcheck OK, port bind OK.
