@@ -1393,31 +1393,40 @@ async def warm_generation_type_menu_cache(
     async def _warmup() -> Dict[str, Any]:
         if warmup_fn is not None:
             return await warmup_fn()
-        counts: Dict[str, Any] = {}
-        for gen_type in get_generation_types():
-            models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
-            counts[gen_type] = {"count": len(models), "cache": cache_status}
-            await asyncio.sleep(0)
-        return counts
+
+        def _warmup_sync() -> Dict[str, Any]:
+            counts: Dict[str, Any] = {}
+            for gen_type in get_generation_types():
+                models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
+                counts[gen_type] = {"count": len(models), "cache": cache_status}
+            return counts
+
+        return await asyncio.to_thread(_warmup_sync)
 
     try:
-        counts = await asyncio.wait_for(_warmup(), timeout=timeout)
-        elapsed_ms = int((time.monotonic() - start) * 1000)
+        warmup_task = asyncio.create_task(_warmup())
+        counts = await asyncio.wait_for(warmup_task, timeout=timeout)
+        elapsed_ms_real = int((time.monotonic() - start) * 1000)
         log_structured_event(
             correlation_id=correlation_id,
             action="GEN_TYPE_MENU_WARMUP",
             action_path="boot:warmup",
             stage="BOOT",
             outcome="done",
-            param={"elapsed_ms": elapsed_ms, "counts": counts},
+            param={"elapsed_ms": elapsed_ms_real, "elapsed_ms_real": elapsed_ms_real, "counts": counts},
         )
-        logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms, counts)
+        logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms_real, counts)
     except asyncio.TimeoutError:
         GEN_TYPE_MENU_WARMUP_DEGRADED = True
-        elapsed_ms = int((time.monotonic() - start) * 1000)
+        elapsed_ms_real = int((time.monotonic() - start) * 1000)
+        try:
+            warmup_task.cancel()
+            await warmup_task
+        except asyncio.CancelledError:
+            pass
         logger.warning(
             "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s correlation_id=%s",
-            elapsed_ms,
+            elapsed_ms_real,
             timeout,
             correlation_id,
         )
@@ -1428,7 +1437,7 @@ async def warm_generation_type_menu_cache(
             stage="BOOT",
             outcome="timeout",
             error_code="GEN_TYPE_MENU_WARMUP_TIMEOUT",
-            param={"elapsed_ms": elapsed_ms, "timeout_s": timeout},
+            param={"elapsed_ms": elapsed_ms_real, "elapsed_ms_real": elapsed_ms_real, "timeout_s": timeout},
         )
 
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
@@ -2420,6 +2429,27 @@ def _parse_cancel_callback(callback_data: Optional[str]) -> Optional[str]:
     if len(parts) != 2 or not parts[1]:
         return None
     return parts[1]
+
+
+def _parse_sku_callback_data(callback_data: Optional[str]) -> tuple[Optional[str], Dict[str, str]]:
+    if not callback_data or not (callback_data.startswith("sku:") or callback_data.startswith("sk:")):
+        return None, {}
+    from app.pricing.ssot_catalog import resolve_sku_callback
+
+    sku_id = resolve_sku_callback(callback_data)
+    if not sku_id:
+        return None, {}
+    params: Dict[str, str] = {}
+    if "::" in sku_id:
+        _model_id, raw_params = sku_id.split("::", 1)
+        if raw_params and raw_params != "default":
+            for segment in raw_params.split("|"):
+                if not segment:
+                    continue
+                key, _, value = segment.partition("=")
+                if key:
+                    params[key] = value
+    return sku_id, params
 
 
 def _build_cancel_callback(job_id: Optional[str]) -> str:
@@ -9420,6 +9450,9 @@ async def _button_callback_impl(
             correlation_id = ensure_correlation_id(update, context)
             partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
             try:
+                session = ensure_session_cached(context, session_store, user_id, update_id)
+                for key in ("waiting_for", "current_param", "param_history", "params"):
+                    session.pop(key, None)
                 _clear_user_task_context(user_id, reason="back_to_menu", allow_mismatch=True)
                 await ensure_main_menu(update, context, source="back", correlation_id=correlation_id, prefer_edit=True)
             except Exception as exc:
@@ -14572,9 +14605,14 @@ async def _button_callback_impl(
 
         if data.startswith("sku:") or data.startswith("sk:"):
             await query.answer()
-            from app.pricing.ssot_catalog import get_sku_by_id, resolve_sku_callback
+            from app.pricing.ssot_catalog import get_sku_by_id
 
-            sku_id = resolve_sku_callback(data)
+            session = ensure_session_cached(context, session_store, user_id, update_id)
+            sku_id, parsed_params = _parse_sku_callback_data(data)
+            if sku_id:
+                session["sku_id"] = sku_id
+            if parsed_params:
+                session["prefill_params"] = dict(parsed_params)
             sku = get_sku_by_id(sku_id) if sku_id else None
             if not sku:
                 user_lang = get_user_language(user_id)
@@ -14582,7 +14620,6 @@ async def _button_callback_impl(
                     "❌ Неверная бесплатная опция" if user_lang == "ru" else "❌ Invalid free option",
                 )
                 return ConversationHandler.END
-            session = ensure_session_cached(context, session_store, user_id, update_id)
             session["prefill_params"] = dict(sku.params)
             session["sku_id"] = sku.sku_id
             data = f"select_model:{canonicalize_model_id(sku.model_id)}"
