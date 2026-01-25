@@ -231,12 +231,21 @@ async def main():
     setup_structured_logging()
     
     logger.info("Starting application...")
+    health_task: Optional[asyncio.Task] = None
     try:
         validate_config(strict=True)
     except ConfigValidationError as exc:
         logger.error("CONFIG_VALIDATION_FAILED missing=%s invalid=%s", exc.missing, exc.invalid)
         sys.exit(1)
-    report = await run_boot_diagnostics(os.environ, storage=None, redis_client=None)
+    boot_timeout = float(os.getenv("BOOT_DIAGNOSTICS_TIMEOUT_SECONDS", "5.0"))
+    try:
+        report = await asyncio.wait_for(
+            run_boot_diagnostics(os.environ, storage=None, redis_client=None),
+            timeout=boot_timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("BOOT_DIAGNOSTICS_TIMEOUT timeout_s=%s", boot_timeout)
+        report = {"meta": {"bot_mode": os.getenv("BOT_MODE", ""), "port": os.getenv("PORT", "")}, "summary": {}, "result": "DEGRADED"}
     log_boot_report(report)
     if report.get("result") == "FAIL":
         logger.error("BOOT DIAGNOSTICS failed, aborting startup.")
@@ -254,6 +263,10 @@ async def main():
     try:
         if bot_mode in ("worker", "bot") or (bot_mode == "auto" and is_lock_acquired()):
             if is_lock_acquired():
+                health_task = asyncio.create_task(
+                    start_healthcheck_server(),
+                    name="healthcheck-server",
+                )
                 # Start Telegram bot (runs indefinitely)
                 await start_telegram_bot()
             else:
@@ -270,7 +283,12 @@ async def main():
     except KeyboardInterrupt:
         logger.info("Shutdown requested")
     finally:
-        pass
+        if health_task is not None and not health_task.done():
+            health_task.cancel()
+            try:
+                await health_task
+            except asyncio.CancelledError:
+                pass
 
 
 if __name__ == "__main__":

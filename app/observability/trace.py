@@ -202,10 +202,12 @@ def trace_error(
     error_code: str,
     fix_hint: str,
     exc: BaseException,
+    *,
+    force_stacktrace: bool = False,
     **fields: Any,
 ) -> None:
     """Emit a structured error trace entry."""
-    debug_enabled = _get_env_flag("TRACE_VERBOSE", "false") or _get_log_level(os.getenv("LOG_LEVEL", "INFO")) <= logging.DEBUG
+    debug_enabled = force_stacktrace or _get_env_flag("TRACE_VERBOSE", "false") or _get_log_level(os.getenv("LOG_LEVEL", "INFO")) <= logging.DEBUG
     context_fields = get_context_fields()
     payload = {
         "correlation_id": correlation_id,
