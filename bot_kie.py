@@ -7664,40 +7664,56 @@ async def respond_price_undefined(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
     start_ts = time.monotonic()
+    correlation_id: Optional[str] = None
+    user_id: Optional[int] = None
+    chat_id: Optional[int] = None
     try:
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
-        upsert_user_registry_entry(update.effective_user)
-        correlation_id = ensure_correlation_id(update, context)
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            update_id=update.update_id,
-            action="COMMAND_START",
-            action_path="command:/start",
-            outcome="received",
-        )
-        ref_param = context.args[0] if context.args else None
-        referral_parse = parse_referral_param(ref_param)
-        if ref_param is not None:
-            partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
+        try:
+            upsert_user_registry_entry(update.effective_user)
+        except Exception as exc:
+            logger.error("❌ Failed to update user registry in /start: %s", exc, exc_info=True)
+        try:
+            correlation_id = ensure_correlation_id(update, context)
+        except Exception as exc:
+            correlation_id = uuid.uuid4().hex
+            logger.error("❌ Failed to build correlation_id in /start: %s", exc, exc_info=True)
+        try:
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
                 chat_id=chat_id,
                 update_id=update.update_id,
-                action="REFERRAL_PARSED",
+                action="COMMAND_START",
                 action_path="command:/start",
-                outcome="valid" if referral_parse.valid else "invalid",
-                param={
-                    "referrer_id": referral_parse.referrer_id,
-                    "referred_user_id": user_id,
-                    "partner_id": partner_id,
-                    "ref_param": ref_param,
-                    "valid": referral_parse.valid,
-                },
+                outcome="received",
             )
+        except Exception as exc:
+            logger.error("❌ /start structured log failed: %s", exc, exc_info=True)
+        ref_param = context.args[0] if context.args else None
+        referral_parse = parse_referral_param(ref_param)
+        if ref_param is not None:
+            partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
+            try:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="REFERRAL_PARSED",
+                    action_path="command:/start",
+                    outcome="valid" if referral_parse.valid else "invalid",
+                    param={
+                        "referrer_id": referral_parse.referrer_id,
+                        "referred_user_id": user_id,
+                        "partner_id": partner_id,
+                        "ref_param": ref_param,
+                        "valid": referral_parse.valid,
+                    },
+                )
+            except Exception as exc:
+                logger.error("❌ /start referral log failed: %s", exc, exc_info=True)
         if _should_dedupe_update(
             update,
             context,
@@ -7777,6 +7793,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 correlation_id=correlation_id,
                 prefer_edit=False,
             )
+    except Exception as exc:
+        fallback_correlation_id = correlation_id or uuid.uuid4().hex
+        logger.error("❌ /start unexpected failure: %s", exc, exc_info=True)
+        try:
+            fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {fallback_correlation_id}."
+            if update.message:
+                await update.message.reply_text(fallback_text)
+            elif update.callback_query and update.callback_query.message:
+                await update.callback_query.message.reply_text(fallback_text)
+        except Exception:
+            logger.debug("start fallback message failed", exc_info=True)
+        try:
+            await _show_minimal_menu(
+                update,
+                context,
+                source="/start",
+                correlation_id=fallback_correlation_id,
+                prefer_edit=False,
+            )
+        except Exception:
+            logger.debug("start minimal menu fallback failed", exc_info=True)
     finally:
         _log_handler_latency("start", start_ts, update)
 
