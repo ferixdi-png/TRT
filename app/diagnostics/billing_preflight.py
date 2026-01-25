@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 import asyncpg
 
+from app.diagnostics.db_health import check_db_health
 from app.diagnostics.sql_helpers import (
     AggregateResult,
     STATUS_ERROR,
@@ -617,6 +618,34 @@ async def run_billing_preflight(
         return report
 
     try:
+        db_health = await check_db_health(
+            os.getenv("DATABASE_URL", "").strip(),
+            db_pool=pool,
+            timeout_s=_read_float_env("BILLING_PREFLIGHT_DB_TIMEOUT_S", 1.5),
+        )
+        if not db_health.ok:
+            report["sections"]["db"] = {
+                "status": STATUS_FAIL,
+                "details": "db ping failed",
+                "meta": {
+                    "latency_ms": db_health.latency_ms,
+                    "error_class": db_health.error_class,
+                    "error": db_health.error_message,
+                    "correlation_id": db_health.correlation_id,
+                },
+            }
+            report["result"] = RESULT_FAIL
+            report["how_to_fix"] = [
+                f"DB check failed (corr={db_health.correlation_id}).",
+                "Verify DATABASE_URL and database availability.",
+            ]
+            human = format_billing_preflight_report(report)
+            if emit_logs:
+                logger.info("BILLING_PREFLIGHT %s", _build_report_json(report))
+                logger.info("%s", human)
+            _cache_billing_preflight(report, human)
+            return report
+
         query_retries = max(1, _read_int_env("BILLING_PREFLIGHT_QUERY_RETRIES", 2))
         query_backoff_s = _read_float_env("BILLING_PREFLIGHT_QUERY_BACKOFF_S", 0.2)
 

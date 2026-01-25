@@ -13,6 +13,7 @@ from telegram import Bot
 from app.config import Settings, get_settings
 from app.storage import get_storage
 from app.telegram_error_handler import ensure_error_handler_registered
+from app.observability.safe_handler import install_safe_handler_wrapper
 from app.utils.logging_config import get_logger
 from app.session_store import get_session_store
 
@@ -207,6 +208,7 @@ async def create_application(settings: Optional[Settings] = None) -> Application
         .build()
     )
     ensure_error_handler_registered(application)
+    install_safe_handler_wrapper(application)
     
     # Инициализируем dependency container
     deps = DependencyContainer()

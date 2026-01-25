@@ -6,6 +6,7 @@ import os
 from typing import List, Optional
 
 from app.config_env import normalize_webhook_base_url, validate_config
+from app.diagnostics.db_health import check_db_health
 from app.diagnostics.boot import format_boot_report, get_cached_boot_report, get_cached_boot_report_text
 from app.diagnostics.billing_preflight import (
     format_billing_preflight_report,
@@ -32,16 +33,12 @@ def _git_version() -> str:
 
 
 async def _db_status() -> str:
-    try:
-        storage = get_storage()
-        if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
-            ok = await storage.ping()
-        else:
-            ok = storage.test_connection()
-        return "✅ ok" if ok else "❌ error"
-    except Exception as exc:
-        logger.warning("admin diagnostics DB check failed: %s", exc)
-        return f"❌ error ({str(exc)[:60]})"
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    result = await check_db_health(database_url, timeout_s=1.5)
+    if result.ok:
+        return "✅ ok"
+    error_details = f"{result.error_class}: {result.error_message}" if result.error_class else "unknown"
+    return f"❌ error ({error_details}, corr={result.correlation_id})"
 
 
 async def _redis_status() -> str:
