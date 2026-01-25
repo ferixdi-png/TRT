@@ -44,6 +44,7 @@ from app.observability.trace import (
 from app.observability.error_catalog import ERROR_CATALOG
 from app.observability.request_logger import log_request_event
 from app.middleware.rate_limit import PerKeyRateLimiter, PerUserRateLimiter, TTLCache
+from app.utils.early_update_buffer import EarlyUpdateBuffer
 from app.session_store import get_session_store, get_session_cached
 from app.generations.request_tracker import RequestTracker, build_request_key
 
@@ -24703,6 +24704,8 @@ _webhook_app_ready_event = asyncio.Event()
 _webhook_init_lock = asyncio.Lock()
 _webhook_init_task: Optional[asyncio.Task] = None
 _webhook_early_update_log_last_ts: Optional[float] = None
+_early_update_buffer: Optional[EarlyUpdateBuffer] = None
+_early_update_drain_task: Optional[asyncio.Task] = None
 
 
 def _webhook_is_application_initialized(application: Optional[Application]) -> bool:
@@ -24720,6 +24723,91 @@ def _should_log_webhook_early_update(now: float, throttle_seconds: float) -> boo
         _webhook_early_update_log_last_ts = now
         return True
     return False
+
+
+def _get_early_update_buffer() -> EarlyUpdateBuffer:
+    global _early_update_buffer
+    if _early_update_buffer is not None:
+        return _early_update_buffer
+    ttl_seconds_raw = float(os.getenv("WEBHOOK_EARLY_UPDATE_TTL_SECONDS", "180"))
+    ttl_seconds = max(120.0, min(300.0, ttl_seconds_raw))
+    max_size_raw = int(os.getenv("WEBHOOK_EARLY_UPDATE_MAX_SIZE", "500"))
+    max_size = max(50, min(5000, max_size_raw))
+    _early_update_buffer = EarlyUpdateBuffer(ttl_seconds=ttl_seconds, max_size=max_size)
+    return _early_update_buffer
+
+
+async def _drain_early_update_buffer(
+    application: Application,
+    *,
+    correlation_id: str,
+) -> None:
+    buffer = _early_update_buffer
+    if buffer is None:
+        return
+    drain_started = time.monotonic()
+    items = await buffer.drain()
+    total = len(items)
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="EARLY_UPDATE_DRAIN_START",
+        action_path="webhook:early_update_drain",
+        outcome="start",
+        param={"count": total},
+    )
+    processed = 0
+    deduped = 0
+    failed = 0
+    for item in items:
+        update_id = item.update_id
+        if update_id and _update_deduper.seen(update_id):
+            deduped += 1
+            log_structured_event(
+                correlation_id=item.correlation_id or correlation_id,
+                action="DEDUP_HIT",
+                action_path="webhook:update_id",
+                outcome="deduped",
+                param={"update_id": update_id, "source": "early_update_buffer"},
+            )
+            continue
+        try:
+            update = Update.de_json(item.payload, application.bot)
+            if not update:
+                failed += 1
+                continue
+            await application.process_update(update)
+            processed += 1
+        except Exception:
+            failed += 1
+            logger.exception(
+                "EARLY_UPDATE_DRAIN_FAILED correlation_id=%s update_id=%s",
+                item.correlation_id or correlation_id,
+                update_id,
+            )
+    duration_ms = int((time.monotonic() - drain_started) * 1000)
+    log_structured_event(
+        correlation_id=correlation_id,
+        action="EARLY_UPDATE_DRAIN_DONE",
+        action_path="webhook:early_update_drain",
+        outcome="done",
+        param={
+            "count": total,
+            "processed": processed,
+            "deduped": deduped,
+            "failed": failed,
+            "duration_ms": duration_ms,
+        },
+    )
+
+
+def _schedule_early_update_drain(application: Application, *, correlation_id: str) -> None:
+    global _early_update_drain_task
+    if _early_update_drain_task and not _early_update_drain_task.done():
+        return
+    _early_update_drain_task = _create_background_task(
+        _drain_early_update_buffer(application, correlation_id=correlation_id),
+        action="early_update_drain",
+    )
 
 
 async def _register_webhook_application(application: Application) -> None:
@@ -24752,6 +24840,7 @@ async def create_webhook_handler():
     )
     request_deduper = TTLCache(request_dedup_ttl_seconds)
     webhook_semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit > 0 else None
+    early_update_buffer = _get_early_update_buffer()
 
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
         """Handle incoming Telegram webhook updates."""
@@ -24773,22 +24862,58 @@ async def create_webhook_handler():
 
             if not _webhook_app_ready_event.is_set() or not _webhook_is_application_initialized(_application_for_webhook):
                 update_id = None
+                payload = None
                 try:
                     payload = await request.json()
                     if isinstance(payload, dict):
                         update_id = payload.get("update_id")
                 except Exception:
                     update_id = None
+                if update_id is not None and isinstance(payload, dict):
+                    try:
+                        update_id_int = int(update_id)
+                    except (TypeError, ValueError):
+                        update_id_int = None
+                    if update_id_int is not None:
+                        buffered, buffer_size = await early_update_buffer.add(
+                            update_id_int,
+                            payload,
+                            correlation_id=correlation_id,
+                        )
+                    else:
+                        buffered = False
+                        buffer_size = 0
+                    outcome = "buffered" if buffered else "deduped"
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="EARLY_UPDATE_BUFFERED",
+                        action_path="webhook:early_update",
+                        outcome=outcome,
+                        param={
+                            "update_id": update_id_int if update_id_int is not None else update_id,
+                            "buffer_size": buffer_size,
+                            "ready": False,
+                        },
+                    )
+                    if update_id_int is not None and not buffered:
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            action="DEDUP_HIT",
+                            action_path="webhook:update_id",
+                            outcome="deduped",
+                            param={"update_id": update_id, "source": "early_update_buffer"},
+                        )
                 if _should_log_webhook_early_update(time.monotonic(), early_update_log_throttle_seconds):
                     logger.info(
                         "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
-                        "outcome=defer retry_after=%s",
+                        "outcome=buffered retry_after=%s",
                         correlation_id,
                         update_id,
                         early_update_retry_after,
                     )
                 return web.Response(
-                    status=204,
+                    status=200,
+                    text="ok",
                     headers={"Retry-After": str(early_update_retry_after)},
                 )
 
@@ -24846,6 +24971,15 @@ async def create_webhook_handler():
             try:
                 update = Update.de_json(data, _application_for_webhook.bot)
                 if update:
+                    if update.update_id is not None and _update_deduper.seen(update.update_id):
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            action="DEDUP_HIT",
+                            action_path="webhook:update_id",
+                            outcome="deduped",
+                            param={"update_id": update.update_id, "source": "webhook_handler"},
+                        )
+                        return web.Response(status=200, text="ok")
                     logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
                     semaphore_acquired = False
                     if webhook_semaphore is not None:
@@ -24962,6 +25096,7 @@ async def _run_webhook_initialization(
     init_ms = int((time.monotonic() - init_started) * 1000)
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
+    _schedule_early_update_drain(application, correlation_id="BOOT")
 
 
 async def main():
