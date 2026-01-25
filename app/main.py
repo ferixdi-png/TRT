@@ -52,7 +52,7 @@ async def initialize_storage() -> bool:
 
 async def start_telegram_bot():
     """Start Telegram bot polling."""
-    from telegram.ext import Application
+    from app.config import get_settings
     from app.telegram_error_handler import ensure_error_handler_registered
     
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -65,9 +65,8 @@ async def start_telegram_bot():
         return
         
     try:
-        app = Application.builder().token(token).build()
-        ensure_error_handler_registered(app)
-        
+        app = None
+        settings = get_settings(validate=False)
         # Register handlers
         # КРИТИЧНО: Исправляем импорт для Render
         try:
@@ -77,16 +76,20 @@ async def start_telegram_bot():
             project_root = Path(__file__).parent.parent.absolute()
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
-            
-            from bot_kie import generation_handler
+
+            from bot_kie import create_bot_application
+            app = await create_bot_application(settings)
         except ImportError:
             try:
                 # Fallback: пробуем из app.bot_kie (если есть)
                 from app.bot_kie import generation_handler
+                from telegram.ext import Application
+                app = Application.builder().token(token).build()
+                ensure_error_handler_registered(app)
+                app.add_handler(generation_handler)
             except ImportError:
-                logger.error("Failed to import generation_handler from bot_kie or app.bot_kie")
+                logger.error("Failed to import create_bot_application or generation_handler")
                 raise
-        app.add_handler(generation_handler)
         
         # Delete webhook and start polling
         await app.bot.delete_webhook(drop_pending_updates=True)
