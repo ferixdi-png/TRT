@@ -3090,7 +3090,7 @@ def _build_current_price_line(
     else:
         breakdown = quote.get("breakdown", {}) if isinstance(quote, dict) else {}
         price_value = quote.get("price_rub") if isinstance(quote, dict) else None
-        is_free = bool(breakdown.get("free_sku")) or str(price_value) in {"0", "0.0", "0.00"}
+        is_free = bool(breakdown.get("free_sku")) or bool(breakdown.get("admin_free"))
         if price_value is None:
             price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
         elif is_free:
@@ -7632,6 +7632,12 @@ async def respond_price_undefined(
             )
         )
     )
+    if correlation_id:
+        message_text = (
+            f"{message_text}\n\n🔎 corr_id: <code>{correlation_id}</code>"
+            if user_lang == "ru"
+            else f"{message_text}\n\n🔎 corr_id: <code>{correlation_id}</code>"
+        )
 
     sent = False
     if update.callback_query and prefer_edit:
@@ -23231,7 +23237,7 @@ async def create_bot_application(settings) -> Application:
         disabled_models = refresh_pricing_coverage_guard()
         if disabled_models:
             logger.warning(
-                "PRICING_PREFLIGHT_DISABLED_COUNT=%s models=%s",
+                "PRICING_PREFLIGHT_BLOCKED_COUNT=%s models=%s",
                 len(disabled_models),
                 sorted(disabled_models.keys()),
             )

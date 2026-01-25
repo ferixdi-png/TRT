@@ -9,9 +9,13 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
+import logging
+
 
 ROOT = Path(__file__).resolve().parents[2]
 PRICING_SSOT_PATH = ROOT / "data" / "kie_pricing_rub.yaml"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -59,13 +63,7 @@ def reset_price_ssot_cache() -> None:
 
 
 def _sku_is_free(sku_data: Dict[str, Any]) -> bool:
-    if sku_data.get("is_free") is True or sku_data.get("free") is True:
-        return True
-    price_value = sku_data.get("price_rub")
-    try:
-        return Decimal(str(price_value)) == Decimal("0")
-    except Exception:
-        return False
+    return sku_data.get("is_free") is True or sku_data.get("free") is True
 
 
 def _iter_skus(model_data: Dict[str, Any], model_id: str) -> Iterable[PriceSku]:
@@ -75,6 +73,13 @@ def _iter_skus(model_data: Dict[str, Any], model_id: str) -> Iterable[PriceSku]:
         unit = str(sku_data.get("unit", "request"))
         notes = str(sku_data.get("notes", "")) if sku_data.get("notes") else ""
         sku_key = _build_sku_key(model_id, params)
+        is_free = _sku_is_free(sku_data)
+        if price == Decimal("0") and not is_free:
+            logger.warning(
+                "PRICING_ZERO_PRICE_UNMARKED model_id=%s sku_id=%s",
+                model_id,
+                sku_key,
+            )
         yield PriceSku(
             model_id=model_id,
             sku_key=sku_key,
@@ -82,7 +87,7 @@ def _iter_skus(model_data: Dict[str, Any], model_id: str) -> Iterable[PriceSku]:
             price_rub=price,
             unit=unit,
             notes=notes,
-            is_free_sku=_sku_is_free(sku_data),
+            is_free_sku=is_free,
         )
 
 
