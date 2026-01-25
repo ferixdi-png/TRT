@@ -136,7 +136,7 @@ async def handle_update_exception(
         [[InlineKeyboardButton("Главное меню", callback_data="back_to_menu")]]
     )
     user_message = (
-        "⚠️ Что-то пошло не так, вернул в меню."
+        "⚠️ Временный сбой, вернул в меню."
         f" Лог: {correlation_id}."
     )
 

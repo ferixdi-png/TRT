@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.kie_contract.schema_loader import get_model_schema
 from app.models.registry_validator import get_invalid_model_ids, get_model_issues
+from app.pricing.coverage_guard import get_disabled_model_info
 from app.pricing.price_ssot import list_model_skus
 
 
@@ -94,6 +95,17 @@ def evaluate_model_visibility(model_id: str) -> ModelVisibilityResult:
             model_id=model_id,
             status=STATUS_BLOCKED_INVALID_REGISTRY,
             issues=issues,
+            required_fields=[],
+            optional_fields=[],
+            defaults={},
+        )
+
+    disabled_info = get_disabled_model_info(model_id)
+    if disabled_info:
+        return ModelVisibilityResult(
+            model_id=model_id,
+            status=STATUS_BLOCKED_NO_PRICE,
+            issues=disabled_info.issues or ["Нет цены для выбранных параметров."],
             required_fields=[],
             optional_fields=[],
             defaults={},
