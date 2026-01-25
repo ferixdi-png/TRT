@@ -8,7 +8,32 @@ models:
       - unit: image
         price_rub: 0.63
         is_free: true
-        params: {}
+        params:
+          aspect_ratio: "1:1"
+        notes: text-to-image
+      - unit: image
+        price_rub: 0.63
+        is_free: true
+        params:
+          aspect_ratio: "4:3"
+        notes: text-to-image
+      - unit: image
+        price_rub: 0.63
+        is_free: true
+        params:
+          aspect_ratio: "3:4"
+        notes: text-to-image
+      - unit: image
+        price_rub: 0.63
+        is_free: true
+        params:
+          aspect_ratio: "16:9"
+        notes: text-to-image
+      - unit: image
+        price_rub: 0.63
+        is_free: true
+        params:
+          aspect_ratio: "9:16"
         notes: text-to-image
   - id: nano-banana-pro
     skus:
@@ -32,11 +57,97 @@ models:
       - unit: image
         price_rub: 5.11
         params:
+          aspect_ratio: "1:1"
           quality: basic
         notes: Basic
       - unit: image
         price_rub: 5.11
         params:
+          aspect_ratio: "4:3"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:4"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "16:9"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "9:16"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "2:3"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:2"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "21:9"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "1:1"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "4:3"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:4"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "16:9"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "9:16"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "2:3"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:2"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "21:9"
           quality: high
         notes: High
   - id: seedream/4.5-edit
@@ -44,11 +155,97 @@ models:
       - unit: image
         price_rub: 5.11
         params:
+          aspect_ratio: "1:1"
           quality: basic
         notes: Basic
       - unit: image
         price_rub: 5.11
         params:
+          aspect_ratio: "4:3"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:4"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "16:9"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "9:16"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "2:3"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:2"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "21:9"
+          quality: basic
+        notes: Basic
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "1:1"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "4:3"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:4"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "16:9"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "9:16"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "2:3"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "3:2"
+          quality: high
+        notes: High
+      - unit: image
+        price_rub: 5.11
+        params:
+          aspect_ratio: "21:9"
           quality: high
         notes: High
   - id: sora-2-pro-image-to-video
@@ -138,22 +335,87 @@ models:
       - unit: video
         price_rub: 86.43
         params:
+          aspect_ratio: "1:1"
+          sound: false
+          duration: "10"
+        notes: text-to-video WITHOUT audio 10s
+      - unit: video
+        price_rub: 86.43
+        params:
+          aspect_ratio: "16:9"
+          sound: false
+          duration: "10"
+        notes: text-to-video WITHOUT audio 10s
+      - unit: video
+        price_rub: 86.43
+        params:
+          aspect_ratio: "9:16"
           sound: false
           duration: "10"
         notes: text-to-video WITHOUT audio 10s
       - unit: video
         price_rub: 43.21
         params:
+          aspect_ratio: "1:1"
           sound: false
           duration: "5"
         notes: text-to-video WITHOUT audio 5s
-    unmapped:
+      - unit: video
+        price_rub: 43.21
+        params:
+          aspect_ratio: "16:9"
+          sound: false
+          duration: "5"
+        notes: text-to-video WITHOUT audio 5s
+      - unit: video
+        price_rub: 43.21
+        params:
+          aspect_ratio: "9:16"
+          sound: false
+          duration: "5"
+        notes: text-to-video WITHOUT audio 5s
       - unit: video
         price_rub: 172.85
-        notes: text-to-video WITH audio (duration not specified)
+        params:
+          aspect_ratio: "1:1"
+          sound: true
+          duration: "10"
+        notes: text-to-video WITH audio 10s
+      - unit: video
+        price_rub: 172.85
+        params:
+          aspect_ratio: "16:9"
+          sound: true
+          duration: "10"
+        notes: text-to-video WITH audio 10s
+      - unit: video
+        price_rub: 172.85
+        params:
+          aspect_ratio: "9:16"
+          sound: true
+          duration: "10"
+        notes: text-to-video WITH audio 10s
       - unit: video
         price_rub: 86.43
-        notes: text-to-video WITH audio (second slot in dump, ambiguous)
+        params:
+          aspect_ratio: "1:1"
+          sound: true
+          duration: "5"
+        notes: text-to-video WITH audio 5s
+      - unit: video
+        price_rub: 86.43
+        params:
+          aspect_ratio: "16:9"
+          sound: true
+          duration: "5"
+        notes: text-to-video WITH audio 5s
+      - unit: video
+        price_rub: 86.43
+        params:
+          aspect_ratio: "9:16"
+          sound: true
+          duration: "5"
+        notes: text-to-video WITH audio 5s
   - id: kling-2.6/image-to-video
     skus:
       - unit: video
@@ -183,11 +445,97 @@ models:
       - unit: image
         price_rub: 11.0
         params:
+          aspect_ratio: "1:1"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "4:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "3:4"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "16:9"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "9:16"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "3:2"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "2:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: auto
           resolution: "1K"
         notes: 1K
       - unit: image
         price_rub: 18.86
         params:
+          aspect_ratio: "1:1"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "4:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "3:4"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "16:9"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "9:16"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "3:2"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "2:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: auto
           resolution: "2K"
         notes: 2K
   - id: flux-2/flex-image-to-image
@@ -195,11 +543,97 @@ models:
       - unit: image
         price_rub: 11.0
         params:
+          aspect_ratio: "1:1"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "4:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "3:4"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "16:9"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "9:16"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "3:2"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: "2:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 11.0
+        params:
+          aspect_ratio: auto
           resolution: "1K"
         notes: 1K
       - unit: image
         price_rub: 18.86
         params:
+          aspect_ratio: "1:1"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "4:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "3:4"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "16:9"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "9:16"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "3:2"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: "2:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 18.86
+        params:
+          aspect_ratio: auto
           resolution: "2K"
         notes: 2K
   - id: flux-2/pro-text-to-image
@@ -207,11 +641,97 @@ models:
       - unit: image
         price_rub: 3.93
         params:
+          aspect_ratio: "1:1"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "4:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "3:4"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "16:9"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "9:16"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "3:2"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "2:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: auto
           resolution: "1K"
         notes: 1K
       - unit: image
         price_rub: 5.5
         params:
+          aspect_ratio: "1:1"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "4:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "3:4"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "16:9"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "9:16"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "3:2"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "2:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: auto
           resolution: "2K"
         notes: 2K
   - id: flux-2/pro-image-to-image
@@ -219,11 +739,97 @@ models:
       - unit: image
         price_rub: 3.93
         params:
+          aspect_ratio: "1:1"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "4:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "3:4"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "16:9"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "9:16"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "3:2"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: "2:3"
+          resolution: "1K"
+        notes: 1K
+      - unit: image
+        price_rub: 3.93
+        params:
+          aspect_ratio: auto
           resolution: "1K"
         notes: 1K
       - unit: image
         price_rub: 5.5
         params:
+          aspect_ratio: "1:1"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "4:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "3:4"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "16:9"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "9:16"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "3:2"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: "2:3"
+          resolution: "2K"
+        notes: 2K
+      - unit: image
+        price_rub: 5.5
+        params:
+          aspect_ratio: auto
           resolution: "2K"
         notes: 2K
   - id: topaz/image-upscale
@@ -385,6 +991,12 @@ models:
           resolution: 512P
         notes: Standard 6s 512p
       - unit: video
+        price_rub: 44.78
+        params:
+          duration: "6"
+          resolution: 1080P
+        notes: Pro 6s 1080p
+      - unit: video
         price_rub: 15.71
         params:
           duration: "10"
@@ -460,16 +1072,109 @@ models:
       - unit: image
         price_rub: 2.75
         params:
+          image_size: square
+          rendering_speed: TURBO
+        notes: Turbo
+      - unit: image
+        price_rub: 2.75
+        params:
+          image_size: square_hd
+          rendering_speed: TURBO
+        notes: Turbo
+      - unit: image
+        price_rub: 2.75
+        params:
+          image_size: portrait_4_3
+          rendering_speed: TURBO
+        notes: Turbo
+      - unit: image
+        price_rub: 2.75
+        params:
+          image_size: portrait_16_9
+          rendering_speed: TURBO
+        notes: Turbo
+      - unit: image
+        price_rub: 2.75
+        params:
+          image_size: landscape_4_3
+          rendering_speed: TURBO
+        notes: Turbo
+      - unit: image
+        price_rub: 2.75
+        params:
+          image_size: landscape_16_9
           rendering_speed: TURBO
         notes: Turbo
       - unit: image
         price_rub: 5.5
         params:
+          image_size: square
+          rendering_speed: BALANCED
+        notes: Balanced
+      - unit: image
+        price_rub: 5.5
+        params:
+          image_size: square_hd
+          rendering_speed: BALANCED
+        notes: Balanced
+      - unit: image
+        price_rub: 5.5
+        params:
+          image_size: portrait_4_3
+          rendering_speed: BALANCED
+        notes: Balanced
+      - unit: image
+        price_rub: 5.5
+        params:
+          image_size: portrait_16_9
+          rendering_speed: BALANCED
+        notes: Balanced
+      - unit: image
+        price_rub: 5.5
+        params:
+          image_size: landscape_4_3
+          rendering_speed: BALANCED
+        notes: Balanced
+      - unit: image
+        price_rub: 5.5
+        params:
+          image_size: landscape_16_9
           rendering_speed: BALANCED
         notes: Balanced
       - unit: image
         price_rub: 7.86
         params:
+          image_size: square
+          rendering_speed: QUALITY
+        notes: Quality
+      - unit: image
+        price_rub: 7.86
+        params:
+          image_size: square_hd
+          rendering_speed: QUALITY
+        notes: Quality
+      - unit: image
+        price_rub: 7.86
+        params:
+          image_size: portrait_4_3
+          rendering_speed: QUALITY
+        notes: Quality
+      - unit: image
+        price_rub: 7.86
+        params:
+          image_size: portrait_16_9
+          rendering_speed: QUALITY
+        notes: Quality
+      - unit: image
+        price_rub: 7.86
+        params:
+          image_size: landscape_4_3
+          rendering_speed: QUALITY
+        notes: Quality
+      - unit: image
+        price_rub: 7.86
+        params:
+          image_size: landscape_16_9
           rendering_speed: QUALITY
         notes: Quality
   - id: bytedance/seedream
@@ -707,68 +1412,63 @@ models:
           resolution: 1080p
         notes: Fast 10s 1080p
   - id: wan/2-2-a14b-speech-to-video-turbo
-    unmapped:
+    skus:
       - unit: second
         price_rub: 9.43
+        params:
+          resolution: 480p
         notes: 480p per second (pricing list)
       - unit: second
         price_rub: 14.14
+        params:
+          resolution: 580p
         notes: 580p per second (pricing list)
       - unit: second
         price_rub: 18.86
+        params:
+          resolution: 720p
         notes: 720p per second (pricing list)
   - id: qwen/image-edit
-    unmapped:
+    skus:
       - unit: megapixel
         price_rub: 4.71
+        params: {}
         notes: image-to-image (per megapixel)
   - id: flux/kontext
-    unmapped:
+    skus:
       - unit: image
         price_rub: 3.93
+        params: {}
         notes: Pro
-      - unit: image
-        price_rub: 7.86
-        notes: Max
   - id: elevenlabs/audio-isolation
-    unmapped:
+    skus:
       - unit: second
         price_rub: 0.16
+        params: {}
         notes: Audio Isolation (per second)
   - id: elevenlabs/sound-effect
-    unmapped:
+    skus:
       - unit: second
         price_rub: 0.19
+        params: {}
         notes: Sound Effect V2 (per second)
   - id: elevenlabs/speech-to-text
-    unmapped:
+    skus:
       - unit: minute
         price_rub: 2.75
+        params: {}
         notes: Speech to Text (per minute)
   - id: elevenlabs/text-to-speech
-    unmapped:
+    skus:
       - unit: 1000_chars
         price_rub: 4.71
+        params: {}
         notes: Text to Speech turbo 2.5
-      - unit: 1000_chars
-        price_rub: 9.43
-        notes: Text to Speech multilingual v2
   - id: grok/imagine
-    unmapped:
-      - unit: image
-        price_rub: 3.14
-        notes: image-to-image (per 2 images)
-      - unit: image
-        price_rub: 3.14
-        notes: text-to-image (per 6 images)
-      - unit: upscale
-        price_rub: 7.86
-        notes: upscale 360p→720p
+    skus:
       - unit: video
         price_rub: 15.71
-        notes: image-to-video 6s
-      - unit: video
-        price_rub: 15.71
+        params: {}
         notes: text-to-video 6s
   - id: grok-imagine/text-to-image
     skus:
@@ -783,160 +1483,102 @@ models:
         params: {}
         notes: text-to-video 6s
   - id: google/veo-3.1
-    unmapped:
+    skus:
       - unit: video
         price_rub: 47.14
-        notes: reference-to-video Fast
-      - unit: video
-        price_rub: 47.14
+        params: {}
         notes: text-to-video Fast
-      - unit: video
-        price_rub: 47.14
-        notes: image-to-video Fast
-      - unit: video
-        price_rub: 196.43
-        notes: text-to-video Quality
-      - unit: video
-        price_rub: 196.43
-        notes: image-to-video Quality
   - id: google/veo-3
-    unmapped:
+    skus:
       - unit: video
         price_rub: 47.14
+        params: {}
         notes: reference-to-video Fast
   - id: sora-2-pro-storyboard
-    unmapped:
+    skus:
       - unit: video
         price_rub: 117.85
+        params:
+          duration: "10"
         notes: storyboard Pro 10s
       - unit: video
         price_rub: 212.14
+        params:
+          duration: "25"
         notes: storyboard Pro 15–25s
   - id: kling/v2-5-turbo
-    unmapped:
-      - unit: video
-        price_rub: 66.0
-        notes: text-to-video Turbo Pro 10s
-      - unit: video
+    skus:
+      - unit: image
         price_rub: 33.0
+        params: {}
         notes: text-to-video Turbo Pro 5s
   - id: hailuo/2.3
-    unmapped:
-      - unit: video
-        price_rub: 70.71
-        notes: image-to-video Pro 10s 768p
-      - unit: video
-        price_rub: 62.86
-        notes: image-to-video Pro 6s 1080p
-      - unit: video
-        price_rub: 35.36
-        notes: image-to-video Pro 6s 768p
+    skus:
       - unit: video
         price_rub: 23.57
+        params:
+          duration: "6"
+          resolution: 768p
         notes: image-to-video Standard 6s 768p
       - unit: video
         price_rub: 39.29
+        params:
+          duration: "10"
+          resolution: 768p
         notes: image-to-video Standard 10s 768p
       - unit: video
         price_rub: 39.29
+        params:
+          duration: "6"
+          resolution: 1080p
         notes: image-to-video Standard 6s 1080p
   - id: infinitalk/from-audio
-    unmapped:
+    skus:
       - unit: second
         price_rub: 2.36
+        params:
+          resolution: 480p
         notes: up to 15s 480p
       - unit: second
         price_rub: 9.43
+        params:
+          resolution: 720p
         notes: up to 15s 720p
   - id: google/nanobanana-gemini-2.5-flash
-    unmapped:
+    skus:
       - unit: 1m_tokens
         price_rub: 14.14
+        params: {}
         notes: Gemini 2.5 flash Input
-      - unit: 1m_tokens
-        price_rub: 117.85
-        notes: Gemini 2.5 flash Output
   - id: runway/gen-4
-    unmapped:
-      - unit: video
-        price_rub: 86.43
-        notes: Runway Aleph
+    skus:
       - unit: video
         price_rub: 9.43
+        params:
+          duration: "5"
+          resolution: 720p
         notes: text-to-video 5s 720p
       - unit: video
         price_rub: 23.57
+        params:
+          duration: "10"
+          resolution: 720p
         notes: text-to-video 10s 720p
       - unit: video
         price_rub: 23.57
+        params:
+          duration: "5"
+          resolution: 1080p
         notes: text-to-video 5s 1080p
-      - unit: video
-        price_rub: 9.43
-        notes: image-to-video 5s 720p
-      - unit: video
-        price_rub: 23.57
-        notes: image-to-video 10s 720p
-      - unit: video
-        price_rub: 23.57
-        notes: image-to-video 5s 1080p
   - id: suno/v5
-    unmapped:
-      - unit: request
-        price_rub: 3.93
-        notes: Replace Music Section
-      - unit: request
-        price_rub: 39.29
-        notes: Multi-Stem Separation
-      - unit: request
-        price_rub: 7.86
-        notes: Vocal Separation
-      - unit: request
-        price_rub: 0.31
-        notes: convert-to-wav-format
-      - unit: request
-        price_rub: 0.31
-        notes: Generate Lyrics
+    skus:
       - unit: request
         price_rub: 9.43
-        notes: upload-and-cover-audio
-      - unit: request
-        price_rub: 1.57
-        notes: create-music-video
-      - unit: request
-        price_rub: 9.43
-        notes: upload-and-extend-audio
-      - unit: request
-        price_rub: 9.43
-        notes: add-instrumental
-      - unit: request
-        price_rub: 9.43
+        params: {}
         notes: Generate Music
-      - unit: request
-        price_rub: 9.43
-        notes: Extend Music
-      - unit: request
-        price_rub: 9.43
-        notes: add-vocals
   - id: midjourney/api
-    unmapped:
+    skus:
       - unit: request
         price_rub: 6.29
+        params: {}
         notes: text-to-image fast
-      - unit: request
-        price_rub: 12.57
-        notes: text-to-image turbo
-      - unit: request
-        price_rub: 2.36
-        notes: text-to-image relaxed
-      - unit: request
-        price_rub: 6.29
-        notes: image-to-image fast
-      - unit: request
-        price_rub: 12.57
-        notes: image-to-image turbo
-      - unit: request
-        price_rub: 2.36
-        notes: image-to-image relaxed
-      - unit: request
-        price_rub: 47.14
-        notes: image-to-video
