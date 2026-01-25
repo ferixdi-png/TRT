@@ -1,5 +1,26 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-10 TRT: STOP/GO аудит меню, pricing схемы, healthcheck singleton
+
+### Что проверено и усилено
+- Hard fallback в меню: safe renderer + dedup, гарантированная отправка main menu при любых сбоях. (bot_kie.py, app/observability/exception_boundary.py, app/observability/no_silence_guard.py)
+- Меню типов генерации: неблокирующий warmup + CancelledError-safe. (bot_kie.py)
+- Healthcheck singleton: конкурентный старт без port bind конфликтов, legacy сервер отключён по умолчанию. (app/utils/healthcheck.py, bot_kie.py)
+- Pricing schema: обновлены входные схемы для sora-2-pro-storyboard/hailuo/2.3/infinitalk/from-audio/runway/gen-4. (models/kie_models.yaml)
+- Pricing audit: строгий режим при AUDIT, auto-fallback на дефолтный SKU в проде. (bot_kie.py, app/pricing/price_resolver.py)
+- Платёжные списания: идемпотентность + логи по double-click/insufficient/negative. (app/storage/json_storage.py, app/storage/postgres_storage.py)
+- Автотесты: меню/sku/цены/генерация не рушатся при добавлении модели; e2e меню под нагрузкой. (tests/test_registry_menu_guard.py, tests/test_menu_resilience_e2e.py)
+
+### STOP/GO чеклист
+- [x] ✅ GO: все тесты зелёные (локально).
+- [ ] ✅ GO: 0 критичных ошибок MENU_*_TIMEOUT в логах.
+- [ ] ✅ GO: меню никогда не пропадает (fallback с main menu кнопками).
+- [ ] ✅ GO: pricing/schema для проблемных моделей OK.
+- [ ] ✅ GO: healthcheck OK, port bind OK.
+- [ ] ✅ GO: платежи/история/рефералка консистентны, идемпотентность соблюдена.
+
+**Текущий статус:** GO после локальных тестов; STOP после подтверждения логов/прода.
+
 ## ✅ 2026-02-08 TRT: Free tools menu dedupe + fast fallback response
 
 ### Причина регресса

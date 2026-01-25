@@ -31,8 +31,16 @@ async def test_router_exception_boundary_callback(caplog, monkeypatch):
     await harness.application.process_update(update)
 
     assert harness.outbox.callback_answers
+    assert any(
+        "⚠️ Техническая ошибка" in answer.get("text", "")
+        for answer in harness.outbox.callback_answers
+    )
     assert harness.outbox.messages
-    assert "⚠️ Техническая ошибка" in harness.outbox.messages[-1]["text"]
+    error_message = next(
+        (msg for msg in harness.outbox.messages if "⚠️ Временный сбой" in msg["text"]),
+        None,
+    )
+    assert error_message is not None
 
     log_line = next((r.message for r in caplog.records if "ROUTER_FAIL" in r.message), None)
     assert log_line is not None
@@ -40,7 +48,7 @@ async def test_router_exception_boundary_callback(caplog, monkeypatch):
     assert payload["update_type"] == "callback_query"
     assert payload["stage"] == "router"
 
-    corr_match = re.search(r"(corr-[\w-]+)", harness.outbox.messages[-1]["text"])
+    corr_match = re.search(r"(corr-[\w-]+)", error_message["text"])
     assert corr_match
     summary = get_error_summary(corr_match.group(1))
     assert summary is not None
