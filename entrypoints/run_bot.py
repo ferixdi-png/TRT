@@ -38,6 +38,9 @@ def is_preflight_strict() -> bool:
 def is_storage_preflight_strict() -> bool:
     return _read_bool_env("STORAGE_PREFLIGHT_STRICT", True)
 
+def is_boot_diagnostics_strict() -> bool:
+    return _read_bool_env("BOOT_DIAGNOSTICS_STRICT", False)
+
 def _read_int_env(name: str, default: int) -> int:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -198,6 +201,7 @@ async def main() -> None:
             format_billing_preflight_report,
             run_billing_preflight,
         )
+        from app.diagnostics.boot import log_boot_report, run_boot_diagnostics
 
         storage = get_storage()
         db_ok = False
@@ -215,6 +219,16 @@ async def main() -> None:
             logger.warning("DB connection failed, continuing startup in degraded mode.")
         else:
             logger.info("DB connection OK, running billing preflight.")
+
+        boot_report = await run_boot_diagnostics(os.environ, storage=storage, redis_client=None)
+        log_boot_report(boot_report)
+        if boot_report.get("result") == "FAIL":
+            logger.error("Boot diagnostics reported FAIL.")
+            if is_boot_diagnostics_strict():
+                logger.error("Boot diagnostics strict mode enabled; aborting startup before Telegram updates.")
+                await stop_healthcheck(health_started)
+                sys.exit(1)
+            logger.warning("Boot diagnostics strict mode disabled; continuing startup.")
 
         if db_ok:
             preflight_report = await run_billing_preflight(storage, db_pool=None)
