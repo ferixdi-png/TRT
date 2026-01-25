@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Awaitable, Callable, Optional
+from weakref import WeakSet
 
 from telegram import Update
 from telegram.ext import BaseHandler, ConversationHandler, ContextTypes
@@ -11,6 +12,9 @@ from app.observability.exception_boundary import handle_update_exception
 from app.observability.trace import ensure_correlation_id
 
 logger = logging.getLogger(__name__)
+
+_wrapped_handlers: WeakSet[BaseHandler] = WeakSet()
+_wrapped_handler_ids: set[int] = set()
 
 
 def _resolve_handler_name(handler: BaseHandler) -> str:
@@ -78,8 +82,29 @@ def _safe_callback(
     return _wrapped
 
 
-def _wrap_handler(handler: BaseHandler) -> None:
+def _is_wrapped(handler: BaseHandler) -> bool:
     if getattr(handler, "_safe_wrapped", False):
+        return True
+    if handler in _wrapped_handlers:
+        return True
+    return id(handler) in _wrapped_handler_ids
+
+
+def _mark_wrapped(handler: BaseHandler) -> None:
+    try:
+        handler._safe_wrapped = True  # type: ignore[attr-defined]
+        return
+    except AttributeError:
+        pass
+    try:
+        _wrapped_handlers.add(handler)
+        return
+    except TypeError:
+        _wrapped_handler_ids.add(id(handler))
+
+
+def _wrap_handler(handler: BaseHandler) -> None:
+    if _is_wrapped(handler):
         return
     if isinstance(handler, ConversationHandler):
         for entry in handler.entry_points:
@@ -89,16 +114,16 @@ def _wrap_handler(handler: BaseHandler) -> None:
                 _wrap_handler(entry)
         for entry in handler.fallbacks:
             _wrap_handler(entry)
-        handler._safe_wrapped = True  # type: ignore[attr-defined]
+        _mark_wrapped(handler)
         return
 
     callback = getattr(handler, "callback", None)
     if not callback:
-        handler._safe_wrapped = True  # type: ignore[attr-defined]
+        _mark_wrapped(handler)
         return
     handler_name = _resolve_handler_name(handler)
     handler.callback = _safe_callback(handler_name, callback)  # type: ignore[assignment]
-    handler._safe_wrapped = True  # type: ignore[attr-defined]
+    _mark_wrapped(handler)
 
 
 def install_safe_handler_wrapper(application: Any) -> None:
