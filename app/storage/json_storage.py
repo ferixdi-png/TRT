@@ -273,6 +273,14 @@ class JsonStorage(BaseStorage):
         deductions = await self._load_json(self.balance_deductions_file)
         if task_id in deductions:
             balance_before = await self.get_user_balance(user_id)
+            logger.info(
+                "BALANCE_CHARGE_DUPLICATE user_id=%s task_id=%s sku_id=%s model_id=%s balance=%.2f",
+                user_id,
+                task_id,
+                sku_id,
+                model_id,
+                balance_before,
+            )
             return {
                 "status": "duplicate",
                 "balance_before": balance_before,
@@ -281,6 +289,13 @@ class JsonStorage(BaseStorage):
 
         balance_before = await self.get_user_balance(user_id)
         if balance_before < amount:
+            logger.warning(
+                "BALANCE_CHARGE_INSUFFICIENT user_id=%s task_id=%s required=%.2f available=%.2f",
+                user_id,
+                task_id,
+                amount,
+                balance_before,
+            )
             return {
                 "status": "insufficient",
                 "balance_before": balance_before,
@@ -288,6 +303,13 @@ class JsonStorage(BaseStorage):
             }
         balance_after = balance_before - amount
         if balance_after < 0:
+            logger.error(
+                "BALANCE_CHARGE_NEGATIVE_BLOCKED user_id=%s task_id=%s balance_before=%.2f amount=%.2f",
+                user_id,
+                task_id,
+                balance_before,
+                amount,
+            )
             return {
                 "status": "negative_blocked",
                 "balance_before": balance_before,
@@ -303,6 +325,15 @@ class JsonStorage(BaseStorage):
             "created_at": datetime.utcnow().isoformat(),
         }
         await self._save_json(self.balance_deductions_file, deductions)
+        logger.info(
+            "BALANCE_CHARGE_OK user_id=%s task_id=%s sku_id=%s model_id=%s amount=%.2f balance_after=%.2f",
+            user_id,
+            task_id,
+            sku_id,
+            model_id,
+            amount,
+            balance_after,
+        )
         return {
             "status": "charged",
             "balance_before": balance_before,
@@ -722,6 +753,14 @@ class JsonStorage(BaseStorage):
             raise ValueError(f"Payment {payment_id} not found")
         
         payment = data[payment_id]
+        prev_status = payment.get("status")
+        if prev_status == status:
+            logger.info(
+                "PAYMENT_STATUS_IDEMPOTENT payment_id=%s status=%s user_id=%s",
+                payment_id,
+                status,
+                payment.get("user_id"),
+            )
         success_statuses = {"approved", "completed"}
         credit_balance = status in success_statuses and not payment.get('balance_charged')
         if credit_balance:
