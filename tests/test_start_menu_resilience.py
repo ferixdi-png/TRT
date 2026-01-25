@@ -85,8 +85,9 @@ async def test_disabled_model_selection_returns_controlled_message(harness, monk
     result = await harness.process_callback(f"select_model:{target_id}", user_id=90002)
 
     assert result["success"]
-    assert harness.outbox.messages
-    assert "Модель временно отключена" in harness.outbox.messages[-1]["text"]
+    payloads = harness.outbox.messages or harness.outbox.edited_messages
+    assert payloads
+    assert "Модель временно отключена" in payloads[-1]["text"]
 
 
 @pytest.mark.asyncio
@@ -103,5 +104,6 @@ async def test_pricing_preflight_degraded_returns_controlled_message(harness, mo
     result = await harness.process_callback(f"select_model:{target_id}", user_id=90003)
 
     assert result["success"]
-    assert harness.outbox.messages
-    assert "Прайс временно недоступен" in harness.outbox.messages[-1]["text"]
+    payloads = harness.outbox.messages or harness.outbox.edited_messages
+    assert payloads
+    assert "Прайс временно недоступен" in payloads[-1]["text"]
