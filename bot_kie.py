@@ -358,6 +358,84 @@ def _safe_text_preview(text: Optional[str], limit: int = 40) -> Optional[str]:
     return f"{cleaned[:limit]}…"
 
 
+def _compact_free_tools_summary(summary: str) -> str:
+    if not summary:
+        return ""
+    normalized = summary.strip()
+    if normalized.startswith("aspect_ratio="):
+        return normalized.replace("aspect_ratio=", "AR ")
+    if normalized.startswith("rendering_speed="):
+        return normalized.replace("rendering_speed=", "speed=")
+    return normalized
+
+
+def _format_free_tools_button_label(
+    *,
+    emoji: str,
+    model_name: str,
+    summary: str,
+    max_len: int = 46,
+) -> str:
+    summary_display = _compact_free_tools_summary(summary)
+    suffix = f" ({summary_display})" if summary_display else ""
+    base = f"{emoji} {model_name}"
+    label = f"{base}{suffix}"
+    if len(label) <= max_len:
+        return label
+    available = max_len - len(emoji) - 1 - len(suffix)
+    if available <= 1:
+        trimmed = model_name[: max(1, max_len - 2)].rstrip() + "…"
+        return f"{emoji} {trimmed}"
+    trimmed_name = model_name
+    if len(model_name) > available:
+        trimmed_name = model_name[: max(1, available - 1)].rstrip() + "…"
+    return f"{emoji} {trimmed_name}{suffix}"
+
+
+def _build_free_tools_keyboard(
+    *,
+    free_skus: list,
+    models_map: dict,
+    user_lang: str,
+) -> tuple[InlineKeyboardMarkup, int]:
+    from app.pricing.ssot_catalog import get_sku_param_summary, encode_sku_callback
+
+    entries: list[tuple[str, str, tuple[str, str, str]]] = []
+    for sku in free_skus:
+        model = models_map.get(sku.model_id, {})
+        if not model:
+            continue
+        model_name = model.get("name", sku.model_id)
+        model_emoji = model.get("emoji", "🆓")
+        summary = _compact_free_tools_summary(get_sku_param_summary(sku))
+        button_text = _format_free_tools_button_label(
+            emoji=model_emoji,
+            model_name=model_name,
+            summary=summary,
+        )
+        callback_data = encode_sku_callback(sku.sku_id)
+        sort_key = (model_name.lower(), summary, sku.sku_id)
+        entries.append((button_text, callback_data, sort_key))
+
+    entries.sort(key=lambda item: item[2])
+    seen: set[tuple[str, str]] = set()
+    rows: list[list[InlineKeyboardButton]] = []
+    current_row: list[InlineKeyboardButton] = []
+    for button_text, callback_data, _sort_key in entries:
+        key = (callback_data, button_text)
+        if key in seen:
+            continue
+        seen.add(key)
+        if len(current_row) == 2:
+            rows.append(current_row)
+            current_row = []
+        current_row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
+    if current_row:
+        rows.append(current_row)
+    rows.append([InlineKeyboardButton(t("btn_back_to_menu", lang=user_lang), callback_data="back_to_menu")])
+    return InlineKeyboardMarkup(rows), len(seen)
+
+
 def _safe_text_hash(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
@@ -7475,6 +7553,9 @@ async def show_main_menu(
         ui_context_before = None
         if user_id and user_id in user_sessions:
             ui_context_before = user_sessions[user_id].get("ui_context")
+        previous_welcome_version = None
+        if user_id and user_id in user_sessions:
+            previous_welcome_version = user_sessions[user_id].get("welcome_version")
         if user_id:
             reset_session_context(
                 user_id,
@@ -7590,6 +7671,46 @@ async def show_main_menu(
         fallback_send = False
         message_id = None
 
+        if (
+            previous_welcome_version == welcome_hash
+            and update.callback_query
+            and prefer_edit
+        ):
+            try:
+                await update.callback_query.answer()
+            except Exception:
+                logger.debug("menu dedupe callback answer failed", exc_info=True)
+            if user_id:
+                user_sessions.ensure(user_id)["welcome_version"] = welcome_hash
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="MENU_RENDER_SKIP",
+                action_path=f"menu:{source}",
+                stage="UI_ROUTER",
+                outcome="same_version",
+                text_hash=welcome_hash,
+                param={
+                    "ui_context": UI_CONTEXT_MAIN_MENU,
+                    "welcome_version": welcome_hash,
+                },
+            )
+            return {
+                "correlation_id": correlation_id,
+                "user_id": user_id,
+                "chat_id": chat_id,
+                "update_id": update.update_id,
+                "ui_context_before": ui_context_before,
+                "ui_context_after": UI_CONTEXT_MAIN_MENU,
+                "used_edit": used_edit,
+                "fallback_send": fallback_send,
+                "message_id": update.callback_query.message.message_id
+                if update.callback_query.message
+                else None,
+            }
+
         if update.callback_query and prefer_edit:
             query = update.callback_query
             if len(header_text) <= TELEGRAM_TEXT_LIMIT:
@@ -7649,6 +7770,8 @@ async def show_main_menu(
                             chat_id,
                             reply_sent_ms,
                         )
+                    if user_id:
+                        user_sessions.ensure(user_id)["welcome_version"] = welcome_hash
                     return {
                         "correlation_id": correlation_id,
                         "user_id": user_id,
@@ -7678,7 +7801,7 @@ async def show_main_menu(
                             "ui_context": UI_CONTEXT_MAIN_MENU,
                             "welcome_version": welcome_hash,
                         },
-                    )
+                )
 
         if chat_id:
             send_result = await context.bot.send_message(
@@ -7735,6 +7858,8 @@ async def show_main_menu(
                     chat_id,
                     reply_sent_ms,
                 )
+            if user_id:
+                user_sessions.ensure(user_id)["welcome_version"] = welcome_hash
         return {
             "correlation_id": correlation_id,
             "user_id": user_id,
@@ -10332,11 +10457,16 @@ async def _button_callback_impl(
             free_sku_ids = get_free_tools_model_ids()
             from app.pricing.ssot_catalog import (
                 get_sku_by_id,
-                get_sku_param_summary,
-                encode_sku_callback,
             )
             models_map = {model.get('id'): model for model in get_models_sync()}
-            free_skus = [get_sku_by_id(sku_id) for sku_id in free_sku_ids]
+            unique_sku_ids = []
+            seen_sku_ids = set()
+            for sku_id in free_sku_ids:
+                if sku_id in seen_sku_ids:
+                    continue
+                seen_sku_ids.add(sku_id)
+                unique_sku_ids.append(sku_id)
+            free_skus = [get_sku_by_id(sku_id) for sku_id in unique_sku_ids]
             free_skus = [sku for sku in free_skus if sku and sku.model_id in models_map]
 
             if not free_skus:
@@ -10363,12 +10493,21 @@ async def _button_callback_impl(
             user_lang = get_user_language(user_id)
             free_counter_line = ""
             try:
-                free_counter_line = await get_free_counter_line(
-                    user_id,
-                    user_lang=user_lang,
+                free_counter_line = await _await_with_timeout(
+                    get_free_counter_line(
+                        user_id,
+                        user_lang=user_lang,
+                        correlation_id=correlation_id,
+                        action_path="free_tools_menu",
+                        sku_id=free_sku_ids[0] if free_sku_ids else None,
+                    ),
+                    timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                    label="free_tools_counter",
                     correlation_id=correlation_id,
-                    action_path="free_tools_menu",
-                    sku_id=free_sku_ids[0] if free_sku_ids else None,
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    default="",
                 )
             except Exception as exc:
                 logger.warning("Failed to resolve free counter line: %s", exc)
@@ -10382,7 +10521,7 @@ async def _button_callback_impl(
                     f"🆓 <b>FAST TOOLS</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>Все инструменты в этом разделе полностью бесплатны!</b>\n\n"
-                    f"🤖 <b>Доступные инструменты ({len(free_skus)}):</b>\n\n"
+                    f"🤖 <b>Доступные инструменты:</b>\n\n"
                     f"💡 <b>Выберите инструмент ниже</b>"
                 )
             else:
@@ -10390,55 +10529,37 @@ async def _button_callback_impl(
                     f"🆓 <b>FAST TOOLS</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>All tools in this section are completely free!</b>\n\n"
-                    f"🤖 <b>Available tools ({len(free_skus)}):</b>\n\n"
+                    f"🤖 <b>Available tools:</b>\n\n"
                     f"💡 <b>Select a tool below</b>"
                 )
             free_tools_text = _append_free_counter_text(free_tools_text, free_counter_line)
-            
-            # Create keyboard with free models (2 per row)
-            keyboard = []
-            model_rows = []
-            for i, sku in enumerate(free_skus):
-                model = models_map.get(sku.model_id, {})
-                model_name = model.get('name', sku.model_id)
-                model_emoji = model.get('emoji', '🆓')
-                option_summary = get_sku_param_summary(sku)
-                
-                # Compact button text
-                max_name_length = 25
-                button_text = f"{model_emoji} {model_name} ({option_summary})"
-                if len(button_text) > max_name_length:
-                    button_text = f"{model_emoji} {model_name[:max_name_length-4]}..."
-                
-                # Ensure callback_data is not too long
-                callback_data = encode_sku_callback(sku.sku_id)
-                
-                if i % 2 == 0:
-                    # First button in row
-                    model_rows.append([InlineKeyboardButton(
-                        button_text,
-                        callback_data=callback_data
-                    )])
+            keyboard_markup, unique_buttons = _build_free_tools_keyboard(
+                free_skus=free_skus,
+                models_map=models_map,
+                user_lang=user_lang,
+            )
+            if unique_buttons:
+                if user_lang == "en":
+                    free_tools_text = free_tools_text.replace(
+                        "<b>Available tools:</b>",
+                        f"<b>Available tools ({unique_buttons}):</b>",
+                    )
                 else:
-                    # Second button in row
-                    if model_rows:
-                        model_rows[-1].append(InlineKeyboardButton(
-                            button_text,
-                            callback_data=callback_data
-                        ))
-                    else:
-                        model_rows.append([InlineKeyboardButton(
-                            button_text,
-                            callback_data=callback_data
-                        )])
-            
-            keyboard.extend(model_rows)
-            keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
+                    free_tools_text = free_tools_text.replace(
+                        "<b>Доступные инструменты:</b>",
+                        f"<b>Доступные инструменты ({unique_buttons}):</b>",
+                    )
+            if unique_buttons < len(free_skus):
+                logger.warning(
+                    "FREE_TOOLS_KEYBOARD_DEDUPED user_id=%s removed=%s",
+                    user_id,
+                    len(free_skus) - unique_buttons,
+                )
             
             try:
                 await query.edit_message_text(
                     free_tools_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    reply_markup=keyboard_markup,
                     parse_mode='HTML'
                 )
             except Exception as e:
@@ -10446,7 +10567,7 @@ async def _button_callback_impl(
                 try:
                     await query.message.reply_text(
                         free_tools_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        reply_markup=keyboard_markup,
                         parse_mode='HTML'
                     )
                 except Exception as e2:
@@ -10496,11 +10617,20 @@ async def _button_callback_impl(
             user_lang = get_user_language(user_id)
             free_counter_line = ""
             try:
-                free_counter_line = await get_free_counter_line(
-                    user_id,
-                    user_lang=user_lang,
+                free_counter_line = await _await_with_timeout(
+                    get_free_counter_line(
+                        user_id,
+                        user_lang=user_lang,
+                        correlation_id=correlation_id,
+                        action_path="models_menu",
+                    ),
+                    timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+                    label="models_menu_counter",
                     correlation_id=correlation_id,
-                    action_path="models_menu",
+                    user_id=user_id,
+                    chat_id=query.message.chat_id if query.message else None,
+                    update_id=update_id,
+                    default="",
                 )
             except Exception as exc:
                 logger.warning("Failed to resolve free counter line: %s", exc)
