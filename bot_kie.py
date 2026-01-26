@@ -1489,6 +1489,11 @@ _GEN_TYPE_MENU_WARMUP_STATE: Dict[str, Any] = {
     "last_counts": None,
     "last_outcome": None,
 }
+_BOOT_WARMUP_STATE: Dict[str, bool] = {
+    "done": False,
+    "cancelled": False,
+    "watchdog_stopped": False,
+}
 
 
 async def _load_gen_type_menu_warmup_cache() -> Optional[Dict[str, Any]]:
@@ -1849,6 +1854,9 @@ async def _warm_models_cache(
 
 async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
     start = time.monotonic()
+    _BOOT_WARMUP_STATE["done"] = False
+    _BOOT_WARMUP_STATE["cancelled"] = False
+    _BOOT_WARMUP_STATE["watchdog_stopped"] = False
     log_structured_event(
         correlation_id=correlation_id,
         action="BOOT_WARMUP",
@@ -1870,9 +1878,22 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
 
     async def _watchdog() -> None:
         nonlocal watchdog_timed_out
+        done_wait = asyncio.create_task(done_event.wait())
+        ready_wait = asyncio.create_task(_webhook_app_ready_event.wait())
         try:
-            await asyncio.wait_for(done_event.wait(), timeout=BOOT_WARMUP_WATCHDOG_SECONDS)
+            done, pending = await asyncio.wait(
+                [done_wait, ready_wait],
+                timeout=BOOT_WARMUP_WATCHDOG_SECONDS,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if ready_wait in done:
+                _BOOT_WARMUP_STATE["watchdog_stopped"] = True
+                return
+            if done_wait in done:
+                return
         except asyncio.TimeoutError:
+            if _BOOT_WARMUP_STATE["cancelled"] or _BOOT_WARMUP_STATE["done"]:
+                return
             watchdog_timed_out = True
             elapsed_ms = int((time.monotonic() - start) * 1000)
             logger.info(
@@ -1893,12 +1914,18 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
                 outcome="timeout",
                 param={"elapsed_ms": elapsed_ms, "watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
             )
+        finally:
+            for task in (done_wait, ready_wait):
+                if task and not task.done():
+                    task.cancel()
+            await asyncio.gather(done_wait, ready_wait, return_exceptions=True)
 
     watchdog_task = asyncio.create_task(_watchdog())
     try:
         await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
         elapsed_ms = int((time.monotonic() - start) * 1000)
         if not watchdog_timed_out:
+            _BOOT_WARMUP_STATE["done"] = True
             log_structured_event(
                 correlation_id=correlation_id,
                 action="BOOT_WARMUP",
@@ -1909,6 +1936,8 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
             )
     except asyncio.CancelledError:
         elapsed_ms = int((time.monotonic() - start) * 1000)
+        _BOOT_WARMUP_STATE["cancelled"] = True
+        done_event.set()
         logger.info("BOOT_WARMUP_CANCELLED elapsed_ms=%s correlation_id=%s", elapsed_ms, correlation_id)
         log_structured_event(
             correlation_id=correlation_id,
@@ -7362,6 +7391,7 @@ MINIMAL_MENU_TEXT = "Главное меню"
 MAIN_MENU_TOTAL_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_TOTAL_TIMEOUT_SECONDS", "4.0"))
 MAIN_MENU_BUILD_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BUILD_TIMEOUT_SECONDS", "4.0"))
 MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS", "0.6"))
+MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS", "6.0"))
 START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
 SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL_SECONDS", "45.0"))
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
@@ -8250,53 +8280,90 @@ async def show_main_menu(
                 chat_id=chat_id,
             )
 
-        async def _build_menu_payload() -> tuple[InlineKeyboardMarkup, str]:
-            reply_markup = InlineKeyboardMarkup(
-                await asyncio.wait_for(
-                    build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False),
-                    timeout=MAIN_MENU_BUILD_TIMEOUT_SECONDS,
-                )
+        async def _build_menu_payload(*, timeout: float) -> tuple[InlineKeyboardMarkup, str]:
+            keyboard_task = asyncio.create_task(
+                build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False),
+                name="menu_keyboard_build",
             )
-            header_text, _details_text = await asyncio.wait_for(
+            sections_task = asyncio.create_task(
                 _build_main_menu_sections(
                     update,
                     correlation_id=correlation_id,
                     user_lang=user_lang,
                     menu_session=session,
                 ),
-                timeout=MAIN_MENU_BUILD_TIMEOUT_SECONDS,
+                name="menu_sections_build",
             )
+            try:
+                done, pending = await asyncio.wait(
+                    {keyboard_task, sections_task},
+                    timeout=timeout,
+                    return_when=asyncio.ALL_COMPLETED,
+                )
+                if pending:
+                    for task in pending:
+                        task.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+                    raise asyncio.TimeoutError()
+                for task in done:
+                    if task.cancelled():
+                        raise asyncio.CancelledError()
+                    if task.exception():
+                        raise task.exception()
+                keyboard_payload = keyboard_task.result()
+                header_text, _details_text = sections_task.result()
+            except Exception:
+                for task in (keyboard_task, sections_task):
+                    if task and not task.done():
+                        task.cancel()
+                await asyncio.gather(keyboard_task, sections_task, return_exceptions=True)
+                raise
+            reply_markup = InlineKeyboardMarkup(keyboard_payload)
             return reply_markup, header_text
 
-        async def _build_with_retry() -> tuple[InlineKeyboardMarkup, str]:
-            attempts = 2
-            last_exc: Optional[BaseException] = None
-            for attempt in range(1, attempts + 1):
-                try:
-                    return await asyncio.wait_for(
-                        _build_menu_payload(),
-                        timeout=MAIN_MENU_TOTAL_TIMEOUT_SECONDS,
-                    )
-                except asyncio.TimeoutError as exc:
-                    last_exc = exc
-                    logger.warning(
-                        "MAIN_MENU_BUILD_TIMEOUT attempt=%s source=%s correlation_id=%s user_id=%s chat_id=%s",
-                        attempt,
-                        source,
-                        correlation_id,
-                        user_id,
-                        chat_id,
-                    )
-                    await asyncio.sleep(0)
-                except MenuDependencyTimeout as exc:
-                    last_exc = exc
-                    break
-            if last_exc:
-                raise last_exc
-            raise asyncio.TimeoutError()
+        async def _retry_render_full_menu() -> None:
+            try:
+                reply_markup_retry, header_text_retry = await _build_menu_payload(
+                    timeout=MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "MENU_RENDER_RETRY_SKIPPED source=%s correlation_id=%s error=%s",
+                    source,
+                    correlation_id,
+                    exc,
+                )
+                return
+            if not chat_id:
+                return
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=header_text_retry,
+                    reply_markup=reply_markup_retry,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_RENDER_RETRY_OK",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="send_ok",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "MENU_RENDER_RETRY_FAILED source=%s correlation_id=%s error=%s",
+                    source,
+                    correlation_id,
+                    exc,
+                )
 
         try:
-            reply_markup, header_text = await _build_with_retry()
+            reply_markup, header_text = await _build_menu_payload(timeout=MAIN_MENU_TOTAL_TIMEOUT_SECONDS)
         except (asyncio.TimeoutError, MenuDependencyTimeout):
             log_structured_event(
                 correlation_id=correlation_id,
@@ -8317,6 +8384,10 @@ async def show_main_menu(
                 source=source,
                 correlation_id=correlation_id,
                 prefer_edit=prefer_edit,
+            )
+            _create_background_task(
+                _retry_render_full_menu(),
+                action="menu_render_retry",
             )
             return result
 
@@ -25555,16 +25626,17 @@ async def _run_webhook_initialization(
 
     # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
     try:
-        from app.utils.healthcheck import start_health_server
+        from app.utils.healthcheck import get_health_status, start_health_server
 
         port_str = os.getenv("PORT", "10000").strip()
         try:
             port = int(port_str)
         except ValueError:
             port = 10000
-        webhook_handler = await create_webhook_handler()
-        started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
-        logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
+        if not get_health_status().get("health_server_running"):
+            webhook_handler = await create_webhook_handler()
+            started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
+            logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
     except Exception as health_exc:
         logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
 
@@ -26796,8 +26868,22 @@ async def main():
             return
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
-        
+
         try:
+            try:
+                from app.utils.healthcheck import start_health_server
+
+                port_str = os.getenv("PORT", "10000").strip()
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    port = 10000
+                webhook_handler = await create_webhook_handler()
+                started = await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
+                logger.info("[WEBHOOK] health_server_started=%s port=%s", started, port)
+            except Exception as health_exc:
+                logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
+
             await _ensure_webhook_initialized(application, webhook_url)
 
             logger.info("✅ Webhook mode ready - waiting for updates via webhook")
