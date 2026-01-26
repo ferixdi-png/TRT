@@ -207,6 +207,11 @@ async def create_application(settings: Optional[Settings] = None) -> Application
         .post_shutdown(post_shutdown)
         .build()
     )
+    if settings.test_mode:
+        async def _skip_bot_initialize() -> None:
+            object.__setattr__(application.bot, "_initialized", True)
+
+        object.__setattr__(application.bot, "initialize", _skip_bot_initialize)
     ensure_error_handler_registered(application)
     install_safe_handler_wrapper(application)
     

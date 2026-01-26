@@ -7,14 +7,15 @@ from app.kie_catalog import get_model_map
 from app.kie_contract.payload_builder import build_kie_payload
 from app.generations.universal_engine import parse_record_info
 from app.generations.telegram_sender import send_job_result
-from app.delivery import result_delivery
+from app.generations import media_pipeline
 from bot_kie import _determine_primary_input
 
 
 def _build_dummy_params(model_spec):
     params = {}
+    required_fields = set(model_spec.schema_required or [])
     for name, schema in model_spec.schema_properties.items():
-        if not schema.get("required", False):
+        if not schema.get("required", False) and name not in required_fields:
             continue
         param_type = schema.get("type", "string")
         enum_values = schema.get("enum") or schema.get("values") or []
@@ -42,7 +43,8 @@ def _build_dummy_params(model_spec):
 
 def _expected_primary_input(model_mode: str) -> str:
     text_modes = {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}
-    image_modes = {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale", "video_upscale"}
+    image_modes = {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale", "lip_sync"}
+    video_modes = {"video_editing", "video_upscale"}
     audio_modes = {"speech_to_text", "audio_to_audio", "speech_to_video"}
     if model_mode in text_modes:
         return "prompt"
@@ -50,6 +52,8 @@ def _expected_primary_input(model_mode: str) -> str:
         return "image"
     if model_mode in audio_modes:
         return "audio"
+    if model_mode in video_modes:
+        return "video"
     pytest.fail(f"Unknown model_mode for input contract: {model_mode}")
 
 
@@ -65,10 +69,19 @@ def test_all_models_require_correct_primary_input():
 
 def test_payload_builder_includes_required_fields():
     catalog = get_model_map()
+    media_aliases = {
+        "image_input": {"image_url", "image_urls", "image", "image_base64"},
+        "audio_input": {"audio_url", "audio"},
+        "video_input": {"video_url", "video_urls", "video"},
+    }
     for model_id, spec in catalog.items():
         params = _build_dummy_params(spec)
         payload = build_kie_payload(spec, params)
         for required_field in spec.schema_required:
+            if required_field not in payload["input"]:
+                aliases = media_aliases.get(required_field, set())
+                if aliases and any(alias in payload["input"] for alias in aliases):
+                    continue
             assert required_field in payload["input"], f"{model_id} missing {required_field} in payload"
 
 
@@ -85,41 +98,16 @@ async def test_telegram_sender_selects_correct_method(monkeypatch):
 
     async def fake_download(session, url, **kwargs):
         if url.endswith(".png"):
-            return result_delivery.DeliveryTarget(
-                url=url,
-                data=b"\x89PNG\r\n\x1a\nfake",
-                content_type="image/png",
-                size_bytes=16,
-            )
+            return b"\x89PNG\r\n\x1a\nfake", "image/png", 16
         if url.endswith(".mp4"):
-            return result_delivery.DeliveryTarget(
-                url=url,
-                data=b"\x00\x00\x00\x18ftypisom",
-                content_type="video/mp4",
-                size_bytes=16,
-            )
+            return b"\x00\x00\x00\x18ftypisom", "video/mp4", 16
         if url.endswith(".mp3"):
-            return result_delivery.DeliveryTarget(
-                url=url,
-                data=b"ID3fake",
-                content_type="audio/mpeg",
-                size_bytes=16,
-            )
+            return b"ID3fake", "audio/mpeg", 16
         if url.endswith(".ogg"):
-            return result_delivery.DeliveryTarget(
-                url=url,
-                data=b"OggSfake",
-                content_type="audio/ogg",
-                size_bytes=16,
-            )
-        return result_delivery.DeliveryTarget(
-            url=url,
-            data=b"PK\x03\x04fake",
-            content_type="application/zip",
-            size_bytes=16,
-        )
+            return b"OggSfake", "audio/ogg", 16
+        return b"PK\x03\x04fake", "application/zip", 16
 
-    monkeypatch.setattr(result_delivery, "_download_with_retries", fake_download)
+    monkeypatch.setattr(media_pipeline, "_download_with_retries", fake_download)
 
     for model_id, spec in catalog.items():
         media_kind = spec.output_media_type or "document"

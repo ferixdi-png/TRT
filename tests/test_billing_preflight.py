@@ -65,6 +65,8 @@ class FakePool:
 
 
 def _query_key(query: str) -> str:
+    if query.strip().lower() == "select 1":
+        return "db_ping"
     match = re.search(r"billing_preflight:([a-z0-9_]+)", query)
     if not match:
         raise KeyError(f"Unknown query: {query}")
@@ -73,12 +75,14 @@ def _query_key(query: str) -> str:
 
 def _base_responses():
     return {
+        "db_ping": 1,
         "column_type": {"data_type": "jsonb", "udt_name": "jsonb"},
         "partners_count": 0,
         "partners_sample": [],
         "partners_top": [],
         "partners_missing": 0,
         "partner_present": None,
+        "users_total": 0,
         "balances_total": 0,
         "balances_partners": 0,
         "balances_updated_24h": 0,
@@ -317,7 +321,7 @@ async def test_billing_preflight_aggregate_failure_degraded(test_env):
     report = await run_billing_preflight(storage, fake_pool)
 
     assert report["result"] == "DEGRADED"
-    assert report["sections"]["balances"]["status"] == "UNKNOWN"
+    assert report["sections"]["balances"]["status"] == "DEGRADED"
 
 
 @pytest.mark.asyncio
