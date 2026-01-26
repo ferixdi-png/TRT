@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set
@@ -46,12 +47,62 @@ class CorrelationRecord:
 _records_by_correlation: Dict[str, CorrelationRecord] = {}
 _records_by_request: Dict[str, CorrelationRecord] = {}
 _persist_tasks: Set[asyncio.Task[Any]] = set()
+_persist_debounce_tasks: Dict[str, asyncio.Task[Any]] = {}
+_persist_debounce_seconds = float(os.getenv("CORRELATION_STORE_DEBOUNCE_SECONDS", "0.5"))
 
 
 def _register_persist_task(task: asyncio.Task[Any]) -> None:
     _persist_tasks.add(task)
     task.add_done_callback(_persist_tasks.discard)
 
+
+def _register_debounce_task(correlation_id: str, task: asyncio.Task[Any]) -> None:
+    _persist_debounce_tasks[correlation_id] = task
+
+    def _cleanup(done_task: asyncio.Task[Any]) -> None:
+        if _persist_debounce_tasks.get(correlation_id) is done_task:
+            _persist_debounce_tasks.pop(correlation_id, None)
+
+    task.add_done_callback(_cleanup)
+    _register_persist_task(task)
+
+
+def _schedule_debounced_persist(
+    *,
+    correlation_id: str,
+    storage: Optional[Any],
+    source: Optional[str],
+) -> None:
+    if _persist_debounce_seconds <= 0:
+        loop = _get_running_loop()
+        if loop and loop.is_running():
+            task = loop.create_task(
+                _persist_record(_records_by_correlation.get(correlation_id), storage=storage, source=source)
+                if _records_by_correlation.get(correlation_id)
+                else asyncio.sleep(0)
+            )
+            _register_persist_task(task)
+        return
+
+    loop = _get_running_loop()
+    if not loop or not loop.is_running():
+        return
+
+    existing = _persist_debounce_tasks.get(correlation_id)
+    if existing and not existing.done():
+        existing.cancel()
+
+    async def _debounced() -> None:
+        try:
+            await asyncio.sleep(_persist_debounce_seconds)
+            record = _records_by_correlation.get(correlation_id)
+            if record:
+                await _persist_record(record, storage=storage, source=source)
+        except asyncio.CancelledError:
+            return
+
+    task = loop.create_task(_debounced(), name=f"correlation-store:debounce:{correlation_id}")
+    _register_debounce_task(correlation_id, task)
 
 def _get_running_loop() -> Optional[asyncio.AbstractEventLoop]:
     try:
@@ -254,11 +305,11 @@ def register_ids(
     if changed:
         loop = _get_running_loop()
         if loop and loop.is_running():
-            task = loop.create_task(
-                _persist_record(record, storage=storage, source=source),
-                name=f"correlation-store:{record.correlation_id}",
+            _schedule_debounced_persist(
+                correlation_id=record.correlation_id,
+                storage=storage,
+                source=source,
             )
-            _register_persist_task(task)
     return resolve_correlation_ids(
         correlation_id=record.correlation_id,
         request_id=record.request_id,
@@ -298,11 +349,11 @@ def note_missing_ids(
     if changed:
         loop = _get_running_loop()
         if loop and loop.is_running():
-            task = loop.create_task(
-                _persist_record(record, storage=storage, source="missing_ids"),
-                name=f"correlation-missing:{record.correlation_id}",
+            _schedule_debounced_persist(
+                correlation_id=record.correlation_id,
+                storage=storage,
+                source="missing_ids",
             )
-            _register_persist_task(task)
 
 
 def is_delivery_complete(status: Optional[str]) -> bool:
@@ -317,3 +368,6 @@ def reset_correlation_store() -> None:
     for task in list(_persist_tasks):
         task.cancel()
     _persist_tasks.clear()
+    for task in list(_persist_debounce_tasks.values()):
+        task.cancel()
+    _persist_debounce_tasks.clear()

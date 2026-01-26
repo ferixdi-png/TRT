@@ -119,6 +119,17 @@ def _infer_filename(url: str, content_type: str, media_kind: str, filename_prefi
             extension = fallback.get(media_kind, ".bin")
         return f"{filename_prefix}{extension}"
     if name:
+        if "." not in name:
+            extension = mimetypes.guess_extension(content_type or "")
+            if not extension:
+                fallback = {
+                    "image": ".png",
+                    "video": ".mp4",
+                    "audio": ".mp3",
+                    "voice": ".ogg",
+                }
+                extension = fallback.get(media_kind, ".bin")
+            return f"{name}{extension}"
         return name
     extension = mimetypes.guess_extension(content_type or "")
     if not extension:
