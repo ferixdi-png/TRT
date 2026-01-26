@@ -9,8 +9,8 @@ import os
 from urllib.parse import urlsplit, urlunsplit
 import asyncio
 import logging
-import random
-from typing import Literal, Optional
+import time
+from typing import Dict, Literal, Optional
 from telegram import Bot
 from telegram.error import Conflict, RetryAfter, TimedOut
 import httpx
@@ -22,16 +22,13 @@ _VALID_MODES = {"polling", "webhook", "web", "smoke"}
 _WEBHOOK_SET_LOCK = asyncio.Lock()
 _WEBHOOK_SET_RATE_LIMIT_TOTAL = 0
 _WEBHOOK_SET_LAST_REASON: Optional[str] = None
-_WEBHOOK_SET_TEST_RANDOM = random.Random(0)
-
-
-def _is_test_mode() -> bool:
-    return os.getenv("TEST_MODE", "0").strip().lower() in {"1", "true", "yes"}
-
-
-def _set_webhook_set_reason(reason: str) -> None:
-    global _WEBHOOK_SET_LAST_REASON
+_WEBHOOK_SET_LAST_ERROR_TYPE: Optional[str] = None
+_WEBHOOK_SET_LAST_ERROR: Optional[str] = None
+def _set_webhook_set_result(reason: str, *, error_type: Optional[str] = None, error: Optional[str] = None) -> None:
+    global _WEBHOOK_SET_LAST_REASON, _WEBHOOK_SET_LAST_ERROR_TYPE, _WEBHOOK_SET_LAST_ERROR
     _WEBHOOK_SET_LAST_REASON = reason
+    _WEBHOOK_SET_LAST_ERROR_TYPE = error_type
+    _WEBHOOK_SET_LAST_ERROR = error
 
 
 def get_webhook_set_last_failure_reason() -> Optional[str]:
@@ -41,12 +38,12 @@ def get_webhook_set_last_failure_reason() -> Optional[str]:
     return reason
 
 
-def _resolve_backoff_sleep(base: float, jitter_ratio: float) -> float:
-    jitter = base * jitter_ratio
-    if jitter <= 0:
-        return base
-    rng = _WEBHOOK_SET_TEST_RANDOM if _is_test_mode() else random
-    return base + rng.uniform(0.0, jitter)
+def get_webhook_set_last_result() -> Dict[str, Optional[str]]:
+    return {
+        "reason": _WEBHOOK_SET_LAST_REASON,
+        "error_type": _WEBHOOK_SET_LAST_ERROR_TYPE,
+        "error": _WEBHOOK_SET_LAST_ERROR,
+    }
 
 
 def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_value: float = 30.0) -> float:
@@ -159,9 +156,8 @@ async def ensure_webhook_mode(
     read_timeout: Optional[float] = None,
     write_timeout: Optional[float] = None,
     pool_timeout: Optional[float] = None,
-    attempts: Optional[int] = None,
-    backoff_base_seconds: Optional[float] = None,
-    backoff_cap_seconds: Optional[float] = None,
+    cycle_timeout_s: Optional[float] = None,
+    pending_update_threshold: Optional[int] = None,
 ) -> bool:
     """
     Гарантирует что бот в webhook режиме
@@ -175,95 +171,103 @@ async def ensure_webhook_mode(
         logger.error("   Set WEBHOOK_URL or WEBHOOK_BASE_URL")
         return False
     
-    timeout_connect = connect_timeout or _read_float_env("WEBHOOK_SET_CONNECT_TIMEOUT_SECONDS", 2.0)
-    timeout_read = read_timeout or _read_float_env("WEBHOOK_SET_READ_TIMEOUT_SECONDS", 3.5)
-    timeout_write = write_timeout or _read_float_env("WEBHOOK_SET_WRITE_TIMEOUT_SECONDS", 3.5)
-    timeout_pool = pool_timeout or _read_float_env("WEBHOOK_SET_POOL_TIMEOUT_SECONDS", 3.0)
-    max_attempts = attempts or _read_int_env("WEBHOOK_SET_MAX_ATTEMPTS", 3, min_value=1, max_value=5)
-    backoff_base = backoff_base_seconds or _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1)
-    backoff_cap = backoff_cap_seconds or _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 3.0, min_value=0.5)
-    backoff_jitter_ratio = _read_float_env("WEBHOOK_SET_BACKOFF_JITTER_RATIO", 0.2, min_value=0.0, max_value=1.0)
+    timeout_connect = connect_timeout or _read_float_env("WEBHOOK_SET_CONNECT_TIMEOUT_SECONDS", 1.0)
+    timeout_read = read_timeout or _read_float_env("WEBHOOK_SET_READ_TIMEOUT_SECONDS", 1.5)
+    timeout_write = write_timeout or _read_float_env("WEBHOOK_SET_WRITE_TIMEOUT_SECONDS", 1.5)
+    timeout_pool = pool_timeout or _read_float_env("WEBHOOK_SET_POOL_TIMEOUT_SECONDS", 1.0)
+    cycle_timeout = cycle_timeout_s or _read_float_env(
+        "WEBHOOK_SET_CYCLE_TIMEOUT_SECONDS",
+        2.8,
+        min_value=1.0,
+        max_value=5.0,
+    )
+    pending_threshold = pending_update_threshold or _read_int_env(
+        "WEBHOOK_SET_PENDING_UPDATE_THRESHOLD",
+        5,
+        min_value=0,
+        max_value=100,
+    )
 
     async with _WEBHOOK_SET_LOCK:
+        start = time.monotonic()
+        deadline = start + cycle_timeout
+
+        def _remaining_timeout() -> float:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("webhook_set_cycle_timeout")
+            return remaining
+
+        async def _call_with_deadline(coro, *, stage: str):
+            try:
+                return await asyncio.wait_for(coro, timeout=_remaining_timeout())
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(f"{stage}_timeout") from exc
+
         try:
-            webhook_info = await bot.get_webhook_info(
-                connect_timeout=timeout_connect,
-                read_timeout=timeout_read,
+            webhook_info = await _call_with_deadline(
+                bot.get_webhook_info(
+                    connect_timeout=min(timeout_connect, _remaining_timeout()),
+                    read_timeout=min(timeout_read, _remaining_timeout()),
+                ),
+                stage="webhook_probe",
             )
-            if webhook_info.url == webhook_url:
+            pending_count = getattr(webhook_info, "pending_update_count", None)
+            pending_ok = pending_count is None or pending_count <= pending_threshold
+            if webhook_info.url == webhook_url and pending_ok:
                 logger.info("✅ Webhook already set: %s", webhook_info.url)
-                _set_webhook_set_reason("already_set")
+                _set_webhook_set_result("already_set")
                 return True
+        except TimeoutError as exc:
+            logger.warning("WEBHOOK_INFO_CHECK_TIMEOUT error=%s", exc)
+            _set_webhook_set_result("timeout", error_type="TimeoutError", error=str(exc))
+            return False
         except Exception as exc:
             logger.warning("WEBHOOK_INFO_CHECK_FAILED error=%s", exc)
-            _set_webhook_set_reason("info_failed")
-        for attempt in range(1, max_attempts + 1):
-            try:
-                result = await bot.set_webhook(
+            _set_webhook_set_result("info_failed", error_type=type(exc).__name__, error=str(exc))
+        try:
+            result = await _call_with_deadline(
+                bot.set_webhook(
                     url=webhook_url,
                     drop_pending_updates=True,
-                    connect_timeout=timeout_connect,
-                    read_timeout=timeout_read,
-                    write_timeout=timeout_write,
-                    pool_timeout=timeout_pool,
-                )
-                logger.info("✅ Webhook set: %s", result)
-
-                webhook_info = await bot.get_webhook_info(connect_timeout=timeout_connect, read_timeout=timeout_read)
-                if webhook_info.url != webhook_url:
-                    logger.error(
-                        "❌ Webhook not set correctly: %s != %s",
-                        webhook_info.url,
-                        webhook_url,
-                    )
-                    raise RuntimeError("Webhook URL mismatch")
-
-                logger.info("✅ Webhook confirmed: %s", webhook_info.url)
-                _set_webhook_set_reason("ok")
-                return True
-            except RetryAfter as exc:
-                global _WEBHOOK_SET_RATE_LIMIT_TOTAL
-                _WEBHOOK_SET_RATE_LIMIT_TOTAL += 1
-                retry_after = max(0.1, float(exc.retry_after or backoff_base))
-                logger.warning(
-                    "WEBHOOK_SET_RATE_LIMIT attempt=%s retry_after_s=%s",
-                    attempt,
-                    retry_after,
-                )
-                logger.info(
-                    "METRIC_GAUGE name=webhook_set_rate_limit_total value=%s retry_after_s=%s",
-                    _WEBHOOK_SET_RATE_LIMIT_TOTAL,
-                    retry_after,
-                )
-                _set_webhook_set_reason("rate_limit")
-                await asyncio.sleep(retry_after)
-            except Conflict as exc:
-                logger.error("❌ Conflict detected while setting webhook: %s", exc)
-                _set_webhook_set_reason("conflict")
-                raise
-            except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
-                logger.warning(
-                    "WEBHOOK_SET_TIMEOUT attempt=%s/%s error=%s",
-                    attempt,
-                    max_attempts,
-                    exc,
-                )
-                _set_webhook_set_reason("timeout")
-                if attempt >= max_attempts:
-                    return False
-            except Exception as exc:
-                logger.error(
-                    "❌ Error setting webhook (attempt %s/%s): %s",
-                    attempt,
-                    max_attempts,
-                    exc,
-                )
-                _set_webhook_set_reason("error")
-                if attempt >= max_attempts:
-                    return False
-            backoff = min(backoff_cap, backoff_base * (2 ** (attempt - 1)))
-            await asyncio.sleep(_resolve_backoff_sleep(backoff, backoff_jitter_ratio))
-        return False
+                    connect_timeout=min(timeout_connect, _remaining_timeout()),
+                    read_timeout=min(timeout_read, _remaining_timeout()),
+                    write_timeout=min(timeout_write, _remaining_timeout()),
+                    pool_timeout=min(timeout_pool, _remaining_timeout()),
+                ),
+                stage="webhook_set",
+            )
+            logger.info("✅ Webhook set: %s", result)
+            _set_webhook_set_result("ok")
+            return True
+        except RetryAfter as exc:
+            global _WEBHOOK_SET_RATE_LIMIT_TOTAL
+            _WEBHOOK_SET_RATE_LIMIT_TOTAL += 1
+            retry_after = max(0.1, float(exc.retry_after or 0.5))
+            logger.warning("WEBHOOK_SET_RATE_LIMIT retry_after_s=%s", retry_after)
+            logger.info(
+                "METRIC_GAUGE name=webhook_set_rate_limit_total value=%s retry_after_s=%s",
+                _WEBHOOK_SET_RATE_LIMIT_TOTAL,
+                retry_after,
+            )
+            _set_webhook_set_result("rate_limit", error_type="RetryAfter", error=str(exc))
+            return False
+        except Conflict as exc:
+            logger.error("❌ Conflict detected while setting webhook: %s", exc)
+            _set_webhook_set_result("conflict", error_type="Conflict", error=str(exc))
+            raise
+        except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout, TimeoutError) as exc:
+            logger.warning("WEBHOOK_SET_TIMEOUT error=%s", exc)
+            _set_webhook_set_result("timeout", error_type="TimeoutError", error=str(exc))
+            return False
+        except asyncio.CancelledError as exc:
+            logger.warning("WEBHOOK_SET_CANCELLED error=%s", exc)
+            _set_webhook_set_result("cancelled", error_type="CancelledError", error=str(exc))
+            raise
+        except Exception as exc:
+            logger.error("❌ Error setting webhook: %s", exc)
+            _set_webhook_set_result("error", error_type=type(exc).__name__, error=str(exc))
+            return False
 
 
 def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
