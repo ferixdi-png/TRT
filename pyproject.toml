@@ -1,0 +1,32 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+include = [
+  "app/**/*.py",
+  "bot_kie.py",
+  "main_render.py",
+  "scripts/smoke_webhook_flow.py",
+  "scripts/smoke_webhook_handler.py",
+]
+extend-exclude = [
+  "archive",
+  "artifacts",
+  "data",
+  "migrations",
+  "models",
+  "node_modules",
+  "pricing",
+]
+
+[tool.ruff.lint]
+ignore = [
+  "E401",
+  "E402",
+  "E722",
+  "F401",
+  "F541",
+  "F821",
+  "F823",
+  "F811",
+  "F841",
+]

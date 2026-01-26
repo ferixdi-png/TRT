@@ -8,6 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 from aiohttp import web
 
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in __import__("sys").path:
+    __import__("sys").path.append(str(REPO_ROOT))
+
 import main_render
 from tests.ptb_harness import PTBHarness
 

@@ -34,7 +34,7 @@ from app.observability.structured_logs import (
 from app.observability.task_lifecycle import log_task_lifecycle
 from app.observability.exception_boundary import handle_update_exception, handle_unknown_callback
 from app.observability.no_silence_guard import track_outgoing_action
-from app.observability.cancel_metrics import increment as increment_metric
+from app.observability.cancel_metrics import increment as increment_cancel_metric
 from app.observability.trace import (
     ensure_correlation_id,
     prompt_summary,
@@ -43,6 +43,7 @@ from app.observability.trace import (
 )
 from app.observability.error_catalog import ERROR_CATALOG
 from app.observability.request_logger import log_request_event
+from app.observability.update_metrics import increment_metric as increment_update_metric
 from app.middleware.rate_limit import PerKeyRateLimiter, PerUserRateLimiter, TTLCache
 from app.utils.early_update_buffer import EarlyUpdateBuffer
 from app.session_store import get_session_store, get_session_cached
@@ -4469,7 +4470,7 @@ def _recover_jobs_on_startup() -> None:
         state = record.get("state")
         if state not in ACTIVE_JOB_STATES_ACTIVE:
             continue
-        increment_metric("worker_restart_detected_total")
+        increment_cancel_metric("worker_restart_detected_total")
         start_ts = record.get("start_ts_ms") or now_ms
         if isinstance(start_ts, str) and start_ts.isdigit():
             start_ts = int(start_ts)
@@ -4480,7 +4481,7 @@ def _recover_jobs_on_startup() -> None:
         data[job_id] = record
         updated = True
         if timed_out:
-            increment_metric("job_timeout_total")
+            increment_cancel_metric("job_timeout_total")
         _log_job_state_update(
             correlation_id=record.get("correlation_id"),
             update_id=None,
@@ -8121,6 +8122,7 @@ async def _show_minimal_menu(
                 user_id,
                 chat_id,
             )
+            increment_update_metric("send_message")
         except Exception:
             fallback_send = True
 
@@ -8139,6 +8141,7 @@ async def _show_minimal_menu(
                 user_id,
                 chat_id,
             )
+            increment_update_metric("send_message")
         except Exception:
             logger.error("MINIMAL_MENU_SEND_FAILED", exc_info=True)
 
@@ -8520,6 +8523,7 @@ async def show_main_menu(
                     user_id,
                     chat_id,
                 )
+                increment_update_metric("send_message")
             except Exception as exc:
                 fallback_send = True
                 log_structured_event(
@@ -8583,6 +8587,7 @@ async def show_main_menu(
                     user_id,
                     chat_id,
                 )
+                increment_update_metric("send_message")
             except Exception as exc:
                 logger.error(
                     "MAIN_MENU_SEND_FAILED source=%s correlation_id=%s error=%s",
@@ -8836,6 +8841,7 @@ async def respond_price_undefined(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
     start_ts = time.monotonic()
+    increment_update_metric("handler_enter")
     correlation_id: Optional[str] = None
     user_id: Optional[int] = None
     chat_id: Optional[int] = None
@@ -9054,6 +9060,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logger.debug("start minimal menu fallback failed", exc_info=True)
     finally:
+        increment_update_metric("handler_exit")
         _log_handler_latency("start", start_ts, update)
 
 
@@ -10758,7 +10765,7 @@ async def _button_callback_impl(
             active_job_id = session.get("job_id") if isinstance(session, dict) else None
             active_state = session.get("job_state") if isinstance(session, dict) else None
             if active_job_id and active_state in ACTIVE_JOB_STATES_ACTIVE:
-                increment_metric("cancel_without_job_total")
+                increment_cancel_metric("cancel_without_job_total")
                 _log_cancel_update(
                     correlation_id=correlation_id,
                     update_id=update_id,
@@ -22991,7 +22998,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if job_id:
             state_before = session.get("job_state") if "session" in locals() else None
             _update_job_record(job_id, state="timed_out", timed_out_ts_ms=_now_ms())
-            increment_metric("job_timeout_total")
+            increment_cancel_metric("job_timeout_total")
             _log_job_state_update(
                 correlation_id=correlation_id,
                 update_id=update.update_id,
@@ -24205,14 +24212,14 @@ async def _request_job_cancel(
     state_source: str,
 ) -> bool:
     now_ms = _now_ms()
-    increment_metric("cancel_received_total")
+    increment_cancel_metric("cancel_received_total")
     job_record = _get_job_record(job_id)
     chat_id = query.message.chat_id if query and query.message else None
     message_id = query.message.message_id if query and query.message else None
     callback_query_id = query.id if query else None
 
     if not job_id:
-        increment_metric("cancel_without_job_total")
+        increment_cancel_metric("cancel_without_job_total")
         _log_cancel_update(
             correlation_id=correlation_id,
             update_id=update.update_id,
@@ -24229,7 +24236,7 @@ async def _request_job_cancel(
         return False
 
     if not job_record or job_record.get("user_id") != user_id:
-        increment_metric("cancel_without_job_total")
+        increment_cancel_metric("cancel_without_job_total")
         _log_cancel_update(
             correlation_id=correlation_id,
             update_id=update.update_id,
@@ -24247,7 +24254,7 @@ async def _request_job_cancel(
 
     state_before = job_record.get("state")
     if state_before in ACTIVE_JOB_STATES_TERMINAL or state_before == "cancel_requested":
-        increment_metric("cancel_ignored_total")
+        increment_cancel_metric("cancel_ignored_total")
         _log_cancel_update(
             correlation_id=correlation_id,
             update_id=update.update_id,
@@ -24264,7 +24271,7 @@ async def _request_job_cancel(
         return False
 
     if not _is_recent_cancel_click(user_id, now_ms):
-        increment_metric("cancel_ignored_total")
+        increment_cancel_metric("cancel_ignored_total")
         _log_cancel_update(
             correlation_id=correlation_id,
             update_id=update.update_id,
@@ -24280,7 +24287,7 @@ async def _request_job_cancel(
         )
         return False
 
-    increment_metric("cancel_accepted_total")
+    increment_cancel_metric("cancel_accepted_total")
     _update_job_record(
         job_id,
         state="cancel_requested",
@@ -25415,26 +25422,108 @@ async def create_webhook_handler():
         client_ip: str,
         semaphore_acquired: bool,
     ) -> None:
+        process_started = time.monotonic()
+        update_id = getattr(update, "update_id", None)
+        user_id = update.effective_user.id if update.effective_user else None
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        increment_update_metric("webhook_process_start")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="WEBHOOK_PROCESS_START",
+            action_path="webhook:process_update",
+            stage="WEBHOOK",
+            outcome="start",
+        )
+        process_task = asyncio.create_task(_application_for_webhook.process_update(update))
+        release_in_finally = True
+
+        def _release_after_task(done_task: asyncio.Task) -> None:
+            if webhook_semaphore is not None and semaphore_acquired:
+                webhook_semaphore.release()
+            try:
+                done_task.result()
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update_id,
+                    action="WEBHOOK_PROCESS_LATE_DONE",
+                    action_path="webhook:process_update",
+                    stage="WEBHOOK",
+                    outcome="ok",
+                    param={"duration_ms": int((time.monotonic() - process_started) * 1000)},
+                )
+            except Exception as exc:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update_id,
+                    action="WEBHOOK_PROCESS_LATE_DONE",
+                    action_path="webhook:process_update",
+                    stage="WEBHOOK",
+                    outcome="failed",
+                    error_id="WEBHOOK_PROCESS_FAILED",
+                    param={"error": str(exc)[:200]},
+                )
+
         try:
             await asyncio.wait_for(
-                _application_for_webhook.process_update(update),
+                asyncio.shield(process_task),
                 timeout=process_timeout_seconds,
+            )
+            duration_ms = int((time.monotonic() - process_started) * 1000)
+            increment_update_metric("webhook_process_done")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_PROCESS_DONE",
+                action_path="webhook:process_update",
+                stage="WEBHOOK",
+                outcome="ok",
+                duration_ms=duration_ms,
             )
             logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
         except asyncio.TimeoutError:
             retry_after = max(1, int(math.ceil(process_timeout_seconds)))
+            increment_update_metric("webhook_process_done")
             log_structured_event(
                 correlation_id=correlation_id,
-                action="WEBHOOK_TIMEOUT",
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_PROCESS_DONE",
                 action_path="webhook:process_update",
+                stage="WEBHOOK",
                 outcome="timeout",
                 error_id="WEBHOOK_PROCESS_TIMEOUT",
                 param={"client_ip": client_ip, "retry_after": retry_after},
             )
+            process_task.add_done_callback(_release_after_task)
+            release_in_finally = False
+            return
         except Exception as exc:
+            increment_update_metric("webhook_process_done")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_PROCESS_DONE",
+                action_path="webhook:process_update",
+                stage="WEBHOOK",
+                outcome="failed",
+                error_id="WEBHOOK_PROCESS_FAILED",
+                param={"error": str(exc)[:200]},
+            )
             logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
         finally:
-            if webhook_semaphore is not None and semaphore_acquired:
+            if release_in_finally and webhook_semaphore is not None and semaphore_acquired:
                 webhook_semaphore.release()
 
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
@@ -25566,15 +25655,40 @@ async def create_webhook_handler():
             try:
                 update = Update.de_json(data, _application_for_webhook.bot)
                 if update:
-                    if update.update_id is not None and _update_deduper.seen(update.update_id):
+                    update_id = getattr(update, "update_id", None)
+                    user_id = update.effective_user.id if update.effective_user else None
+                    chat_id = update.effective_chat.id if update.effective_chat else None
+                    if update_id is not None and _update_deduper.seen(update_id):
                         log_structured_event(
                             correlation_id=correlation_id,
                             action="DEDUP_HIT",
                             action_path="webhook:update_id",
                             outcome="deduped",
-                            param={"update_id": update.update_id, "source": "webhook_handler"},
+                            param={"update_id": update_id, "source": "webhook_handler"},
+                        )
+                        increment_update_metric("webhook_update_in")
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            user_id=user_id,
+                            chat_id=chat_id,
+                            update_id=update_id,
+                            action="WEBHOOK_UPDATE_IN",
+                            action_path="webhook:update",
+                            stage="WEBHOOK",
+                            outcome="deduped",
                         )
                         return web.Response(status=200, text="ok")
+                    increment_update_metric("webhook_update_in")
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        update_id=update_id,
+                        action="WEBHOOK_UPDATE_IN",
+                        action_path="webhook:update",
+                        stage="WEBHOOK",
+                        outcome="received",
+                    )
                     logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
                     semaphore_acquired = False
                     if webhook_semaphore is not None:
