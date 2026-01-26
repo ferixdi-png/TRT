@@ -361,13 +361,14 @@ class HybridStorage(BaseStorage):
         self,
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+        lock_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         if self._is_runtime_file(filename):
-            updated = await self._runtime.update_json_file(filename, update_fn)
+            updated = await self._runtime.update_json_file(filename, update_fn, lock_mode=lock_mode)
             if updated:
                 await self._write_runtime_primary(filename, updated)
             return updated
-        updated = await self._primary.update_json_file(filename, update_fn)
+        updated = await self._primary.update_json_file(filename, update_fn, lock_mode=lock_mode)
         if updated:
             self._primary_cache_version += 1
             self._primary_cache[filename] = self._CacheEntry(

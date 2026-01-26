@@ -228,6 +228,7 @@ class BaseStorage(ABC):
         self,
         filename: str,
         update_fn: "Callable[[Dict[str, Any]], Dict[str, Any]]",
+        lock_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Обновить произвольный JSON файл с optimistic merge."""
         pass

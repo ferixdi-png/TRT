@@ -31,6 +31,12 @@ from app.observability.generation_metrics import (
 )
 
 logger = logging.getLogger(__name__)
+try:  # pragma: no cover - optional dependency
+    import asyncpg
+
+    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError, asyncpg.PostgresError)
+except Exception:  # pragma: no cover - asyncpg may be unavailable in tests
+    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError)
 
 PENDING_STATES = set(CANONICAL_PENDING_STATES) | {"running", "succeeded", "completed"}
 SUCCESS_STATES = {"success"}
@@ -1140,6 +1146,7 @@ async def run_reconciler_loop(
     get_user_language: Optional[Callable[[int], str]] = None,
 ) -> None:
     backoff_seconds = interval_seconds
+    db_backoff_seconds = 0
     max_backoff = max(interval_seconds, DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS)
     while True:
         try:
@@ -1153,6 +1160,15 @@ async def run_reconciler_loop(
                 get_user_language=get_user_language,
             )
             backoff_seconds = interval_seconds
+            db_backoff_seconds = 0
+        except _DB_DEGRADED_EXCEPTIONS as exc:
+            db_backoff_seconds = 5 if db_backoff_seconds == 0 else min(60, db_backoff_seconds * 2)
+            backoff_seconds = min(max_backoff, max(interval_seconds, db_backoff_seconds))
+            logger.warning(
+                "DB_DEGRADED_BACKOFF source=delivery_reconciler delay_s=%s error=%s",
+                backoff_seconds,
+                exc,
+            )
         except Exception as exc:
             logger.error("delivery_reconciler_failed: %s", exc, exc_info=True)
             backoff_seconds = min(max_backoff, max(interval_seconds, backoff_seconds * 2))

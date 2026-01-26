@@ -57,6 +57,7 @@ if _flush_interval_ms_raw:
         _flush_interval_seconds = max(0.01, float(_flush_interval_ms_raw) / 1000)
     except ValueError:
         logger.warning("OBS_FLUSH_INTERVAL_MS invalid: %s", _flush_interval_ms_raw)
+_persist_timeout_seconds = float(os.getenv("CORRELATION_STORE_PERSIST_TIMEOUT_SECONDS", "2.5"))
 _flush_max_records = int(os.getenv("CORRELATION_STORE_FLUSH_MAX_RECORDS", "200"))
 _queue_max_records = int(os.getenv("OBS_QUEUE_MAX", "1000"))
 _dropped_records_total = 0
@@ -132,7 +133,22 @@ def _schedule_debounced_persist(
                 batch = {key: _pending_records.pop(key) for key in batch_keys}
                 batch_sources = {key: _pending_sources.pop(key, None) for key in batch_keys}
                 storage_instance = _pending_storage or storage
-                await _persist_records_batch(batch, storage=storage_instance, sources=batch_sources)
+            try:
+                await asyncio.wait_for(
+                    _persist_records_batch(batch, storage=storage_instance, sources=batch_sources),
+                    timeout=_persist_timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "correlation_store_flush_timeout batch_size=%s timeout_s=%.2f",
+                    len(batch),
+                    _persist_timeout_seconds,
+                )
+                async with _flush_lock:
+                    _pending_records.update(batch)
+                    _pending_sources.update(batch_sources)
+                await asyncio.sleep(_flush_interval_seconds)
+                continue
             if _pending_records:
                 await asyncio.sleep(_flush_interval_seconds)
             else:
@@ -269,7 +285,11 @@ async def _persist_record(record: CorrelationRecord, *, storage: Optional[Any], 
                 next_data[index_key] = request_payload
             return next_data
 
-        await storage_instance.update_json_file(CORRELATIONS_FILE, updater)
+        await storage_instance.update_json_file(
+            CORRELATIONS_FILE,
+            updater,
+            lock_mode="pg_try_advisory_xact_lock",
+        )
 
     try:
         await _update_file()
@@ -317,7 +337,11 @@ async def _persist_records_batch(
                     next_data[index_key] = request_payload
             return next_data
 
-        await storage_instance.update_json_file(CORRELATIONS_FILE, updater)
+        await storage_instance.update_json_file(
+            CORRELATIONS_FILE,
+            updater,
+            lock_mode="pg_try_advisory_xact_lock",
+        )
 
     start_ts = time.monotonic()
     try:
