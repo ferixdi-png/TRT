@@ -7,7 +7,7 @@
 **Статус:** ГОТОВО
 
 **Реализация:**
-- ✅ `render_singleton_lock.py` — PostgreSQL advisory lock
+- ✅ `app/utils/singleton_lock.py` — PostgreSQL advisory lock
 - ✅ `bot_kie.py` — интеграция advisory lock в `main()` перед polling
 - ✅ `bot_kie.py` — `delete_webhook(drop_pending_updates=True)` перед `start_polling`
 - ✅ Lock держится живым соединением весь runtime
@@ -15,7 +15,7 @@
 
 **Проверка:**
 ```bash
-python -c "from render_singleton_lock import make_lock_key; print('OK')"
+python -c "from app.utils.pg_advisory_lock import build_advisory_lock_key_pair; print('OK')"
 ```
 
 ---
@@ -159,7 +159,7 @@ ENABLE_HEALTH_SERVER=1 (по умолчанию)
 
 ```bash
 # 1. Проверка advisory lock
-python -c "from render_singleton_lock import make_lock_key; print('OK')"
+python -c "from app.utils.pg_advisory_lock import build_advisory_lock_key_pair; print('OK')"
 
 # 2. Проверка реестра моделей
 python -c "import yaml; f=open('models/kie_models.yaml'); d=yaml.safe_load(f); print(f'Models: {len(d[\"models\"])}')"
@@ -189,7 +189,7 @@ python tools/kie_sanity_all_types.py
 
 ## 📁 СОЗДАННЫЕ/ИЗМЕНЕННЫЕ ФАЙЛЫ
 
-1. `render_singleton_lock.py` — PostgreSQL advisory lock
+1. `app/utils/singleton_lock.py` — PostgreSQL advisory lock
 2. `models/kie_models.yaml` — реестр 72 моделей
 3. `kie_validator.py` — валидатор входных параметров
 4. `kie_client.py` — улучшен (парсинг resultJson)

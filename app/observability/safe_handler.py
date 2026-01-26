@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable, Optional
 from weakref import WeakSet
 
 from telegram import Update
-from telegram.ext import BaseHandler, ConversationHandler, ContextTypes
+from telegram.ext import ApplicationHandlerStop, BaseHandler, ConversationHandler, ContextTypes
 
 from app.observability.exception_boundary import handle_update_exception
 from app.observability.trace import ensure_correlation_id
@@ -31,6 +31,8 @@ def _safe_callback(
     async def _wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
         try:
             return await callback(update, context)
+        except ApplicationHandlerStop:
+            return None
         except Exception as exc:
             correlation_id = ensure_correlation_id(update, context)
             user_id = update.effective_user.id if isinstance(update, Update) and update.effective_user else None

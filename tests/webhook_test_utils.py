@@ -45,6 +45,14 @@ def _build_params(schema: Dict[str, dict], sku_params: Dict[str, object]) -> Dic
         if key in params:
             continue
         default = spec.get("default") if isinstance(spec, dict) else None
+        if isinstance(spec, dict) and spec.get("required", False):
+            lowered = key.lower()
+            if any(token in lowered for token in ("image", "video", "audio", "mask", "file")):
+                if default:
+                    params[key] = default
+                else:
+                    params[key] = "test"
+                continue
         if default is not None:
             params[key] = default
     return params
@@ -52,9 +60,16 @@ def _build_params(schema: Dict[str, dict], sku_params: Dict[str, object]) -> Dic
 
 def select_paid_model() -> Optional[ModelSelection]:
     for model_id in list_all_models():
-        if not get_model(model_id):
+        model_spec = get_model(model_id)
+        if not model_spec:
             continue
         schema = get_model_schema(model_id) or {}
+        if any(
+            token in key.lower()
+            for key in schema.keys()
+            for token in ("image", "video", "audio", "mask", "file")
+        ):
+            continue
         if not _schema_is_simple(schema):
             continue
         skus = list_model_skus(model_id)
@@ -67,9 +82,16 @@ def select_paid_model() -> Optional[ModelSelection]:
 
 def select_free_model() -> Optional[ModelSelection]:
     for model_id in list_all_models():
-        if not get_model(model_id):
+        model_spec = get_model(model_id)
+        if not model_spec:
             continue
         schema = get_model_schema(model_id) or {}
+        if any(
+            token in key.lower()
+            for key in schema.keys()
+            for token in ("image", "video", "audio", "mask", "file")
+        ):
+            continue
         if not _schema_is_simple(schema):
             continue
         skus = list_model_skus(model_id)

@@ -51,7 +51,7 @@ UnboundLocalError: cannot access local variable 'os' where it is not associated 
 
 ### Основные файлы:
 1. ✅ `bot_kie.py` - исправлены все ошибки деплоя
-2. ✅ `render_singleton_lock.py` - advisory lock механизм
+2. ✅ `app/utils/singleton_lock.py` - advisory lock механизм
 3. ✅ `models/kie_models.yaml` - 72 модели
 4. ✅ `kie_client.py` - универсальный KIE client
 5. ✅ `kie_validator.py` - валидатор схем
