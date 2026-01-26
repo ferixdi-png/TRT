@@ -23,6 +23,7 @@ from telegram import Update
 from app.bootstrap import create_application
 from app.middleware.rate_limit import PerKeyRateLimiter, TTLCache
 from app.observability.structured_logs import log_structured_event
+from app.observability.update_metrics import increment_metric as increment_update_metric
 from app.utils.healthcheck import start_health_server, stop_health_server
 from app.utils.logging_config import setup_logging
 
@@ -128,29 +129,111 @@ def build_webhook_handler(
         client_ip: str,
         semaphore_acquired: bool,
     ) -> None:
+        process_started = time.monotonic()
+        update_id = getattr(update, "update_id", None)
+        user_id = update.effective_user.id if update.effective_user else None
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        increment_update_metric("webhook_process_start")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update_id,
+            action="WEBHOOK_PROCESS_START",
+            action_path="webhook:process_update",
+            stage="WEBHOOK",
+            outcome="start",
+        )
+        process_task = asyncio.create_task(application.process_update(update))
+        release_in_finally = True
+
+        def _release_after_task(done_task: asyncio.Task) -> None:
+            if webhook_semaphore is not None and semaphore_acquired:
+                webhook_semaphore.release()
+            try:
+                done_task.result()
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update_id,
+                    action="WEBHOOK_PROCESS_LATE_DONE",
+                    action_path="webhook:process_update",
+                    stage="WEBHOOK",
+                    outcome="ok",
+                    param={"duration_ms": int((time.monotonic() - process_started) * 1000)},
+                )
+            except Exception as exc:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update_id,
+                    action="WEBHOOK_PROCESS_LATE_DONE",
+                    action_path="webhook:process_update",
+                    stage="WEBHOOK",
+                    outcome="failed",
+                    error_id="WEBHOOK_PROCESS_FAILED",
+                    param={"error": str(exc)[:200]},
+                )
+
         try:
-            await asyncio.wait_for(application.process_update(update), timeout=process_timeout_seconds)
+            await asyncio.wait_for(asyncio.shield(process_task), timeout=process_timeout_seconds)
+            duration_ms = int((time.monotonic() - process_started) * 1000)
+            increment_update_metric("webhook_process_done")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_PROCESS_DONE",
+                action_path="webhook:process_update",
+                stage="WEBHOOK",
+                outcome="ok",
+                duration_ms=duration_ms,
+            )
             logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
         except asyncio.TimeoutError:
             retry_after = max(1, int(math.ceil(process_timeout_seconds)))
+            increment_update_metric("webhook_process_done")
             log_structured_event(
                 correlation_id=correlation_id,
-                action="WEBHOOK_TIMEOUT",
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_PROCESS_DONE",
                 action_path="webhook:process_update",
+                stage="WEBHOOK",
                 outcome="timeout",
                 error_id="WEBHOOK_PROCESS_TIMEOUT",
                 param={"client_ip": client_ip, "retry_after": retry_after},
             )
+            process_task.add_done_callback(_release_after_task)
+            release_in_finally = False
+            return
         except Exception as exc:
+            increment_update_metric("webhook_process_done")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_PROCESS_DONE",
+                action_path="webhook:process_update",
+                stage="WEBHOOK",
+                outcome="failed",
+                error_id="WEBHOOK_PROCESS_FAILED",
+                param={"error": str(exc)[:200]},
+            )
             logger.exception("WEBHOOK correlation_id=%s forward_failed=true error=%s", correlation_id, exc)
-            chat_id = getattr(update.effective_chat, "id", None)
             if chat_id:
                 try:
                     await application.bot.send_message(chat_id=chat_id, text="Ошибка обработки. Вернул в меню.")
+                    increment_update_metric("send_message")
                 except Exception:
                     logger.warning("WEBHOOK correlation_id=%s fallback_send_failed=true", correlation_id)
         finally:
-            if webhook_semaphore is not None and semaphore_acquired:
+            if release_in_finally and webhook_semaphore is not None and semaphore_acquired:
                 webhook_semaphore.release()
 
     async def _handler(request: web.Request) -> web.StreamResponse:
@@ -230,12 +313,33 @@ def build_webhook_handler(
             logger.warning("WEBHOOK correlation_id=%s payload_parse_failed=true", correlation_id)
             return web.json_response({"ok": False}, status=400)
 
-        update_id = payload.get("update_id") if isinstance(payload, dict) else None
+        update = Update.de_json(payload, application.bot)
+        update_id = getattr(update, "update_id", None)
         if _is_duplicate(update_id):
+            increment_update_metric("webhook_update_in")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=update.effective_user.id if update.effective_user else None,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update_id,
+                action="WEBHOOK_UPDATE_IN",
+                action_path="webhook:update",
+                stage="WEBHOOK",
+                outcome="deduped",
+            )
             logger.info("WEBHOOK correlation_id=%s update_duplicate=true", correlation_id)
             return web.json_response({"ok": True}, status=200)
-
-        update = Update.de_json(payload, application.bot)
+        increment_update_metric("webhook_update_in")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=update.effective_user.id if update.effective_user else None,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update_id,
+            action="WEBHOOK_UPDATE_IN",
+            action_path="webhook:update",
+            stage="WEBHOOK",
+            outcome="received",
+        )
 
         semaphore_acquired = False
         if webhook_semaphore is not None:
