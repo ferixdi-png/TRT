@@ -1351,12 +1351,18 @@ class GitHubStorage(BaseStorage):
     # ==================== GENERIC JSON FILES ====================
 
     async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"github_storage.read:{filename}")
         data, _ = await self._read_json(filename)
         if data:
             return data
         return default or {}
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"github_storage.write:{filename}")
         lock = self._get_write_lock(filename)
         lock_key = f"{self.config.bot_instance_id}:{filename}"
         async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as lock_result:
@@ -1408,6 +1414,9 @@ class GitHubStorage(BaseStorage):
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"github_storage.update:{filename}")
         lock_key = f"{self.config.bot_instance_id}:{filename}"
         async with distributed_lock(lock_key, ttl_seconds=15, wait_seconds=3) as lock_result:
             correlation_id = get_correlation_id()

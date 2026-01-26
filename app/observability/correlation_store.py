@@ -51,7 +51,15 @@ _persist_tasks: Set[asyncio.Task[Any]] = set()
 _persist_debounce_tasks: Dict[str, asyncio.Task[Any]] = {}
 _persist_debounce_seconds = float(os.getenv("CORRELATION_STORE_DEBOUNCE_SECONDS", "0.5"))
 _flush_interval_seconds = float(os.getenv("CORRELATION_STORE_FLUSH_INTERVAL_SECONDS", "1.0"))
+_flush_interval_ms_raw = os.getenv("OBS_FLUSH_INTERVAL_MS", "").strip()
+if _flush_interval_ms_raw:
+    try:
+        _flush_interval_seconds = max(0.01, float(_flush_interval_ms_raw) / 1000)
+    except ValueError:
+        logger.warning("OBS_FLUSH_INTERVAL_MS invalid: %s", _flush_interval_ms_raw)
 _flush_max_records = int(os.getenv("CORRELATION_STORE_FLUSH_MAX_RECORDS", "200"))
+_queue_max_records = int(os.getenv("OBS_QUEUE_MAX", "1000"))
+_dropped_records_total = 0
 _pending_records: Dict[str, CorrelationRecord] = {}
 _pending_sources: Dict[str, Optional[str]] = {}
 _flush_task: Optional[asyncio.Task[Any]] = None
@@ -86,6 +94,21 @@ def _schedule_debounced_persist(
         return
     record = _records_by_correlation.get(correlation_id)
     if not record:
+        return
+    global _dropped_records_total
+    if _queue_max_records > 0 and correlation_id not in _pending_records and len(_pending_records) >= _queue_max_records:
+        _dropped_records_total += 1
+        logger.warning(
+            "correlation_store_queue_full dropped_total=%s queue_max=%s correlation_id=%s",
+            _dropped_records_total,
+            _queue_max_records,
+            correlation_id,
+        )
+        logger.info(
+            "METRIC_GAUGE name=correlation_store_dropped_total value=%s queue_max=%s",
+            _dropped_records_total,
+            _queue_max_records,
+        )
         return
     _pending_records[correlation_id] = record
     if source:
@@ -262,6 +285,9 @@ async def _persist_records_batch(
 ) -> None:
     if not records:
         return
+    from app.utils.fault_injection import maybe_inject_sleep
+
+    await maybe_inject_sleep("TRT_FAULT_INJECT_CORR_FLUSH_SLEEP_MS", label="correlation_store.flush")
     storage_instance = _resolve_storage(storage)
     if not storage_instance or not hasattr(storage_instance, "update_json_file"):
         return
