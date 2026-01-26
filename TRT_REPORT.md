@@ -1,5 +1,64 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-26 TRT: webhook setter deadlines + warmup budget (boot non-blocking)
+
+### Root cause (по симптомам)
+- `WEBHOOK_SETTER_FAILED=Timed out`: `setWebhook` выполнялся без общего дедлайна на цикл (под капотом мог зависать дольше, чем ожидалось), а retry-логика была в той же критической попытке, что делало цикл “длинным”. В итоге цикл мог жить дольше 3s и отдавать `Timed out`. 
+- `GEN_TYPE_MENU_WARMUP_TIMEOUT timeout_s=2.0` при `elapsed_total_ms≈38–44s`: warmup был с повторными попытками и без глобального budget, а отмена не прерывала всю цепочку; итог — суммарное время выходило далеко за заданный `timeout_s`. 
+- BOOT warmup “done” при десятках секунд: warmup не имел общего bootstrap budget, поэтому оставался в работе слишком долго и “задерживал” фазу прогрева.
+
+### Что сделано
+- WEBHOOK_SETTER: введён явный цикл-дедлайн (2.8s по умолчанию), разделены probe/set под `wait_for`, idempotency (already_set) и корректные логи `WEBHOOK_SETTER_START/ALREADY_SET/OK/FAIL` с `error_type`, `timeout_s`, `duration_ms`, `next_retry_s`. 
+- Retry вынесен в фон: экспоненциальный backoff + jitter, максимум быстрых повторов, затем long sleep.
+- GEN_TYPE_MENU_WARMUP: глобальный дедлайн на весь warmup, единичная попытка в boot, real cancel и outcome `skipped_deadline` без растягивания на десятки секунд. 
+- BOOT warmup: добавлен bootstrap budget, по превышению — отмена оставшихся warmup тасок и переход в READY без ожидания.
+
+### Тесты (полная команда + вывод)
+Команда:
+`pytest tests/test_webhook_setter_warmup.py`
+
+Вывод:
+```
+============================= test session starts ==============================
+platform linux -- Python 3.10.19, pytest-9.0.2, pluggy-1.6.0 -- /root/.pyenv/versions/3.10.19/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/TRT
+configfile: pytest.ini
+plugins: asyncio-1.3.0, anyio-4.12.1
+asyncio: mode=auto, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/test_webhook_setter_warmup.py::test_webhook_setter_timeout_is_enforced PASSED [ 25%]
+tests/test_webhook_setter_warmup.py::test_webhook_setter_already_set_skips PASSED [ 50%]
+tests/test_webhook_setter_warmup.py::test_warmup_timeout_cancels_task PASSED [ 75%]
+tests/test_webhook_setter_warmup.py::test_boot_does_not_block_ready PASSED [100%]
+
+============================== 4 passed in 5.68s ===============================
+```
+
+### Логи (один нормальный boot + один TG hang)
+
+Нормальный boot (already_set + быстрый warmup):
+```
+2026-01-26 18:51:16,369 - app.observability.structured_logs - INFO - [-] - STRUCTURED_LOG {"correlation_id": "BOOT-NORMAL", "request_id": "BOOT-NORMAL", "timestamp_ms": 1769453476369, "user_id": null, "chat_id": null, "update_id": null, "update_type": null, "action": "BOOT_WARMUP", "action_path": "boot:warmup", "command": null, "callback_data": null, "message_type": null, "text_length": null, "text_hash": null, "text_preview": null, "model_id": null, "gen_type": null, "task_id": null, "job_id": null, "sku_id": null, "price_rub": null, "stage": "BOOT", "waiting_for": null, "param": {"watchdog_s": 2.0, "budget_s": 1.0}, "outcome": "start", "duration_ms": null, "lock_key": null, "lock_wait_ms_total": null, "lock_attempts": null, "lock_ttl_s": null, "lock_acquired": null, "poll_attempt": null, "poll_latency_ms": null, "total_wait_ms": null, "retry_count": null, "task_state": null, "dedup_hit": null, "existing_task_id": null, "error_id": null, "error_code": null, "fix_hint": null, "abuse_id": null}
+2026-01-26 18:51:16,369 - app.observability.structured_logs - INFO - [-] - STRUCTURED_LOG {"correlation_id": "BOOT-NORMAL", "request_id": "BOOT-NORMAL", "timestamp_ms": 1769453476369, "user_id": null, "chat_id": null, "update_id": null, "update_type": null, "action": "BOOT_WARMUP", "action_path": "boot:warmup", "command": null, "callback_data": null, "message_type": null, "text_length": null, "text_hash": null, "text_preview": null, "model_id": null, "gen_type": null, "task_id": null, "job_id": null, "sku_id": null, "price_rub": null, "stage": "BOOT", "waiting_for": null, "param": {"elapsed_ms": 0}, "outcome": "done", "duration_ms": null, "lock_key": null, "lock_wait_ms_total": null, "lock_attempts": null, "lock_ttl_s": null, "lock_acquired": null, "poll_attempt": null, "poll_latency_ms": null, "total_wait_ms": null, "retry_count": null, "task_state": null, "dedup_hit": null, "existing_task_id": null, "error_id": null, "error_code": null, "fix_hint": null, "abuse_id": null}
+2026-01-26 18:51:16,369 - app.observability.structured_logs - INFO - [-] - STRUCTURED_LOG {"correlation_id": null, "request_id": null, "timestamp_ms": 1769453476369, "user_id": null, "chat_id": null, "update_id": null, "update_type": null, "action": "WEBHOOK_SETTER_START", "action_path": "webhook:setter", "command": null, "callback_data": null, "message_type": null, "text_length": null, "text_hash": null, "text_preview": null, "model_id": null, "gen_type": null, "task_id": null, "job_id": null, "sku_id": null, "price_rub": null, "stage": "WEBHOOK", "waiting_for": null, "param": {"attempt": 1, "timeout_s": 2.8}, "outcome": "start", "duration_ms": null, "lock_key": null, "lock_wait_ms_total": null, "lock_attempts": null, "lock_ttl_s": null, "lock_acquired": null, "poll_attempt": null, "poll_latency_ms": null, "total_wait_ms": null, "retry_count": null, "task_state": null, "dedup_hit": null, "existing_task_id": null, "error_id": null, "error_code": null, "fix_hint": null, "abuse_id": null}
+2026-01-26 18:51:16,369 - bot_kie - INFO - [-] - WEBHOOK_SETTER_START cycle=1 timeout_s=2.8
+2026-01-26 18:51:16,369 - app.bot_mode - INFO - [-] - ✅ Webhook already set: https://example.com/webhook
+2026-01-26 18:51:16,369 - bot_kie - INFO - [-] - WEBHOOK_SETTER_ALREADY_SET cycle=1 duration_ms=0 timeout_s=2.8
+```
+
+TG hang (setWebhook зависает, цикл завершается по дедлайну, retry в фоне):
+```
+2026-01-26 18:51:30,000 - app.observability.structured_logs - INFO - [-] - STRUCTURED_LOG {"correlation_id": null, "request_id": null, "timestamp_ms": 1769453490000, "user_id": null, "chat_id": null, "update_id": null, "update_type": null, "action": "WEBHOOK_SETTER_START", "action_path": "webhook:setter", "command": null, "callback_data": null, "message_type": null, "text_length": null, "text_hash": null, "text_preview": null, "model_id": null, "gen_type": null, "task_id": null, "job_id": null, "sku_id": null, "price_rub": null, "stage": "WEBHOOK", "waiting_for": null, "param": {"attempt": 1, "timeout_s": 2.8}, "outcome": "start", "duration_ms": null, "lock_key": null, "lock_wait_ms_total": null, "lock_attempts": null, "lock_ttl_s": null, "lock_acquired": null, "poll_attempt": null, "poll_latency_ms": null, "total_wait_ms": null, "retry_count": null, "task_state": null, "dedup_hit": null, "existing_task_id": null, "error_id": null, "error_code": null, "fix_hint": null, "abuse_id": null}
+2026-01-26 18:51:30,000 - bot_kie - INFO - [-] - WEBHOOK_SETTER_START cycle=1 timeout_s=2.8
+2026-01-26 18:51:32,805 - app.bot_mode - WARNING - [-] - WEBHOOK_SET_TIMEOUT error=webhook_set_timeout
+2026-01-26 18:51:32,809 - bot_kie - WARNING - [-] - WEBHOOK_SETTER_FAIL cycle=1 error_type=TimeoutError error=webhook_set_timeout duration_ms=2804 timeout_s=2.8 next_retry_s=0.5399994335674563
+```
+
+### Итог
+**GO** — все тесты зелёные; WEBHOOK_SETTER деградирует без блокировки и с backoff; warmup ограничен бюджетом и не держит boot.
+
 ## ✅ 2026-01-26 TRT: webhook resiliency, warmup diagnostics, menu fallback + advisory lock drop
 
 ### Что изменено
