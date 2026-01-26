@@ -1413,6 +1413,7 @@ class GitHubStorage(BaseStorage):
         self,
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+        lock_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         from app.utils.fault_injection import maybe_inject_sleep
 
