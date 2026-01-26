@@ -88,6 +88,31 @@ async def test_webhook_ack_under_telegram_connect_timeout(webhook_harness, monke
     assert ack_ms < 500
 
 
+async def test_start_placeholder_fast_under_storage_timeout(webhook_harness, monkeypatch):
+    monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
+    monkeypatch.setenv("START_PLACEHOLDER_TIMEOUT_SECONDS", "1.0")
+    monkeypatch.setenv("START_PLACEHOLDER_RETRY_ATTEMPTS", "1")
+
+    async def slow_get_user_language(_user_id: int) -> str:
+        await asyncio.sleep(2.0)
+        return "ru"
+
+    monkeypatch.setattr(
+        "app.services.user_service.get_user_language",
+        slow_get_user_language,
+    )
+
+    start_ts = time.monotonic()
+    response = await _send_start(webhook_harness, user_id=106, update_id=5006)
+    ack_ms = (time.monotonic() - start_ts) * 1000
+
+    assert response.status == 200
+    assert ack_ms < 500
+
+    message = await _wait_for_message(webhook_harness, timeout_s=1.0)
+    assert MINIMAL_MENU_TEXT in message["text"]
+
+
 async def test_webhook_ack_under_correlation_lock_busy(webhook_harness, monkeypatch):
     monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
     monkeypatch.setenv("START_FALLBACK_MAX_MS", "800")
