@@ -21,6 +21,7 @@ from app.observability.trace import get_correlation_id
 from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
+_corr_lock_drop_total = 0
 
 
 class PostgresStorage(BaseStorage):
@@ -1055,13 +1056,65 @@ class PostgresStorage(BaseStorage):
         lock_key = self._advisory_lock_key_pair(filename)
         async with pool.acquire() as conn:
             async with conn.transaction():
-                from app.utils.pg_advisory_lock import acquire_advisory_xact_lock, log_advisory_lock_key
+                from app.utils.pg_advisory_lock import (
+                    acquire_advisory_xact_lock,
+                    log_advisory_lock_key,
+                    try_acquire_advisory_xact_lock,
+                )
 
                 correlation_id = get_correlation_id() or "corr-na"
-                log_advisory_lock_key(logger, lock_key, correlation_id=correlation_id, action="pg_advisory_xact_lock")
+                if filename == "observability_correlations.json":
+                    log_advisory_lock_key(
+                        logger,
+                        lock_key,
+                        correlation_id=correlation_id,
+                        action="pg_try_advisory_xact_lock",
+                    )
+                else:
+                    log_advisory_lock_key(
+                        logger,
+                        lock_key,
+                        correlation_id=correlation_id,
+                        action="pg_advisory_xact_lock",
+                    )
                 lock_start = time.monotonic()
                 try:
-                    await acquire_advisory_xact_lock(conn, lock_key)
+                    if filename == "observability_correlations.json":
+                        acquired = await try_acquire_advisory_xact_lock(conn, lock_key)
+                        if not acquired:
+                            lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
+                            global _corr_lock_drop_total
+                            _corr_lock_drop_total += 1
+                            logger.warning(
+                                "CORR_DROP_LOCK_BUSY filename=%s duration_ms=%s correlation_id=%s",
+                                filename,
+                                lock_duration_ms,
+                                correlation_id,
+                            )
+                            logger.info(
+                                "METRIC_GAUGE name=correlation_store_drop_lock_busy_total value=%s",
+                                _corr_lock_drop_total,
+                            )
+                            log_structured_event(
+                                correlation_id=correlation_id,
+                                action="CORR_DROP_LOCK_BUSY",
+                                action_path="postgres_storage.update_json_file",
+                                stage="STORAGE_LOCK",
+                                outcome="drop",
+                                lock_key=f"{self.partner_id}:{filename}",
+                                lock_wait_ms_total=lock_duration_ms,
+                                lock_attempts=1,
+                                lock_acquired=False,
+                                param={
+                                    "lock_mode": "pg_try_advisory_xact_lock",
+                                    "filename": filename,
+                                    "lock_key_pair": [lock_key.key_a, lock_key.key_b],
+                                },
+                                skip_correlation_store=True,
+                            )
+                            return {}
+                    else:
+                        await acquire_advisory_xact_lock(conn, lock_key)
                 except Exception as exc:
                     lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
                     logger.error(

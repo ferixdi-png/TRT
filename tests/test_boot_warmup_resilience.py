@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 import pytest
 
@@ -76,3 +77,25 @@ async def test_boot_warmup_ready_then_cancel_has_no_timeout(monkeypatch, caplog)
     await task
 
     assert not any("BOOT_WARMUP_WATCHDOG_TIMEOUT" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_gen_type_warmup_timeout_elapsed_is_per_attempt(caplog):
+    async def slow_warmup():
+        await asyncio.sleep(0.2)
+        return {}
+
+    caplog.set_level("INFO")
+    await bot_kie.warm_generation_type_menu_cache(
+        correlation_id="TEST_WARMUP_ELAPSED",
+        timeout_s=0.05,
+        warmup_fn=slow_warmup,
+        retry_attempts=1,
+        force=True,
+    )
+
+    assert "GEN_TYPE_MENU_WARMUP_TIMEOUT" in caplog.text
+    match = re.search(r"GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=(\d+)", caplog.text)
+    assert match, "expected elapsed_ms in timeout log"
+    elapsed_ms = int(match.group(1))
+    assert elapsed_ms <= 200
