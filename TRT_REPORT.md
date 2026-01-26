@@ -1,5 +1,22 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-12 TRT: BOT_MODE/lock/env/entrypoints SSOT cleanup
+
+### Что изменено
+- BOT_MODE семантика унифицирована на `polling/webhook/web/smoke`, неизвестные значения теперь дают явную ошибку без тихих фолбэков. (`app/bot_mode.py`, `app/main.py`, `bot_kie.py`)
+- `app/main.py` помечен как polling/web-only entrypoint: `webhook` режим теперь завершает процесс с явным сообщением. (`app/main.py`)
+- Singleton lock теперь имеет единый источник истины `app/utils/singleton_lock.py`; legacy `app/singleton_lock.py` удалён, добавлен тест на отсутствие legacy импорта. (`app/utils/singleton_lock.py`, `tests/test_singleton_lock_imports.py`)
+- Убраны legacy OWNER_* ключи оплаты/поддержки: единый стандарт `PAYMENT_*`/`SUPPORT_*`, обновлены сообщения и тесты. (`bot_kie.py`, `app/config_env.py`, `tests/test_partner_onboarding.py`, `docs/PARTNER_QUICKSTART.md`)
+- Архивный entrypoint `archive/main_render.py` удалён; документация указывает на `entrypoints/run_bot.py` как SSOT. (`README.md`, `README_DEPLOY_RENDER.md`, `README_RENDER.md`)
+- "Тихие" except:pass заменены на debug-логи с контекстом. (`app/utils/healthcheck.py`, `app/domain/models_registry.py`)
+
+### Как проверить
+- `pytest`
+- `python -m compileall .`
+
+### STOP/GO
+**GO** после зелёных тестов и compileall.  
+
 ## ✅ 2026-02-10 TRT: STOP/GO аудит меню, pricing схемы, healthcheck singleton
 
 ### Что проверено и усилено

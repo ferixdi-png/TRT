@@ -115,19 +115,10 @@ def test_payments_support_fallbacks(monkeypatch):
     monkeypatch.delenv("SUPPORT_TELEGRAM", raising=False)
     monkeypatch.delenv("SUPPORT_TEXT", raising=False)
 
-    monkeypatch.setenv("OWNER_PAYMENT_PHONE", "+79990001122")
-    monkeypatch.setenv("OWNER_PAYMENT_BANK", "Owner Bank")
-    monkeypatch.setenv("OWNER_PAYMENT_CARD_HOLDER", "Owner Name")
-    monkeypatch.setenv("OWNER_SUPPORT_TELEGRAM", "@owner_support")
-    monkeypatch.setenv("OWNER_SUPPORT_TEXT", "Owner support text")
-
     payment_details = get_payment_details()
     support_details = get_support_contact()
-    assert "+79990001122" in payment_details
-    assert "Owner Bank" in payment_details
-    assert "Owner Name" in payment_details
-    assert "@owner_support" in support_details
-    assert "Owner support text" in support_details
+    assert "Реквизиты не настроены" in payment_details
+    assert "Контактная информация не настроена" in support_details
 
     monkeypatch.setenv("PAYMENT_PHONE", "+70000000000")
     monkeypatch.setenv("PAYMENT_BANK", "Partner Bank")
