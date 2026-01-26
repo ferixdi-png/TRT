@@ -29,6 +29,7 @@ class WebhookHarness:
         self.outbox = WebhookOutbox()
         self.session_store = None
         self._message_id_counter = 1000
+        self.settings = None
 
     def _next_message_id(self) -> int:
         self._message_id_counter += 1
@@ -36,8 +37,8 @@ class WebhookHarness:
 
     async def setup(self) -> None:
         reset_settings()
-        settings = Settings()
-        self.application = await create_bot_application(settings)
+        self.settings = Settings()
+        self.application = await create_bot_application(self.settings)
         await self.application.initialize()
 
         main_render._app_ready_event.set()
@@ -100,9 +101,10 @@ class WebhookHarness:
             object.__setattr__(self.application.bot, name, AsyncMock(side_effect=fn))
 
         main_render._seen_update_ids.clear()
-        self.handler = main_render.build_webhook_handler(self.application, settings)
+        self.handler = main_render.build_webhook_handler(self.application, self.settings)
         self.session_store = get_session_store(application=self.application)
         import bot_kie
+
         bot_kie.user_sessions = self.session_store
         bot_kie.generation_submit_locks.clear()
 
@@ -115,11 +117,13 @@ class WebhookHarness:
         self.handler = None
         try:
             import bot_kie
+
             bot_kie.generation_submit_locks.clear()
         except Exception:
             pass
 
     async def _send_payload(self, payload: Dict[str, Any], *, request_id: str) -> web.StreamResponse:
+        self.handler = main_render.build_webhook_handler(self.application, self.settings)
         request = MagicMock(spec=web.Request)
         request.headers = {"X-Request-ID": request_id}
         request.method = "POST"
