@@ -25402,6 +25402,40 @@ async def create_webhook_handler():
     request_deduper = TTLCache(request_dedup_ttl_seconds)
     webhook_semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit > 0 else None
     early_update_buffer = _get_early_update_buffer()
+    process_in_background_raw = os.getenv("WEBHOOK_PROCESS_IN_BACKGROUND")
+    if process_in_background_raw is None:
+        process_in_background = os.getenv("TEST_MODE", "").strip() != "1"
+    else:
+        process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
+
+    async def _process_update_async(
+        update: Update,
+        *,
+        correlation_id: str,
+        client_ip: str,
+        semaphore_acquired: bool,
+    ) -> None:
+        try:
+            await asyncio.wait_for(
+                _application_for_webhook.process_update(update),
+                timeout=process_timeout_seconds,
+            )
+            logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
+        except asyncio.TimeoutError:
+            retry_after = max(1, int(math.ceil(process_timeout_seconds)))
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="WEBHOOK_TIMEOUT",
+                action_path="webhook:process_update",
+                outcome="timeout",
+                error_id="WEBHOOK_PROCESS_TIMEOUT",
+                param={"client_ip": client_ip, "retry_after": retry_after},
+            )
+        except Exception as exc:
+            logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
+        finally:
+            if webhook_semaphore is not None and semaphore_acquired:
+                webhook_semaphore.release()
 
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
         """Handle incoming Telegram webhook updates."""
@@ -25563,34 +25597,27 @@ async def create_webhook_handler():
                                 text="Server busy",
                                 headers={"Retry-After": str(retry_after)},
                             )
-                    try:
-                        await asyncio.wait_for(
-                            _application_for_webhook.process_update(update),
-                            timeout=process_timeout_seconds,
+                    if process_in_background:
+                        _create_background_task(
+                            _process_update_async(
+                                update,
+                                correlation_id=correlation_id,
+                                client_ip=client_ip,
+                                semaphore_acquired=semaphore_acquired,
+                            ),
+                            action="webhook_update",
                         )
-                    finally:
-                        if webhook_semaphore is not None and semaphore_acquired:
-                            webhook_semaphore.release()
-                    logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
+                    else:
+                        await _process_update_async(
+                            update,
+                            correlation_id=correlation_id,
+                            client_ip=client_ip,
+                            semaphore_acquired=semaphore_acquired,
+                        )
                     return web.Response(status=200, text="ok")
                 else:
                     logger.warning(f"[WEBHOOK] {correlation_id} update_parse_failed")
                     return web.Response(status=400, text="Invalid update")
-            except asyncio.TimeoutError:
-                retry_after = max(1, int(math.ceil(process_timeout_seconds)))
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    action="WEBHOOK_TIMEOUT",
-                    action_path="webhook:process_update",
-                    outcome="timeout",
-                    error_id="WEBHOOK_PROCESS_TIMEOUT",
-                    param={"client_ip": client_ip, "retry_after": retry_after},
-                )
-                return web.Response(
-                    status=503,
-                    text="Processing timeout",
-                    headers={"Retry-After": str(retry_after)},
-                )
             except Exception as exc:
                 logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
                 return web.Response(status=500, text="Processing error")

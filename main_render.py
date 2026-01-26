@@ -102,6 +102,56 @@ def build_webhook_handler(
     )
     request_deduper = TTLCache(request_dedup_ttl_seconds)
     webhook_semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit > 0 else None
+    process_in_background_raw = os.getenv("WEBHOOK_PROCESS_IN_BACKGROUND")
+    if process_in_background_raw is None:
+        process_in_background = os.getenv("TEST_MODE", "").strip() != "1"
+    else:
+        process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
+
+    def _schedule_task(coro: Awaitable[None], *, correlation_id: str) -> None:
+        task = asyncio.create_task(coro)
+
+        def _on_done(done_task: asyncio.Task) -> None:
+            try:
+                done_task.result()
+            except asyncio.CancelledError:
+                logger.info("WEBHOOK correlation_id=%s background_task_cancelled=true", correlation_id)
+            except Exception:
+                logger.exception("WEBHOOK correlation_id=%s background_task_failed=true", correlation_id)
+
+        task.add_done_callback(_on_done)
+
+    async def _process_update_async(
+        update: Update,
+        *,
+        correlation_id: str,
+        client_ip: str,
+        semaphore_acquired: bool,
+    ) -> None:
+        try:
+            await asyncio.wait_for(application.process_update(update), timeout=process_timeout_seconds)
+            logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
+        except asyncio.TimeoutError:
+            retry_after = max(1, int(math.ceil(process_timeout_seconds)))
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="WEBHOOK_TIMEOUT",
+                action_path="webhook:process_update",
+                outcome="timeout",
+                error_id="WEBHOOK_PROCESS_TIMEOUT",
+                param={"client_ip": client_ip, "retry_after": retry_after},
+            )
+        except Exception as exc:
+            logger.exception("WEBHOOK correlation_id=%s forward_failed=true error=%s", correlation_id, exc)
+            chat_id = getattr(update.effective_chat, "id", None)
+            if chat_id:
+                try:
+                    await application.bot.send_message(chat_id=chat_id, text="Ошибка обработки. Вернул в меню.")
+                except Exception:
+                    logger.warning("WEBHOOK correlation_id=%s fallback_send_failed=true", correlation_id)
+        finally:
+            if webhook_semaphore is not None and semaphore_acquired:
+                webhook_semaphore.release()
 
     async def _handler(request: web.Request) -> web.StreamResponse:
         global _early_update_count
@@ -209,37 +259,24 @@ def build_webhook_handler(
                     headers={"Retry-After": str(retry_after)},
                 )
 
-        try:
-            await asyncio.wait_for(application.process_update(update), timeout=process_timeout_seconds)
-            logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
-            return web.json_response({"ok": True}, status=200)
-        except asyncio.TimeoutError:
-            retry_after = max(1, int(math.ceil(process_timeout_seconds)))
-            log_structured_event(
+        if process_in_background:
+            _schedule_task(
+                _process_update_async(
+                    update,
+                    correlation_id=correlation_id,
+                    client_ip=client_ip,
+                    semaphore_acquired=semaphore_acquired,
+                ),
                 correlation_id=correlation_id,
-                action="WEBHOOK_TIMEOUT",
-                action_path="webhook:process_update",
-                outcome="timeout",
-                error_id="WEBHOOK_PROCESS_TIMEOUT",
-                param={"client_ip": client_ip, "retry_after": retry_after},
             )
-            return web.json_response(
-                {"ok": False, "retry_after": retry_after},
-                status=503,
-                headers={"Retry-After": str(retry_after)},
+        else:
+            await _process_update_async(
+                update,
+                correlation_id=correlation_id,
+                client_ip=client_ip,
+                semaphore_acquired=semaphore_acquired,
             )
-        except Exception as exc:
-            logger.exception("WEBHOOK correlation_id=%s forward_failed=true error=%s", correlation_id, exc)
-            chat_id = getattr(update.effective_chat, "id", None)
-            if chat_id:
-                try:
-                    await application.bot.send_message(chat_id=chat_id, text="Ошибка обработки. Вернул в меню.")
-                except Exception:
-                    logger.warning("WEBHOOK correlation_id=%s fallback_send_failed=true", correlation_id)
-            return web.json_response({"ok": True}, status=200)
-        finally:
-            if webhook_semaphore is not None and semaphore_acquired:
-                webhook_semaphore.release()
+        return web.json_response({"ok": True}, status=200)
 
     _handler_ready = True
     return _handler
