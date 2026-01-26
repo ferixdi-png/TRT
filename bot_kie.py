@@ -1749,10 +1749,13 @@ async def warm_generation_type_menu_cache(
                 elapsed_ms_real = int((time.monotonic() - attempt_start) * 1000)
                 total_elapsed_ms = int((time.monotonic() - start) * 1000)
                 logger.info(
-                    "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s attempt=%s correlation_id=%s",
+                    "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s elapsed_total_ms=%s timeout_s=%s "
+                    "attempt=%s attempts_total=%s correlation_id=%s",
                     elapsed_ms_real,
+                    total_elapsed_ms,
                     timeout,
                     attempt,
+                    attempts,
                     correlation_id,
                 )
                 if attempt < max(1, attempts):
@@ -1772,7 +1775,8 @@ async def warm_generation_type_menu_cache(
                         "started_at_ms": attempt_start_ms,
                         "now_ms": int(time.time() * 1000),
                         "timeout_s": timeout,
-                        "attempts": attempt,
+                        "attempt": attempt,
+                        "attempts_total": attempts,
                     },
                 )
                 return
@@ -7429,6 +7433,12 @@ START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
 TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
+TELEGRAM_API_CONNECT_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_CONNECT_TIMEOUT_SECONDS", "1.5"))
+TELEGRAM_API_READ_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_READ_TIMEOUT_SECONDS", "2.5"))
+TELEGRAM_API_WRITE_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_WRITE_TIMEOUT_SECONDS", "2.5"))
+TELEGRAM_API_POOL_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_POOL_TIMEOUT_SECONDS", "2.0"))
+MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS = float(os.getenv("MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS", "1.5"))
+MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS = int(os.getenv("MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS", "2"))
 SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL_SECONDS", "45.0"))
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
 MAIN_MENU_DEP_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_DEP_CACHE_TTL_SECONDS", "30.0"))
@@ -8119,6 +8129,24 @@ def _build_minimal_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
     )
 
 
+def _build_menu_fallback_keyboard(user_lang: str) -> InlineKeyboardMarkup:
+    label = "🏠 Main Menu" if user_lang == "en" else "🏠 Главное меню"
+    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="back_to_menu")]])
+
+
+def _telegram_request_timeouts() -> Dict[str, float]:
+    return {
+        "connect_timeout": TELEGRAM_API_CONNECT_TIMEOUT_SECONDS,
+        "read_timeout": TELEGRAM_API_READ_TIMEOUT_SECONDS,
+        "write_timeout": TELEGRAM_API_WRITE_TIMEOUT_SECONDS,
+        "pool_timeout": TELEGRAM_API_POOL_TIMEOUT_SECONDS,
+    }
+
+
+def _minimal_menu_fallback_text(user_lang: str) -> str:
+    return "Main menu" if user_lang == "en" else "Главное меню"
+
+
 async def _run_telegram_request(
     action: str,
     *,
@@ -8195,6 +8223,7 @@ async def _show_minimal_menu(
     used_edit = False
     fallback_send = False
     send_ok = False
+    telegram_timeouts = _telegram_request_timeouts()
 
     if update.callback_query and prefer_edit:
         edit_result = await _run_telegram_request(
@@ -8206,6 +8235,7 @@ async def _show_minimal_menu(
             request_fn=lambda: update.callback_query.edit_message_text(
                 MINIMAL_MENU_TEXT,
                 reply_markup=reply_markup,
+                **telegram_timeouts,
             ),
         )
         if edit_result is not None:
@@ -8236,6 +8266,7 @@ async def _show_minimal_menu(
                 chat_id=chat_id,
                 text=MINIMAL_MENU_TEXT,
                 reply_markup=reply_markup,
+                **telegram_timeouts,
             ),
         )
         if send_result is not None:
@@ -8253,20 +8284,30 @@ async def _show_minimal_menu(
             logger.error("MINIMAL_MENU_SEND_FAILED corr_id=%s", correlation_id)
 
     if not send_ok and chat_id:
-        _create_background_task(
-            _run_telegram_request(
-                "minimal_menu_fallback_text",
-                correlation_id=correlation_id,
-                timeout_s=TELEGRAM_SEND_TIMEOUT_SECONDS,
-                retry_attempts=1,
-                retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
-                request_fn=lambda: context.bot.send_message(
-                    chat_id=chat_id,
-                    text=MINIMAL_MENU_TEXT,
-                ),
+        logger.warning("MENU_RENDER_FAIL corr_id=%s source=%s fallback=attempt", correlation_id, source)
+        fallback_text = _minimal_menu_fallback_text(user_lang)
+        fallback_keyboard = _build_menu_fallback_keyboard(user_lang)
+        fallback_result = await _run_telegram_request(
+            "minimal_menu_fallback",
+            correlation_id=correlation_id,
+            timeout_s=MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS,
+            retry_attempts=MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS,
+            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+            request_fn=lambda: context.bot.send_message(
+                chat_id=chat_id,
+                text=fallback_text,
+                reply_markup=fallback_keyboard,
+                **telegram_timeouts,
             ),
-            action="minimal_menu_fallback_text",
         )
+        fallback_send = True
+        if fallback_result is not None:
+            send_ok = True
+            message_id = getattr(fallback_result, "message_id", None)
+            logger.info("MENU_RENDER_FAIL corr_id=%s fallback_ok=true", correlation_id)
+            increment_update_metric("send_message")
+        else:
+            logger.warning("MENU_RENDER_FAIL corr_id=%s fallback_ok=false", correlation_id)
 
     log_structured_event(
         correlation_id=correlation_id,
@@ -8373,6 +8414,20 @@ async def _start_menu_with_fallback(
             prefer_edit=False,
         )
 
+    full_menu_task = asyncio.create_task(
+        show_main_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=False,
+        )
+    )
+    try:
+        return await asyncio.wait_for(asyncio.shield(full_menu_task), timeout=START_FALLBACK_MAX_MS / 1000)
+    except asyncio.TimeoutError:
+        _register_background_task(full_menu_task, action="start_full_menu")
+
     minimal_result = await _show_minimal_menu(
         update,
         context,
@@ -8390,16 +8445,6 @@ async def _start_menu_with_fallback(
         stage="UI_ROUTER",
         outcome="degraded",
         param={"fallback_ms": START_FALLBACK_MAX_MS},
-    )
-    _create_background_task(
-        show_main_menu(
-            update,
-            context,
-            source=source,
-            correlation_id=correlation_id,
-            prefer_edit=False,
-        ),
-        action="start_full_menu",
     )
     return minimal_result
 
@@ -25550,6 +25595,12 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
     backoff_base = _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1, max_value=10.0)
     backoff_cap = _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 5.0, min_value=0.5, max_value=30.0)
     retry_interval = _read_float_env("WEBHOOK_SET_RETRY_INTERVAL_SECONDS", 10.0, min_value=1.0, max_value=120.0)
+    retry_jitter_ratio = _read_float_env(
+        "WEBHOOK_SET_RETRY_JITTER_RATIO",
+        0.2,
+        min_value=0.0,
+        max_value=1.0,
+    )
     attempt_cycle = 0
 
     while True:
@@ -25582,7 +25633,9 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
             attempt_cycle,
             retry_interval,
         )
-        await asyncio.sleep(retry_interval)
+        jitter = retry_interval * retry_jitter_ratio
+        sleep_for = retry_interval + random.uniform(0, jitter) if jitter > 0 else retry_interval
+        await asyncio.sleep(sleep_for)
 
 
 def _schedule_webhook_setter(webhook_url: str) -> None:

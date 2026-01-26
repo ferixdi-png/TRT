@@ -1127,12 +1127,20 @@ class PostgresStorage(BaseStorage):
                     )
                     raise
                 lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
-                logger.info(
-                    "PG_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
-                    filename,
-                    lock_duration_ms,
-                    correlation_id,
-                )
+                if filename == "observability_correlations.json":
+                    logger.info(
+                        "PG_TRY_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
+                        filename,
+                        lock_duration_ms,
+                        correlation_id,
+                    )
+                else:
+                    logger.info(
+                        "PG_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
+                        filename,
+                        lock_duration_ms,
+                        correlation_id,
+                    )
                 log_structured_event(
                     correlation_id=correlation_id,
                     action="STORAGE_LOCK",
@@ -1144,7 +1152,9 @@ class PostgresStorage(BaseStorage):
                     lock_attempts=1,
                     lock_acquired=True,
                     param={
-                        "lock_mode": "pg_advisory_xact_lock",
+                        "lock_mode": "pg_try_advisory_xact_lock"
+                        if filename == "observability_correlations.json"
+                        else "pg_advisory_xact_lock",
                         "filename": filename,
                         "lock_key_pair": [lock_key.key_a, lock_key.key_b],
                     },
