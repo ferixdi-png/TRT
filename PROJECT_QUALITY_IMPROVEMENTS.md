@@ -45,7 +45,7 @@
 **Файлы:**
 - `kie_validator.py` - добавлено подробное описание модуля
 - `kie_universal_handler.py` - добавлено описание алгоритма работы
-- `render_singleton_lock.py` - добавлено объяснение механизма advisory lock
+- `app/utils/singleton_lock.py` - добавлено объяснение механизма advisory lock
 
 **Результат:**
 - Код стал более понятным для других разработчиков

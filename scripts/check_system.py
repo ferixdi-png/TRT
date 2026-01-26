@@ -15,7 +15,7 @@ import asyncio
 from pathlib import Path
 
 # Добавляем корневую директорию в путь
-root_dir = Path(__file__).parent
+root_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(root_dir))
 
 def test_imports():
@@ -29,7 +29,7 @@ def test_imports():
         'kie_validator',
         'kie_universal_handler',
         'database',
-        'render_singleton_lock'
+        'app.utils.singleton_lock'
     ]
     
     failed = []
@@ -205,24 +205,29 @@ def test_universal_handler():
 def test_advisory_lock():
     """Тест advisory lock механизма"""
     print("\n" + "=" * 80)
-    print("TEST 6: Advisory Lock (render_singleton_lock.py)")
+    print("TEST 6: Advisory Lock (app/utils/singleton_lock.py)")
     print("=" * 80)
     
     try:
-        from render_singleton_lock import make_lock_key
+        from app.utils.pg_advisory_lock import build_advisory_lock_key_pair
         
         # Тест генерации lock key
         test_token = "test_token_12345"
-        lock_key = make_lock_key(test_token)
+        lock_key = build_advisory_lock_key_pair(source="check_system", payload=test_token)
         
-        if isinstance(lock_key, int) and -9223372036854775808 <= lock_key <= 9223372036854775807:
-            print(f"[OK] Lock key сгенерирован: {lock_key}")
+        if (
+            isinstance(lock_key.key1, int)
+            and isinstance(lock_key.key2, int)
+            and -9223372036854775808 <= lock_key.key1 <= 9223372036854775807
+            and -9223372036854775808 <= lock_key.key2 <= 9223372036854775807
+        ):
+            print(f"[OK] Lock key сгенерирован: ({lock_key.key1}, {lock_key.key2})")
         else:
             print(f"[FAIL] Неверный формат lock key: {lock_key}")
             return False
         
         # Тест детерминированности
-        lock_key2 = make_lock_key(test_token)
+        lock_key2 = build_advisory_lock_key_pair(source="check_system", payload=test_token)
         if lock_key == lock_key2:
             print("[OK] Lock key детерминирован (одинаковый для одного токена)")
         else:
@@ -287,4 +292,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

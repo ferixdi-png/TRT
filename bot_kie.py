@@ -20412,35 +20412,49 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             action_type = "send_message"
             if query:
-                try:
-                    result_message = await query.edit_message_text(
-                        text,
+                query_has_bot = getattr(query, "_bot", None) is not None
+                if not query_has_bot and query.message and context.bot:
+                    result_message = await context.bot.edit_message_text(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id,
+                        text=text,
                         parse_mode=parse_mode,
                         reply_markup=reply_markup,
                     )
                     action_type = "edit_message_text"
-                except Exception as edit_error:
-                    logger.warning(f"Could not edit message: {edit_error}, sending new")
+                else:
                     try:
-                        result_message = await query.message.reply_text(
+                        result_message = await query.edit_message_text(
                             text,
                             parse_mode=parse_mode,
                             reply_markup=reply_markup,
                         )
-                        action_type = "reply_text"
+                        action_type = "edit_message_text"
+                    except Exception as edit_error:
+                        logger.warning(f"Could not edit message: {edit_error}, sending new")
                         try:
-                            await query.message.delete()
-                        except:
-                            pass
-                    except Exception as send_error:
-                        logger.error(f"Could not send new message: {send_error}")
-                        result_message = await context.bot.send_message(
-                            chat_id=user_id,
-                            text=text,
-                            parse_mode=parse_mode,
-                            reply_markup=reply_markup,
-                        )
-                        action_type = "send_message"
+                            if query.message and context.bot:
+                                result_message = await context.bot.edit_message_text(
+                                    chat_id=query.message.chat_id,
+                                    message_id=query.message.message_id,
+                                    text=text,
+                                    parse_mode=parse_mode,
+                                    reply_markup=reply_markup,
+                                )
+                                action_type = "edit_message_text"
+                            else:
+                                raise RuntimeError("callback_message_missing")
+                        except Exception:
+                            try:
+                                result_message = await context.bot.send_message(
+                                    chat_id=user_id,
+                                    text=text,
+                                    parse_mode=parse_mode,
+                                    reply_markup=reply_markup,
+                                )
+                                action_type = "send_message"
+                            except Exception as send_error:
+                                logger.error(f"Could not send new message: {send_error}")
             else:
                 result_message = await context.bot.send_message(
                     chat_id=user_id,
@@ -20455,7 +20469,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 result_message = await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
                 track_outgoing_action(update.update_id, action_type="send_message")
-            except:
+            except Exception:
                 pass
         return result_message
 
@@ -21962,6 +21976,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         task_id = job_result.task_id
         session["task_id"] = task_id
+        if not is_free and not is_admin_user and price > 0:
+            charge_result = await _charge_balance_once(
+                user_id=user_id,
+                task_id=task_id,
+                sku_id=sku_id,
+                model_id=model_id,
+                price=price,
+                correlation_id=correlation_id,
+                chat_id=chat_id_value,
+            )
+            if charge_result.get("status") in {"charged", "duplicate"}:
+                session["balance_charged"] = True
+                _ensure_session_task_registry(session, "charged_task_ids").add(task_id)
         if job_id:
             from app.generations.request_dedupe_store import set_job_task_mapping
 
@@ -21998,8 +22025,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             status_value="queued",
             message_id_value=status_message_id,
         )
+        queued_text = build_queued_message(model_name, correlation_id, lang=user_lang)
+        if is_free:
+            try:
+                free_counter_line = await get_free_counter_line(
+                    user_id,
+                    user_lang=user_lang,
+                    correlation_id=correlation_id,
+                    action_path="confirm_generate_post_consume",
+                    sku_id=sku_id,
+                )
+            except Exception as exc:
+                logger.warning("Failed to refresh free counter line after consume: %s", exc)
+            queued_text = _append_free_counter_text(queued_text, free_counter_line)
         accept_message = await send_or_edit_message(
-            build_queued_message(model_name, correlation_id, lang=user_lang),
+            queued_text,
             parse_mode="HTML",
             reply_markup=status_keyboard,
         )
@@ -24358,10 +24398,11 @@ async def create_bot_application(settings) -> Application:
     
     # Для обратной совместимости: сохраняем в глобальные переменные
     # NOTE: удалить после полного рефакторинга handlers
-    global storage, kie
+    global storage, kie, user_sessions
     deps = application.bot_data["deps"]
     storage = deps.get_storage()
     kie = deps.get_kie_client()
+    user_sessions = get_session_store(application=application)
 
     # DB-only storage preflight with counts (users/balances/payments/free_limits)
     if storage is not None:

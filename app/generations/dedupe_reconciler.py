@@ -127,7 +127,7 @@ async def reconcile_dedupe_orphans(
                 entry.model_id,
                 entry.prompt_hash,
                 task_id=recovered_task_id,
-                status="waiting",
+                status="running",
                 last_recovery_ts=now_ts,
                 recovery_attempts=recovery_attempts,
             )

@@ -58,7 +58,7 @@
 Если видите в логах:
 
 1. **"Failed to import lock modules"**
-   - Проблема с импортом `render_singleton_lock` или `database`
+   - Проблема с импортом `app.utils.singleton_lock` или `database`
    - Проверьте, что все зависимости установлены
    - Fallback на file lock должен сработать
 
