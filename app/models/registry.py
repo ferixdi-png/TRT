@@ -44,6 +44,7 @@ except ImportError as e:
 _model_cache: Optional[List[Dict[str, Any]]] = None
 _model_source: Optional[str] = None
 _model_timestamp: Optional[datetime] = None
+_model_cache_is_minimal: bool = False
 
 # Cache for KIE_MODELS import (expensive operation - 51 seconds!)
 _kie_models_import_cache: Optional[List[Dict[str, Any]]] = None
@@ -59,6 +60,48 @@ def get_models_cached_only() -> Optional[List[Dict[str, Any]]]:
     return _model_cache
 
 
+def get_models_sync_fast() -> List[Dict[str, Any]]:
+    """Fast path: load minimal models from YAML without expensive imports."""
+    global _model_cache, _model_source, _model_timestamp, _model_cache_is_minimal, _kie_models_import_cache
+    if _model_cache is not None:
+        return _model_cache
+    if YAML_REGISTRY_AVAILABLE:
+        try:
+            yaml_models_dict = load_yaml_models()
+            if yaml_models_dict:
+                normalized = []
+                for model_id, yaml_data in yaml_models_dict.items():
+                    try:
+                        norm_model = normalize_yaml_model(model_id, yaml_data, enrich_from=None)
+                        normalized.append(norm_model)
+                    except Exception:
+                        continue
+                _model_cache = normalized
+                _model_source = "yaml_fast"
+                _model_cache_is_minimal = True
+                _model_timestamp = datetime.now()
+                return normalized
+        except Exception:
+            pass
+    if _kie_models_import_cache is not None:
+        normalized = []
+        seen_ids = set()
+        for model in _kie_models_import_cache:
+            try:
+                norm_model = _normalize_model(model)
+                if norm_model["id"] not in seen_ids:
+                    seen_ids.add(norm_model["id"])
+                    normalized.append(norm_model)
+            except Exception:
+                continue
+        _model_cache = normalized
+        _model_source = "kie_models_cached_fast"
+        _model_cache_is_minimal = False
+        _model_timestamp = datetime.now()
+        return normalized
+    return []
+
+
 async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """
     Load models from API or static fallback.
@@ -66,7 +109,7 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
     Returns:
         List of normalized model dictionaries
     """
-    global _model_cache, _model_source, _model_timestamp
+    global _model_cache, _model_source, _model_timestamp, _model_cache_is_minimal
     
     # Return cached if available and not forcing refresh
     if _model_cache is not None and not force_refresh:
@@ -88,6 +131,7 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
                 # Normalize API models with enrichment from YAML
                 normalized = _normalize_api_models_with_yaml(api_models)
                 _model_cache = normalized
+                _model_cache_is_minimal = False
                 _model_source = "kie_api_enriched_with_yaml"
                 _model_timestamp = datetime.now()
                 logger.info(f"✅ Loaded {len(normalized)} models from KIE API (enriched with YAML)")
@@ -131,6 +175,7 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
                         continue
                 
                 _model_cache = normalized_yaml
+                _model_cache_is_minimal = False
                 _model_source = "yaml"
                 _model_timestamp = datetime.now()
                 yaml_meta = get_yaml_meta()
@@ -160,6 +205,7 @@ async def load_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
                 continue
         
         _model_cache = normalized_static
+        _model_cache_is_minimal = False
         _model_source = "kie_models_py_fallback"
         _model_timestamp = datetime.now()
         logger.warning(f"⚠️ Using legacy kie_models.py fallback: {len(normalized_static)} normalized models")
@@ -424,7 +470,9 @@ def get_model_registry() -> Dict[str, Any]:
 # Synchronous wrapper for compatibility
 def get_models_sync() -> List[Dict[str, Any]]:
     """Synchronous wrapper - loads models blocking."""
-    global _model_cache, _model_source, _model_timestamp, _kie_models_import_cache
+    global _model_cache, _model_source, _model_timestamp, _kie_models_import_cache, _model_cache_is_minimal
+    if _model_cache is not None:
+        return _model_cache
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -457,6 +505,7 @@ def get_models_sync() -> List[Dict[str, Any]]:
                             except:
                                 continue
                         _model_cache = normalized
+                        _model_cache_is_minimal = False
                         _model_source = "yaml"
                         _model_timestamp = datetime.now()
                         return normalized
@@ -479,6 +528,7 @@ def get_models_sync() -> List[Dict[str, Any]]:
                 except:
                     continue
             _model_cache = normalized
+            _model_cache_is_minimal = False
             _model_source = "kie_models_py_fallback"
             _model_timestamp = datetime.now()
             return normalized
@@ -514,6 +564,7 @@ def get_models_sync() -> List[Dict[str, Any]]:
                         except:
                             continue
                     _model_cache = normalized
+                    _model_cache_is_minimal = False
                     _model_source = "yaml"
                     _model_timestamp = datetime.now()
                     return normalized
@@ -536,6 +587,7 @@ def get_models_sync() -> List[Dict[str, Any]]:
             except:
                 continue
         _model_cache = normalized
+        _model_cache_is_minimal = False
         _model_source = "kie_models_py_fallback"
         _model_timestamp = datetime.now()
         return normalized

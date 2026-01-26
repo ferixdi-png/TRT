@@ -71,6 +71,8 @@ def log_structured_event(**fields: Any) -> None:
     request_id = fields.get("request_id")
     correlation_id = fields.get("correlation_id") or get_trace_correlation_id()
     skip_correlation_store = bool(fields.get("skip_correlation_store"))
+    if fields.get("stage") == "BOOT":
+        skip_correlation_store = True
     resolved_ids = resolve_correlation_ids(
         correlation_id=correlation_id,
         request_id=request_id,

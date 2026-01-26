@@ -45,6 +45,27 @@ class ModelMode:
     title_ru: Optional[str] = None
     short_hint_ru: Optional[str] = None
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "unit": self.unit,
+            "credits": self.credits,
+            "official_usd": self.official_usd,
+            "notes": self.notes,
+            "title_ru": self.title_ru,
+            "short_hint_ru": self.short_hint_ru,
+        }
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.to_dict().get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.to_dict()[key]
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
+        return key in self.to_dict()
+
 
 @dataclass
 class ModelSpec:
@@ -73,6 +94,44 @@ class ModelSpec:
             self.category = self.type
         if not self.kie_model:
             self.kie_model = self.id
+
+    @property
+    def gen_type(self) -> str:
+        """Compatibility alias for generation type (text-to-image)."""
+        base = self.model_mode or self.model_type or self.type
+        return base.replace("_", "-") if base else "unknown"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "title_ru": self.title_ru,
+            "type": self.type,
+            "category": self.category,
+            "model_type": self.model_type,
+            "model_mode": self.model_mode,
+            "gen_type": self.gen_type,
+            "schema_required": self.schema_required,
+            "schema_properties": self.schema_properties,
+            "output_media_type": self.output_media_type,
+            "free": self.free,
+            "kie_model": self.kie_model,
+            "modes": [mode.to_dict() for mode in self.modes],
+            "description_ru": self.description_ru,
+            "required_inputs_ru": self.required_inputs_ru,
+            "output_type_ru": self.output_type_ru,
+        }
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.to_dict().get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.to_dict()[key]
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
+        return key in self.to_dict()
 
 
 ALLOWED_OUTPUT_MEDIA_TYPES = {"image", "video", "audio", "text", "document"}

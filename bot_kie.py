@@ -1357,9 +1357,11 @@ def _get_visible_model_ids() -> Set[str]:
     if _VISIBLE_MODEL_IDS_CACHE is None:
         from app.ux.model_visibility import is_model_visible
 
+        cached_models = get_models_cached_only()
+        models = cached_models if cached_models is not None else get_models_sync()
         _VISIBLE_MODEL_IDS_CACHE = {
             model_id
-            for model in get_models_sync()
+            for model in models
             if (model_id := model.get("id")) and is_model_visible(model_id)
         }
     return _VISIBLE_MODEL_IDS_CACHE
@@ -1445,6 +1447,12 @@ GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIM
 GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS", "300.0"))
 GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS = int(os.getenv("GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS", "2"))
 GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS", "0.3"))
+GEN_TYPE_MENU_WARMUP_CACHE_PATH = os.getenv(
+    "GEN_TYPE_MENU_WARMUP_CACHE_PATH",
+    "data/cache/gen_type_menu_warmup.json",
+)
+GEN_TYPE_MENU_WARMUP_SLOW_MS = int(os.getenv("GEN_TYPE_MENU_WARMUP_SLOW_MS", "250"))
+GEN_TYPE_MENU_WARMUP_CONCURRENCY = int(os.getenv("GEN_TYPE_MENU_WARMUP_CONCURRENCY", "6"))
 PRICING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("PRICING_PREFLIGHT_TIMEOUT_SECONDS", "2.5"))
 BILLING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("BILLING_PREFLIGHT_TIMEOUT_SECONDS", "6.0"))
 MODEL_CACHE_WARMUP_TIMEOUT_SECONDS = float(os.getenv("MODEL_CACHE_WARMUP_TIMEOUT_SECONDS", "1.5"))
@@ -1456,6 +1464,35 @@ _GEN_TYPE_MENU_WARMUP_STATE: Dict[str, Any] = {
     "last_counts": None,
     "last_outcome": None,
 }
+
+
+async def _load_gen_type_menu_warmup_cache() -> Optional[Dict[str, Any]]:
+    cache_path = Path(GEN_TYPE_MENU_WARMUP_CACHE_PATH)
+
+    def _load() -> Optional[Dict[str, Any]]:
+        if not cache_path.exists():
+            return None
+        try:
+            with cache_path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            if not isinstance(payload, dict):
+                return None
+            return payload
+        except Exception:
+            return None
+
+    return await asyncio.to_thread(_load)
+
+
+async def _persist_gen_type_menu_warmup_cache(payload: Dict[str, Any]) -> None:
+    cache_path = Path(GEN_TYPE_MENU_WARMUP_CACHE_PATH)
+
+    def _write() -> None:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with cache_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+
+    await asyncio.to_thread(_write)
 
 
 def _get_generation_types_cached() -> Optional[List[str]]:
@@ -1499,6 +1536,23 @@ async def warm_generation_type_menu_cache(
             param={"reason": "cache_fresh", "cache_ttl_s": cache_ttl},
         )
         return
+    if warmup_fn is None and not force:
+        disk_cache = await _load_gen_type_menu_warmup_cache()
+        if disk_cache and isinstance(disk_cache.get("counts"), dict):
+            cached_at = disk_cache.get("cached_at_ts")
+            if isinstance(cached_at, (int, float)) and (now - cached_at) < cache_ttl:
+                _GEN_TYPE_MENU_WARMUP_STATE["last_success_ts"] = cached_at
+                _GEN_TYPE_MENU_WARMUP_STATE["last_counts"] = disk_cache.get("counts")
+                _GEN_TYPE_MENU_WARMUP_STATE["last_outcome"] = "cache"
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="GEN_TYPE_MENU_WARMUP",
+                    action_path="boot:warmup",
+                    stage="BOOT",
+                    outcome="skip",
+                    param={"reason": "cache_disk_fresh", "cache_ttl_s": cache_ttl},
+                )
+                return
     in_flight = _GEN_TYPE_MENU_WARMUP_STATE.get("task")
     if warmup_fn is None and not force and in_flight and not in_flight.done():
         log_structured_event(
@@ -1530,10 +1584,48 @@ async def warm_generation_type_menu_cache(
             return {"skipped": "models_cache_empty"}
 
         counts: Dict[str, Any] = {}
-        for gen_type in cached_types:
-            models, cache_status = get_visible_models_by_generation_type_cached(gen_type)
-            counts[gen_type] = {"count": len(models), "cache": cache_status}
-        return counts
+        per_gen_type_ms: Dict[str, int] = {}
+        slow_gen_types: List[str] = []
+        cache_hits = 0
+        cache_misses = 0
+
+        semaphore = asyncio.Semaphore(max(1, GEN_TYPE_MENU_WARMUP_CONCURRENCY))
+
+        async def _warm_gen_type(gen_type: str) -> None:
+            nonlocal cache_hits, cache_misses
+            async with semaphore:
+                start_gen = time.monotonic()
+                models, cache_status = await asyncio.to_thread(get_visible_models_by_generation_type_cached, gen_type)
+                elapsed_ms = int((time.monotonic() - start_gen) * 1000)
+                per_gen_type_ms[gen_type] = elapsed_ms
+                if elapsed_ms >= GEN_TYPE_MENU_WARMUP_SLOW_MS:
+                    slow_gen_types.append(gen_type)
+                counts[gen_type] = {"count": len(models), "cache": cache_status}
+                if cache_status == "hit":
+                    cache_hits += 1
+                else:
+                    cache_misses += 1
+
+        tasks = [asyncio.create_task(_warm_gen_type(gen_type)) for gen_type in cached_types]
+        timeout_triggered = False
+        done, pending = await asyncio.wait(tasks, timeout=timeout)
+        if pending:
+            timeout_triggered = True
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for gen_type, task in zip(cached_types, tasks):
+                if task in pending and gen_type not in counts:
+                    counts[gen_type] = {"count": None, "cache": "timeout"}
+                    per_gen_type_ms[gen_type] = int(timeout * 1000)
+        return {
+            "counts": counts,
+            "per_gen_type_ms": per_gen_type_ms,
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+            "slow_gen_types": slow_gen_types,
+            "partial": timeout_triggered,
+        }
 
     try:
         last_exc: Optional[BaseException] = None
@@ -1541,6 +1633,17 @@ async def warm_generation_type_menu_cache(
             try:
                 warmup_task = asyncio.create_task(_warmup())
                 counts = await asyncio.wait_for(warmup_task, timeout=timeout)
+                if not isinstance(counts, dict):
+                    counts = {}
+                if "counts" not in counts and "skipped" not in counts:
+                    counts = {
+                        "counts": counts,
+                        "per_gen_type_ms": {},
+                        "cache_hits": 0,
+                        "cache_misses": 0,
+                        "slow_gen_types": [],
+                        "partial": False,
+                    }
                 elapsed_ms_real = int((time.monotonic() - start) * 1000)
                 if counts.get("skipped"):
                     log_structured_event(
@@ -1558,19 +1661,37 @@ async def warm_generation_type_menu_cache(
                         correlation_id,
                     )
                     return
-                GEN_TYPE_MENU_WARMUP_DEGRADED = False
+                GEN_TYPE_MENU_WARMUP_DEGRADED = bool(counts.get("partial"))
                 _GEN_TYPE_MENU_WARMUP_STATE["last_success_ts"] = time.monotonic()
-                _GEN_TYPE_MENU_WARMUP_STATE["last_counts"] = counts
-                _GEN_TYPE_MENU_WARMUP_STATE["last_outcome"] = "done"
+                _GEN_TYPE_MENU_WARMUP_STATE["last_counts"] = counts.get("counts")
+                _GEN_TYPE_MENU_WARMUP_STATE["last_outcome"] = "partial" if counts.get("partial") else "done"
+                try:
+                    await _persist_gen_type_menu_warmup_cache(
+                        {
+                            "cached_at_ts": _GEN_TYPE_MENU_WARMUP_STATE["last_success_ts"],
+                            "counts": counts.get("counts"),
+                        }
+                    )
+                except Exception as exc:
+                    logger.debug("GEN_TYPE_MENU_WARMUP_CACHE_WRITE_FAILED error=%s", exc, exc_info=True)
                 log_structured_event(
                     correlation_id=correlation_id,
                     action="GEN_TYPE_MENU_WARMUP",
                     action_path="boot:warmup",
                     stage="BOOT",
-                    outcome="done",
-                    param={"elapsed_ms": elapsed_ms_real, "elapsed_ms_real": elapsed_ms_real, "counts": counts},
+                    outcome="partial" if counts.get("partial") else "done",
+                    param={
+                        "elapsed_ms": elapsed_ms_real,
+                        "elapsed_ms_real": elapsed_ms_real,
+                        "warmup_total_ms": elapsed_ms_real,
+                        "counts": counts.get("counts"),
+                        "per_gen_type_ms": counts.get("per_gen_type_ms"),
+                        "cache_hits": counts.get("cache_hits"),
+                        "cache_misses": counts.get("cache_misses"),
+                        "slow_gen_types": counts.get("slow_gen_types"),
+                    },
                 )
-                logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms_real, counts)
+                logger.info("✅ GEN_TYPE_MENU cache ready in %sms: %s", elapsed_ms_real, counts.get("counts"))
                 return
             except asyncio.TimeoutError as exc:
                 last_exc = exc
@@ -1634,18 +1755,45 @@ async def _warm_models_cache(
 ) -> None:
     timeout = MODEL_CACHE_WARMUP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
     start = time.monotonic()
-    from app.models.registry import get_models_sync, _model_source
+    from app.models.registry import get_models_sync_fast, _model_source
 
     try:
-        warmup_models = await asyncio.wait_for(asyncio.to_thread(get_models_sync), timeout=timeout)
+        warmup_models = await asyncio.wait_for(asyncio.to_thread(get_models_sync_fast), timeout=timeout)
         elapsed_ms = int((time.monotonic() - start) * 1000)
-        logger.info(
-            "✅ Models cache warmed up: %s models loaded in %sms (source=%s) correlation_id=%s",
-            len(warmup_models),
-            elapsed_ms,
-            _model_source,
-            correlation_id,
-        )
+        if warmup_models:
+            logger.info(
+                "✅ Models cache warmed up: %s models loaded in %sms (source=%s) correlation_id=%s",
+                len(warmup_models),
+                elapsed_ms,
+                _model_source,
+                correlation_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="MODELS_CACHE_WARMUP",
+                action_path="boot:warmup",
+                stage="BOOT",
+                outcome="done",
+                param={
+                    "warmup_total_ms": elapsed_ms,
+                    "model_count": len(warmup_models),
+                    "source": _model_source,
+                },
+            )
+        else:
+            logger.info(
+                "MODELS_CACHE_WARMUP_SKIP elapsed_ms=%s reason=empty_cache correlation_id=%s",
+                elapsed_ms,
+                correlation_id,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="MODELS_CACHE_WARMUP",
+                action_path="boot:warmup",
+                stage="BOOT",
+                outcome="skip",
+                param={"warmup_total_ms": elapsed_ms, "reason": "empty_cache"},
+            )
     except asyncio.TimeoutError:
         elapsed_ms = int((time.monotonic() - start) * 1000)
         logger.info(
@@ -1654,8 +1802,24 @@ async def _warm_models_cache(
             timeout,
             correlation_id,
         )
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="MODELS_CACHE_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="timeout",
+            error_code="MODELS_CACHE_WARMUP_TIMEOUT",
+            param={"warmup_total_ms": elapsed_ms, "timeout_s": timeout},
+        )
     except Exception:
         logger.info("MODELS_CACHE_WARMUP_FAILED correlation_id=%s", correlation_id, exc_info=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="MODELS_CACHE_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="failed",
+        )
 
 
 async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
@@ -3038,7 +3202,10 @@ def format_rub_amount(value: float) -> str:
     """Format RUB amount with 2 decimals (ROUND_HALF_UP)."""
     from app.pricing.price_resolver import format_price_rub
 
-    return f"{format_price_rub(value)} ₽"
+    formatted = format_price_rub(value)
+    if "." in formatted:
+        formatted = formatted.rstrip("0").rstrip(".")
+    return f"{formatted} ₽"
 
 _admin_price_notice_logged = False
 
@@ -5359,12 +5526,15 @@ async def _commit_post_delivery_charge(
                 param={"task_id": task_id, "sku_id": sku_id, "delivered": True},
             )
             return outcome
+        import inspect
+
+        consume_kwargs = {"correlation_id": correlation_id, "source": "delivery"}
+        if "task_id" in inspect.signature(consume_free_generation).parameters:
+            consume_kwargs["task_id"] = task_id
         consume_result = await consume_free_generation(
             user_id,
             sku_id,
-            correlation_id=correlation_id,
-            task_id=task_id,
-            source="delivery",
+            **consume_kwargs,
         )
         registry.add(task_key)
         if consume_result.get("status") == "ok":
@@ -5773,11 +5943,10 @@ def save_generation_to_history(
     """Save generation to user history (GitHub JSON storage)."""
     import time
     try:
-        from app.config import get_settings
         from app.storage.factory import get_storage
 
-        if get_settings().get_storage_mode() == "db":
-            storage_instance = get_storage()
+        storage_instance = get_storage()
+        if storage_instance and hasattr(storage_instance, "add_generation_to_history"):
             gen_id = _run_storage_coro_sync(
                 storage_instance.add_generation_to_history(
                     user_id=user_id,
@@ -5799,7 +5968,10 @@ def save_generation_to_history(
                 task_id=task_id,
                 stage="PERSIST",
                 outcome="success",
-                param={"storage": "db", "generation_id": gen_id},
+                param={
+                    "storage": getattr(storage_instance, "storage_mode", "unknown"),
+                    "generation_id": gen_id,
+                },
             )
             return gen_id
 
@@ -7499,6 +7671,7 @@ async def _build_main_menu_sections(
 
     if resolved_lang == "ru":
         header_text = (
+            "Привет! 👋\n\n"
             "🔥 FERIXDI AI — Ultra Creative Suite\n"
             "Премиальная AI-студия в Telegram для маркетинга / SMM / арбитража.\n"
             "Здесь делают креатив не 'поиграться', а быстро собрать материал под трафик: варианты, стили, усиление качества — и сразу в работу.\n\n"
@@ -11007,7 +11180,7 @@ async def _button_callback_impl(
                     free_counter_line = f"{free_counter_line}\n🔄 Лимит обновляется раз в день."
             if user_lang == 'ru':
                 free_tools_text = (
-                    f"🆓 <b>FAST TOOLS</b>\n\n"
+                    f"🆓 <b>БЕСПЛАТНЫЕ ИНСТРУМЕНТЫ</b>\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"💡 <b>Все инструменты в этом разделе полностью бесплатны!</b>\n\n"
                     f"🤖 <b>Доступные инструменты:</b>\n\n"
@@ -15375,6 +15548,11 @@ async def _button_callback_impl(
 
             mode_index = user_sessions.get(user_id, {}).get("mode_index")
             if model_spec.modes and len(model_spec.modes) > 1 and mode_index is None:
+                user_balance = await get_user_balance_async(user_id)
+                sku_id = session.get("sku_id", "")
+                is_free_available = await is_free_generation_available(user_id, sku_id)
+                is_admin_check = get_is_admin(user_id) if user_id is not None else False
+                min_price: Optional[float] = None
                 session["model_id"] = model_id
                 session["model_info"] = model_info
                 session["active_model_id"] = model_id
@@ -15408,11 +15586,27 @@ async def _button_callback_impl(
                             },
                         )
                         continue
+                    try:
+                        mode_price = float(mode_quote.price_rub)
+                        min_price = mode_price if min_price is None else min(min_price, mode_price)
+                    except Exception:
+                        pass
                     available_mode_entries.append((idx, mode))
 
                 if not available_mode_entries:
                     blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
                     await query.edit_message_text(blocked_text, parse_mode="HTML")
+                    return ConversationHandler.END
+                if (
+                    not is_admin_check
+                    and not is_free_available
+                    and min_price is not None
+                    and user_balance < min_price
+                ):
+                    await query.edit_message_text(
+                        _build_insufficient_funds_text(user_lang, min_price, user_balance),
+                        reply_markup=_build_insufficient_funds_keyboard(user_lang),
+                    )
                     return ConversationHandler.END
                 await query.edit_message_text(
                     _build_mode_selection_text(model_name, user_lang),
@@ -22108,7 +22302,12 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             stage="GEN_START",
             outcome="queued",
         )
-        return ConversationHandler.END
+        from app.generations.state_machine import normalize_provider_state, CANONICAL_SUCCESS_STATES
+
+        state_resolution = normalize_provider_state(job_result.state)
+        immediate_result = state_resolution.canonical_state in CANONICAL_SUCCESS_STATES
+        if not immediate_result:
+            return ConversationHandler.END
 
         delivered = False
         if job_result.urls or job_result.text:
@@ -22353,12 +22552,15 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return ConversationHandler.END
 
-        if job_result.urls:
+        if job_result.urls or job_result.text:
+            history_params = params.copy()
+            if job_result.text and not job_result.urls:
+                history_params["result_text"] = job_result.text
             save_generation_to_history(
                 user_id=user_id,
                 model_id=model_id,
                 model_name=model_info.get("name", model_id) if model_info else model_id,
-                params=params.copy(),
+                params=history_params,
                 result_urls=job_result.urls.copy(),
                 task_id=task_id,
                 price=price,
