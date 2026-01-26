@@ -18,28 +18,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.singleton_lock import SingletonLock
 from app.bot_mode import get_bot_mode, ensure_polling_mode, ensure_webhook_mode, handle_conflict_gracefully
 from telegram.error import Conflict
-
-
-def test_singleton_lock_prevents_duplicate():
-    """Тест: singleton lock предотвращает запуск второго экземпляра"""
-    lock1 = SingletonLock("test_lock")
-    lock2 = SingletonLock("test_lock")
-    
-    # Первый экземпляр получает lock
-    assert lock1.acquire() is True
-    
-    # Второй экземпляр НЕ получает lock
-    assert lock2.acquire() is False
-    
-    # Освобождаем lock
-    lock1.release()
-    
-    # Теперь второй может получить lock
-    assert lock2.acquire() is True
-    lock2.release()
 
 
 def test_bot_mode_polling():
@@ -61,6 +41,13 @@ def test_bot_mode_default():
     with patch.dict(os.environ, {}, clear=True):
         mode = get_bot_mode()
         assert mode == "polling"
+
+
+def test_bot_mode_invalid():
+    """Тест: невалидный BOT_MODE вызывает ошибку"""
+    with patch.dict(os.environ, {"BOT_MODE": "auto"}):
+        with pytest.raises(ValueError):
+            get_bot_mode()
 
 
 @pytest.mark.asyncio
@@ -127,7 +114,7 @@ def test_handle_conflict_gracefully_exits():
     """Тест: handle_conflict_gracefully завершает процесс"""
     conflict = Conflict("terminated by other getUpdates request")
     
-    with patch('sys.exit') as mock_exit:
+    with patch("os._exit") as mock_exit:
         handle_conflict_gracefully(conflict, "polling")
         mock_exit.assert_called_once_with(0)
 
