@@ -2453,7 +2453,6 @@ except ImportError:
 try:
     from app.config import BOT_TOKEN, BOT_MODE, WEBHOOK_URL
     from app.utils.mask import mask as mask_secret
-    from app.singleton_lock import get_singleton_lock
     from app.bot_mode import get_bot_mode, ensure_polling_mode, ensure_webhook_mode, handle_conflict_gracefully
 except ImportError:
     # Fallback для обратной совместимости (если app.config не доступен)
@@ -2484,8 +2483,8 @@ except ImportError:
                 mode = "webhook"
             else:
                 mode = "polling"
-        if mode not in ["polling", "webhook"]:
-            mode = "polling"
+        if mode not in ["polling", "webhook", "web", "smoke"]:
+            raise ValueError(f"Invalid BOT_MODE: {mode}")
         return mode
     
     async def ensure_polling_mode(bot):
@@ -2516,16 +2515,7 @@ except ImportError:
         logging.getLogger(__name__).error(f"Conflict detected in {mode} mode: {error}")
         sys.exit(0)
     
-    # Fallback для singleton_lock
-    class DummyLock:
-        def acquire(self, timeout=None):
-            return True
-        def release(self):
-            pass
-    
-    def get_singleton_lock(key: str):
-        """Fallback для get_singleton_lock"""
-        return DummyLock()
+    # Singleton lock fallback removed (use app.utils.singleton_lock instead).
 
 # Admin user ID (can be set via environment variable)
 try:
@@ -6381,13 +6371,7 @@ def _resolve_payment_details() -> tuple[str, str, str, str]:
     phone = os.getenv("PAYMENT_PHONE", "").strip()
     bank = os.getenv("PAYMENT_BANK", "").strip()
 
-    if not phone and not bank and not card_holder:
-        card_holder = os.getenv("OWNER_PAYMENT_CARD_HOLDER", "").strip()
-        phone = os.getenv("OWNER_PAYMENT_PHONE", "").strip()
-        bank = os.getenv("OWNER_PAYMENT_BANK", "").strip()
-        source = "owner"
-    else:
-        source = "partner"
+    source = "partner" if (phone or bank or card_holder) else "missing"
 
     return phone, bank, card_holder, source
 
@@ -6410,7 +6394,7 @@ def get_payment_details() -> str:
 
     if not phone and not bank and not card_holder:
         logger.warning("Payment details not found in environment variables!")
-        logger.warning("Set PAYMENT_* for partner or OWNER_PAYMENT_* for defaults.")
+        logger.warning("Set PAYMENT_PHONE, PAYMENT_BANK, and PAYMENT_CARD_HOLDER.")
 
     details = "💳 <b>Реквизиты для оплаты (СБП):</b>\n\n"
 
@@ -6424,9 +6408,9 @@ def get_payment_details() -> str:
     if not phone and not bank and not card_holder:
         details += "⚠️ <b>ВНИМАНИЕ: Реквизиты не настроены!</b>\n\n"
         details += "Администратору необходимо указать переменные окружения:\n"
-        details += "• <code>PAYMENT_PHONE</code> / <code>OWNER_PAYMENT_PHONE</code>\n"
-        details += "• <code>PAYMENT_BANK</code> / <code>OWNER_PAYMENT_BANK</code>\n"
-        details += "• <code>PAYMENT_CARD_HOLDER</code> / <code>OWNER_PAYMENT_CARD_HOLDER</code>\n\n"
+        details += "• <code>PAYMENT_PHONE</code>\n"
+        details += "• <code>PAYMENT_BANK</code>\n"
+        details += "• <code>PAYMENT_CARD_HOLDER</code>\n\n"
         details += "На Render: добавьте их в разделе Environment Variables\n"
         details += "Локально: добавьте в файл .env\n\n"
 
@@ -6490,12 +6474,7 @@ def _resolve_support_details() -> tuple[str, str, str]:
     support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip()
     support_text = os.getenv("SUPPORT_TEXT", "").strip()
 
-    if not support_telegram and not support_text:
-        support_telegram = os.getenv("OWNER_SUPPORT_TELEGRAM", "").strip()
-        support_text = os.getenv("OWNER_SUPPORT_TEXT", "").strip()
-        source = "owner"
-    else:
-        source = "partner"
+    source = "partner" if (support_telegram or support_text) else "missing"
 
     return support_telegram, support_text, source
 
@@ -6527,9 +6506,9 @@ def get_support_contact() -> str:
         contact += f"💬 <b>Telegram:</b> @{telegram_username}\n"
     else:
         logger.warning("Support contact not found in environment variables!")
-        logger.warning("Set SUPPORT_* for partner or OWNER_SUPPORT_* for defaults.")
+        logger.warning("Set SUPPORT_TELEGRAM and/or SUPPORT_TEXT.")
         contact += "⚠️ <b>Контактная информация не настроена.</b>\n\n"
-        contact += "Администратору необходимо указать SUPPORT_TELEGRAM или OWNER_SUPPORT_TELEGRAM.\n\n"
+        contact += "Администратору необходимо указать SUPPORT_TELEGRAM.\n\n"
         contact += "Обратитесь к администратору."
 
     return contact
@@ -26301,7 +26280,11 @@ async def main():
     
     # ==================== BOT MODE SELECTION ====================
     # КРИТИЧНО: Строгое разделение polling и webhook через BOT_MODE
-    bot_mode = get_bot_mode()
+    try:
+        bot_mode = get_bot_mode()
+    except ValueError as exc:
+        logger.error("❌ Invalid BOT_MODE: %s", exc)
+        raise SystemExit(2) from exc
     logger.info(f"📡 Bot mode: {bot_mode}")
     
     # Если webhook режим - НЕ запускаем polling

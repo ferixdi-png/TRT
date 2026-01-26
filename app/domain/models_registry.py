@@ -60,8 +60,8 @@ class ModelRegistry:
                 categories = get_categories()
                 for cat in categories:
                     self._categories.add(cat)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to load categories from kie_models: %s", exc, exc_info=True)
             
             self._initialized = True
             logger.info(f"[OK] Models registry loaded: {len(self._models)} models, {len(self._models_by_type)} types")
@@ -179,5 +179,4 @@ def get_models_registry() -> ModelRegistry:
     if _registry_instance is None:
         _registry_instance = ModelRegistry()
     return _registry_instance
-
 
