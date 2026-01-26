@@ -1036,13 +1036,14 @@ elif os.getenv("SKIP_CONFIG_INIT", "0") != "1" and os.getenv("TEST_MODE", "0") !
     log_env_summary()
 
 # ==================== IMPORTS AFTER SELF-CHECK ====================
+import httpx
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     ConversationHandler, CallbackQueryHandler, TypeHandler
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand
 from telegram.ext import ContextTypes
-from telegram.error import BadRequest, Conflict
+from telegram.error import BadRequest, Conflict, RetryAfter, TimedOut
 from telegram.warnings import PTBUserWarning
 
 # Suppress PTB warning about per_message handlers (we enforce correct behavior manually)
@@ -1662,6 +1663,8 @@ async def warm_generation_type_menu_cache(
     try:
         last_exc: Optional[BaseException] = None
         for attempt in range(1, max(1, attempts) + 1):
+            attempt_start = time.monotonic()
+            attempt_start_ms = int(time.time() * 1000)
             try:
                 warmup_task = asyncio.create_task(_warmup())
                 counts = await asyncio.wait_for(warmup_task, timeout=timeout)
@@ -1676,7 +1679,8 @@ async def warm_generation_type_menu_cache(
                         "slow_gen_types": [],
                         "partial": False,
                     }
-                elapsed_ms_real = int((time.monotonic() - start) * 1000)
+                elapsed_ms_real = int((time.monotonic() - attempt_start) * 1000)
+                total_elapsed_ms = int((time.monotonic() - start) * 1000)
                 if counts.get("skipped"):
                     log_structured_event(
                         correlation_id=correlation_id,
@@ -1684,7 +1688,13 @@ async def warm_generation_type_menu_cache(
                         action_path="boot:warmup",
                         stage="BOOT",
                         outcome="skip",
-                        param={"elapsed_ms": elapsed_ms_real, "reason": counts.get("skipped")},
+                        param={
+                            "elapsed_ms": elapsed_ms_real,
+                            "elapsed_total_ms": total_elapsed_ms,
+                            "reason": counts.get("skipped"),
+                            "started_at_ms": attempt_start_ms,
+                            "now_ms": int(time.time() * 1000),
+                        },
                     )
                     logger.info(
                         "GEN_TYPE_MENU_WARMUP_SKIP elapsed_ms=%s reason=%s correlation_id=%s",
@@ -1716,6 +1726,9 @@ async def warm_generation_type_menu_cache(
                         "elapsed_ms": elapsed_ms_real,
                         "elapsed_ms_real": elapsed_ms_real,
                         "warmup_total_ms": elapsed_ms_real,
+                        "elapsed_total_ms": total_elapsed_ms,
+                        "started_at_ms": attempt_start_ms,
+                        "now_ms": int(time.time() * 1000),
                         "counts": counts.get("counts"),
                         "per_gen_type_ms": counts.get("per_gen_type_ms"),
                         "cache_hits": counts.get("cache_hits"),
@@ -1733,7 +1746,8 @@ async def warm_generation_type_menu_cache(
                 except asyncio.CancelledError:
                     pass
                 GEN_TYPE_MENU_WARMUP_DEGRADED = True
-                elapsed_ms_real = int((time.monotonic() - start) * 1000)
+                elapsed_ms_real = int((time.monotonic() - attempt_start) * 1000)
+                total_elapsed_ms = int((time.monotonic() - start) * 1000)
                 logger.info(
                     "GEN_TYPE_MENU_WARMUP_TIMEOUT elapsed_ms=%s timeout_s=%s attempt=%s correlation_id=%s",
                     elapsed_ms_real,
@@ -1754,6 +1768,9 @@ async def warm_generation_type_menu_cache(
                     param={
                         "elapsed_ms": elapsed_ms_real,
                         "elapsed_ms_real": elapsed_ms_real,
+                        "elapsed_total_ms": total_elapsed_ms,
+                        "started_at_ms": attempt_start_ms,
+                        "now_ms": int(time.time() * 1000),
                         "timeout_s": timeout,
                         "attempts": attempt,
                     },
@@ -7409,6 +7426,9 @@ MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS",
 MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS", "6.0"))
 START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
 START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
+TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
+TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
+TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
 SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL_SECONDS", "45.0"))
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
 MAIN_MENU_DEP_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_DEP_CACHE_TTL_SECONDS", "30.0"))
@@ -8099,6 +8119,61 @@ def _build_minimal_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
     )
 
 
+async def _run_telegram_request(
+    action: str,
+    *,
+    correlation_id: Optional[str],
+    timeout_s: float,
+    retry_attempts: int,
+    retry_backoff_s: float,
+    request_fn: Callable[[], Awaitable[Any]],
+) -> Optional[Any]:
+    from app.utils.fault_injection import maybe_inject_sleep
+
+    for attempt in range(1, max(1, retry_attempts) + 1):
+        try:
+            await maybe_inject_sleep(
+                "TRT_FAULT_INJECT_TELEGRAM_CONNECT_SLEEP_MS",
+                label=f"telegram.{action}",
+            )
+            if os.getenv("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "").strip() in {"1", "true", "yes"}:
+                raise TimedOut("Injected Telegram connect timeout")
+            return await asyncio.wait_for(request_fn(), timeout=timeout_s)
+        except RetryAfter as exc:
+            delay = max(0.1, float(exc.retry_after or retry_backoff_s))
+            logger.warning(
+                "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s",
+                action,
+                correlation_id,
+                attempt,
+                delay,
+            )
+            await asyncio.sleep(delay)
+        except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            logger.warning(
+                "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s",
+                action,
+                correlation_id,
+                attempt,
+                exc,
+            )
+            if attempt >= retry_attempts:
+                return None
+            await asyncio.sleep(retry_backoff_s * (2 ** (attempt - 1)))
+        except Exception as exc:
+            logger.warning(
+                "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error=%s",
+                action,
+                correlation_id,
+                attempt,
+                exc,
+            )
+            if attempt >= retry_attempts:
+                return None
+            await asyncio.sleep(retry_backoff_s * (2 ** (attempt - 1)))
+    return None
+
+
 async def _show_minimal_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -8119,14 +8194,23 @@ async def _show_minimal_menu(
     message_id = None
     used_edit = False
     fallback_send = False
+    send_ok = False
 
     if update.callback_query and prefer_edit:
-        try:
-            edit_result = await update.callback_query.edit_message_text(
+        edit_result = await _run_telegram_request(
+            "minimal_menu_edit",
+            correlation_id=correlation_id,
+            timeout_s=TELEGRAM_SEND_TIMEOUT_SECONDS,
+            retry_attempts=TELEGRAM_SEND_RETRY_ATTEMPTS,
+            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+            request_fn=lambda: update.callback_query.edit_message_text(
                 MINIMAL_MENU_TEXT,
                 reply_markup=reply_markup,
-            )
+            ),
+        )
+        if edit_result is not None:
             used_edit = True
+            send_ok = True
             message_id = getattr(edit_result, "message_id", None) or (
                 update.callback_query.message.message_id if update.callback_query.message else None
             )
@@ -8138,16 +8222,24 @@ async def _show_minimal_menu(
                 chat_id,
             )
             increment_update_metric("send_message")
-        except Exception:
+        else:
             fallback_send = True
 
     if chat_id and not used_edit:
-        try:
-            send_result = await context.bot.send_message(
+        send_result = await _run_telegram_request(
+            "minimal_menu_send",
+            correlation_id=correlation_id,
+            timeout_s=TELEGRAM_SEND_TIMEOUT_SECONDS,
+            retry_attempts=TELEGRAM_SEND_RETRY_ATTEMPTS,
+            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+            request_fn=lambda: context.bot.send_message(
                 chat_id=chat_id,
                 text=MINIMAL_MENU_TEXT,
                 reply_markup=reply_markup,
-            )
+            ),
+        )
+        if send_result is not None:
+            send_ok = True
             message_id = getattr(send_result, "message_id", None)
             logger.info(
                 "MINIMAL_MENU_RENDER corr_id=%s method=send source=%s user_id=%s chat_id=%s",
@@ -8157,18 +8249,34 @@ async def _show_minimal_menu(
                 chat_id,
             )
             increment_update_metric("send_message")
-        except Exception:
-            logger.error("MINIMAL_MENU_SEND_FAILED", exc_info=True)
+        else:
+            logger.error("MINIMAL_MENU_SEND_FAILED corr_id=%s", correlation_id)
+
+    if not send_ok and chat_id:
+        _create_background_task(
+            _run_telegram_request(
+                "minimal_menu_fallback_text",
+                correlation_id=correlation_id,
+                timeout_s=TELEGRAM_SEND_TIMEOUT_SECONDS,
+                retry_attempts=1,
+                retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                request_fn=lambda: context.bot.send_message(
+                    chat_id=chat_id,
+                    text=MINIMAL_MENU_TEXT,
+                ),
+            ),
+            action="minimal_menu_fallback_text",
+        )
 
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
         chat_id=chat_id,
         update_id=update.update_id,
-        action="MENU_RENDER_FAIL",
+        action="MENU_RENDER",
         action_path=f"menu:{source}",
         stage="UI_ROUTER",
-        outcome="degraded",
+        outcome="ok" if send_ok else "degraded",
         param={
             "used_edit": used_edit,
             "fallback_send": fallback_send,

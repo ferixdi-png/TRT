@@ -632,3 +632,21 @@ Critical-пункты отсутствуют (см. таблицу рисков)
 
 ### STOP/GO
 * **STOP** — `pytest -q` и lint падают (baseline). Переход в **GO** только если: 0 падающих тестов, `/start` стабильно отвечает в webhook, SLA webhook выдерживается, таймауты/ретраи задокументированы.  
+
+## ✅ 2026-01-26 — Webhook SLA hardening / Telegram timeouts / lock drops
+### Root cause (short)
+* Триггер: медленный/таймаутный сетевой коннект Telegram при `/start` → `send_message` висит внутри `_show_minimal_menu` → обработка update длится десятки секунд.  
+* Цепочка: `webhook_handler` → `process_update` → `/start` → `_show_minimal_menu` → сетевой таймаут Telegram → блокировка UI-ответа.  
+* Почему ACK уходит поздно: при фоновом обработчике ACK должен быть быстрым, но в ряде сценариев `/start` зависал на сетевых ожиданиях и блокировал completion логов/timeout метрики.  
+* Почему минимальное меню не приходит: сетевые timeout/ConnectTimeout в Telegram приводили к `MINIMAL_MENU_SEND_FAILED` без retry/alt-path.
+
+### Исправления
+* `_show_minimal_menu`: добавлены жесткие timeouts/retry на Telegram send/edit, fallback-отправка без inline-markup, outcome логируется как `ok/degraded` вместо постоянного fail.  
+* Корреляции: `observability_correlations.json` перевод на `pg_try_advisory_xact_lock` с быстрым drop и метрикой `correlation_store_drop_lock_busy_total` + structured `CORR_DROP_LOCK_BUSY`.  
+* Warmup elapsed: фиксация `elapsed_ms` по каждой попытке и доп. поля `started_at_ms/now_ms` для корректного time base.
+
+### Тесты
+* `pytest tests/test_boot_warmup_resilience.py::test_gen_type_warmup_timeout_elapsed_is_per_attempt` — **OK** (локально).
+
+### STOP/GO
+* **STOP** — требуются полные прогонки `ruff`, `pytest -q`, `python scripts/smoke_webhook_flow.py`, `python scripts/repro_webhook_timeouts.py`.
