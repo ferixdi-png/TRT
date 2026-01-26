@@ -1,5 +1,36 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-26 Incident: storage sync timeout + correlation flush lock storm → webhook timeouts
+
+### Root cause (по логам)
+- `SYNC_STORAGE_CALL_TIMEOUT` на `read:user_registry.json` и `write:user_registry.json` из sync-bridge (`_run_storage_coro_sync`) блокировал обработку `/start` внутри webhook update pipeline. (`bot_kie.py`)
+- `observability_correlations.json` flush выполнялся через `pg_advisory_xact_lock`, с реальными `lock_wait_ms_total` и `correlation_store_flush_duration_ms` > 10s/50s; flush шёл в одном event loop и мешал обработчикам. (`app/observability/correlation_store.py`, `app/storage/postgres_storage.py`)
+- Строитель меню занимал 8–12s, что превышало `WEBHOOK_PROCESS_TIMEOUT_SECONDS` и рвало обработку `/start`. (`bot_kie.py`)
+- Redis lock connect/lock acquisition мог ждать десятки секунд перед деградацией, блокируя webhook-путь. (`app/utils/singleton_lock.py`)
+
+### Что сделано
+- Webhook обработка всегда отдаёт ACK быстро: обновлён pipeline, семафор/конкурентность обрабатываются в фоне, без ожидания в handler. (`bot_kie.py`, `main_render.py`)
+- `/start` переведён на двухфазный ответ: быстрый минимальный ответ и фоновая отрисовка полного меню; реферальный бонус вынесен в background task. (`bot_kie.py`)
+- User registry обновляется асинхронно и вынесен в background task, без sync-bridge. (`bot_kie.py`)
+- Correlation store получил bounded queue с drop-метрикой и fault-injection для воспроизведения flush; flush выполняется в фоне. (`app/observability/correlation_store.py`)
+- Введены fault-injection ENV для storage/menu/flush/redis и таймауты на redis connect/acquire. (`app/utils/fault_injection.py`, `app/storage/*.py`, `app/utils/singleton_lock.py`)
+- Добавлен воспроизводящий скрипт и регрессионные тесты T1–T4. (`scripts/repro_webhook_timeouts.py`, `tests/test_webhook_timeout_regressions.py`)
+
+### Как воспроизвести
+- `python scripts/repro_webhook_timeouts.py`
+  - Использует `TRT_FAULT_INJECT_*` для замедления storage/menu/flush и сниженный `WEBHOOK_PROCESS_TIMEOUT_SECONDS`.
+
+### Тесты (регрессия)
+- `pytest -q tests/test_webhook_timeout_regressions.py`
+
+### Метрики/логи для наблюдения
+- `WEBHOOK_ACK_SLOW`, `WEBHOOK_PROCESS_TIMEOUT`, `MENU_BUILD_TIMEOUT`
+- `METRIC_GAUGE name=correlation_store_flush_duration_ms`
+- `METRIC_GAUGE name=correlation_store_dropped_total`
+
+### Итог
+**STOP** до подтверждения зелёных тестов/ruff + smoke скриптов (`smoke_webhook_flow.py`, `repro_webhook_timeouts.py`).
+
 ## ✅ 2026-01-26 TRT: webhook /start silence fix + update pipeline telemetry
 
 ### Причина
