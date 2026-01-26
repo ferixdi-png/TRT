@@ -94,6 +94,38 @@ async def test_bot_kie_webhook_handler_defers_early_update(harness, monkeypatch)
     assert response.headers.get("Retry-After")
 
 
+async def test_bot_kie_webhook_handler_survives_redis_failure(harness, monkeypatch):
+    main_render._app_ready_event.set()
+    bot_kie._webhook_app_ready_event.clear()
+    bot_kie._webhook_early_update_log_last_ts = None
+    monkeypatch.setattr(bot_kie, "_application_for_webhook", harness.application)
+
+    from app.utils import distributed_lock
+
+    async def failed_init():
+        distributed_lock._redis_initialized = True
+        distributed_lock._redis_available = False
+        return False
+
+    monkeypatch.setattr(distributed_lock, "_init_redis", failed_init)
+
+    handler = await bot_kie.create_webhook_handler()
+    payload = {
+        "update_id": 101,
+        "message": {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 100, "type": "private"},
+            "from": {"id": 100, "is_bot": False, "first_name": "Tester"},
+            "text": "/start",
+        },
+    }
+    request = _build_request(payload, request_id="corr-early-redis")
+    response = await handler(request)
+
+    assert response.status in {200, 204}
+
+
 async def test_startup_smoke_log_info_only(caplog, harness):
     main_render._app_ready_event.clear()
     main_render._early_update_log_last_ts = None

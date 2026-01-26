@@ -7,8 +7,9 @@ Bot Mode Manager - единая семантика BOT_MODE.
 
 import os
 from urllib.parse import urlsplit, urlunsplit
+import asyncio
 import logging
-from typing import Literal
+from typing import Literal, Optional
 from telegram import Bot
 from telegram.error import Conflict
 
@@ -16,6 +17,31 @@ logger = logging.getLogger(__name__)
 
 BotMode = Literal["polling", "webhook", "web", "smoke"]
 _VALID_MODES = {"polling", "webhook", "web", "smoke"}
+_WEBHOOK_SET_LOCK = asyncio.Lock()
+
+
+def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_value: float = 30.0) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = float(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+    return max(min_value, min(max_value, value))
+
+
+def _read_int_env(name: str, default: int, *, min_value: int = 1, max_value: int = 10) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+    return max(min_value, min(max_value, value))
 
 def _normalize_webhook_url(url: str) -> str:
     if not url:
@@ -96,7 +122,18 @@ async def ensure_polling_mode(bot: Bot) -> bool:
         return False
 
 
-async def ensure_webhook_mode(bot: Bot, webhook_url: str) -> bool:
+async def ensure_webhook_mode(
+    bot: Bot,
+    webhook_url: str,
+    *,
+    connect_timeout: Optional[float] = None,
+    read_timeout: Optional[float] = None,
+    write_timeout: Optional[float] = None,
+    pool_timeout: Optional[float] = None,
+    attempts: Optional[int] = None,
+    backoff_base_seconds: Optional[float] = None,
+    backoff_cap_seconds: Optional[float] = None,
+) -> bool:
     """
     Гарантирует что бот в webhook режиме
     Устанавливает webhook и проверяет что polling не запущен
@@ -109,27 +146,55 @@ async def ensure_webhook_mode(bot: Bot, webhook_url: str) -> bool:
         logger.error("   Set WEBHOOK_URL or WEBHOOK_BASE_URL")
         return False
     
-    try:
-        # Устанавливаем webhook
-        result = await bot.set_webhook(
-            url=webhook_url,
-            drop_pending_updates=True
-        )
-        logger.info(f"✅ Webhook set: {result}")
-        
-        # Проверяем что webhook установлен
-        webhook_info = await bot.get_webhook_info()
-        if webhook_info.url != webhook_url:
-            logger.error(f"❌ Webhook not set correctly: {webhook_info.url} != {webhook_url}")
-            return False
-        
-        logger.info(f"✅ Webhook confirmed: {webhook_info.url}")
-        return True
-    except Conflict as e:
-        logger.error(f"❌ Conflict detected while setting webhook: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error setting webhook: {e}")
+    timeout_connect = connect_timeout or _read_float_env("WEBHOOK_SET_CONNECT_TIMEOUT_SECONDS", 2.0)
+    timeout_read = read_timeout or _read_float_env("WEBHOOK_SET_READ_TIMEOUT_SECONDS", 3.5)
+    timeout_write = write_timeout or _read_float_env("WEBHOOK_SET_WRITE_TIMEOUT_SECONDS", 3.5)
+    timeout_pool = pool_timeout or _read_float_env("WEBHOOK_SET_POOL_TIMEOUT_SECONDS", 3.0)
+    max_attempts = attempts or _read_int_env("WEBHOOK_SET_MAX_ATTEMPTS", 3, min_value=1, max_value=5)
+    backoff_base = backoff_base_seconds or _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1)
+    backoff_cap = backoff_cap_seconds or _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 3.0, min_value=0.5)
+
+    async with _WEBHOOK_SET_LOCK:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = await bot.set_webhook(
+                    url=webhook_url,
+                    drop_pending_updates=True,
+                    connect_timeout=timeout_connect,
+                    read_timeout=timeout_read,
+                    write_timeout=timeout_write,
+                    pool_timeout=timeout_pool,
+                )
+                logger.info("✅ Webhook set: %s", result)
+
+                webhook_info = await bot.get_webhook_info(
+                    connect_timeout=timeout_connect,
+                    read_timeout=timeout_read,
+                )
+                if webhook_info.url != webhook_url:
+                    logger.error(
+                        "❌ Webhook not set correctly: %s != %s",
+                        webhook_info.url,
+                        webhook_url,
+                    )
+                    raise RuntimeError("Webhook URL mismatch")
+
+                logger.info("✅ Webhook confirmed: %s", webhook_info.url)
+                return True
+            except Conflict as exc:
+                logger.error("❌ Conflict detected while setting webhook: %s", exc)
+                raise
+            except Exception as exc:
+                logger.error(
+                    "❌ Error setting webhook (attempt %s/%s): %s",
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                if attempt >= max_attempts:
+                    return False
+                backoff = min(backoff_cap, backoff_base * (2 ** (attempt - 1)))
+                await asyncio.sleep(backoff)
         return False
 
 
@@ -150,5 +215,4 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
 

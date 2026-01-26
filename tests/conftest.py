@@ -14,6 +14,21 @@ import inspect
 import socket
 from pathlib import Path
 
+DEFAULT_TEST_ENV = {
+    "TEST_MODE": "1",
+    "DRY_RUN": "0",
+    "ALLOW_REAL_GENERATION": "1",
+}
+for key, value in DEFAULT_TEST_ENV.items():
+    os.environ.setdefault(key, value)
+
+try:
+    from app.config import reset_settings
+
+    reset_settings()
+except Exception:
+    pass
+
 
 def _module_available(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
@@ -56,6 +71,14 @@ def disable_network_calls():
     if os.getenv("NETWORK_DISABLED", "1").lower() in ("0", "false", "no"):
         yield
         return
+
+    defaults = {
+        "TEST_MODE": "1",
+        "DRY_RUN": "0",
+        "ALLOW_REAL_GENERATION": "1",
+    }
+    for key, value in defaults.items():
+        os.environ.setdefault(key, value)
 
     original_create_connection = socket.create_connection
     original_connect = socket.socket.connect
