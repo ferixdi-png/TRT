@@ -44,7 +44,7 @@ def _now() -> datetime:
 
 def _start_of_next_day(current_time: datetime) -> datetime:
     next_day = current_time.date() + timedelta(days=1)
-    return datetime.combine(next_day, time_of_day.min)
+    return datetime.combine(next_day, time_of_day.min, tzinfo=current_time.tzinfo)
 
 
 async def get_free_generation_status(user_id: int) -> Dict[str, int]:
@@ -83,12 +83,30 @@ async def get_free_counter_snapshot(user_id: int, now: Optional[datetime] = None
     used_count = int(await storage.get_user_free_generations_today(user_id))
     referral_remaining = int(await storage.get_referral_free_bank(user_id))
     limit_per_day = int(cfg.base_per_day + referral_remaining)
-    remaining = max(0, limit_per_day - used_count)
-    next_refill_at = _start_of_next_day(current_time)
+    hourly_limit = int(cfg.base_per_day)
+    hourly_usage = await storage.get_hourly_free_usage(user_id)
+    window_start = current_time.replace(minute=0, second=0, microsecond=0)
+    used_in_current_window = 0
+    reset_window = True
+    window_start_iso = hourly_usage.get("window_start_iso") if isinstance(hourly_usage, dict) else None
+    if window_start_iso:
+        try:
+            stored_start = datetime.fromisoformat(window_start_iso)
+        except ValueError:
+            stored_start = None
+        if stored_start and stored_start == window_start:
+            used_in_current_window = int(hourly_usage.get("used_count", 0))
+            reset_window = False
+    daily_remaining = max(0, limit_per_day - used_count)
+    hourly_remaining = max(0, hourly_limit - used_in_current_window)
+    remaining = min(daily_remaining, hourly_remaining)
+    next_refill_at = current_time + timedelta(hours=1) if reset_window else window_start + timedelta(hours=1)
     next_refill_in = max(0, int((next_refill_at - current_time).total_seconds()))
     return {
         "limit_per_day": limit_per_day,
+        "limit_per_hour": hourly_limit,
         "used_today": used_count,
+        "used_in_current_window": used_in_current_window,
         "remaining": remaining,
         "next_refill_in": next_refill_in,
         "referral_remaining": referral_remaining,

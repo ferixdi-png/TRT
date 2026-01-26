@@ -1,5 +1,26 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-13 TRT: BOOT warmup fast-path + correlation debounce + health idempotency
+
+### Что изменено
+- BOOT warmup теперь использует быстрый YAML-кэш моделей, тайм-бюджет и параллелизм по типам, пишет метрики per_gen_type/cache_hit/miss и сохраняет диск-кэш меню. (`bot_kie.py`, `app/models/registry.py`)
+- Structured logs на стадии BOOT больше не триггерят persist корреляций; persist корреляций переведён на debounce, снижая lock contention. (`app/observability/structured_logs.py`, `app/observability/correlation_store.py`)
+- Healthcheck сервер проверен на идемпотентный повторный старт, добавлен тест. (`tests/test_webhook_without_db_github_storage.py`)
+- Документация Render дополнена коротким блоком entrypoint + ключевые ENV. (`README_RENDER.md`)
+- Добавлен тест, гарантирующий отсутствие persist-корреляций во время BOOT warmup. (`tests/test_boot_correlation_store.py`)
+
+### Метрики до/после (ожидаемо)
+- GEN_TYPE_MENU warmup: ~58 000 ms → ≤ `GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS` с partial результатом.
+- Models cache warmup: 51–58 s (импорт KIE_MODELS) → быстрый YAML warmup (обычно <1–2 s).
+- PG advisory lock на `observability_correlations.json` в BOOT: да → нет (debounce + skip на BOOT).
+
+### Как проверить
+- `pytest -q`
+- `python -m compileall .`
+
+### Итог
+**GO** после зелёного pytest/compileall и подтверждения быстрых warmup-логов в Render.
+
 ## ✅ 2026-02-12 TRT: BOT_MODE/lock/env/entrypoints SSOT cleanup
 
 ### Что изменено
