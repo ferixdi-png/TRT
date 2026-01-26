@@ -57,7 +57,8 @@ render/
 ├── Dockerfile              # Docker конфигурация
 ├── index.js                # Node.js wrapper
 ├── package.json            # Node.js зависимости
-├── run_bot.py              # Python скрипт запуска
+├── entrypoints/run_bot.py  # Канонический Python entrypoint
+├── run_bot.py              # Wrapper (совместимость)
 ├── bot_kie.py              # Основная логика бота
 ├── requirements.txt        # Python зависимости
 ├── render.yaml             # Конфигурация Render (опционально)
@@ -73,4 +74,3 @@ render/
 ---
 
 **Готово к развертыванию! 🎉**
-

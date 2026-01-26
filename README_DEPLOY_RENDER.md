@@ -82,7 +82,7 @@ pip install -r requirements.txt
 
 **Start Command:**
 ```bash
-python bot_kie.py
+python entrypoints/run_bot.py
 ```
 
 **Environment:** `Python 3`
@@ -91,7 +91,7 @@ python bot_kie.py
 - ❌ НЕ используйте `npm install`
 - ❌ НЕ используйте `node index.js`
 - ❌ НЕ используйте `npm start`
-- ✅ Используйте только `pip install` и `python bot_kie.py`
+- ✅ Используйте только `pip install` и `python entrypoints/run_bot.py`
 
 **Plan:** Выберите подходящий план (Free/Starter/Standard)
 
@@ -254,4 +254,3 @@ python cleanup_database.py
 ---
 
 **Готово к деплою! 🚀**
-

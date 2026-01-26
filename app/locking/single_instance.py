@@ -47,7 +47,7 @@ def acquire_single_instance_lock() -> bool:
     if dsn:
         logger.info("🔒 DB lock requested (DATABASE_URL present)")
     else:
-        logger.info("🔒 DB lock requested without DATABASE_URL (fallback allowed=%s)", lock_utils._allow_file_fallback())
+        logger.info("🔒 DB lock requested without DATABASE_URL (fallback to file lock if enabled)")
     return _run_coro_sync(lock_utils.acquire_singleton_lock(dsn=dsn, require_lock=True), label="acquire")
 
 
