@@ -561,3 +561,21 @@ Critical-пункты отсутствуют (см. таблицу рисков)
 
 ### STOP/GO
 * **STOP** — массовые падения в `pytest -q`, требуется разбор baseline.  
+
+## ✅ 2026-01-26 — Webhook /start ACK + loop-safe correlation reset
+### Корень инцидента
+* В webhook режиме обработчик /webhook синхронно ждал `process_update`, из-за чего длительные операции в /start могли превышать таймаут и приводить к “/start без ответа”.  
+* В `reset_correlation_store` отмена тасков могла пытаться дернуть закрытый loop, что проявлялось как `RuntimeError: Event loop is closed`.  
+
+### Исправления
+* Webhook handler (main_render + bot_kie): `process_update` вынесен в фоновые задачи (по умолчанию в prod; в TEST_MODE остаётся синхронный путь) с сохранением backpressure/timeout логов → быстрый ACK Telegram без тяжёлых операций в handler.  
+* Correlation store: отмена flush/debounce тасков выполняется loop-safe (проверка закрытого loop + suppress RuntimeError/CancelledError).  
+
+### Тесты/проверки
+* `python scripts/smoke_webhook_handler.py`
+* `pytest -q`
+* `python -m ruff check .` (lint)  
+* `python scripts/smoke_webhook_flow.py`
+
+### STOP/GO
+* **STOP** — `pytest -q` и lint падают (baseline). Переход в **GO** только если: 0 падающих тестов, `/start` стабильно отвечает в webhook, SLA webhook выдерживается, таймауты/ретраи задокументированы.  

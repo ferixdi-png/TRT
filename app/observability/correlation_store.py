@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import time
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set
 
@@ -437,17 +438,27 @@ def is_delivery_complete(status: Optional[str]) -> bool:
 
 
 def reset_correlation_store() -> None:
+    def _cancel_task_safe(task: asyncio.Task[Any]) -> None:
+        try:
+            loop = task.get_loop()
+        except Exception:
+            loop = None
+        if loop is not None and loop.is_closed():
+            return
+        with suppress(RuntimeError):
+            task.cancel()
+
     _records_by_correlation.clear()
     _records_by_request.clear()
     for task in list(_persist_tasks):
-        task.cancel()
+        _cancel_task_safe(task)
     _persist_tasks.clear()
     for task in list(_persist_debounce_tasks.values()):
-        task.cancel()
+        _cancel_task_safe(task)
     _persist_debounce_tasks.clear()
     global _flush_task, _pending_storage
     if _flush_task:
-        _flush_task.cancel()
+        _cancel_task_safe(_flush_task)
     _flush_task = None
     _pending_storage = None
     _pending_records.clear()
