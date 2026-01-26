@@ -65,6 +65,19 @@ render/
 └── ...                     # Все остальные файлы
 ```
 
+### ▶️ Render entrypoint + ключевые ENV (коротко)
+
+- **Entrypoint:** `python entrypoints/run_bot.py`
+- **Webhook-режим (Web Service):**
+  - `BOT_MODE=webhook`
+  - `TELEGRAM_BOT_TOKEN=...`
+  - `WEBHOOK_URL=https://<service>.onrender.com/webhook`
+  - `PORT=10000` (healthcheck server)
+- **Хранилище:**
+  - `STORAGE_MODE=db` + `DATABASE_URL=...` (Postgres)
+  - или `STORAGE_MODE=json` (локальный JSON для dev)
+- **Опционально:** `KIE_API_KEY=...`, `BOT_INSTANCE_ID=partner-01`, `ENABLE_HEALTH_SERVER=1`
+
 ### ⚠️ Важно:
 
 - Файл `.env` НЕ должен быть в репозитории

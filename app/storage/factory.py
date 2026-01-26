@@ -118,6 +118,17 @@ def create_storage(
 
     if not database_url:
         if explicit_db_mode:
+            if os.getenv("TEST_MODE", "").lower() in ("1", "true", "yes"):
+                fallback_dir = Path(os.getenv("DATA_DIR", data_dir or "./data"))
+                fallback_partner = partner_id or "default"
+                fallback_dir = _resolve_tenant_dir(fallback_dir, fallback_partner)
+                _storage_instance = JsonStorage(data_dir=str(fallback_dir), bot_instance_id=fallback_partner)
+                logger.warning(
+                    "[STORAGE] backend=json reason=missing_database_url_test_mode partner_id=%s data_dir=%s",
+                    fallback_partner,
+                    fallback_dir,
+                )
+                return _storage_instance
             raise RuntimeError("DATABASE_URL is required for PostgreSQL storage")
         fallback_dir = Path(os.getenv("DATA_DIR", data_dir or "./data"))
         fallback_partner = partner_id or "default"

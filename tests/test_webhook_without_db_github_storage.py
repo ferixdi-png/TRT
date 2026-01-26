@@ -2,6 +2,7 @@ import json
 import socket
 
 import aiohttp
+from aiohttp import web
 import pytest
 
 import main_render
@@ -35,5 +36,25 @@ async def test_webhook_db_only_registers_route(harness, monkeypatch):
         assert payload["status"] == "ok"
         assert payload["webhook_route_registered"] is True
         assert health_status.get("webhook_route_registered") is True
+    finally:
+        await stop_health_server()
+
+
+@pytest.mark.asyncio
+async def test_health_server_idempotent_start(monkeypatch):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    async def webhook_handler(request):
+        return web.Response(text="ok")
+
+    try:
+        first = await start_health_server(port=port, webhook_handler=webhook_handler)
+        second = await start_health_server(port=port, webhook_handler=webhook_handler)
+        status = get_health_status()
+        assert first is True
+        assert second is True
+        assert status.get("health_server_running") is True
     finally:
         await stop_health_server()
