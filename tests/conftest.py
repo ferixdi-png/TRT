@@ -52,7 +52,7 @@ def _ensure_test_dependencies() -> None:
 _ensure_test_dependencies()
 
 from tests.ptb_harness import PTBHarness
-from tests.webhook_harness import WebhookHarness
+from app.debug.webhook_harness import WebhookHarness
 
 
 def _is_localhost(host: object) -> bool:
@@ -316,6 +316,7 @@ def webhook_harness(monkeypatch, tmp_path):
         "DRY_RUN": "0",
         "ALLOW_REAL_GENERATION": "1",
         "KIE_STUB": "1",
+        "WEBHOOK_PROCESS_IN_BACKGROUND": "0",
         "TELEGRAM_BOT_TOKEN": "test_token_12345",
         "ADMIN_ID": "12345",
         "BOT_INSTANCE_ID": "test-instance",

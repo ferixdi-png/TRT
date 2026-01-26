@@ -21,6 +21,32 @@ BotMode = Literal["polling", "webhook", "web", "smoke"]
 _VALID_MODES = {"polling", "webhook", "web", "smoke"}
 _WEBHOOK_SET_LOCK = asyncio.Lock()
 _WEBHOOK_SET_RATE_LIMIT_TOTAL = 0
+_WEBHOOK_SET_LAST_REASON: Optional[str] = None
+_WEBHOOK_SET_TEST_RANDOM = random.Random(0)
+
+
+def _is_test_mode() -> bool:
+    return os.getenv("TEST_MODE", "0").strip().lower() in {"1", "true", "yes"}
+
+
+def _set_webhook_set_reason(reason: str) -> None:
+    global _WEBHOOK_SET_LAST_REASON
+    _WEBHOOK_SET_LAST_REASON = reason
+
+
+def get_webhook_set_last_failure_reason() -> Optional[str]:
+    reason = _WEBHOOK_SET_LAST_REASON
+    if reason in {None, "ok", "already_set"}:
+        return None
+    return reason
+
+
+def _resolve_backoff_sleep(base: float, jitter_ratio: float) -> float:
+    jitter = base * jitter_ratio
+    if jitter <= 0:
+        return base
+    rng = _WEBHOOK_SET_TEST_RANDOM if _is_test_mode() else random
+    return base + rng.uniform(0.0, jitter)
 
 
 def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_value: float = 30.0) -> float:
@@ -166,9 +192,11 @@ async def ensure_webhook_mode(
             )
             if webhook_info.url == webhook_url:
                 logger.info("✅ Webhook already set: %s", webhook_info.url)
+                _set_webhook_set_reason("already_set")
                 return True
         except Exception as exc:
             logger.warning("WEBHOOK_INFO_CHECK_FAILED error=%s", exc)
+            _set_webhook_set_reason("info_failed")
         for attempt in range(1, max_attempts + 1):
             try:
                 result = await bot.set_webhook(
@@ -191,6 +219,7 @@ async def ensure_webhook_mode(
                     raise RuntimeError("Webhook URL mismatch")
 
                 logger.info("✅ Webhook confirmed: %s", webhook_info.url)
+                _set_webhook_set_reason("ok")
                 return True
             except RetryAfter as exc:
                 global _WEBHOOK_SET_RATE_LIMIT_TOTAL
@@ -206,9 +235,11 @@ async def ensure_webhook_mode(
                     _WEBHOOK_SET_RATE_LIMIT_TOTAL,
                     retry_after,
                 )
+                _set_webhook_set_reason("rate_limit")
                 await asyncio.sleep(retry_after)
             except Conflict as exc:
                 logger.error("❌ Conflict detected while setting webhook: %s", exc)
+                _set_webhook_set_reason("conflict")
                 raise
             except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
                 logger.warning(
@@ -217,6 +248,7 @@ async def ensure_webhook_mode(
                     max_attempts,
                     exc,
                 )
+                _set_webhook_set_reason("timeout")
                 if attempt >= max_attempts:
                     return False
             except Exception as exc:
@@ -226,12 +258,11 @@ async def ensure_webhook_mode(
                     max_attempts,
                     exc,
                 )
+                _set_webhook_set_reason("error")
                 if attempt >= max_attempts:
                     return False
             backoff = min(backoff_cap, backoff_base * (2 ** (attempt - 1)))
-            jitter = backoff * backoff_jitter_ratio
-            sleep_for = backoff + random.uniform(0, jitter) if jitter > 0 else backoff
-            await asyncio.sleep(sleep_for)
+            await asyncio.sleep(_resolve_backoff_sleep(backoff, backoff_jitter_ratio))
         return False
 
 

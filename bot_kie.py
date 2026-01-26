@@ -19,7 +19,7 @@ import warnings
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Set, Callable, Awaitable
+from typing import Optional, Dict, Any, List, Set, Callable, Awaitable, TypeVar
 
 from app.utils.logging_config import setup_logging
 
@@ -50,6 +50,7 @@ from app.session_store import get_session_store, get_session_cached
 from app.generations.request_tracker import RequestTracker, build_request_key
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 DEBUG_VERBOSE_LOGS = os.getenv("DEBUG_VERBOSE_LOGS", "0").lower() in ("1", "true", "yes")
 DATABASE_AVAILABLE = True
 
@@ -3073,6 +3074,24 @@ async def register_active_generation_task(user_id: int) -> None:
     task.add_done_callback(_cleanup)
 
 
+async def run_generation_with_tracking(user_id: int, coro: Awaitable[T]) -> T:
+    """Run generation coroutine while tracking the underlying task for cancellation."""
+    task = asyncio.create_task(coro)
+    async with active_generation_tasks_lock:
+        active_generation_tasks[user_id] = task
+
+    def _cleanup(done_task: asyncio.Task) -> None:
+        async def _remove_if_matches() -> None:
+            async with active_generation_tasks_lock:
+                if active_generation_tasks.get(user_id) is done_task:
+                    active_generation_tasks.pop(user_id, None)
+
+        _create_background_task(_remove_if_matches(), action="active_generation_cleanup")
+
+    task.add_done_callback(_cleanup)
+    return await task
+
+
 async def cancel_active_generation(user_id: int) -> bool:
     """Cancel an in-flight generation task for the user if present."""
     async with active_generation_tasks_lock:
@@ -3101,7 +3120,8 @@ DEDUPE_ORPHAN_MAX_AGE_SECONDS = int(os.getenv("DEDUPE_ORPHAN_MAX_AGE_SECONDS", "
 DEDUPE_ORPHAN_ALERT_THRESHOLD = int(os.getenv("DEDUPE_ORPHAN_ALERT_THRESHOLD", "3"))
 
 # Generation submit locks to prevent double confirm clicks
-generation_submit_locks: dict[int, float] = {}
+generation_submit_locks: dict[str, float] = {}
+generation_submit_locks_guard = asyncio.Lock()
 _generation_submit_lock_ttl_raw = float(os.getenv("GENERATION_SUBMIT_LOCK_TTL_SECONDS", "5"))
 GENERATION_SUBMIT_LOCK_TTL_SECONDS = max(3.0, min(5.0, _generation_submit_lock_ttl_raw))
 REQUEST_DEDUPE_WINDOW_SECONDS = int(os.getenv("GENERATION_DEDUPE_WINDOW_SECONDS", "15"))
@@ -4970,8 +4990,8 @@ def clear_user_session(user_id: int, *, reason: str) -> None:
     logger.info("🧹 SESSION_RESET_FULL: action_path=%s user_id=%s", reason, user_id)
 
 
-def _generation_submit_lock_remaining(user_id: int) -> float:
-    last = generation_submit_locks.get(user_id)
+def _generation_submit_lock_remaining(lock_key: str) -> float:
+    last = generation_submit_locks.get(lock_key)
     if not last:
         return 0.0
     elapsed = time.time() - last
@@ -4988,6 +5008,17 @@ def _build_request_fingerprint(model_id: str, params: Optional[Dict[str, Any]]) 
     except Exception:
         serialized = f"{model_id}:{str(params)}"
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
+
+
+def _build_generation_submit_lock_key(
+    *,
+    partner_id: str,
+    user_id: int,
+    chat_id: int,
+    fingerprint: str,
+) -> str:
+    safe_partner = partner_id or "default"
+    return f"{safe_partner}:{user_id}:{chat_id}:{fingerprint}"
 
 
 def _is_terminal_job_status(status: Optional[str]) -> bool:
@@ -5131,17 +5162,18 @@ async def _show_task_already_started(
             logger.warning("task_already_started_notify_failed chat_id=%s error=%s", chat.id, exc)
 
 
-def _acquire_generation_submit_lock(user_id: int) -> bool:
+async def _acquire_generation_submit_lock(lock_key: str) -> bool:
     now = time.time()
-    last = generation_submit_locks.get(user_id)
-    if last and now - last < GENERATION_SUBMIT_LOCK_TTL_SECONDS:
-        return False
-    generation_submit_locks[user_id] = now
+    async with generation_submit_locks_guard:
+        last = generation_submit_locks.get(lock_key)
+        if last and now - last < GENERATION_SUBMIT_LOCK_TTL_SECONDS:
+            return False
+        generation_submit_locks[lock_key] = now
     return True
 
 
-def _release_generation_submit_lock(user_id: int) -> None:
-    generation_submit_locks.pop(user_id, None)
+def _release_generation_submit_lock(lock_key: str) -> None:
+    generation_submit_locks.pop(lock_key, None)
 
 def _cleanup_processed_updates(now_ts: float) -> None:
     expired = [
@@ -6650,8 +6682,30 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
         return
 
-    generation_types = get_generation_types()
-    total_models = len(get_models_sync())
+    generation_types = await _await_with_timeout(
+        asyncio.to_thread(get_generation_types),
+        timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+        label="generation_types",
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        update_id=update.update_id,
+        default=[],
+        raise_on_timeout=False,
+        log_timeout=False,
+    )
+    total_models = await _await_with_timeout(
+        asyncio.to_thread(lambda: len(get_models_sync())),
+        timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+        label="models_count",
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        update_id=update.update_id,
+        default=0,
+        raise_on_timeout=False,
+        log_timeout=False,
+    )
 
     stats = get_extended_admin_stats()
 
@@ -7729,8 +7783,30 @@ async def _build_main_menu_sections(
         if user_id:
             _set_menu_dep_cache(menu_session, user_lang=resolved_lang)
 
-    generation_types = get_generation_types()
-    total_models = len(get_models_sync())
+    generation_types = await _await_with_timeout(
+        asyncio.to_thread(get_generation_types),
+        timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+        label="generation_types",
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        update_id=update.update_id,
+        default=[],
+        raise_on_timeout=False,
+        log_timeout=False,
+    )
+    total_models = await _await_with_timeout(
+        asyncio.to_thread(lambda: len(get_models_sync())),
+        timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
+        label="models_count",
+        correlation_id=correlation_id,
+        user_id=user_id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        update_id=update.update_id,
+        default=0,
+        raise_on_timeout=False,
+        log_timeout=False,
+    )
     remaining_free = (
         cached_menu.get("remaining_free") if cached_menu and "remaining_free" in cached_menu else FREE_GENERATIONS_PER_DAY
     )
@@ -8405,7 +8481,31 @@ async def _start_menu_with_fallback(
     source: str,
     correlation_id: Optional[str],
 ) -> dict:
-    if START_FALLBACK_MAX_MS <= 0:
+    try:
+        fallback_max_ms = int(os.getenv("START_FALLBACK_MAX_MS", str(START_FALLBACK_MAX_MS)))
+    except ValueError:
+        fallback_max_ms = START_FALLBACK_MAX_MS
+    if os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip():
+        minimal_result = await _show_minimal_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=False,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=update.effective_user.id if update.effective_user else None,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update.update_id,
+            action="START_FALLBACK",
+            action_path=f"menu:{source}",
+            stage="UI_ROUTER",
+            outcome="degraded",
+            param={"fallback_ms": 0, "reason": "storage_fault_injection"},
+        )
+        return minimal_result
+    if fallback_max_ms <= 0:
         return await show_main_menu(
             update,
             context,
@@ -8423,8 +8523,10 @@ async def _start_menu_with_fallback(
             prefer_edit=False,
         )
     )
+    guard_ms = int(os.getenv("START_FALLBACK_GUARD_MS", "150"))
+    timeout_ms = max(50, fallback_max_ms - guard_ms)
     try:
-        return await asyncio.wait_for(asyncio.shield(full_menu_task), timeout=START_FALLBACK_MAX_MS / 1000)
+        return await asyncio.wait_for(asyncio.shield(full_menu_task), timeout=timeout_ms / 1000)
     except asyncio.TimeoutError:
         _register_background_task(full_menu_task, action="start_full_menu")
 
@@ -8444,7 +8546,7 @@ async def _start_menu_with_fallback(
         action_path=f"menu:{source}",
         stage="UI_ROUTER",
         outcome="degraded",
-        param={"fallback_ms": START_FALLBACK_MAX_MS},
+        param={"fallback_ms": fallback_max_ms},
     )
     return minimal_result
 
@@ -20989,8 +21091,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
     job_id: Optional[str] = None
-    # Track running generation task for user-driven cancellation
-    await register_active_generation_task(user_id)
     
     # Answer callback immediately if present
     if query:
@@ -21082,25 +21182,6 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             ]
         )
 
-    if not _acquire_generation_submit_lock(user_id):
-        user_lang = get_user_language(user_id) if user_id else "ru"
-        remaining_seconds = max(1, int(math.ceil(_generation_submit_lock_remaining(user_id))))
-        throttle_text = (
-            "⏳ <b>Генерация уже запускается</b>\n\n"
-            f"Подождите {remaining_seconds} сек и попробуйте снова."
-            if user_lang == "ru"
-            else (
-                "⏳ <b>Generation already starting</b>\n\n"
-                f"Please wait {remaining_seconds}s and try again."
-            )
-        )
-
-        await send_or_edit_message(
-            throttle_text,
-            reply_markup=build_back_to_menu_keyboard(user_lang),
-        )
-        return ConversationHandler.END
-    
     # Check if user is blocked
     if not is_admin_user and is_user_blocked(user_id):
         await send_or_edit_message(
@@ -21348,6 +21429,31 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     request_id = session.get("request_id") or correlation_id or str(uuid.uuid4())
     session["request_id"] = request_id
     session["prompt_hash"] = prompt_hash
+    partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
+    submit_lock_key = _build_generation_submit_lock_key(
+        partner_id=partner_id,
+        user_id=user_id,
+        chat_id=chat_id or user_id,
+        fingerprint=prompt_hash,
+    )
+    if not await _acquire_generation_submit_lock(submit_lock_key):
+        user_lang = get_user_language(user_id) if user_id else "ru"
+        remaining_seconds = max(1, int(math.ceil(_generation_submit_lock_remaining(submit_lock_key))))
+        throttle_text = (
+            "⏳ <b>Генерация уже запускается</b>\n\n"
+            f"Подождите {remaining_seconds} сек и попробуйте снова."
+            if user_lang == "ru"
+            else (
+                "⏳ <b>Generation already starting</b>\n\n"
+                f"Please wait {remaining_seconds}s and try again."
+            )
+        )
+
+        await send_or_edit_message(
+            throttle_text,
+            reply_markup=build_back_to_menu_keyboard(user_lang),
+        )
+        return ConversationHandler.END
     from app.observability.correlation_store import register_correlation_ids
 
     await register_correlation_ids(
@@ -22592,26 +22698,29 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 state_before=state_before,
                 state_after="create_start",
             )
-        job_result = await run_generation(
+        job_result = await run_generation_with_tracking(
             user_id,
-            model_id,
-            params,
-            correlation_id=correlation_id,
-            progress_callback=progress_callback,
-            timeout=timeout_seconds,
-            poll_interval=poll_interval,
-            wait_for_result=False,
-            request_id=request_id,
-            prompt_hash=prompt_hash,
-            prompt=prompt_value,
-            job_id=job_id,
-            chat_id=chat_id_value,
-            message_id=status_message_id,
-            sku_id=sku_id,
-            price=price,
-            is_free=is_free,
-            is_admin_user=is_admin_user,
-            on_task_created=_on_task_created,
+            run_generation(
+                user_id,
+                model_id,
+                params,
+                correlation_id=correlation_id,
+                progress_callback=progress_callback,
+                timeout=timeout_seconds,
+                poll_interval=poll_interval,
+                wait_for_result=False,
+                request_id=request_id,
+                prompt_hash=prompt_hash,
+                prompt=prompt_value,
+                job_id=job_id,
+                chat_id=chat_id_value,
+                message_id=status_message_id,
+                sku_id=sku_id,
+                price=price,
+                is_free=is_free,
+                is_admin_user=is_admin_user,
+                on_task_created=_on_task_created,
+            ),
         )
         task_id = job_result.task_id
         session["task_id"] = task_id
@@ -25590,11 +25699,31 @@ def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_va
     return max(min_value, min(max_value, value))
 
 
+_webhook_set_test_random = random.Random(0)
+
+
+def _resolve_webhook_set_sleep(base: float, jitter_ratio: float) -> float:
+    jitter = base * jitter_ratio
+    if jitter <= 0:
+        return base
+    rng = _webhook_set_test_random if is_test_mode() else random
+    return base + rng.uniform(0.0, jitter)
+
+
 async def _run_webhook_setter_loop(webhook_url: str) -> None:
+    from app.bot_mode import get_webhook_set_last_failure_reason
+
     max_attempts = _read_int_env("WEBHOOK_SET_MAX_ATTEMPTS", 3, min_value=1, max_value=5)
     backoff_base = _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1, max_value=10.0)
     backoff_cap = _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 5.0, min_value=0.5, max_value=30.0)
     retry_interval = _read_float_env("WEBHOOK_SET_RETRY_INTERVAL_SECONDS", 10.0, min_value=1.0, max_value=120.0)
+    cooldown_seconds = _read_float_env("WEBHOOK_SET_COOLDOWN_SECONDS", 30.0, min_value=2.0, max_value=300.0)
+    timeout_window_seconds = _read_float_env(
+        "WEBHOOK_SET_TIMEOUT_LOG_WINDOW_SECONDS",
+        60.0,
+        min_value=10.0,
+        max_value=600.0,
+    )
     retry_jitter_ratio = _read_float_env(
         "WEBHOOK_SET_RETRY_JITTER_RATIO",
         0.2,
@@ -25602,6 +25731,8 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
         max_value=1.0,
     )
     attempt_cycle = 0
+    timeout_cycles = 0
+    last_timeout_log_ts: Optional[float] = None
 
     while True:
         attempt_cycle += 1
@@ -25627,14 +25758,29 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
         if ok:
             logger.info("action=WEBHOOK_SET_SUCCESS cycle=%s", attempt_cycle)
             return
+        failure_reason = get_webhook_set_last_failure_reason()
+        if failure_reason == "timeout":
+            timeout_cycles += 1
+            now = time.monotonic()
+            if last_timeout_log_ts is None or (now - last_timeout_log_ts) >= timeout_window_seconds:
+                logger.warning(
+                    "WEBHOOK_SETTER_TIMEOUT_WINDOW cycle=%s consecutive_timeouts=%s cooldown_s=%s",
+                    attempt_cycle,
+                    timeout_cycles,
+                    cooldown_seconds,
+                )
+                last_timeout_log_ts = now
+        else:
+            timeout_cycles = 0
 
         logger.warning(
             "WEBHOOK_SET_RETRY_SCHEDULED cycle=%s retry_in_s=%s",
             attempt_cycle,
             retry_interval,
         )
-        jitter = retry_interval * retry_jitter_ratio
-        sleep_for = retry_interval + random.uniform(0, jitter) if jitter > 0 else retry_interval
+        sleep_for = _resolve_webhook_set_sleep(retry_interval, retry_jitter_ratio)
+        if timeout_cycles >= 2:
+            sleep_for = max(sleep_for, _resolve_webhook_set_sleep(cooldown_seconds, retry_jitter_ratio))
         await asyncio.sleep(sleep_for)
 
 
