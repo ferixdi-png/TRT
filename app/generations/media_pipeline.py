@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 TELEGRAM_MAX_BYTES = int(os.getenv("TELEGRAM_MAX_FILE_BYTES", str(50 * 1024 * 1024)))
 TELEGRAM_URL_DIRECT = os.getenv("TELEGRAM_URL_DIRECT", "0") == "1"
 
+
+def _skip_media_download() -> bool:
+    test_mode = os.getenv("TEST_MODE", "0").lower() in {"1", "true", "yes"}
+    dry_run = os.getenv("DRY_RUN", "0").lower() in {"1", "true", "yes"}
+    allow_real = os.getenv("ALLOW_REAL_GENERATION", "1").strip() != "0"
+    return test_mode or dry_run or not allow_real
+
 HTML_SNIPPET_LIMIT = 1024
 
 
@@ -249,6 +256,29 @@ async def _resolve_single_media(
     )
     if _is_kie_url(url, kie_client):
         resolved_url = await _resolve_kie_download_url(url, kie_client, correlation_id)
+
+    if _skip_media_download():
+        content_type = (mimetypes.guess_type(resolved_url)[0] or "").lower()
+        method = _media_method_from_type(media_kind, content_type, resolved_url)
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="MEDIA_PIPELINE",
+            action_path="media_pipeline._resolve_single_media",
+            stage="MEDIA_VALIDATE",
+            outcome="test_mode_skip_download",
+            param={"content_type": content_type, "tg_method": method},
+        )
+        return ResolvedMedia(
+            url=resolved_url,
+            payload=resolved_url,
+            content_type=content_type,
+            content_length=None,
+            method=method,
+            used_download=False,
+            too_large=False,
+            is_media=True,
+            error_code=None,
+        )
 
     log_structured_event(
         correlation_id=correlation_id,

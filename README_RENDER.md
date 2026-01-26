@@ -65,9 +65,9 @@ render/
 └── ...                     # Все остальные файлы
 ```
 
-### ▶️ Render entrypoint + ключевые ENV (коротко)
+### ▶️ Render entrypoint + ключевые ENV (канонично)
 
-- **Entrypoint:** `python entrypoints/run_bot.py`
+- **Entrypoint (SSOT):** `python entrypoints/run_bot.py`
 - **Webhook-режим (Web Service):**
   - `BOT_MODE=webhook`
   - `TELEGRAM_BOT_TOKEN=...`
@@ -75,8 +75,14 @@ render/
   - `PORT=10000` (healthcheck server)
 - **Хранилище:**
   - `STORAGE_MODE=db` + `DATABASE_URL=...` (Postgres)
-  - или `STORAGE_MODE=json` (локальный JSON для dev)
+  - `REDIS_URL=...` (опционально, быстрые distributed locks)
 - **Опционально:** `KIE_API_KEY=...`, `BOT_INSTANCE_ID=partner-01`, `ENABLE_HEALTH_SERVER=1`
+
+### 🔁 Поведение webhook при сбое Telegram API
+
+- Если `setWebhook` не отвечает/таймаутит, сервис **не завершает процесс**.
+- Установка webhook уходит в фоновый retry-контур с backoff (короткие таймауты, 2–3 попытки на цикл).
+- Когда Telegram снова доступен, webhook подтверждается автоматически.
 
 ### ⚠️ Важно:
 

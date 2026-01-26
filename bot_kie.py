@@ -240,6 +240,31 @@ def start_dedupe_reconciler(bot) -> None:
     )
 
 
+async def stop_reconcilers(timeout_s: float = 5.0) -> None:
+    global _delivery_reconciler_task, _dedupe_reconciler_task
+    tasks: list[asyncio.Task] = []
+    if _delivery_reconciler_task and not _delivery_reconciler_task.done():
+        _delivery_reconciler_task.cancel()
+        tasks.append(_delivery_reconciler_task)
+    if _dedupe_reconciler_task and not _dedupe_reconciler_task.done():
+        _dedupe_reconciler_task.cancel()
+        tasks.append(_dedupe_reconciler_task)
+
+    if not tasks:
+        return
+    try:
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=timeout_s)
+        logger.info("RECONCILER_STOPPED count=%s timeout_s=%s", len(tasks), timeout_s)
+    except asyncio.TimeoutError:
+        logger.warning("RECONCILER_STOP_TIMEOUT count=%s timeout_s=%s", len(tasks), timeout_s)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        _delivery_reconciler_task = None
+        _dedupe_reconciler_task = None
+
+
 LONG_CALLBACK_PREFIXES = (
     "gen_type:",
     "category:",
@@ -1840,40 +1865,70 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
             cache_ttl_seconds=GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS,
         )
     )
+    done_event = asyncio.Event()
+    watchdog_timed_out = False
+
+    async def _watchdog() -> None:
+        nonlocal watchdog_timed_out
+        try:
+            await asyncio.wait_for(done_event.wait(), timeout=BOOT_WARMUP_WATCHDOG_SECONDS)
+        except asyncio.TimeoutError:
+            watchdog_timed_out = True
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "BOOT_WARMUP_WATCHDOG_TIMEOUT elapsed_ms=%s watchdog_s=%s correlation_id=%s",
+                elapsed_ms,
+                BOOT_WARMUP_WATCHDOG_SECONDS,
+                correlation_id,
+            )
+            for task in (models_task, gen_type_task):
+                if task and not task.done():
+                    task.cancel()
+            await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="BOOT_WARMUP",
+                action_path="boot:warmup",
+                stage="BOOT",
+                outcome="timeout",
+                param={"elapsed_ms": elapsed_ms, "watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
+            )
+
+    watchdog_task = asyncio.create_task(_watchdog())
     try:
-        await asyncio.wait_for(
-            asyncio.gather(models_task, gen_type_task, return_exceptions=True),
-            timeout=BOOT_WARMUP_WATCHDOG_SECONDS,
-        )
+        await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
         elapsed_ms = int((time.monotonic() - start) * 1000)
+        if not watchdog_timed_out:
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="BOOT_WARMUP",
+                action_path="boot:warmup",
+                stage="BOOT",
+                outcome="done",
+                param={"elapsed_ms": elapsed_ms},
+            )
+    except asyncio.CancelledError:
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        logger.info("BOOT_WARMUP_CANCELLED elapsed_ms=%s correlation_id=%s", elapsed_ms, correlation_id)
         log_structured_event(
             correlation_id=correlation_id,
             action="BOOT_WARMUP",
             action_path="boot:warmup",
             stage="BOOT",
-            outcome="done",
+            outcome="cancelled",
             param={"elapsed_ms": elapsed_ms},
-        )
-    except asyncio.TimeoutError:
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        logger.info(
-            "BOOT_WARMUP_WATCHDOG_TIMEOUT elapsed_ms=%s watchdog_s=%s correlation_id=%s",
-            elapsed_ms,
-            BOOT_WARMUP_WATCHDOG_SECONDS,
-            correlation_id,
         )
         for task in (models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
         await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
-        log_structured_event(
-            correlation_id=correlation_id,
-            action="BOOT_WARMUP",
-            action_path="boot:warmup",
-            stage="BOOT",
-            outcome="timeout",
-            param={"elapsed_ms": elapsed_ms, "watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
-        )
+    finally:
+        done_event.set()
+        if watchdog_task:
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
 
 
 def start_boot_warmups(*, correlation_id: str = "BOOT") -> asyncio.Task:
@@ -15464,6 +15519,12 @@ async def _button_callback_impl(
                 return ConversationHandler.END
 
             session = ensure_session_cached(context, session_store, user_id, update_id)
+            session["model_id"] = model_id
+            session["model_info"] = model_info
+            session["active_model_id"] = model_id
+            if model_gen_type:
+                session["active_gen_type"] = model_gen_type
+                session["gen_type"] = model_gen_type
             session_gen_type = _resolve_session_gen_type(session, None)
             model_gen_type = _derive_model_gen_type(model_spec)
             registry_gen_type = session.get("gen_type") or session_gen_type
@@ -20767,7 +20828,19 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 correlation_id=correlation_id,
             )
             return ConversationHandler.END
-    model_id = session.get('model_id')
+    model_id = (
+        session.get("model_id")
+        or session.get("active_model_id")
+        or session.get("model_info", {}).get("id")
+    )
+    if not model_id and session.get("sku_id"):
+        model_id = str(session.get("sku_id")).split("::", 1)[0]
+    if model_id:
+        session["model_id"] = model_id
+        session["active_model_id"] = model_id
+    else:
+        await send_or_edit_message("❌ Сессия модели не найдена. Пожалуйста, начните заново с /start")
+        return ConversationHandler.END
     params = session.get('params', {})
     model_info = session.get('model_info', {})
 
@@ -21010,6 +21083,38 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         chat_id=chat_id,
         is_admin=is_admin_user,
     )
+    if not price_quote and is_test_mode():
+        price_quote = {
+            "price_rub": "0.00",
+            "currency": "RUB",
+            "breakdown": {
+                "model_id": model_id,
+                "mode_index": mode_index,
+                "gen_type": session.get("gen_type"),
+                "params": dict(params or {}),
+                "sku_id": session.get("sku_id") or "test_mode",
+                "test_mode_fallback": True,
+            },
+        }
+        session["price_quote"] = price_quote
+        session.setdefault("sku_id", "test_mode")
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="PRICE_CALC",
+            action_path="confirm_generate",
+            model_id=model_id,
+            gen_type=session.get("gen_type"),
+            stage="PRICE_CALC",
+            outcome="test_mode_fallback",
+            param={
+                "price_rub": price_quote.get("price_rub"),
+                "mode_index": mode_index,
+                "test_mode": True,
+            },
+        )
     if not price_quote:
         user_lang = get_user_language(user_id)
         free_remaining = free_result.get("base_remaining") if isinstance(free_result, dict) else None
@@ -25015,6 +25120,8 @@ _webhook_init_task: Optional[asyncio.Task] = None
 _webhook_early_update_log_last_ts: Optional[float] = None
 _early_update_buffer: Optional[EarlyUpdateBuffer] = None
 _early_update_drain_task: Optional[asyncio.Task] = None
+_webhook_setter_task: Optional[asyncio.Task] = None
+_webhook_setter_lock = asyncio.Lock()
 
 
 def _webhook_is_application_initialized(application: Optional[Application]) -> bool:
@@ -25116,6 +25223,80 @@ def _schedule_early_update_drain(application: Application, *, correlation_id: st
     _early_update_drain_task = _create_background_task(
         _drain_early_update_buffer(application, correlation_id=correlation_id),
         action="early_update_drain",
+    )
+
+
+def _read_int_env(name: str, default: int, *, min_value: int = 1, max_value: int = 10) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+    return max(min_value, min(max_value, value))
+
+
+def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_value: float = 120.0) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = float(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+    return max(min_value, min(max_value, value))
+
+
+async def _run_webhook_setter_loop(webhook_url: str) -> None:
+    max_attempts = _read_int_env("WEBHOOK_SET_MAX_ATTEMPTS", 3, min_value=1, max_value=5)
+    backoff_base = _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1, max_value=10.0)
+    backoff_cap = _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 5.0, min_value=0.5, max_value=30.0)
+    retry_interval = _read_float_env("WEBHOOK_SET_RETRY_INTERVAL_SECONDS", 10.0, min_value=1.0, max_value=120.0)
+    attempt_cycle = 0
+
+    while True:
+        attempt_cycle += 1
+        async with _webhook_setter_lock:
+            try:
+                from telegram import Bot
+
+                async with Bot(token=BOT_TOKEN) as temp_bot:
+                    ok = await ensure_webhook_mode(
+                        temp_bot,
+                        webhook_url,
+                        attempts=max_attempts,
+                        backoff_base_seconds=backoff_base,
+                        backoff_cap_seconds=backoff_cap,
+                    )
+            except Conflict as exc:
+                handle_conflict_gracefully(exc, "webhook")
+                return
+            except Exception as exc:
+                logger.error("WEBHOOK_SETTER_FAILED cycle=%s error=%s", attempt_cycle, exc)
+                ok = False
+
+        if ok:
+            logger.info("action=WEBHOOK_SET_SUCCESS cycle=%s", attempt_cycle)
+            return
+
+        logger.warning(
+            "WEBHOOK_SET_RETRY_SCHEDULED cycle=%s retry_in_s=%s",
+            attempt_cycle,
+            retry_interval,
+        )
+        await asyncio.sleep(retry_interval)
+
+
+def _schedule_webhook_setter(webhook_url: str) -> None:
+    global _webhook_setter_task
+    if _webhook_setter_task and not _webhook_setter_task.done():
+        return
+    _webhook_setter_task = _create_background_task(
+        _run_webhook_setter_loop(webhook_url),
+        action="webhook_setter",
     )
 
 
@@ -25372,21 +25553,6 @@ async def _run_webhook_initialization(
     start_delivery_reconciler(application.bot)
     start_dedupe_reconciler(application.bot)
 
-    # Устанавливаем webhook
-    try:
-        from telegram import Bot
-
-        temp_bot = Bot(token=BOT_TOKEN)
-        if not await ensure_webhook_mode(temp_bot, webhook_url):
-            logger.error("❌ Failed to set webhook")
-            return
-    except Conflict as e:
-        handle_conflict_gracefully(e, "webhook")
-        return
-    except Exception as e:
-        logger.error(f"❌ Error in webhook mode: {e}")
-        return
-
     # 🚑 Гарантируем, что HTTP сервер с /webhook поднят даже без entrypoints/run_bot
     try:
         from app.utils.healthcheck import start_health_server
@@ -25406,6 +25572,7 @@ async def _run_webhook_initialization(
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
     _schedule_early_update_drain(application, correlation_id="BOOT")
+    _schedule_webhook_setter(webhook_url)
 
 
 async def main():
@@ -26632,9 +26799,6 @@ async def main():
         
         try:
             await _ensure_webhook_initialized(application, webhook_url)
-            if not _webhook_app_ready_event.is_set():
-                logger.error("❌ Webhook initialization incomplete; aborting webhook mode")
-                return
 
             logger.info("✅ Webhook mode ready - waiting for updates via webhook")
             logger.info("   Bot will receive updates at: %s", webhook_url)
@@ -26646,6 +26810,21 @@ async def main():
             logger.info("🛑 Webhook mode cancelled; shutting down cleanly.")
             return
         finally:
+            try:
+                await stop_reconcilers(timeout_s=5.0)
+            except Exception as exc:
+                logger.warning("RECONCILER_STOP_FAILED error=%s", exc)
+            try:
+                from app.utils.healthcheck import stop_health_server
+
+                await stop_health_server()
+            except Exception as exc:
+                logger.warning("[WEBHOOK] health_server_stop_failed=%s", exc)
+            try:
+                await application.stop()
+                await application.shutdown()
+            except Exception as exc:
+                logger.warning("WEBHOOK_APP_SHUTDOWN_FAILED error=%s", exc)
             await cleanup_storage()
             await cleanup_http_client()
     
@@ -26935,6 +27114,17 @@ async def main():
                     pass
             except Exception as e:
                 logger.warning("💓 BOT_HEARTBEAT stop_failed error=%s", e)
+
+        try:
+            await stop_reconcilers(timeout_s=5.0)
+        except Exception as exc:
+            logger.warning("RECONCILER_STOP_FAILED error=%s", exc)
+        try:
+            from app.utils.healthcheck import stop_health_server
+
+            await stop_health_server()
+        except Exception as exc:
+            logger.warning("[BOOT] health_server_stop_failed=%s", exc)
 
         # Останавливаем application
         try:

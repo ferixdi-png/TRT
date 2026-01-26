@@ -21,6 +21,18 @@ _redis_initialized: bool = False
 _tenant_default_warned: bool = False
 
 
+def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_value: float = 10.0) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = float(raw_value.strip())
+    except ValueError:
+        logger.warning("Invalid %s value '%s', defaulting to %s", name, raw_value, default)
+        return default
+    return max(min_value, min(max_value, value))
+
+
 @dataclass(frozen=True)
 class LockResult:
     acquired: bool
@@ -65,6 +77,15 @@ async def _init_redis() -> bool:
         logger.info("[DISTRIBUTED_LOCK] mode=single-instance reason=redis_url_missing")
         _redis_available = False
         return False
+
+    connect_timeout = _read_float_env("REDIS_CONNECT_TIMEOUT_SECONDS", 1.0, min_value=0.2, max_value=5.0)
+    read_timeout = _read_float_env("REDIS_READ_TIMEOUT_SECONDS", 1.0, min_value=0.2, max_value=5.0)
+    connect_deadline = _read_float_env(
+        "REDIS_CONNECT_DEADLINE_SECONDS",
+        max(connect_timeout, read_timeout),
+        min_value=0.3,
+        max_value=6.0,
+    )
     
     try:
         import redis.asyncio as redis
@@ -72,11 +93,11 @@ async def _init_redis() -> bool:
             redis_url,
             encoding="utf-8",
             decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5,
+            socket_connect_timeout=connect_timeout,
+            socket_timeout=read_timeout,
         )
         # Test connection
-        await _redis_client.ping()
+        await asyncio.wait_for(_redis_client.ping(), timeout=connect_deadline)
         _redis_available = True
         logger.info("[DISTRIBUTED_LOCK] mode=redis url=%s", redis_url.split("@")[-1] if "@" in redis_url else "configured")
         return True
@@ -84,10 +105,19 @@ async def _init_redis() -> bool:
         logger.warning("[DISTRIBUTED_LOCK] mode=single-instance reason=redis_module_missing")
         _redis_available = False
         return False
+    except asyncio.TimeoutError:
+        logger.warning("[DISTRIBUTED_LOCK] mode=single-instance reason=redis_connect_timeout")
+        _redis_available = False
     except Exception as exc:
         logger.warning("[DISTRIBUTED_LOCK] mode=single-instance reason=redis_connect_failed error=%s", exc)
         _redis_available = False
-        return False
+    if _redis_client:
+        try:
+            await _redis_client.close()
+        except Exception:
+            pass
+        _redis_client = None
+    return False
 
 
 async def get_redis_client() -> Optional[any]:
