@@ -248,7 +248,11 @@ def build_webhook_handler(
 async def _initialize_application(settings):
     init_started = time.monotonic()
     application = await create_application(settings)
-    await application.initialize()
+    if os.getenv("TEST_MODE", "").strip() == "1":
+        logger.info("TEST_MODE enabled; skipping Telegram API initialization.")
+        setattr(application, "_initialized", True)
+    else:
+        await application.initialize()
     init_ms = int((time.monotonic() - init_started) * 1000)
     _app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)

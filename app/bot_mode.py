@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bot Mode Manager - строгое разделение polling и webhook
-Гарантирует что только один режим активен
+Bot Mode Manager - единая семантика BOT_MODE.
+Поддерживает polling/webhook/web/smoke и гарантирует явную ошибку для неизвестных значений.
 """
 
 import os
@@ -14,7 +14,8 @@ from telegram.error import Conflict
 
 logger = logging.getLogger(__name__)
 
-BotMode = Literal["polling", "webhook"]
+BotMode = Literal["polling", "webhook", "web", "smoke"]
+_VALID_MODES = {"polling", "webhook", "web", "smoke"}
 
 def _normalize_webhook_url(url: str) -> str:
     if not url:
@@ -53,9 +54,9 @@ def get_bot_mode() -> BotMode:
         else:
             mode = "polling"
     
-    if mode not in ["polling", "webhook"]:
-        logger.warning(f"Invalid BOT_MODE={mode}, defaulting to polling")
-        mode = "polling"
+    if mode not in _VALID_MODES:
+        logger.error("Invalid BOT_MODE=%s. Allowed: %s", mode, ", ".join(sorted(_VALID_MODES)))
+        raise ValueError(f"Invalid BOT_MODE: {mode}")
     
     logger.info(f"📡 Bot mode: {mode}")
     return mode
@@ -149,7 +150,5 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
-
 
 

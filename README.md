@@ -13,7 +13,7 @@ pip install -r requirements.txt
 # 2. Установи переменные окружения (см. ниже)
 
 # 3. Запусти бота
-BOT_MODE=polling python bot_kie.py
+BOT_MODE=polling python entrypoints/run_bot.py
 ```
 
 ### Автоматический деплой через GitHub Actions:
@@ -163,8 +163,10 @@ python scripts/read_logs.py --since 60m --grep "ERROR|Traceback"
 
 3. **Run the bot:**
    ```bash
-   python run_bot.py
+   python entrypoints/run_bot.py
    ```
+
+   (Shortcut wrapper is available as `python run_bot.py`.)
 
 ### Important Notes
 - **Only one instance** of the bot can use the same token simultaneously

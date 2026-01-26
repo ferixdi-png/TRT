@@ -52,8 +52,8 @@ async def health_handler(request):
         from app.config import get_settings
         settings = get_settings()
         storage_mode = settings.get_storage_mode()
-    except:
-        pass
+    except Exception as exc:
+        logger.debug("healthcheck_storage_mode_failed error=%s", exc, exc_info=True)
     
     # Определяем KIE mode
     kie_mode = "stub" if os.getenv("KIE_STUB") else "real"

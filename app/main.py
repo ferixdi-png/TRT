@@ -21,21 +21,20 @@ from app.diagnostics.boot import log_boot_report, run_boot_diagnostics
 def get_bot_mode() -> str:
     """
     Get BOT_MODE from environment or determine automatically.
-    
+
     Returns:
-        "worker", "bot", "web", or "auto"
+        "polling", "webhook", "web", or "smoke"
     """
-    mode = os.getenv("BOT_MODE", "").lower()
-    if mode in ("worker", "bot", "web", "auto"):
-        return mode
-    
-    # AUTO mode: determine based on environment
-    if os.getenv("TELEGRAM_BOT_TOKEN") and is_lock_acquired():
-        return "bot"  # Will start polling
-    elif os.getenv("PORT") and os.getenv("RENDER"):
-        return "web"  # Healthcheck only
-    else:
-        return "auto"
+    mode = os.getenv("BOT_MODE", "").lower().strip()
+    if not mode:
+        webhook_base_url = normalize_webhook_base_url(os.getenv("WEBHOOK_BASE_URL", "").strip())
+        if os.getenv("PORT") and webhook_base_url:
+            return "web"
+        return "polling"
+    if mode not in {"polling", "webhook", "web", "smoke"}:
+        logger.error("Invalid BOT_MODE=%s (allowed: polling/webhook/web/smoke)", mode)
+        raise ValueError(f"Invalid BOT_MODE: {mode}")
+    return mode
 
 
 async def initialize_storage() -> bool:
@@ -255,30 +254,40 @@ async def main():
     await initialize_storage()
     
     # Determine bot mode
-    bot_mode = get_bot_mode()
+    try:
+        bot_mode = get_bot_mode()
+    except ValueError as exc:
+        logger.error("BOT_MODE_INVALID error=%s", exc)
+        sys.exit(2)
     logger.info(f"BOT_MODE: {bot_mode}, Safe mode: {get_safe_mode()}")
     _log_startup_summary(bot_mode)
+
+    if bot_mode == "webhook":
+        logger.error(
+            "BOT_MODE=webhook is not supported in app.main. "
+            "Use entrypoints/run_bot.py for webhook mode."
+        )
+        sys.exit(1)
+    if bot_mode == "smoke":
+        logger.info("BOT_MODE=smoke - boot diagnostics completed, exiting without starting services.")
+        return
     
     # Start services based on mode
     try:
-        if bot_mode in ("worker", "bot") or (bot_mode == "auto" and is_lock_acquired()):
+        if bot_mode == "polling":
             if is_lock_acquired():
                 health_task = asyncio.create_task(
                     start_healthcheck_server(),
                     name="healthcheck-server",
                 )
-                # Start Telegram bot (runs indefinitely)
                 await start_telegram_bot()
             else:
                 logger.info("[LOCK] Passive mode: telegram runner disabled")
-                # Start healthcheck only (runs indefinitely)
                 await start_healthcheck_server()
-        elif bot_mode == "web" or (os.getenv("PORT") and not is_lock_acquired()):
-            # Web/healthcheck only mode (runs indefinitely)
+        elif bot_mode == "web":
             await start_healthcheck_server()
         else:
-            logger.warning("No services to start. Set BOT_MODE, PORT, or TELEGRAM_BOT_TOKEN")
-            # Keep process alive even if nothing started
+            logger.warning("No services to start. Set BOT_MODE to polling/web or use entrypoints/run_bot.py.")
             await start_healthcheck_server()
     except KeyboardInterrupt:
         logger.info("Shutdown requested")
