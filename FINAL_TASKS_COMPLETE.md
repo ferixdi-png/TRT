@@ -17,16 +17,15 @@
    - ✅ release только на shutdown
 
 ### Реализация:
-- ✅ **Файл:** `render_singleton_lock.py` - модуль для advisory lock
+- ✅ **Файл:** `app/utils/singleton_lock.py` - модуль для advisory lock
 - ✅ **Файл:** `bot_kie.py` (строки 24957-25026) - интеграция lock в main()
 - ✅ **Файл:** `bot_kie.py` (строки 26281-26330) - safe_start_polling с delete_webhook
 
 ### Проверка:
 ```python
 # В bot_kie.py main():
-lock_key_int = make_lock_key(BOT_TOKEN, namespace="telegram_polling")
-lock_conn = acquire_lock_session(pool, lock_key_int)
-if lock_conn is None:
+lock_acquired = await acquire_singleton_lock(dsn=DATABASE_URL, require_lock=True)
+if not lock_acquired:
     sys.exit(0)  # Другой инстанс держит lock
 
 # В safe_start_polling():
@@ -208,7 +207,7 @@ final_result = await client.wait_task(task_id, timeout_s=900, poll_s=3)
 
 ## 📁 СОЗДАННЫЕ ФАЙЛЫ
 
-1. ✅ `render_singleton_lock.py` - PostgreSQL advisory lock
+1. ✅ `app/utils/singleton_lock.py` - PostgreSQL advisory lock
 2. ✅ `models/kie_models.yaml` - реестр 72 моделей
 3. ✅ `kie_client.py` - универсальный KIE client (улучшен)
 4. ✅ `kie_validator.py` - валидатор входных параметров

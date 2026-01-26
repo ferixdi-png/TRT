@@ -56,7 +56,7 @@ if not bot_token_set:
 ```python
 except ImportError as e:
     logger.error(f"❌ Failed to import lock modules: {e}", exc_info=True)
-    logger.error("   Module 'render_singleton_lock' or 'database' not found")
+    logger.error("   Module 'app.utils.singleton_lock' or 'database' not found")
     logger.error("   Falling back to file-based singleton lock")
     # ... fallback code ...
     except Exception as fallback_error:
@@ -179,8 +179,8 @@ logger.info("   This may take a few seconds...")
 
 **Проблема 2: Модуль не найден**
 ```
-❌ Failed to import lock modules: No module named 'render_singleton_lock'
-   Module 'render_singleton_lock' or 'database' not found
+❌ Failed to import lock modules: No module named 'app.utils.singleton_lock'
+   Module 'app.utils.singleton_lock' or 'database' not found
    Falling back to file-based singleton lock
 ```
 

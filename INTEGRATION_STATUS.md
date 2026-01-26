@@ -7,7 +7,7 @@
 
 ## ✅ ЗАДАЧА №1 — TELEGRAM 409
 **Статус:** ✅ **ПОЛНОСТЬЮ ИНТЕГРИРОВАНО**
-- ✅ `render_singleton_lock.py` создан
+- ✅ `app/utils/singleton_lock.py` создан
 - ✅ Интегрировано в `bot_kie.py` main() (строки 24957-25026)
 - ✅ `delete_webhook` вызывается перед polling (строки 26318)
 - ✅ PostgreSQL advisory lock работает
@@ -73,7 +73,7 @@
 ## 📊 ИТОГОВАЯ ПРОВЕРКА
 
 ### Все компоненты созданы: ✅
-1. ✅ `render_singleton_lock.py`
+1. ✅ `app/utils/singleton_lock.py`
 2. ✅ `models/kie_models.yaml`
 3. ✅ `kie_client.py`
 4. ✅ `kie_validator.py`

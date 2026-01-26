@@ -265,7 +265,7 @@ async def main():
     if bot_mode == "webhook":
         logger.error(
             "BOT_MODE=webhook is not supported in app.main. "
-            "Use entrypoints/run_bot.py for webhook mode."
+            "Use entrypoints/run_bot.py or main_render.py for webhook."
         )
         sys.exit(1)
     if bot_mode == "smoke":

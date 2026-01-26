@@ -165,12 +165,30 @@ def test_env():
     except ImportError:
         pass
     reset_correlation_store()
+    try:
+        import bot_kie
+        bot_kie.user_sessions.data.clear()
+        bot_kie.generation_submit_locks.clear()
+    except Exception:
+        pass
+    try:
+        from app.helpers.free_limit_helpers import reset_free_counters
+        reset_free_counters()
+    except Exception:
+        pass
     bot_kie._update_deduper._entries.clear()
     bot_kie._callback_deduper._entries.clear()
     bot_kie._processed_update_ids.clear()
     bot_kie._message_rate_limiter._buckets.clear()
     bot_kie._callback_rate_limiter._buckets.clear()
     bot_kie._callback_data_rate_limiter._buckets.clear()
+    bot_kie.user_sessions.data.clear()
+    bot_kie.generation_submit_locks.clear()
+    try:
+        from app.helpers.free_limit_helpers import reset_free_counters
+        reset_free_counters()
+    except Exception:
+        pass
     
     # Восстанавливаем старые значения
     for key, value in old_env.items():

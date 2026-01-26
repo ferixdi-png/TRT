@@ -8,17 +8,17 @@
 ## ТОЧКИ ВХОДА (ENTRYPOINTS)
 
 ### Render (Production)
-- **Файл:** `app/main.py`
-- **Команда:** `python -m app.main`
+- **Файл:** `entrypoints/run_bot.py` (канон)
+- **Команда:** `python entrypoints/run_bot.py`
 - **Функции:**
-  - `load_settings()` - загрузка и валидация настроек из ENV
-  - `build_application(settings)` - создание Telegram Application
-  - `run(settings, application)` - запуск бота (polling/webhook)
+  - Запуск polling/webhook/web в зависимости от `BOT_MODE`
+  - Старт singleton lock перед запуском сервисов
 
 ### Legacy Entrypoint
-- **Файл:** `run_bot.py` (deprecated)
+- **Файл:** `run_bot.py` (wrapper)
+- **Файл:** `app/main.py` (polling/web-only)
 - **Файл:** `bot_kie.py` (функция `main()`)
-- **Использование:** Fallback если `create_bot_application` не найден
+- **Использование:** Fallback при локальном запуске; для webhook использовать `entrypoints/run_bot.py` или `main_render.py`
 
 ---
 
