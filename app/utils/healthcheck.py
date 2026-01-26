@@ -150,6 +150,9 @@ async def start_health_server(
     """Запустить healthcheck сервер в том же event loop"""
     global _health_server, _health_runner, _health_server_running, _webhook_route_registered, _health_lock
 
+    if _health_runner is not None and _health_server_running:
+        return True
+
     if _health_lock is None:
         _health_lock = asyncio.Lock()
 
@@ -158,8 +161,7 @@ async def start_health_server(
         return False
 
     async with _health_lock:
-        if _health_runner is not None:
-            logger.info("[HEALTH] server_already_running=true port=%s", port)
+        if _health_runner is not None and _health_server_running:
             return True
 
         try:
@@ -231,6 +233,11 @@ async def stop_health_server():
         try:
             await _health_runner.cleanup()
             logger.info("[HEALTH] Healthcheck server stopped")
+        except RuntimeError as exc:
+            if "Event loop is closed" in str(exc):
+                logger.warning("[HEALTH] Event loop closed while stopping healthcheck server")
+            else:
+                logger.warning("[HEALTH] Failed to stop healthcheck server: %s", exc)
         except Exception as e:
             logger.warning(f"[HEALTH] Failed to stop healthcheck server: {e}")
         finally:

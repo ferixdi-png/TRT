@@ -49,6 +49,13 @@ _records_by_request: Dict[str, CorrelationRecord] = {}
 _persist_tasks: Set[asyncio.Task[Any]] = set()
 _persist_debounce_tasks: Dict[str, asyncio.Task[Any]] = {}
 _persist_debounce_seconds = float(os.getenv("CORRELATION_STORE_DEBOUNCE_SECONDS", "0.5"))
+_flush_interval_seconds = float(os.getenv("CORRELATION_STORE_FLUSH_INTERVAL_SECONDS", "1.0"))
+_flush_max_records = int(os.getenv("CORRELATION_STORE_FLUSH_MAX_RECORDS", "200"))
+_pending_records: Dict[str, CorrelationRecord] = {}
+_pending_sources: Dict[str, Optional[str]] = {}
+_flush_task: Optional[asyncio.Task[Any]] = None
+_pending_storage: Optional[Any] = None
+_flush_lock: Optional[asyncio.Lock] = None
 
 
 def _register_persist_task(task: asyncio.Task[Any]) -> None:
@@ -73,36 +80,42 @@ def _schedule_debounced_persist(
     storage: Optional[Any],
     source: Optional[str],
 ) -> None:
-    if _persist_debounce_seconds <= 0:
-        loop = _get_running_loop()
-        if loop and loop.is_running():
-            task = loop.create_task(
-                _persist_record(_records_by_correlation.get(correlation_id), storage=storage, source=source)
-                if _records_by_correlation.get(correlation_id)
-                else asyncio.sleep(0)
-            )
-            _register_persist_task(task)
-        return
-
     loop = _get_running_loop()
     if not loop or not loop.is_running():
         return
+    record = _records_by_correlation.get(correlation_id)
+    if not record:
+        return
+    _pending_records[correlation_id] = record
+    if source:
+        _pending_sources[correlation_id] = source
+    global _pending_storage, _flush_task, _flush_lock
+    if storage is not None:
+        _pending_storage = storage
+    if _flush_lock is None:
+        _flush_lock = asyncio.Lock()
+    if _flush_task and not _flush_task.done():
+        return
 
-    existing = _persist_debounce_tasks.get(correlation_id)
-    if existing and not existing.done():
-        existing.cancel()
-
-    async def _debounced() -> None:
-        try:
+    async def _flush_pending() -> None:
+        if _persist_debounce_seconds > 0:
             await asyncio.sleep(_persist_debounce_seconds)
-            record = _records_by_correlation.get(correlation_id)
-            if record:
-                await _persist_record(record, storage=storage, source=source)
-        except asyncio.CancelledError:
-            return
+        while True:
+            async with _flush_lock:
+                if not _pending_records:
+                    return
+                batch_keys = list(_pending_records.keys())[:_flush_max_records]
+                batch = {key: _pending_records.pop(key) for key in batch_keys}
+                batch_sources = {key: _pending_sources.pop(key, None) for key in batch_keys}
+                storage_instance = _pending_storage or storage
+                await _persist_records_batch(batch, storage=storage_instance, sources=batch_sources)
+            if _pending_records:
+                await asyncio.sleep(_flush_interval_seconds)
+            else:
+                return
 
-    task = loop.create_task(_debounced(), name=f"correlation-store:debounce:{correlation_id}")
-    _register_debounce_task(correlation_id, task)
+    _flush_task = loop.create_task(_flush_pending(), name="correlation-store:flush")
+    _register_persist_task(_flush_task)
 
 def _get_running_loop() -> Optional[asyncio.AbstractEventLoop]:
     try:
@@ -240,6 +253,63 @@ async def _persist_record(record: CorrelationRecord, *, storage: Optional[Any], 
         logger.debug("correlation_store_persist_failed correlation_id=%s error=%s", record.correlation_id, exc)
 
 
+async def _persist_records_batch(
+    records: Dict[str, CorrelationRecord],
+    *,
+    storage: Optional[Any],
+    sources: Dict[str, Optional[str]],
+) -> None:
+    if not records:
+        return
+    storage_instance = _resolve_storage(storage)
+    if not storage_instance or not hasattr(storage_instance, "update_json_file"):
+        return
+
+    async def _update_file() -> None:
+        def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+            next_data = dict(data or {})
+            for record in records.values():
+                payload = dict(next_data.get(record.correlation_id) or {})
+                payload.update(record.to_dict())
+                source = sources.get(record.correlation_id)
+                if source:
+                    payload["source"] = source
+                next_data[record.correlation_id] = payload
+                if record.request_id:
+                    index_key = f"request:{record.request_id}"
+                    request_payload = dict(next_data.get(index_key) or {})
+                    request_payload.update(
+                        {
+                            "correlation_id": record.correlation_id,
+                            "request_id": record.request_id,
+                            "task_id": record.task_id,
+                            "job_id": record.job_id,
+                            "updated_at_ms": record.updated_at_ms,
+                        }
+                    )
+                    next_data[index_key] = request_payload
+            return next_data
+
+        await storage_instance.update_json_file(CORRELATIONS_FILE, updater)
+
+    start_ts = time.monotonic()
+    try:
+        await _update_file()
+    except Exception as exc:
+        logger.debug(
+            "correlation_store_persist_failed batch_size=%s error=%s",
+            len(records),
+            exc,
+        )
+        return
+    duration_ms = int((time.monotonic() - start_ts) * 1000)
+    logger.info(
+        "METRIC_GAUGE name=correlation_store_flush_duration_ms value=%s count=%s",
+        duration_ms,
+        len(records),
+    )
+
+
 async def register_correlation_ids(
     *,
     correlation_id: Optional[str],
@@ -267,7 +337,11 @@ async def register_correlation_ids(
     if record.request_id:
         _records_by_request[record.request_id] = record
     if changed:
-        await _persist_record(record, storage=storage, source=source)
+        _schedule_debounced_persist(
+            correlation_id=record.correlation_id,
+            storage=storage,
+            source=source,
+        )
     return resolve_correlation_ids(
         correlation_id=record.correlation_id,
         request_id=record.request_id,
@@ -371,3 +445,10 @@ def reset_correlation_store() -> None:
     for task in list(_persist_debounce_tasks.values()):
         task.cancel()
     _persist_debounce_tasks.clear()
+    global _flush_task, _pending_storage
+    if _flush_task:
+        _flush_task.cancel()
+    _flush_task = None
+    _pending_storage = None
+    _pending_records.clear()
+    _pending_sources.clear()

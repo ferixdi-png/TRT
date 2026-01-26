@@ -32,6 +32,33 @@ async def test_start_falls_back_to_minimal_menu_on_timeout(harness, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_start_menu_timeout_schedules_retry_without_unhandled(harness, monkeypatch, caplog):
+    async def slow_keyboard(*_args, **_kwargs):
+        await asyncio.sleep(0.2)
+        return [[InlineKeyboardButton("X", callback_data="back_to_menu")]]
+
+    async def slow_sections(*_args, **_kwargs):
+        await asyncio.sleep(0.2)
+        return "Header", "Details"
+
+    monkeypatch.setattr("bot_kie.build_main_menu_keyboard", slow_keyboard)
+    monkeypatch.setattr("bot_kie._build_main_menu_sections", slow_sections)
+    monkeypatch.setattr("bot_kie.MAIN_MENU_TOTAL_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("bot_kie.MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS", 0.05)
+
+    caplog.set_level("ERROR")
+    harness.application.add_handler(CommandHandler("start", start))
+    result = await harness.process_command("/start", user_id=90011)
+
+    assert result["success"]
+    assert harness.outbox.messages
+    assert harness.outbox.messages[-1]["text"] == bot_kie.MINIMAL_MENU_TEXT
+
+    await asyncio.sleep(0.1)
+    assert not any("Task exception was never retrieved" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_gen_type_menu_warmup_timeout_sets_degraded(monkeypatch):
     async def slow_warmup():
         await asyncio.sleep(0.05)

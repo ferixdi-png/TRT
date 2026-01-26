@@ -546,3 +546,18 @@ Critical-пункты отсутствуют (см. таблицу рисков)
 
 ### STOP/GO
 * **STOP** — e2e smoke не прогнан, требуется ручной прогон в окружении с Telegram/KIE/DB.
+
+## ✅ 2026-01-26 — Webhook resilience / warmup / locks
+### Изменения
+* Boot warmup: добавлены явные флаги `done/cancelled`, watchdog останавливается после `WEBHOOK_APP_READY`, таймауты не логируются при штатной отмене.  
+* /start SLA: build главного меню переводится в деградированный ответ на таймауте, затем запускается фоновый retry без unhandled task exceptions.  
+* Redis distributed lock: добавлены попытки подключения с backoff, быстрый fallback и метрика `redis_lock_fallback`.  
+* Correlation store: батч-флаш с ограничением частоты, метрики `correlation_store_flush_duration_ms` и `correlation_store_lock_wait_ms_total`.  
+* Health server: строго идемпотентный старт/стоп и ранний запуск в webhook режиме.
+
+### Тесты
+* `pytest -q` — **FAILED** (77 failed, 554 passed, 4 skipped).  
+* `python scripts/smoke_webhook_flow.py` — **OK**.
+
+### STOP/GO
+* **STOP** — массовые падения в `pytest -q`, требуется разбор baseline.  
