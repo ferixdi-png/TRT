@@ -7486,6 +7486,9 @@ START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS
 START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
 START_PLACEHOLDER_TIMEOUT_SECONDS = float(os.getenv("START_PLACEHOLDER_TIMEOUT_SECONDS", "1.5"))
 START_PLACEHOLDER_RETRY_ATTEMPTS = int(os.getenv("START_PLACEHOLDER_RETRY_ATTEMPTS", "1"))
+START_PLACEHOLDER_DEADLINE_MS = int(os.getenv("START_PLACEHOLDER_DEADLINE_MS", "1200"))
+START_SLO_P95_MS = int(os.getenv("START_SLO_P95_MS", "2000"))
+START_SLO_P99_MS = int(os.getenv("START_SLO_P99_MS", "3000"))
 TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
@@ -8288,11 +8291,34 @@ async def _run_telegram_request(
     timeout_s: float,
     retry_attempts: int,
     retry_backoff_s: float,
+    deadline_ms: Optional[int] = None,
+    non_blocking: bool = False,
     request_fn: Callable[[], Awaitable[Any]],
 ) -> Optional[Any]:
     from app.utils.fault_injection import maybe_inject_sleep
 
-    for attempt in range(1, max(1, retry_attempts) + 1):
+    started_at = time.monotonic()
+    max_attempts = max(1, retry_attempts)
+
+    def _remaining_timeout_s(default_timeout: float) -> float:
+        if deadline_ms is None:
+            return default_timeout
+        remaining = (deadline_ms / 1000) - (time.monotonic() - started_at)
+        if remaining <= 0:
+            return 0
+        return min(default_timeout, remaining)
+
+    for attempt in range(1, max_attempts + 1):
+        remaining_timeout_s = _remaining_timeout_s(timeout_s)
+        if remaining_timeout_s <= 0:
+            logger.warning(
+                "TELEGRAM_REQUEST_SKIPPED_DEADLINE action=%s correlation_id=%s attempt=%s deadline_ms=%s",
+                action,
+                correlation_id,
+                attempt,
+                deadline_ms,
+            )
+            return None
         try:
             await maybe_inject_sleep(
                 "TRT_FAULT_INJECT_TELEGRAM_CONNECT_SLEEP_MS",
@@ -8300,39 +8326,56 @@ async def _run_telegram_request(
             )
             if os.getenv("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "").strip() in {"1", "true", "yes"}:
                 raise TimedOut("Injected Telegram connect timeout")
-            return await asyncio.wait_for(request_fn(), timeout=timeout_s)
+            return await asyncio.wait_for(request_fn(), timeout=remaining_timeout_s)
         except RetryAfter as exc:
             delay = max(0.1, float(exc.retry_after or retry_backoff_s))
             logger.warning(
-                "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s",
+                "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s error_type=%s error=%r",
                 action,
                 correlation_id,
                 attempt,
                 delay,
+                type(exc).__name__,
+                exc,
             )
-            await asyncio.sleep(delay)
+            if attempt >= max_attempts or non_blocking:
+                return None
+            remaining_sleep = _remaining_timeout_s(delay)
+            if remaining_sleep <= 0:
+                return None
+            await asyncio.sleep(remaining_sleep)
         except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
             logger.warning(
-                "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s",
+                "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error_type=%s error=%r",
                 action,
                 correlation_id,
                 attempt,
+                type(exc).__name__,
                 exc,
             )
-            if attempt >= retry_attempts:
+            if attempt >= max_attempts or non_blocking:
                 return None
-            await asyncio.sleep(retry_backoff_s * (2 ** (attempt - 1)))
+            backoff_s = retry_backoff_s * (2 ** (attempt - 1))
+            remaining_sleep = _remaining_timeout_s(backoff_s)
+            if remaining_sleep <= 0:
+                return None
+            await asyncio.sleep(remaining_sleep)
         except Exception as exc:
             logger.warning(
-                "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error=%s",
+                "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error_type=%s error=%r",
                 action,
                 correlation_id,
                 attempt,
+                type(exc).__name__,
                 exc,
             )
-            if attempt >= retry_attempts:
+            if attempt >= max_attempts or non_blocking:
                 return None
-            await asyncio.sleep(retry_backoff_s * (2 ** (attempt - 1)))
+            backoff_s = retry_backoff_s * (2 ** (attempt - 1))
+            remaining_sleep = _remaining_timeout_s(backoff_s)
+            if remaining_sleep <= 0:
+                return None
+            await asyncio.sleep(remaining_sleep)
     return None
 
 
@@ -8343,10 +8386,13 @@ async def _show_minimal_menu(
     source: str,
     correlation_id: Optional[str],
     prefer_edit: bool = True,
+    non_blocking: bool = False,
     timeout_s: Optional[float] = None,
     max_attempts: Optional[int] = None,
     fallback_timeout_s: Optional[float] = None,
     fallback_max_attempts: Optional[int] = None,
+    deadline_ms: Optional[int] = None,
+    allow_fallback: bool = True,
     action_prefix: str = "minimal_menu",
 ) -> dict:
     user_id = update.effective_user.id if update.effective_user else None
@@ -8362,6 +8408,8 @@ async def _show_minimal_menu(
     used_edit = False
     fallback_send = False
     send_ok = False
+    deadline_hit = False
+    started_at = time.monotonic()
     telegram_timeouts = _telegram_request_timeouts()
     resolved_timeout_s = TELEGRAM_SEND_TIMEOUT_SECONDS if timeout_s is None else timeout_s
     resolved_attempts = TELEGRAM_SEND_RETRY_ATTEMPTS if max_attempts is None else max_attempts
@@ -8372,89 +8420,132 @@ async def _show_minimal_menu(
         MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS if fallback_max_attempts is None else fallback_max_attempts
     )
 
-    if update.callback_query and prefer_edit:
-        edit_result = await _run_telegram_request(
-            f"{action_prefix}_edit",
+    def _remaining_deadline_s(default_timeout_s: float) -> float:
+        if deadline_ms is None:
+            return default_timeout_s
+        remaining = (deadline_ms / 1000) - (time.monotonic() - started_at)
+        if remaining <= 0:
+            return 0
+        return min(default_timeout_s, remaining)
+
+    def _maybe_log_deadline_skip() -> None:
+        action_name = f"{action_prefix.upper()}_SKIPPED_DEADLINE"
+        log_structured_event(
             correlation_id=correlation_id,
-            timeout_s=resolved_timeout_s,
-            retry_attempts=resolved_attempts,
-            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
-            request_fn=lambda: update.callback_query.edit_message_text(
-                MINIMAL_MENU_TEXT,
-                reply_markup=reply_markup,
-                **telegram_timeouts,
-            ),
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action=action_name,
+            action_path=f"menu:{source}",
+            stage="UI_ROUTER",
+            outcome="skipped_deadline",
+            param={"budget_ms": deadline_ms},
         )
-        if edit_result is not None:
-            used_edit = True
-            send_ok = True
-            message_id = getattr(edit_result, "message_id", None) or (
-                update.callback_query.message.message_id if update.callback_query.message else None
-            )
-            logger.info(
-                "MINIMAL_MENU_RENDER corr_id=%s method=edit source=%s user_id=%s chat_id=%s",
-                correlation_id,
-                source,
-                user_id,
-                chat_id,
-            )
-            increment_update_metric("send_message")
+
+    if update.callback_query and prefer_edit:
+        edit_timeout_s = _remaining_deadline_s(resolved_timeout_s)
+        if edit_timeout_s <= 0:
+            deadline_hit = True
         else:
-            fallback_send = True
+            edit_result = await _run_telegram_request(
+                f"{action_prefix}_edit",
+                correlation_id=correlation_id,
+                timeout_s=edit_timeout_s,
+                retry_attempts=resolved_attempts,
+                retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                deadline_ms=deadline_ms,
+                non_blocking=non_blocking,
+                request_fn=lambda: update.callback_query.edit_message_text(
+                    MINIMAL_MENU_TEXT,
+                    reply_markup=reply_markup,
+                    **telegram_timeouts,
+                ),
+            )
+            if edit_result is not None:
+                used_edit = True
+                send_ok = True
+                message_id = getattr(edit_result, "message_id", None) or (
+                    update.callback_query.message.message_id if update.callback_query.message else None
+                )
+                logger.info(
+                    "MINIMAL_MENU_RENDER corr_id=%s method=edit source=%s user_id=%s chat_id=%s",
+                    correlation_id,
+                    source,
+                    user_id,
+                    chat_id,
+                )
+                increment_update_metric("send_message")
+            else:
+                fallback_send = True
 
     if chat_id and not used_edit:
-        send_result = await _run_telegram_request(
-            f"{action_prefix}_send",
-            correlation_id=correlation_id,
-            timeout_s=resolved_timeout_s,
-            retry_attempts=resolved_attempts,
-            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
-            request_fn=lambda: context.bot.send_message(
-                chat_id=chat_id,
-                text=MINIMAL_MENU_TEXT,
-                reply_markup=reply_markup,
-                **telegram_timeouts,
-            ),
-        )
-        if send_result is not None:
-            send_ok = True
-            message_id = getattr(send_result, "message_id", None)
-            logger.info(
-                "MINIMAL_MENU_RENDER corr_id=%s method=send source=%s user_id=%s chat_id=%s",
-                correlation_id,
-                source,
-                user_id,
-                chat_id,
-            )
-            increment_update_metric("send_message")
+        send_timeout_s = _remaining_deadline_s(resolved_timeout_s)
+        if send_timeout_s <= 0:
+            deadline_hit = True
         else:
-            logger.error("MINIMAL_MENU_SEND_FAILED corr_id=%s", correlation_id)
+            send_result = await _run_telegram_request(
+                f"{action_prefix}_send",
+                correlation_id=correlation_id,
+                timeout_s=send_timeout_s,
+                retry_attempts=resolved_attempts,
+                retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                deadline_ms=deadline_ms,
+                non_blocking=non_blocking,
+                request_fn=lambda: context.bot.send_message(
+                    chat_id=chat_id,
+                    text=MINIMAL_MENU_TEXT,
+                    reply_markup=reply_markup,
+                    **telegram_timeouts,
+                ),
+            )
+            if send_result is not None:
+                send_ok = True
+                message_id = getattr(send_result, "message_id", None)
+                logger.info(
+                    "MINIMAL_MENU_RENDER corr_id=%s method=send source=%s user_id=%s chat_id=%s",
+                    correlation_id,
+                    source,
+                    user_id,
+                    chat_id,
+                )
+                increment_update_metric("send_message")
+            else:
+                logger.error("MINIMAL_MENU_SEND_FAILED corr_id=%s", correlation_id)
 
-    if not send_ok and chat_id:
+    if not send_ok and chat_id and allow_fallback:
         logger.warning("MENU_RENDER_FAIL corr_id=%s source=%s fallback=attempt", correlation_id, source)
         fallback_text = _minimal_menu_fallback_text(user_lang)
         fallback_keyboard = _build_menu_fallback_keyboard(user_lang)
-        fallback_result = await _run_telegram_request(
-            f"{action_prefix}_fallback",
-            correlation_id=correlation_id,
-            timeout_s=resolved_fallback_timeout_s,
-            retry_attempts=resolved_fallback_attempts,
-            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
-            request_fn=lambda: context.bot.send_message(
-                chat_id=chat_id,
-                text=fallback_text,
-                reply_markup=fallback_keyboard,
-                **telegram_timeouts,
-            ),
-        )
-        fallback_send = True
-        if fallback_result is not None:
-            send_ok = True
-            message_id = getattr(fallback_result, "message_id", None)
-            logger.info("MENU_RENDER_FAIL corr_id=%s fallback_ok=true", correlation_id)
-            increment_update_metric("send_message")
+        fallback_timeout_s = _remaining_deadline_s(resolved_fallback_timeout_s)
+        if fallback_timeout_s <= 0:
+            deadline_hit = True
         else:
-            logger.warning("MENU_RENDER_FAIL corr_id=%s fallback_ok=false", correlation_id)
+            fallback_result = await _run_telegram_request(
+                f"{action_prefix}_fallback",
+                correlation_id=correlation_id,
+                timeout_s=fallback_timeout_s,
+                retry_attempts=resolved_fallback_attempts,
+                retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                deadline_ms=deadline_ms,
+                non_blocking=non_blocking,
+                request_fn=lambda: context.bot.send_message(
+                    chat_id=chat_id,
+                    text=fallback_text,
+                    reply_markup=fallback_keyboard,
+                    **telegram_timeouts,
+                ),
+            )
+            fallback_send = True
+            if fallback_result is not None:
+                send_ok = True
+                message_id = getattr(fallback_result, "message_id", None)
+                logger.info("MENU_RENDER_FAIL corr_id=%s fallback_ok=true", correlation_id)
+                increment_update_metric("send_message")
+            else:
+                logger.warning("MENU_RENDER_FAIL corr_id=%s fallback_ok=false", correlation_id)
+
+    if deadline_hit and not send_ok:
+        _maybe_log_deadline_skip()
 
     log_structured_event(
         correlation_id=correlation_id,
@@ -8464,7 +8555,7 @@ async def _show_minimal_menu(
         action="MENU_RENDER",
         action_path=f"menu:{source}",
         stage="UI_ROUTER",
-        outcome="ok" if send_ok else "degraded",
+        outcome="ok" if send_ok else ("skipped_deadline" if deadline_hit else "degraded"),
         param={
             "used_edit": used_edit,
             "fallback_send": fallback_send,
@@ -8556,17 +8647,23 @@ async def _start_menu_with_fallback(
         fallback_max_ms = int(os.getenv("START_FALLBACK_MAX_MS", str(START_FALLBACK_MAX_MS)))
     except ValueError:
         fallback_max_ms = START_FALLBACK_MAX_MS
-    placeholder_result = await _show_minimal_menu(
-        update,
-        context,
-        source=source,
-        correlation_id=correlation_id,
-        prefer_edit=False,
-        timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
-        max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
-        fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
-        fallback_max_attempts=1,
-        action_prefix="start_placeholder",
+    placeholder_task = _create_background_task(
+        _show_minimal_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=False,
+            non_blocking=True,
+            timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+            max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
+            fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+            fallback_max_attempts=1,
+            deadline_ms=START_PLACEHOLDER_DEADLINE_MS,
+            allow_fallback=False,
+            action_prefix="start_placeholder",
+        ),
+        action="start_placeholder",
     )
     log_structured_event(
         correlation_id=correlation_id,
@@ -8579,13 +8676,22 @@ async def _start_menu_with_fallback(
         outcome="degraded",
         param={"fallback_ms": fallback_max_ms, "reason": "placeholder_first"},
     )
-    placeholder_message_id = placeholder_result.get("message_id")
 
     if os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip():
-        return placeholder_result
+        return {"correlation_id": correlation_id, "scheduled": True}
 
-    full_menu_task = asyncio.create_task(
-        show_main_menu(
+    async def _render_full_menu() -> None:
+        placeholder_message_id = None
+        try:
+            placeholder_result = await placeholder_task
+            placeholder_message_id = placeholder_result.get("message_id")
+        except Exception as exc:
+            logger.warning(
+                "START_PLACEHOLDER_TASK_FAILED correlation_id=%s error=%r",
+                correlation_id,
+                exc,
+            )
+        await show_main_menu(
             update,
             context,
             source=source,
@@ -8593,9 +8699,9 @@ async def _start_menu_with_fallback(
             prefer_edit=True,
             edit_message_id=placeholder_message_id,
         )
-    )
-    _register_background_task(full_menu_task, action="start_full_menu")
-    return placeholder_result
+
+    _create_background_task(_render_full_menu(), action="start_full_menu")
+    return {"correlation_id": correlation_id, "scheduled": True}
 
 
 async def show_main_menu(
@@ -9540,6 +9646,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logger.debug("start minimal menu fallback failed", exc_info=True)
     finally:
+        try:
+            duration_ms = int((time.monotonic() - start_ts) * 1000)
+            verdict = "pass" if duration_ms <= START_SLO_P99_MS else "fail"
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="START_SLO",
+                action_path="command:/start",
+                stage="HANDLER",
+                outcome=verdict,
+                param={
+                    "duration_ms": duration_ms,
+                    "p95_budget_ms": START_SLO_P95_MS,
+                    "p99_budget_ms": START_SLO_P99_MS,
+                },
+            )
+        except Exception:
+            logger.debug("START_SLO log failed", exc_info=True)
         increment_update_metric("handler_exit")
         _log_handler_latency("start", start_ts, update)
 
@@ -25934,6 +26060,7 @@ async def create_webhook_handler():
     ip_rate_limit_burst = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_BURST", "12"))
     request_dedup_ttl_seconds = float(os.getenv("WEBHOOK_REQUEST_DEDUP_TTL_SECONDS", "30"))
     process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
+    process_budget_ms = int(os.getenv("WEBHOOK_PROCESS_BUDGET_MS", "2500"))
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
     ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "500"))
@@ -25978,6 +26105,7 @@ async def create_webhook_handler():
         )
         process_task = asyncio.create_task(_application_for_webhook.process_update(update))
         release_in_finally = True
+        budget_s = min(process_timeout_seconds, process_budget_ms / 1000)
 
         def _release_after_task(done_task: asyncio.Task) -> None:
             if webhook_semaphore is not None and semaphore_acquired:
@@ -26012,7 +26140,7 @@ async def create_webhook_handler():
         try:
             await asyncio.wait_for(
                 asyncio.shield(process_task),
-                timeout=process_timeout_seconds,
+                timeout=budget_s,
             )
             duration_ms = int((time.monotonic() - process_started) * 1000)
             increment_update_metric("webhook_process_done")
@@ -26029,8 +26157,26 @@ async def create_webhook_handler():
             )
             logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
         except asyncio.TimeoutError:
-            retry_after = max(1, int(math.ceil(process_timeout_seconds)))
+            duration_ms = int((time.monotonic() - process_started) * 1000)
+            retry_after = max(1, int(math.ceil(budget_s)))
             increment_update_metric("webhook_process_done")
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="WEBHOOK_BUDGET_EXCEEDED",
+                action_path="webhook:process_update",
+                stage="WEBHOOK",
+                outcome="budget_exceeded",
+                error_id="WEBHOOK_BUDGET_EXCEEDED",
+                param={
+                    "client_ip": client_ip,
+                    "retry_after": retry_after,
+                    "duration_ms": duration_ms,
+                    "budget_ms": int(budget_s * 1000),
+                },
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -26039,9 +26185,9 @@ async def create_webhook_handler():
                 action="WEBHOOK_PROCESS_DONE",
                 action_path="webhook:process_update",
                 stage="WEBHOOK",
-                outcome="timeout",
-                error_id="WEBHOOK_PROCESS_TIMEOUT",
-                param={"client_ip": client_ip, "retry_after": retry_after},
+                outcome="budget_exceeded",
+                error_id="WEBHOOK_BUDGET_EXCEEDED",
+                param={"client_ip": client_ip, "retry_after": retry_after, "duration_ms": duration_ms},
             )
             process_task.add_done_callback(_release_after_task)
             release_in_finally = False
