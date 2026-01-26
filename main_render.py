@@ -372,8 +372,8 @@ def build_webhook_handler(
                 stage="WEBHOOK",
                 outcome="received",
             )
-
             if process_in_background:
+                logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
                 _schedule_task(
                     _process_update_with_semaphore(
                         update,

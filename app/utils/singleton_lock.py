@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import threading
+import random
 from pathlib import Path
 from typing import Optional
 
@@ -68,6 +69,29 @@ def _get_redis_renew_interval_seconds(ttl_seconds: int) -> int:
     return max(1, interval)
 
 
+def _get_redis_renew_jitter_ratio() -> float:
+    try:
+        ratio = float(os.getenv("REDIS_LOCK_RENEW_JITTER_RATIO", "0"))
+    except ValueError:
+        ratio = 0.0
+    return max(0.0, min(0.5, ratio))
+
+
+def _is_test_mode() -> bool:
+    return os.getenv("TEST_MODE", "0").lower() in ("1", "true", "yes")
+
+
+_redis_renew_test_random = random.Random(0)
+
+
+def _resolve_renew_sleep(base_seconds: float, jitter_ratio: float) -> float:
+    jitter = base_seconds * jitter_ratio
+    if jitter <= 0:
+        return base_seconds
+    rng = _redis_renew_test_random if _is_test_mode() else random
+    return base_seconds + rng.uniform(0.0, jitter)
+
+
 def _get_redis_connect_timeout_seconds() -> float:
     try:
         timeout_ms = int(os.getenv("REDIS_LOCK_CONNECT_TIMEOUT_MS", "250"))
@@ -113,6 +137,7 @@ async def _renew_redis_lock(ttl_seconds: int, interval_seconds: int) -> None:
     global _redis_client, _redis_lock_key, _redis_lock_value
     if _redis_client is None or _redis_lock_key is None or _redis_lock_value is None:
         return
+    jitter_ratio = _get_redis_renew_jitter_ratio()
     lua_script = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
     return redis.call("expire", KEYS[1], ARGV[2])
@@ -124,7 +149,7 @@ end
         if _redis_renew_stop is not None and _redis_renew_stop.is_set():
             break
         try:
-            await asyncio.sleep(interval_seconds)
+            await asyncio.sleep(_resolve_renew_sleep(interval_seconds, jitter_ratio))
         except asyncio.CancelledError:
             break
         try:
@@ -368,12 +393,17 @@ async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
 
         await maybe_inject_sleep("TRT_FAULT_INJECT_REDIS_CONNECT_SLEEP_MS", label="redis_lock.connect")
         connect_timeout = _get_redis_connect_timeout_seconds()
-        _redis_client = redis.from_url(
-            redis_url,
-            decode_responses=True,
-            socket_connect_timeout=connect_timeout,
-            socket_timeout=connect_timeout,
-        )
+        try:
+            _redis_client = redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_connect_timeout=connect_timeout,
+                socket_timeout=connect_timeout,
+            )
+        except TypeError:
+            _redis_client = redis.from_url(redis_url, decode_responses=True)
+        if asyncio.iscoroutine(_redis_client):
+            _redis_client = await _redis_client
         _redis_lock_key = f"trt_bot_lock:{os.getenv('BOT_INSTANCE_ID', 'default')}"
         _redis_lock_value = f"{os.getpid()}:{time.time()}"
 
