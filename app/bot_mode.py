@@ -9,15 +9,18 @@ import os
 from urllib.parse import urlsplit, urlunsplit
 import asyncio
 import logging
+import random
 from typing import Literal, Optional
 from telegram import Bot
-from telegram.error import Conflict
+from telegram.error import Conflict, RetryAfter, TimedOut
+import httpx
 
 logger = logging.getLogger(__name__)
 
 BotMode = Literal["polling", "webhook", "web", "smoke"]
 _VALID_MODES = {"polling", "webhook", "web", "smoke"}
 _WEBHOOK_SET_LOCK = asyncio.Lock()
+_WEBHOOK_SET_RATE_LIMIT_TOTAL = 0
 
 
 def _read_float_env(name: str, default: float, *, min_value: float = 0.1, max_value: float = 30.0) -> float:
@@ -153,8 +156,19 @@ async def ensure_webhook_mode(
     max_attempts = attempts or _read_int_env("WEBHOOK_SET_MAX_ATTEMPTS", 3, min_value=1, max_value=5)
     backoff_base = backoff_base_seconds or _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1)
     backoff_cap = backoff_cap_seconds or _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 3.0, min_value=0.5)
+    backoff_jitter_ratio = _read_float_env("WEBHOOK_SET_BACKOFF_JITTER_RATIO", 0.2, min_value=0.0, max_value=1.0)
 
     async with _WEBHOOK_SET_LOCK:
+        try:
+            webhook_info = await bot.get_webhook_info(
+                connect_timeout=timeout_connect,
+                read_timeout=timeout_read,
+            )
+            if webhook_info.url == webhook_url:
+                logger.info("✅ Webhook already set: %s", webhook_info.url)
+                return True
+        except Exception as exc:
+            logger.warning("WEBHOOK_INFO_CHECK_FAILED error=%s", exc)
         for attempt in range(1, max_attempts + 1):
             try:
                 result = await bot.set_webhook(
@@ -167,10 +181,7 @@ async def ensure_webhook_mode(
                 )
                 logger.info("✅ Webhook set: %s", result)
 
-                webhook_info = await bot.get_webhook_info(
-                    connect_timeout=timeout_connect,
-                    read_timeout=timeout_read,
-                )
+                webhook_info = await bot.get_webhook_info(connect_timeout=timeout_connect, read_timeout=timeout_read)
                 if webhook_info.url != webhook_url:
                     logger.error(
                         "❌ Webhook not set correctly: %s != %s",
@@ -181,9 +192,33 @@ async def ensure_webhook_mode(
 
                 logger.info("✅ Webhook confirmed: %s", webhook_info.url)
                 return True
+            except RetryAfter as exc:
+                global _WEBHOOK_SET_RATE_LIMIT_TOTAL
+                _WEBHOOK_SET_RATE_LIMIT_TOTAL += 1
+                retry_after = max(0.1, float(exc.retry_after or backoff_base))
+                logger.warning(
+                    "WEBHOOK_SET_RATE_LIMIT attempt=%s retry_after_s=%s",
+                    attempt,
+                    retry_after,
+                )
+                logger.info(
+                    "METRIC_GAUGE name=webhook_set_rate_limit_total value=%s retry_after_s=%s",
+                    _WEBHOOK_SET_RATE_LIMIT_TOTAL,
+                    retry_after,
+                )
+                await asyncio.sleep(retry_after)
             except Conflict as exc:
                 logger.error("❌ Conflict detected while setting webhook: %s", exc)
                 raise
+            except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                logger.warning(
+                    "WEBHOOK_SET_TIMEOUT attempt=%s/%s error=%s",
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                if attempt >= max_attempts:
+                    return False
             except Exception as exc:
                 logger.error(
                     "❌ Error setting webhook (attempt %s/%s): %s",
@@ -193,8 +228,10 @@ async def ensure_webhook_mode(
                 )
                 if attempt >= max_attempts:
                     return False
-                backoff = min(backoff_cap, backoff_base * (2 ** (attempt - 1)))
-                await asyncio.sleep(backoff)
+            backoff = min(backoff_cap, backoff_base * (2 ** (attempt - 1)))
+            jitter = backoff * backoff_jitter_ratio
+            sleep_for = backoff + random.uniform(0, jitter) if jitter > 0 else backoff
+            await asyncio.sleep(sleep_for)
         return False
 
 
@@ -215,4 +252,3 @@ def handle_conflict_gracefully(error: Conflict, mode: BotMode) -> None:
     # Это предотвращает повторные конфликты и останавливает polling loop
     import os
     os._exit(0)
-
