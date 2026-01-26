@@ -7484,6 +7484,8 @@ MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS",
 MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS", "6.0"))
 START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
 START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
+START_PLACEHOLDER_TIMEOUT_SECONDS = float(os.getenv("START_PLACEHOLDER_TIMEOUT_SECONDS", "1.5"))
+START_PLACEHOLDER_RETRY_ATTEMPTS = int(os.getenv("START_PLACEHOLDER_RETRY_ATTEMPTS", "1"))
 TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
@@ -7493,6 +7495,7 @@ TELEGRAM_API_WRITE_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_WRITE_TIMEOUT
 TELEGRAM_API_POOL_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_POOL_TIMEOUT_SECONDS", "2.0"))
 MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS = float(os.getenv("MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS", "1.5"))
 MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS = int(os.getenv("MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS", "2"))
+STORAGE_DEGRADED_COOLDOWN_SECONDS = float(os.getenv("STORAGE_DEGRADED_COOLDOWN_SECONDS", "15"))
 SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL_SECONDS", "45.0"))
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
 MAIN_MENU_DEP_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_DEP_CACHE_TTL_SECONDS", "30.0"))
@@ -7567,6 +7570,29 @@ def _set_menu_dep_cache(session: Optional[Dict[str, Any]], **values: Any) -> Non
     session[_MENU_DEP_CACHE_KEY] = cache
 
 
+_storage_degraded_until = 0.0
+_storage_degraded_reason: Optional[str] = None
+
+
+def _is_storage_degraded() -> bool:
+    return time.monotonic() < _storage_degraded_until
+
+
+def _mark_storage_degraded(reason: str) -> None:
+    global _storage_degraded_until, _storage_degraded_reason
+    now = time.monotonic()
+    cooldown_until = now + STORAGE_DEGRADED_COOLDOWN_SECONDS
+    if cooldown_until <= _storage_degraded_until:
+        return
+    _storage_degraded_until = cooldown_until
+    _storage_degraded_reason = reason
+    logger.warning(
+        "STORAGE_DEGRADED reason=%s cooldown_s=%s",
+        reason,
+        STORAGE_DEGRADED_COOLDOWN_SECONDS,
+    )
+
+
 async def _refresh_menu_language_cache(
     user_id: int,
     *,
@@ -7574,11 +7600,19 @@ async def _refresh_menu_language_cache(
     timeout_s: Optional[float] = None,
 ) -> None:
     timeout = MAIN_MENU_DEP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    if _is_storage_degraded():
+        logger.debug(
+            "MENU_LANG_REFRESH_SKIPPED storage_degraded=true user_id=%s correlation_id=%s",
+            user_id,
+            correlation_id,
+        )
+        return
     try:
         from app.services.user_service import get_user_language as get_user_language_async
 
         resolved_lang = await asyncio.wait_for(get_user_language_async(user_id), timeout=timeout)
     except asyncio.TimeoutError:
+        _mark_storage_degraded("menu_lang_refresh_timeout")
         logger.debug(
             "MENU_LANG_REFRESH_TIMEOUT user_id=%s correlation_id=%s timeout_s=%s",
             user_id,
@@ -7610,10 +7644,13 @@ async def _await_with_timeout(
     default=None,
     raise_on_timeout: bool = False,
     log_timeout: bool = True,
+    degrade_storage_on_timeout: bool = False,
 ) -> Any:
     try:
         return await asyncio.wait_for(coro, timeout=timeout)
     except asyncio.TimeoutError as exc:
+        if degrade_storage_on_timeout:
+            _mark_storage_degraded(f"{label}_timeout")
         if log_timeout:
             logger.warning(
                 "MENU_DEP_TIMEOUT label=%s correlation_id=%s user_id=%s chat_id=%s update_id=%s",
@@ -7757,12 +7794,25 @@ async def _build_main_menu_sections(
 ) -> tuple[str, str]:
     user = update.effective_user
     user_id = user.id if user else None
+    storage_degraded = _is_storage_degraded()
+    if storage_degraded:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update.update_id,
+            action="STORAGE_DEGRADED",
+            action_path="menu:dependencies",
+            stage="UI_ROUTER",
+            outcome="skip",
+            param={"reason": _storage_degraded_reason},
+        )
     resolved_lang = user_lang or "ru"
     cached_menu = _get_menu_dep_cache(menu_session, MAIN_MENU_DEP_CACHE_TTL_SECONDS)
     cached_lang = cached_menu.get("user_lang") if cached_menu else None
     if cached_lang and user_lang is None:
         resolved_lang = cached_lang
-    if user_id and user_lang is None and not cached_lang:
+    if user_id and user_lang is None and not cached_lang and not storage_degraded:
         try:
             from app.services.user_service import get_user_language as get_user_language_async
             resolved_lang = await _await_with_timeout(
@@ -7776,6 +7826,7 @@ async def _build_main_menu_sections(
                 default="ru",
                 raise_on_timeout=False,
                 log_timeout=False,
+                degrade_storage_on_timeout=True,
             )
         except Exception as exc:
             logger.warning("Failed to resolve user language: %s", exc)
@@ -7810,7 +7861,7 @@ async def _build_main_menu_sections(
     remaining_free = (
         cached_menu.get("remaining_free") if cached_menu and "remaining_free" in cached_menu else FREE_GENERATIONS_PER_DAY
     )
-    if user_id and (not cached_menu or "remaining_free" not in cached_menu):
+    if user_id and (not cached_menu or "remaining_free" not in cached_menu) and not storage_degraded:
         try:
             from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
             remaining_free = await _await_with_timeout(
@@ -7824,6 +7875,7 @@ async def _build_main_menu_sections(
                 default=FREE_GENERATIONS_PER_DAY,
                 raise_on_timeout=False,
                 log_timeout=False,
+                degrade_storage_on_timeout=True,
             )
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
@@ -7832,7 +7884,7 @@ async def _build_main_menu_sections(
     if user_id:
         if cached_menu and "is_new" in cached_menu:
             is_new = cached_menu["is_new"]
-        else:
+        elif not storage_degraded:
             is_new = await _await_with_timeout(
                 is_new_user_async(user_id),
                 timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
@@ -7844,15 +7896,18 @@ async def _build_main_menu_sections(
                 default=True,
                 raise_on_timeout=False,
                 log_timeout=False,
+                degrade_storage_on_timeout=True,
             )
             _set_menu_dep_cache(menu_session, is_new=is_new)
+        else:
+            is_new = True
     else:
         is_new = True
     referral_link = get_user_referral_link(user_id) if user_id else ""
     if user_id:
         if cached_menu and "referrals_count" in cached_menu:
             referrals_count = cached_menu["referrals_count"]
-        else:
+        elif not storage_degraded:
             referrals = await _await_with_timeout(
                 get_user_referrals(user_id),
                 timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
@@ -7864,9 +7919,12 @@ async def _build_main_menu_sections(
                 default=[],
                 raise_on_timeout=False,
                 log_timeout=False,
+                degrade_storage_on_timeout=True,
             )
             referrals_count = len(referrals)
             _set_menu_dep_cache(menu_session, referrals_count=referrals_count)
+        else:
+            referrals_count = 0
     else:
         referrals_count = 0
     online_count = get_fake_online_count()
@@ -8285,6 +8343,11 @@ async def _show_minimal_menu(
     source: str,
     correlation_id: Optional[str],
     prefer_edit: bool = True,
+    timeout_s: Optional[float] = None,
+    max_attempts: Optional[int] = None,
+    fallback_timeout_s: Optional[float] = None,
+    fallback_max_attempts: Optional[int] = None,
+    action_prefix: str = "minimal_menu",
 ) -> dict:
     user_id = update.effective_user.id if update.effective_user else None
     user_lang = "ru"
@@ -8300,13 +8363,21 @@ async def _show_minimal_menu(
     fallback_send = False
     send_ok = False
     telegram_timeouts = _telegram_request_timeouts()
+    resolved_timeout_s = TELEGRAM_SEND_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    resolved_attempts = TELEGRAM_SEND_RETRY_ATTEMPTS if max_attempts is None else max_attempts
+    resolved_fallback_timeout_s = (
+        MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS if fallback_timeout_s is None else fallback_timeout_s
+    )
+    resolved_fallback_attempts = (
+        MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS if fallback_max_attempts is None else fallback_max_attempts
+    )
 
     if update.callback_query and prefer_edit:
         edit_result = await _run_telegram_request(
-            "minimal_menu_edit",
+            f"{action_prefix}_edit",
             correlation_id=correlation_id,
-            timeout_s=TELEGRAM_SEND_TIMEOUT_SECONDS,
-            retry_attempts=TELEGRAM_SEND_RETRY_ATTEMPTS,
+            timeout_s=resolved_timeout_s,
+            retry_attempts=resolved_attempts,
             retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
             request_fn=lambda: update.callback_query.edit_message_text(
                 MINIMAL_MENU_TEXT,
@@ -8333,10 +8404,10 @@ async def _show_minimal_menu(
 
     if chat_id and not used_edit:
         send_result = await _run_telegram_request(
-            "minimal_menu_send",
+            f"{action_prefix}_send",
             correlation_id=correlation_id,
-            timeout_s=TELEGRAM_SEND_TIMEOUT_SECONDS,
-            retry_attempts=TELEGRAM_SEND_RETRY_ATTEMPTS,
+            timeout_s=resolved_timeout_s,
+            retry_attempts=resolved_attempts,
             retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
             request_fn=lambda: context.bot.send_message(
                 chat_id=chat_id,
@@ -8364,10 +8435,10 @@ async def _show_minimal_menu(
         fallback_text = _minimal_menu_fallback_text(user_lang)
         fallback_keyboard = _build_menu_fallback_keyboard(user_lang)
         fallback_result = await _run_telegram_request(
-            "minimal_menu_fallback",
+            f"{action_prefix}_fallback",
             correlation_id=correlation_id,
-            timeout_s=MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS,
-            retry_attempts=MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS,
+            timeout_s=resolved_fallback_timeout_s,
+            retry_attempts=resolved_fallback_attempts,
             retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
             request_fn=lambda: context.bot.send_message(
                 chat_id=chat_id,
@@ -8485,57 +8556,17 @@ async def _start_menu_with_fallback(
         fallback_max_ms = int(os.getenv("START_FALLBACK_MAX_MS", str(START_FALLBACK_MAX_MS)))
     except ValueError:
         fallback_max_ms = START_FALLBACK_MAX_MS
-    if os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip():
-        minimal_result = await _show_minimal_menu(
-            update,
-            context,
-            source=source,
-            correlation_id=correlation_id,
-            prefer_edit=False,
-        )
-        log_structured_event(
-            correlation_id=correlation_id,
-            user_id=update.effective_user.id if update.effective_user else None,
-            chat_id=update.effective_chat.id if update.effective_chat else None,
-            update_id=update.update_id,
-            action="START_FALLBACK",
-            action_path=f"menu:{source}",
-            stage="UI_ROUTER",
-            outcome="degraded",
-            param={"fallback_ms": 0, "reason": "storage_fault_injection"},
-        )
-        return minimal_result
-    if fallback_max_ms <= 0:
-        return await show_main_menu(
-            update,
-            context,
-            source=source,
-            correlation_id=correlation_id,
-            prefer_edit=False,
-        )
-
-    full_menu_task = asyncio.create_task(
-        show_main_menu(
-            update,
-            context,
-            source=source,
-            correlation_id=correlation_id,
-            prefer_edit=False,
-        )
-    )
-    guard_ms = int(os.getenv("START_FALLBACK_GUARD_MS", "150"))
-    timeout_ms = max(50, fallback_max_ms - guard_ms)
-    try:
-        return await asyncio.wait_for(asyncio.shield(full_menu_task), timeout=timeout_ms / 1000)
-    except asyncio.TimeoutError:
-        _register_background_task(full_menu_task, action="start_full_menu")
-
-    minimal_result = await _show_minimal_menu(
+    placeholder_result = await _show_minimal_menu(
         update,
         context,
         source=source,
         correlation_id=correlation_id,
         prefer_edit=False,
+        timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+        max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
+        fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+        fallback_max_attempts=1,
+        action_prefix="start_placeholder",
     )
     log_structured_event(
         correlation_id=correlation_id,
@@ -8546,9 +8577,25 @@ async def _start_menu_with_fallback(
         action_path=f"menu:{source}",
         stage="UI_ROUTER",
         outcome="degraded",
-        param={"fallback_ms": fallback_max_ms},
+        param={"fallback_ms": fallback_max_ms, "reason": "placeholder_first"},
     )
-    return minimal_result
+    placeholder_message_id = placeholder_result.get("message_id")
+
+    if os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip():
+        return placeholder_result
+
+    full_menu_task = asyncio.create_task(
+        show_main_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=True,
+            edit_message_id=placeholder_message_id,
+        )
+    )
+    _register_background_task(full_menu_task, action="start_full_menu")
+    return placeholder_result
 
 
 async def show_main_menu(
@@ -8558,6 +8605,7 @@ async def show_main_menu(
     *,
     correlation_id: Optional[str] = None,
     prefer_edit: bool = True,
+    edit_message_id: Optional[int] = None,
 ) -> dict:
     """Показывает единое главное меню для всех входов."""
     correlation_id = correlation_id or ensure_correlation_id(update, context)
@@ -8602,10 +8650,11 @@ async def show_main_menu(
                 except Exception:
                     user_lang = "ru"
                 _set_menu_dep_cache(session, user_lang=user_lang)
-                _create_background_task(
-                    _refresh_menu_language_cache(user_id, correlation_id=correlation_id),
-                    action="menu_lang_refresh",
-                )
+                if not _is_storage_degraded():
+                    _create_background_task(
+                        _refresh_menu_language_cache(user_id, correlation_id=correlation_id),
+                        action="menu_lang_refresh",
+                    )
 
         if user_id:
             reset_session_context(
@@ -8823,7 +8872,80 @@ async def show_main_menu(
             }
             return result
 
-        if update.callback_query and prefer_edit and len(header_text) <= TELEGRAM_TEXT_LIMIT:
+        if (
+            edit_message_id
+            and prefer_edit
+            and chat_id
+            and len(header_text) <= TELEGRAM_TEXT_LIMIT
+        ):
+            try:
+                edit_result = await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=edit_message_id,
+                    text=header_text,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                used_edit = True
+                message_id = getattr(edit_result, "message_id", None) or edit_message_id
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_RENDER",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="edit_ok",
+                    text_hash=welcome_hash,
+                    param={
+                        "ui_context": UI_CONTEXT_MAIN_MENU,
+                        "welcome_version": welcome_hash,
+                        "edit_message_id": edit_message_id,
+                    },
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_RENDER_OK",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="ok",
+                    text_hash=welcome_hash,
+                )
+                logger.info(
+                    "MENU_RENDER_DELIVERED corr_id=%s method=edit_message_id source=%s user_id=%s chat_id=%s",
+                    correlation_id,
+                    source,
+                    user_id,
+                    chat_id,
+                )
+                increment_update_metric("send_message")
+            except Exception as exc:
+                fallback_send = True
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_RENDER",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="edit_failed",
+                    error_code="MENU_EDIT_FAIL",
+                    fix_hint=str(exc),
+                    text_hash=welcome_hash,
+                    param={
+                        "ui_context": UI_CONTEXT_MAIN_MENU,
+                        "welcome_version": welcome_hash,
+                        "edit_message_id": edit_message_id,
+                    },
+                )
+
+        if not used_edit and update.callback_query and prefer_edit and len(header_text) <= TELEGRAM_TEXT_LIMIT:
             query = update.callback_query
             try:
                 edit_result = await query.edit_message_text(

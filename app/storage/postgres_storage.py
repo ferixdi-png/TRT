@@ -32,7 +32,9 @@ class PostgresStorage(BaseStorage):
         self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "").strip()
         if not self.partner_id:
             raise ValueError("BOT_INSTANCE_ID is required for multi-tenant storage")
-        max_pool_env = os.getenv("DB_MAX_CONN", "5")
+        max_pool_env = os.getenv("DB_MAX_CONN")
+        if max_pool_env is None:
+            max_pool_env = os.getenv("DB_MAXCONN", "5")
         try:
             self.max_pool_size = max(1, int(max_pool_env))
         except ValueError:
@@ -41,6 +43,9 @@ class PostgresStorage(BaseStorage):
         self._pools: Dict[int, asyncpg.Pool] = {}
         self._schema_ready_loops: set[int] = set()
         self._file_locks: Dict[Tuple[int, str], asyncio.Lock] = {}
+        self._circuit_open_until = 0.0
+        self._circuit_open_seconds = float(os.getenv("DB_CIRCUIT_OPEN_SECONDS", "20"))
+        self._circuit_open_reason: Optional[str] = None
 
         # logical filenames (same as JsonStorage/GitHubStorage)
         self.balances_file = "user_balances.json"
@@ -72,49 +77,63 @@ class PostgresStorage(BaseStorage):
         return {}
 
     async def _get_pool(self) -> asyncpg.Pool:
+        if self._is_circuit_open():
+            raise RuntimeError(f"PostgresStorage circuit open: {self._circuit_open_reason or 'unknown'}")
         loop = asyncio.get_running_loop()
         loop_id = id(loop)
         pool = self._pools.get(loop_id)
         if pool is None:
-            pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=self.max_pool_size)
-            self._pools[loop_id] = pool
+            try:
+                pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=self.max_pool_size)
+                self._pools[loop_id] = pool
+            except Exception as exc:
+                self._maybe_open_circuit(exc, context="create_pool")
+                raise
         if loop_id not in self._schema_ready_loops:
-            await self._ensure_schema(pool, loop_id)
+            try:
+                await self._ensure_schema(pool, loop_id)
+            except Exception as exc:
+                self._maybe_open_circuit(exc, context="ensure_schema")
+                raise
         return pool
 
     async def _ensure_schema(self, pool: asyncpg.Pool, loop_id: int) -> None:
         if loop_id in self._schema_ready_loops:
             return
-        async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS storage_json (
-                    partner_id TEXT NOT NULL,
-                    filename   TEXT NOT NULL,
-                    payload    JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    PRIMARY KEY (partner_id, filename)
-                );
-                CREATE TABLE IF NOT EXISTS migrations_meta (
-                    key TEXT PRIMARY KEY,
-                    completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                );
-                CREATE TABLE IF NOT EXISTS referrals (
-                    partner_id TEXT NOT NULL,
-                    referred_user_id BIGINT NOT NULL,
-                    referrer_id BIGINT NOT NULL,
-                    ref_param TEXT,
-                    bonus_amount INTEGER,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    bonus_granted_at TIMESTAMPTZ,
-                    PRIMARY KEY (partner_id, referred_user_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id
-                    ON referrals(partner_id, referrer_id);
-                CREATE INDEX IF NOT EXISTS idx_referrals_created_at
-                    ON referrals(partner_id, created_at DESC);
-                """
-            )
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS storage_json (
+                        partner_id TEXT NOT NULL,
+                        filename   TEXT NOT NULL,
+                        payload    JSONB NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        PRIMARY KEY (partner_id, filename)
+                    );
+                    CREATE TABLE IF NOT EXISTS migrations_meta (
+                        key TEXT PRIMARY KEY,
+                        completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    CREATE TABLE IF NOT EXISTS referrals (
+                        partner_id TEXT NOT NULL,
+                        referred_user_id BIGINT NOT NULL,
+                        referrer_id BIGINT NOT NULL,
+                        ref_param TEXT,
+                        bonus_amount INTEGER,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        bonus_granted_at TIMESTAMPTZ,
+                        PRIMARY KEY (partner_id, referred_user_id)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id
+                        ON referrals(partner_id, referrer_id);
+                    CREATE INDEX IF NOT EXISTS idx_referrals_created_at
+                        ON referrals(partner_id, created_at DESC);
+                    """
+                )
+        except Exception as exc:
+            self._maybe_open_circuit(exc, context="ensure_schema")
+            raise
         self._schema_ready_loops.add(loop_id)
         logger.info("[STORAGE] schema_ready=true partner_id=%s", self.partner_id)
 
@@ -127,34 +146,63 @@ class PostgresStorage(BaseStorage):
             self._file_locks[key] = lock
         return lock
 
+    def _is_circuit_open(self) -> bool:
+        return time.monotonic() < self._circuit_open_until
+
+    def _open_circuit(self, reason: str) -> None:
+        self._circuit_open_until = time.monotonic() + self._circuit_open_seconds
+        self._circuit_open_reason = reason
+        logger.warning(
+            "[STORAGE] circuit_open=true reason=%s cooldown_s=%s",
+            reason,
+            self._circuit_open_seconds,
+        )
+
+    def _maybe_open_circuit(self, exc: Exception, *, context: str) -> None:
+        if isinstance(
+            exc,
+            (
+                asyncio.TimeoutError,
+                TimeoutError,
+                OSError,
+                ConnectionError,
+                asyncpg.PostgresError,
+            ),
+        ):
+            self._open_circuit(f"{context}:{exc.__class__.__name__}")
+
     async def _load_json_unlocked(self, filename: str) -> Dict[str, Any]:
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                self.partner_id,
-                filename,
-            )
-            if not row:
+        try:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    filename,
+                )
+                if not row:
+                    return {}
+                payload = row[0]
+                if isinstance(payload, dict):
+                    return dict(payload)
+                if isinstance(payload, str):
+                    try:
+                        parsed = json.loads(payload)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        return parsed
+                correlation_id = uuid.uuid4().hex[:8]
+                logger.warning(
+                    "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s payload_type=%s",
+                    correlation_id,
+                    filename,
+                    type(payload).__name__,
+                )
                 return {}
-            payload = row[0]
-            if isinstance(payload, dict):
-                return dict(payload)
-            if isinstance(payload, str):
-                try:
-                    parsed = json.loads(payload)
-                except json.JSONDecodeError:
-                    parsed = None
-                if isinstance(parsed, dict):
-                    return parsed
-            correlation_id = uuid.uuid4().hex[:8]
-            logger.warning(
-                "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s payload_type=%s",
-                correlation_id,
-                filename,
-                type(payload).__name__,
-            )
-            return {}
+        except Exception as exc:
+            self._maybe_open_circuit(exc, context="load_json")
+            raise
 
     async def _load_json(self, filename: str) -> Dict[str, Any]:
         lock = self._get_file_lock(filename)
@@ -163,18 +211,22 @@ class PostgresStorage(BaseStorage):
 
     async def _save_json_unlocked(self, filename: str, data: Dict[str, Any]) -> None:
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO storage_json (partner_id, filename, payload)
-                VALUES ($1, $2, $3::jsonb)
-                ON CONFLICT (partner_id, filename)
-                DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
-                """,
-                self.partner_id,
-                filename,
-                json.dumps(data) if data else "{}",
-            )
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO storage_json (partner_id, filename, payload)
+                    VALUES ($1, $2, $3::jsonb)
+                    ON CONFLICT (partner_id, filename)
+                    DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                    """,
+                    self.partner_id,
+                    filename,
+                    json.dumps(data) if data else "{}",
+                )
+        except Exception as exc:
+            self._maybe_open_circuit(exc, context="save_json")
+            raise
 
     async def _save_json(self, filename: str, data: Dict[str, Any]) -> None:
         lock = self._get_file_lock(filename)
@@ -1048,154 +1100,156 @@ class PostgresStorage(BaseStorage):
         self,
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+        lock_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         from app.utils.fault_injection import maybe_inject_sleep
 
         await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"postgres_storage.update:{filename}")
         pool = await self._get_pool()
         lock_key = self._advisory_lock_key_pair(filename)
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                from app.utils.pg_advisory_lock import (
-                    acquire_advisory_xact_lock,
-                    log_advisory_lock_key,
-                    try_acquire_advisory_xact_lock,
-                )
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    from app.utils.pg_advisory_lock import (
+                        acquire_advisory_xact_lock,
+                        log_advisory_lock_key,
+                        try_acquire_advisory_xact_lock,
+                    )
 
-                correlation_id = get_correlation_id() or "corr-na"
-                if filename == "observability_correlations.json":
+                    correlation_id = get_correlation_id() or "corr-na"
+                    resolved_lock_mode = lock_mode
+                    if resolved_lock_mode is None:
+                        resolved_lock_mode = (
+                            "pg_try_advisory_xact_lock"
+                            if filename == "observability_correlations.json"
+                            else "pg_advisory_xact_lock"
+                        )
                     log_advisory_lock_key(
                         logger,
                         lock_key,
                         correlation_id=correlation_id,
-                        action="pg_try_advisory_xact_lock",
+                        action=resolved_lock_mode,
                     )
-                else:
-                    log_advisory_lock_key(
-                        logger,
-                        lock_key,
-                        correlation_id=correlation_id,
-                        action="pg_advisory_xact_lock",
-                    )
-                lock_start = time.monotonic()
-                try:
-                    if filename == "observability_correlations.json":
-                        acquired = await try_acquire_advisory_xact_lock(conn, lock_key)
-                        if not acquired:
-                            lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
-                            global _corr_lock_drop_total
-                            _corr_lock_drop_total += 1
-                            logger.warning(
-                                "CORR_DROP_LOCK_BUSY filename=%s duration_ms=%s correlation_id=%s",
-                                filename,
-                                lock_duration_ms,
-                                correlation_id,
-                            )
-                            logger.info(
-                                "METRIC_GAUGE name=correlation_store_drop_lock_busy_total value=%s",
-                                _corr_lock_drop_total,
-                            )
-                            log_structured_event(
-                                correlation_id=correlation_id,
-                                action="CORR_DROP_LOCK_BUSY",
-                                action_path="postgres_storage.update_json_file",
-                                stage="STORAGE_LOCK",
-                                outcome="drop",
-                                lock_key=f"{self.partner_id}:{filename}",
-                                lock_wait_ms_total=lock_duration_ms,
-                                lock_attempts=1,
-                                lock_acquired=False,
-                                param={
-                                    "lock_mode": "pg_try_advisory_xact_lock",
-                                    "filename": filename,
-                                    "lock_key_pair": [lock_key.key_a, lock_key.key_b],
-                                },
-                                skip_correlation_store=True,
-                            )
-                            return {}
-                    else:
-                        await acquire_advisory_xact_lock(conn, lock_key)
-                except Exception as exc:
+                    lock_start = time.monotonic()
+                    try:
+                        if resolved_lock_mode == "pg_try_advisory_xact_lock":
+                            acquired = await try_acquire_advisory_xact_lock(conn, lock_key)
+                            if not acquired:
+                                lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
+                                global _corr_lock_drop_total
+                                _corr_lock_drop_total += 1
+                                logger.warning(
+                                    "CORR_DROP_LOCK_BUSY filename=%s duration_ms=%s correlation_id=%s",
+                                    filename,
+                                    lock_duration_ms,
+                                    correlation_id,
+                                )
+                                logger.info(
+                                    "METRIC_GAUGE name=correlation_store_drop_lock_busy_total value=%s",
+                                    _corr_lock_drop_total,
+                                )
+                                log_structured_event(
+                                    correlation_id=correlation_id,
+                                    action="CORR_DROP_LOCK_BUSY",
+                                    action_path="postgres_storage.update_json_file",
+                                    stage="STORAGE_LOCK",
+                                    outcome="drop",
+                                    lock_key=f"{self.partner_id}:{filename}",
+                                    lock_wait_ms_total=lock_duration_ms,
+                                    lock_attempts=1,
+                                    lock_acquired=False,
+                                    param={
+                                        "lock_mode": "pg_try_advisory_xact_lock",
+                                        "filename": filename,
+                                        "lock_key_pair": [lock_key.key_a, lock_key.key_b],
+                                    },
+                                    skip_correlation_store=True,
+                                )
+                                return {}
+                        else:
+                            await acquire_advisory_xact_lock(conn, lock_key)
+                    except Exception as exc:
+                        lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
+                        logger.error(
+                            "PG_ADVISORY_XACT_LOCK_FAILED filename=%s duration_ms=%s correlation_id=%s error=%s",
+                            filename,
+                            lock_duration_ms,
+                            correlation_id,
+                            exc,
+                            exc_info=True,
+                        )
+                        raise
                     lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
-                    logger.error(
-                        "PG_ADVISORY_XACT_LOCK_FAILED filename=%s duration_ms=%s correlation_id=%s error=%s",
-                        filename,
-                        lock_duration_ms,
-                        correlation_id,
-                        exc,
-                        exc_info=True,
+                    if resolved_lock_mode == "pg_try_advisory_xact_lock":
+                        logger.info(
+                            "PG_TRY_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
+                            filename,
+                            lock_duration_ms,
+                            correlation_id,
+                        )
+                    else:
+                        logger.info(
+                            "PG_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
+                            filename,
+                            lock_duration_ms,
+                            correlation_id,
+                        )
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="STORAGE_LOCK",
+                        action_path="postgres_storage.update_json_file",
+                        stage="STORAGE_LOCK",
+                        outcome="acquired",
+                        lock_key=f"{self.partner_id}:{filename}",
+                        lock_wait_ms_total=lock_duration_ms,
+                        lock_attempts=1,
+                        lock_acquired=True,
+                        param={
+                            "lock_mode": resolved_lock_mode,
+                            "filename": filename,
+                            "lock_key_pair": [lock_key.key_a, lock_key.key_b],
+                        },
+                        skip_correlation_store=True,
                     )
-                    raise
-                lock_duration_ms = int((time.monotonic() - lock_start) * 1000)
-                if filename == "observability_correlations.json":
-                    logger.info(
-                        "PG_TRY_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
-                        filename,
-                        lock_duration_ms,
-                        correlation_id,
-                    )
-                else:
-                    logger.info(
-                        "PG_ADVISORY_XACT_LOCK_ACQUIRED filename=%s duration_ms=%s correlation_id=%s",
-                        filename,
-                        lock_duration_ms,
-                        correlation_id,
-                    )
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    action="STORAGE_LOCK",
-                    action_path="postgres_storage.update_json_file",
-                    stage="STORAGE_LOCK",
-                    outcome="acquired",
-                    lock_key=f"{self.partner_id}:{filename}",
-                    lock_wait_ms_total=lock_duration_ms,
-                    lock_attempts=1,
-                    lock_acquired=True,
-                    param={
-                        "lock_mode": "pg_try_advisory_xact_lock"
-                        if filename == "observability_correlations.json"
-                        else "pg_advisory_xact_lock",
-                        "filename": filename,
-                        "lock_key_pair": [lock_key.key_a, lock_key.key_b],
-                    },
-                    skip_correlation_store=True,
-                )
-                row = await conn.fetchrow(
-                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
-                    self.partner_id,
-                    filename,
-                )
-                current: Dict[str, Any] = {}
-                if row:
-                    payload = row[0]
-                    if isinstance(payload, dict):
-                        current = dict(payload)
-                    elif isinstance(payload, str):
-                        try:
-                            parsed = json.loads(payload)
-                        except json.JSONDecodeError:
-                            parsed = None
-                        if isinstance(parsed, dict):
-                            current = parsed
-                updated = update_fn(dict(current))
-                await conn.execute(
-                    """
-                    INSERT INTO storage_json (partner_id, filename, payload)
-                    VALUES ($1, $2, $3::jsonb)
-                    ON CONFLICT (partner_id, filename)
-                    DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
-                    """,
-                    self.partner_id,
-                    filename,
-                    json.dumps(updated) if updated else "{}",
-                )
-                if filename == "observability_correlations.json":
-                    logger.info(
-                        "METRIC_GAUGE name=correlation_store_lock_wait_ms_total value=%s filename=%s",
-                        lock_duration_ms,
+                    row = await conn.fetchrow(
+                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                        self.partner_id,
                         filename,
                     )
-                return updated
+                    current: Dict[str, Any] = {}
+                    if row:
+                        payload = row[0]
+                        if isinstance(payload, dict):
+                            current = dict(payload)
+                        elif isinstance(payload, str):
+                            try:
+                                parsed = json.loads(payload)
+                            except json.JSONDecodeError:
+                                parsed = None
+                            if isinstance(parsed, dict):
+                                current = parsed
+                    updated = update_fn(dict(current))
+                    await conn.execute(
+                        """
+                        INSERT INTO storage_json (partner_id, filename, payload)
+                        VALUES ($1, $2, $3::jsonb)
+                        ON CONFLICT (partner_id, filename)
+                        DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                        """,
+                        self.partner_id,
+                        filename,
+                        json.dumps(updated) if updated else "{}",
+                    )
+                    if filename == "observability_correlations.json":
+                        logger.info(
+                            "METRIC_GAUGE name=correlation_store_lock_wait_ms_total value=%s filename=%s",
+                            lock_duration_ms,
+                            filename,
+                        )
+                    return updated
+        except Exception as exc:
+            self._maybe_open_circuit(exc, context="update_json")
+            raise
 
     # ==================== UTILITY ====================
 

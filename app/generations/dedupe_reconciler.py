@@ -17,6 +17,12 @@ from app.observability.structured_logs import log_structured_event
 from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+try:  # pragma: no cover - optional dependency
+    import asyncpg
+
+    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError, asyncpg.PostgresError)
+except Exception:  # pragma: no cover
+    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError)
 
 ORPHAN_STATES = {
     "create_start",
@@ -207,6 +213,8 @@ async def run_dedupe_reconciler_loop(
     orphan_max_age_seconds: int,
     orphan_alert_threshold: int,
 ) -> None:
+    backoff_seconds = interval_seconds
+    db_backoff_seconds = 0
     while True:
         try:
             await reconcile_dedupe_orphans(
@@ -218,6 +226,17 @@ async def run_dedupe_reconciler_loop(
                 orphan_max_age_seconds=orphan_max_age_seconds,
                 orphan_alert_threshold=orphan_alert_threshold,
             )
+            backoff_seconds = interval_seconds
+            db_backoff_seconds = 0
+        except _DB_DEGRADED_EXCEPTIONS as exc:
+            db_backoff_seconds = 5 if db_backoff_seconds == 0 else min(60, db_backoff_seconds * 2)
+            backoff_seconds = max(interval_seconds, db_backoff_seconds)
+            logger.warning(
+                "DB_DEGRADED_BACKOFF source=dedupe_reconciler delay_s=%s error=%s",
+                backoff_seconds,
+                exc,
+            )
         except Exception as exc:
             logger.error("dedupe_reconciler_failed: %s", exc, exc_info=True)
-        await asyncio.sleep(interval_seconds)
+            backoff_seconds = max(interval_seconds, min(60, backoff_seconds * 2))
+        await asyncio.sleep(backoff_seconds)
