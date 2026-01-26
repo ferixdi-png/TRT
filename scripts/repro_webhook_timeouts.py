@@ -18,6 +18,8 @@ async def main() -> None:
     os.environ.setdefault("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "5000")
     os.environ.setdefault("TRT_FAULT_INJECT_MENU_SLEEP_MS", "5000")
     os.environ.setdefault("TRT_FAULT_INJECT_CORR_FLUSH_SLEEP_MS", "5000")
+    os.environ.setdefault("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "1")
+    os.environ.setdefault("TRT_FAULT_INJECT_TELEGRAM_CONNECT_SLEEP_MS", "1500")
     os.environ.setdefault("START_FALLBACK_MAX_MS", "800")
 
     harness = WebhookHarness()

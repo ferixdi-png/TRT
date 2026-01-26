@@ -76,3 +76,13 @@ def log_advisory_lock_key(
 async def acquire_advisory_xact_lock(conn: object, lock_key: AdvisoryLockKeyPair) -> None:
     """Acquire pg_advisory_xact_lock(int4,int4) for a given key pair."""
     await conn.execute("SELECT pg_advisory_xact_lock($1, $2)", lock_key.key_a, lock_key.key_b)
+
+
+async def try_acquire_advisory_xact_lock(conn: object, lock_key: AdvisoryLockKeyPair) -> bool:
+    """Try to acquire pg_try_advisory_xact_lock(int4,int4); return True if acquired."""
+    result = await conn.fetchval(
+        "SELECT pg_try_advisory_xact_lock($1, $2)",
+        lock_key.key_a,
+        lock_key.key_b,
+    )
+    return bool(result)
