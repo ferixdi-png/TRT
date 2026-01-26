@@ -1,5 +1,27 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-14 TRT: webhook resiliency + BOOT watchdog cancel + fast redis degrade + safe shutdown
+
+### Что изменено
+- Webhook инициализация разделена: приложение поднимается и остаётся живым, а `setWebhook` уходит в фоновый retry-контур с backoff и явными timeout; параллельные попытки защищены lock-ом. (`bot_kie.py`, `app/bot_mode.py`)
+- BOOT watchdog переведён на явный stop-сигнал: при cancel/finish warmup больше не появляется ложный `BOOT_WARMUP_WATCHDOG_TIMEOUT`. (`bot_kie.py`)
+- Redis для distributed lock теперь деградирует быстрее: короткие connect/read timeouts + общий deadline. (`app/utils/distributed_lock.py`)
+- Shutdown последовательность усилена: остановка reconciler-тасков + health server до shutdown app; release lock теперь безопасен при закрытом loop (без исключений). (`bot_kie.py`, `app/utils/singleton_lock.py`)
+- Документация Render уточнена: канонический entrypoint + поведение webhook при сбое Telegram API. (`README_RENDER.md`)
+- Добавлены тесты на cancel watchdog, быстрый redis timeout, безопасный release lock при закрытом loop, и устойчивость webhook handler при деградации Redis. (`tests/test_boot_warmup_resilience.py`, `tests/test_distributed_lock_timeout.py`, `tests/test_singleton_lock_release.py`, `tests/test_webhook_ready_state.py`)
+
+### Как воспроизвести по логам
+1. Поднять сервис в webhook-режиме без доступа к Telegram API → увидеть `WEBHOOK_SET_RETRY_SCHEDULED` без остановки процесса.
+2. Отменить BOOT warmup → увидеть `GEN_TYPE_MENU_WARMUP_CANCELLED` и отсутствие `BOOT_WARMUP_WATCHDOG_TIMEOUT`.
+3. Задать `REDIS_URL` недоступный → увидеть `mode=single-instance reason=redis_connect_timeout` без блокировки старта.
+
+### Как проверить
+- `pytest -q`
+- `python -m compileall .`
+
+### Итог
+**GO** после зелёных pytest/compileall и подтверждения retry-логики webhook на Render.
+
 ## ✅ 2026-02-13 TRT: BOOT warmup fast-path + correlation debounce + health idempotency
 
 ### Что изменено

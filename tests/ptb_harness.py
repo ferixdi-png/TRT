@@ -138,6 +138,18 @@ class PTBHarness:
         await self.application.initialize()
         object.__setattr__(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
         object.__setattr__(self.application.bot, "_initialized", True)
+        try:
+            import bot_kie
+
+            bot_kie.generation_submit_locks.clear()
+            bot_kie._processed_update_ids.clear()
+            from app.generations import request_dedupe_store
+
+            request_dedupe_store._memory_entries.clear()
+            request_dedupe_store._memory_job_tasks.clear()
+            request_dedupe_store._memory_request_map.clear()
+        except Exception:
+            pass
     
     async def teardown(self):
         """Очищает ресурсы."""
