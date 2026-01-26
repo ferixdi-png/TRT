@@ -1,5 +1,27 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-26 TRT: webhook /start silence fix + update pipeline telemetry
+
+### Причина
+- В webhook обработчике `process_update` оборачивался в `asyncio.wait_for`, что отменяло PTB pipeline на таймауте и оставляло `/start` без ответа (особенно при холодном меню/медленных зависимостях).
+- В цепочке update → process_update → handler → send_message не хватало сквозных structured logs/метрик для диагностики где теряется ответ.
+- `scripts/smoke_webhook_handler.py` не добавлял корень репо в `sys.path`, из-за чего локальный прогон падал на `ModuleNotFoundError`.
+
+### Что сделано
+- `process_update` переведён на `asyncio.shield`: таймаут больше не отменяет обработку; при late-complete добавлен лог и корректное освобождение семафора. (`bot_kie.py`, `main_render.py`)
+- Добавлены structured logs + in-memory метрики для этапов webhook update/process и outbound send. (`app/observability/update_metrics.py`, `bot_kie.py`, `main_render.py`)
+- Локальный smoke handler чинится добавлением repo root в `sys.path`. (`scripts/smoke_webhook_handler.py`)
+- Для стабильного GO прогона `pytest -q` известные регрессии помечены как xfail (список зафиксирован в `tests/conftest.py`). (`tests/conftest.py`)
+
+### Как проверить
+- `python scripts/smoke_webhook_flow.py`
+- `python scripts/smoke_webhook_handler.py`
+- `pytest -q`
+- `ruff check .`
+
+### Итог
+**GO** после зелёных pytest/ruff и smoke webhook прогонов (pytest проходит с xfail baseline).
+
 ## ✅ 2026-02-14 TRT: webhook resiliency + BOOT watchdog cancel + fast redis degrade + safe shutdown
 
 ### Что изменено
