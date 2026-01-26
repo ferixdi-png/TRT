@@ -382,7 +382,11 @@ async def _release_redis_lock() -> None:
     global _redis_client, _redis_lock_key, _redis_lock_value
     if _redis_client is None or _redis_lock_key is None:
         return
-    await _stop_redis_renewal()
+    try:
+        await _stop_redis_renewal()
+    except RuntimeError as exc:
+        logger.warning("[LOCK] LOCK_MODE=redis lock_release_failed=true reason=loop_closed error=%s", exc)
+        return
     try:
         # Use Lua script for atomic check-and-delete
         lua_script = """
@@ -546,16 +550,26 @@ async def release_singleton_lock() -> None:
     if _singleton_lock_instance is not None:
         try:
             await _singleton_lock_instance.release()
+        except RuntimeError as exc:
+            logger.warning("LOCK_RELEASE_SKIPPED reason=loop_closed error=%s", exc)
         except Exception as e:
             logger.error(f"Failed to release singleton lock: {e}")
         finally:
             _singleton_lock_instance = None
 
     if _lock_mode == "redis":
-        await _release_redis_lock()
+        try:
+            await _release_redis_lock()
+        except RuntimeError as exc:
+            logger.warning("LOCK_RELEASE_SKIPPED reason=loop_closed error=%s", exc)
+            return
 
     if _lock_mode == "postgres":
-        await _release_postgres_lock()
+        try:
+            await _release_postgres_lock()
+        except RuntimeError as exc:
+            logger.warning("LOCK_RELEASE_SKIPPED reason=loop_closed error=%s", exc)
+            return
 
     if _file_lock_handle is not None:
         _release_file_lock()

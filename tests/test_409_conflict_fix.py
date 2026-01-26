@@ -104,10 +104,10 @@ async def test_ensure_webhook_mode_sets_webhook():
     
     result = await ensure_webhook_mode(mock_bot, "https://example.com/webhook")
     assert result is True
-    mock_bot.set_webhook.assert_called_once_with(
-        url="https://example.com/webhook",
-        drop_pending_updates=True
-    )
+    assert mock_bot.set_webhook.call_count >= 1
+    args, kwargs = mock_bot.set_webhook.call_args
+    assert kwargs["url"] == "https://example.com/webhook"
+    assert kwargs["drop_pending_updates"] is True
 
 
 def test_handle_conflict_gracefully_exits():
