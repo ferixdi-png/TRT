@@ -153,6 +153,7 @@ CALLBACK_DEDUP_TTL_SECONDS = float(os.getenv("TG_CALLBACK_DEDUP_TTL_SECONDS", "3
 CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "8"))
 CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "2.0"))
 STORAGE_IO_TIMEOUT_SECONDS = float(os.getenv("STORAGE_IO_TIMEOUT_SECONDS", "2.5"))
+STORAGE_OP_TIMEOUT_SECONDS = max(0.1, float(os.getenv("STORAGE_OP_TIMEOUT_MS", "2000")) / 1000)
 GEN_TYPE_MENU_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_TIMEOUT_SECONDS", "6.0"))
 JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "900"))
 JOB_TIMEOUT_MS = JOB_TIMEOUT_SECONDS * 1000
@@ -4273,8 +4274,8 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
         logger.error(f"❌ CRITICAL ERROR saving {filename}: {e}", exc_info=True)
 
 
-def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
-    """Store basic user identity for admin lookup."""
+async def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
+    """Store basic user identity for admin lookup (async, non-blocking in handlers)."""
     if user is None:
         return
     try:
@@ -4282,24 +4283,37 @@ def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
         username = user.username or ""
         first_name = user.first_name or ""
         last_name = user.last_name or ""
-        data = load_json_file(USER_REGISTRY_FILE, {})
-        user_key = str(user_id)
-        existing = data.get(user_key, {})
-        if (
-            existing.get("username") == username
-            and existing.get("first_name") == first_name
-            and existing.get("last_name") == last_name
-        ):
-            return
-        data[user_key] = {
-            **existing,
-            "user_id": user_id,
-            "username": username,
-            "first_name": first_name,
-            "last_name": last_name,
-            "updated_at": datetime.now().isoformat(),
-        }
-        save_json_file(USER_REGISTRY_FILE, data, use_cache=True)
+        from app.storage.factory import get_storage
+
+        storage = get_storage()
+        storage_filename = os.path.basename(USER_REGISTRY_FILE)
+
+        def updater(data: dict) -> dict:
+            payload = dict(data or {})
+            user_key = str(user_id)
+            existing = payload.get(user_key, {})
+            if (
+                existing.get("username") == username
+                and existing.get("first_name") == first_name
+                and existing.get("last_name") == last_name
+            ):
+                return payload
+            payload[user_key] = {
+                **existing,
+                "user_id": user_id,
+                "username": username,
+                "first_name": first_name,
+                "last_name": last_name,
+                "updated_at": datetime.now().isoformat(),
+            }
+            return payload
+
+        await asyncio.wait_for(
+            storage.update_json_file(storage_filename, updater),
+            timeout=STORAGE_OP_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.error("❌ User registry update timed out user_id=%s", getattr(user, "id", None))
     except Exception as e:
         logger.error(f"❌ Failed to update user registry: {e}", exc_info=True)
 
@@ -7394,6 +7408,7 @@ MAIN_MENU_BUILD_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BUILD_TIMEOUT_SECON
 MAIN_MENU_DEP_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_DEP_TIMEOUT_SECONDS", "0.6"))
 MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS = float(os.getenv("MAIN_MENU_BACKGROUND_TIMEOUT_SECONDS", "6.0"))
 START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS", "2.0"))
+START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
 SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL_SECONDS", "45.0"))
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
 MAIN_MENU_DEP_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_DEP_CACHE_TTL_SECONDS", "30.0"))
@@ -8209,6 +8224,78 @@ async def ensure_main_menu(
     return result
 
 
+async def _award_referral_bonus_with_timeout(
+    *,
+    referrer_id: int,
+    referred_user_id: int,
+    ref_param: Optional[str],
+    correlation_id: Optional[str],
+    partner_id: str,
+    bonus: int,
+) -> None:
+    try:
+        await asyncio.wait_for(
+            award_referral_bonus(
+                referrer_id=referrer_id,
+                referred_user_id=referred_user_id,
+                ref_param=ref_param,
+                correlation_id=correlation_id,
+                partner_id=partner_id,
+                bonus=bonus,
+            ),
+            timeout=START_REFERRAL_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning("START_REFERRAL_BONUS_FAILED correlation_id=%s error=%s", correlation_id, exc)
+
+
+async def _start_menu_with_fallback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    source: str,
+    correlation_id: Optional[str],
+) -> dict:
+    if START_FALLBACK_MAX_MS <= 0:
+        return await show_main_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=False,
+        )
+
+    minimal_result = await _show_minimal_menu(
+        update,
+        context,
+        source=source,
+        correlation_id=correlation_id,
+        prefer_edit=False,
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=update.effective_user.id if update.effective_user else None,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        update_id=update.update_id,
+        action="START_FALLBACK",
+        action_path=f"menu:{source}",
+        stage="UI_ROUTER",
+        outcome="degraded",
+        param={"fallback_ms": START_FALLBACK_MAX_MS},
+    )
+    _create_background_task(
+        show_main_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=False,
+        ),
+        action="start_full_menu",
+    )
+    return minimal_result
+
+
 async def show_main_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -8284,6 +8371,9 @@ async def show_main_menu(
             )
 
         async def _build_menu_payload(*, timeout: float) -> tuple[InlineKeyboardMarkup, str]:
+            from app.utils.fault_injection import maybe_inject_sleep
+
+            await maybe_inject_sleep("TRT_FAULT_INJECT_MENU_SLEEP_MS", label=f"menu_build:{source}")
             keyboard_task = asyncio.create_task(
                 build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False),
                 name="menu_keyboard_build",
@@ -8850,7 +8940,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
         try:
-            upsert_user_registry_entry(update.effective_user)
+            _create_background_task(
+                upsert_user_registry_entry(update.effective_user),
+                action="user_registry_upsert",
+            )
         except Exception as exc:
             logger.error("❌ Failed to update user registry in /start: %s", exc, exc_info=True)
         try:
@@ -8923,7 +9016,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_id,
                 chat_id,
             )
-            await ensure_main_menu(update, context, source="/start-dedup", correlation_id=correlation_id, prefer_edit=False)
+            await _start_menu_with_fallback(
+                update,
+                context,
+                source="/start-dedup",
+                correlation_id=correlation_id,
+            )
             return
         logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
         try:
@@ -8936,7 +9034,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     update_id=update.update_id,
                     chat_id=chat_id,
                 )
-            await show_main_menu(update, context, source="/start")
+            await _start_menu_with_fallback(
+                update,
+                context,
+                source="/start",
+                correlation_id=correlation_id,
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 user_id=user_id,
@@ -8948,8 +9051,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 outcome="ok",
             )
             if referral_parse.valid and referral_parse.referrer_id and user_id:
-                await asyncio.wait_for(
-                    award_referral_bonus(
+                _create_background_task(
+                    _award_referral_bonus_with_timeout(
                         referrer_id=referral_parse.referrer_id,
                         referred_user_id=user_id,
                         ref_param=ref_param,
@@ -8957,7 +9060,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         partner_id=partner_id,
                         bonus=REFERRAL_BONUS_GENERATIONS,
                     ),
-                    timeout=START_REFERRAL_TIMEOUT_SECONDS,
+                    action="referral_bonus",
                 )
         except Exception as exc:
             logger.error(
@@ -9459,7 +9562,10 @@ async def _button_callback_impl(
         user_id = query.from_user.id if query and query.from_user else None
         data = query.data if query else None
         if query and query.from_user:
-            upsert_user_registry_entry(query.from_user)
+            _create_background_task(
+                upsert_user_registry_entry(query.from_user),
+                action="user_registry_upsert",
+            )
         correlation_id = ensure_correlation_id(update, context)
         chat_id = query.message.chat_id if query and query.message else None
         message_id = query.message.message_id if query and query.message else None
@@ -17661,7 +17767,10 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
     import time
     start_time = time.time()
     user_id = update.effective_user.id
-    upsert_user_registry_entry(update.effective_user)
+    _create_background_task(
+        upsert_user_registry_entry(update.effective_user),
+        action="user_registry_upsert",
+    )
     
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
@@ -25398,6 +25507,7 @@ async def create_webhook_handler():
     process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
+    ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "500"))
     early_update_retry_after = int(os.getenv("WEBHOOK_EARLY_UPDATE_RETRY_AFTER", "2"))
     early_update_log_throttle_seconds = float(os.getenv("WEBHOOK_EARLY_UPDATE_LOG_THROTTLE_SECONDS", "30"))
 
@@ -25411,7 +25521,7 @@ async def create_webhook_handler():
     early_update_buffer = _get_early_update_buffer()
     process_in_background_raw = os.getenv("WEBHOOK_PROCESS_IN_BACKGROUND")
     if process_in_background_raw is None:
-        process_in_background = os.getenv("TEST_MODE", "").strip() != "1"
+        process_in_background = True
     else:
         process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
 
@@ -25526,8 +25636,40 @@ async def create_webhook_handler():
             if release_in_finally and webhook_semaphore is not None and semaphore_acquired:
                 webhook_semaphore.release()
 
+    async def _process_update_with_semaphore(
+        update: Update,
+        *,
+        correlation_id: str,
+        client_ip: str,
+    ) -> None:
+        semaphore_acquired = False
+        if webhook_semaphore is not None:
+            try:
+                await asyncio.wait_for(webhook_semaphore.acquire(), timeout=concurrency_timeout_seconds)
+                semaphore_acquired = True
+            except asyncio.TimeoutError:
+                retry_after = max(1, int(math.ceil(concurrency_timeout_seconds)))
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="WEBHOOK_BACKPRESSURE",
+                    action_path="webhook:concurrency_limit",
+                    outcome="throttled",
+                    error_id="WEBHOOK_CONCURRENCY_LIMIT",
+                    abuse_id="concurrency_limit",
+                    param={"client_ip": client_ip, "retry_after": retry_after},
+                )
+                return
+        await _process_update_async(
+            update,
+            correlation_id=correlation_id,
+            client_ip=client_ip,
+            semaphore_acquired=semaphore_acquired,
+        )
+
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
         """Handle incoming Telegram webhook updates."""
+        handler_start = time.monotonic()
+        correlation_id = "unknown"
         try:
             correlation_id = (
                 request.headers.get("X-Request-ID")
@@ -25690,45 +25832,23 @@ async def create_webhook_handler():
                         outcome="received",
                     )
                     logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
-                    semaphore_acquired = False
-                    if webhook_semaphore is not None:
-                        try:
-                            await asyncio.wait_for(webhook_semaphore.acquire(), timeout=concurrency_timeout_seconds)
-                            semaphore_acquired = True
-                        except asyncio.TimeoutError:
-                            retry_after = max(1, int(math.ceil(concurrency_timeout_seconds)))
-                            log_structured_event(
-                                correlation_id=correlation_id,
-                                action="WEBHOOK_BACKPRESSURE",
-                                action_path="webhook:concurrency_limit",
-                                outcome="throttled",
-                                error_id="WEBHOOK_CONCURRENCY_LIMIT",
-                                abuse_id="concurrency_limit",
-                                param={"client_ip": client_ip, "retry_after": retry_after},
-                            )
-                            return web.Response(
-                                status=503,
-                                text="Server busy",
-                                headers={"Retry-After": str(retry_after)},
-                            )
                     if process_in_background:
                         _create_background_task(
-                            _process_update_async(
+                            _process_update_with_semaphore(
                                 update,
                                 correlation_id=correlation_id,
                                 client_ip=client_ip,
-                                semaphore_acquired=semaphore_acquired,
                             ),
                             action="webhook_update",
                         )
                     else:
-                        await _process_update_async(
+                        await _process_update_with_semaphore(
                             update,
                             correlation_id=correlation_id,
                             client_ip=client_ip,
-                            semaphore_acquired=semaphore_acquired,
                         )
-                    return web.Response(status=200, text="ok")
+                    response = web.Response(status=200, text="ok")
+                    return response
                 else:
                     logger.warning(f"[WEBHOOK] {correlation_id} update_parse_failed")
                     return web.Response(status=400, text="Invalid update")
@@ -25738,6 +25858,10 @@ async def create_webhook_handler():
         except Exception as exc:
             logger.error(f"[WEBHOOK] handler_exception={exc}", exc_info=True)
             return web.Response(status=500, text="Internal error")
+        finally:
+            duration_ms = int((time.monotonic() - handler_start) * 1000)
+            if duration_ms > ack_max_ms:
+                logger.warning("WEBHOOK_ACK_SLOW correlation_id=%s duration_ms=%s", correlation_id, duration_ms)
     
     return webhook_handler
 
@@ -26471,7 +26595,10 @@ async def main():
         if user_id is None or not is_admin(user_id):
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
             return
-        upsert_user_registry_entry(update.effective_user)
+        _create_background_task(
+            upsert_user_registry_entry(update.effective_user),
+            action="user_registry_upsert",
+        )
         reset_session_context(
             user_id,
             reason="command:/admin",

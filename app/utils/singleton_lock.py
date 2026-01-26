@@ -68,6 +68,22 @@ def _get_redis_renew_interval_seconds(ttl_seconds: int) -> int:
     return max(1, interval)
 
 
+def _get_redis_connect_timeout_seconds() -> float:
+    try:
+        timeout_ms = int(os.getenv("REDIS_LOCK_CONNECT_TIMEOUT_MS", "250"))
+    except ValueError:
+        timeout_ms = 250
+    return max(0.05, timeout_ms / 1000)
+
+
+def _get_redis_max_wait_seconds() -> float:
+    try:
+        timeout_ms = int(os.getenv("REDIS_LOCK_MAX_WAIT_MS", "300"))
+    except ValueError:
+        timeout_ms = 300
+    return max(0.05, timeout_ms / 1000)
+
+
 async def _stop_redis_renewal() -> None:
     global _redis_renew_task, _redis_renew_stop, _redis_renew_loop, _redis_renew_thread
     if _redis_renew_stop is not None:
@@ -348,15 +364,28 @@ async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
         return False
     
     try:
-        _redis_client = await redis.from_url(redis_url, decode_responses=True)
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_REDIS_CONNECT_SLEEP_MS", label="redis_lock.connect")
+        connect_timeout = _get_redis_connect_timeout_seconds()
+        _redis_client = redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_connect_timeout=connect_timeout,
+            socket_timeout=connect_timeout,
+        )
         _redis_lock_key = f"trt_bot_lock:{os.getenv('BOT_INSTANCE_ID', 'default')}"
         _redis_lock_value = f"{os.getpid()}:{time.time()}"
-        
-        acquired = await _redis_client.set(
-            _redis_lock_key,
-            _redis_lock_value,
-            nx=True,
-            ex=ttl_seconds
+
+        acquire_timeout = _get_redis_max_wait_seconds()
+        acquired = await asyncio.wait_for(
+            _redis_client.set(
+                _redis_lock_key,
+                _redis_lock_value,
+                nx=True,
+                ex=ttl_seconds,
+            ),
+            timeout=acquire_timeout,
         )
         if acquired:
             logger.info("[LOCK] LOCK_MODE=redis lock_acquired=true ttl=%s", ttl_seconds)
@@ -366,6 +395,15 @@ async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
             _redis_client = None
             logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=already_held")
             return False
+    except asyncio.TimeoutError:
+        logger.warning("[LOCK] LOCK_MODE=redis lock_acquire_failed=true reason=timeout")
+        if _redis_client:
+            try:
+                await _redis_client.close()
+            except Exception:
+                pass
+            _redis_client = None
+        return False
     except Exception as exc:
         logger.error("[LOCK] LOCK_MODE=redis lock_acquire_failed=true reason=%s", exc)
         if _redis_client:

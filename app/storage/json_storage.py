@@ -847,6 +847,9 @@ class JsonStorage(BaseStorage):
     # ==================== GENERIC JSON FILES ====================
 
     async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"json_storage.read:{filename}")
         target = self.data_dir / filename
         payload = await self._load_json(target)
         if payload:
@@ -854,6 +857,9 @@ class JsonStorage(BaseStorage):
         return default or {}
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"json_storage.write:{filename}")
         target = self.data_dir / filename
         await self._save_json(target, data)
 
@@ -862,6 +868,9 @@ class JsonStorage(BaseStorage):
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"json_storage.update:{filename}")
         target = self.data_dir / filename
         data = await self._load_json(target)
         updated = update_fn(dict(data))

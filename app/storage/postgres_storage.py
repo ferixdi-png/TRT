@@ -1029,12 +1029,18 @@ class PostgresStorage(BaseStorage):
     # ==================== GENERIC JSON FILES ====================
 
     async def read_json_file(self, filename: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"postgres_storage.read:{filename}")
         payload = await self._load_json(filename)
         if payload:
             return payload
         return default or {}
 
     async def write_json_file(self, filename: str, data: Dict[str, Any]) -> None:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"postgres_storage.write:{filename}")
         await self._save_json(filename, data)
 
     async def update_json_file(
@@ -1042,6 +1048,9 @@ class PostgresStorage(BaseStorage):
         filename: str,
         update_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
     ) -> Dict[str, Any]:
+        from app.utils.fault_injection import maybe_inject_sleep
+
+        await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"postgres_storage.update:{filename}")
         pool = await self._get_pool()
         lock_key = self._advisory_lock_key_pair(filename)
         async with pool.acquire() as conn:
