@@ -1,5 +1,35 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-15 TRT: /start non-blocking TG budget + webhook deadline log
+
+### Единая истина / инварианты (SLO)
+- **/start handler:** p95 ≤ 2000ms, p99 ≤ 3000ms при сбоях TG/DB; критический путь не ждёт retry/backoff TG. (`bot_kie.py`)
+- **Webhook processing:** выход из бюджета фиксируется как `WEBHOOK_BUDGET_EXCEEDED`, без `WEBHOOK_PROCESS_TIMEOUT` в логах. (`bot_kie.py`)
+- **TG send из /start:** не более 1 попытки, max deadline 1200ms, retries только async. (`bot_kie.py`)
+- **Best-effort storage:** user_registry обновляется в фоне (не блокирует /start). (`bot_kie.py`)
+
+### Root cause (по коду/логам)
+- `_run_telegram_request` спал на `RetryAfter` даже при `max_attempts=1`, что добавляло секунды в критический путь. (`bot_kie.py`)
+- `_show_minimal_menu` выполнял последовательные TG вызовы (edit/send/fallback) и мог суммарно превысить бюджет /start. (`bot_kie.py`)
+- Webhook handler логировал `WEBHOOK_PROCESS_TIMEOUT` при долгих handler'ах, вместо явного бюджета и деградации. (`bot_kie.py`)
+
+### Что сделано
+- Введены `deadline_ms`/`non_blocking` в `_run_telegram_request`: no-sleep на RetryAfter при последней попытке, deadline skip и подробный error_type. (`bot_kie.py`)
+- `/start` переводит placeholder в background task с budget `START_PLACEHOLDER_DEADLINE_MS` и без fallback в критическом пути. (`bot_kie.py`)
+- Добавлен `START_SLO` structured log с verdict по p95/p99. (`bot_kie.py`)
+- Webhook handler теперь использует `WEBHOOK_PROCESS_BUDGET_MS` и пишет `WEBHOOK_BUDGET_EXCEEDED`. (`bot_kie.py`)
+- Добавлены тесты на no-sleep RetryAfter + deadline skip. (`tests/test_telegram_request_budget.py`)
+
+### Как воспроизвести
+- `TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT=1 START_PLACEHOLDER_DEADLINE_MS=1200` → /start должен завершиться, placeholder попытка максимум 1.2s.
+- `WEBHOOK_PROCESS_BUDGET_MS=2500` + slow TG → лог `WEBHOOK_BUDGET_EXCEEDED`.
+
+### Тесты
+- `pytest -q tests/test_webhook_timeout_regressions.py tests/test_telegram_request_budget.py`
+
+### Итог
+**STOP/GO:** ⏳ определяется по итогам тестов выше и логам без `WEBHOOK_PROCESS_TIMEOUT`/`HANDLER_LATENCY start >3000ms`.
+
 ## ✅ 2026-01-26 TRT: webhook resiliency, warmup diagnostics, menu fallback + advisory lock drop
 
 ### Что изменено
