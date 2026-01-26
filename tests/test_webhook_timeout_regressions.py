@@ -75,6 +75,45 @@ async def test_menu_build_timeout_degrades_gracefully(webhook_harness, monkeypat
     assert MINIMAL_MENU_TEXT in message["text"]
 
 
+async def test_webhook_ack_under_telegram_connect_timeout(webhook_harness, monkeypatch):
+    monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
+    monkeypatch.setenv("START_FALLBACK_MAX_MS", "800")
+    monkeypatch.setenv("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "1")
+
+    start_ts = time.monotonic()
+    response = await _send_start(webhook_harness, user_id=104, update_id=5004)
+    ack_ms = (time.monotonic() - start_ts) * 1000
+
+    assert response.status == 200
+    assert ack_ms < 500
+
+
+async def test_webhook_ack_under_correlation_lock_busy(webhook_harness, monkeypatch):
+    monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
+    monkeypatch.setenv("START_FALLBACK_MAX_MS", "800")
+
+    class BusyLockStorage:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def update_json_file(self, *_args, **_kwargs):
+            self.calls += 1
+            return {}
+
+    busy_storage = BusyLockStorage()
+
+    monkeypatch.setattr(
+        "app.observability.correlation_store._resolve_storage",
+        lambda _storage=None: busy_storage,
+    )
+
+    start_ts = time.monotonic()
+    response = await _send_start(webhook_harness, user_id=105, update_id=5005)
+    ack_ms = (time.monotonic() - start_ts) * 1000
+
+    assert response.status == 200
+    assert ack_ms < 500
+
 async def test_redis_lock_timeout_fallback_fast(monkeypatch, tmp_path):
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6390")
     monkeypatch.setenv("REDIS_LOCK_CONNECT_TIMEOUT_MS", "100")

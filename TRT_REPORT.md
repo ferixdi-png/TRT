@@ -1,5 +1,27 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-26 TRT: webhook resiliency, warmup diagnostics, menu fallback + advisory lock drop
+
+### Что изменено
+- GEN_TYPE_MENU warmup timeout теперь пишет корректные elapsed_total/attempts и избегает ложных диагностик. (`bot_kie.py`)
+- `setWebhook` переведён на идемпотентный режим (getWebhookInfo), backoff+jitter, rate-limit метрика и отдельные timeouts; setter остаётся в фоне. (`app/bot_mode.py`, `bot_kie.py`)
+- MINIMAL menu получил гарантированный fallback (short-text + Main Menu), ограниченные retry, отдельные Telegram API timeouts; `MENU_RENDER_FAIL` логируется вместе с попыткой fallback send. (`bot_kie.py`)
+- Advisory lock для `observability_correlations.json` использует `pg_try_advisory_xact_lock`, метрики drop, без ожидания; структурные логи фиксируют режим lock. (`app/storage/postgres_storage.py`)
+- Добавлены регрессии на SLA для `/start` при Telegram connect timeout и lock busy. (`tests/test_webhook_timeout_regressions.py`)
+
+### Как воспроизвести
+- `PYTHONPATH=. TELEGRAM_BOT_TOKEN=test BOT_INSTANCE_ID=test-instance python scripts/repro_webhook_timeouts.py`
+- `python scripts/smoke_webhook_flow.py`
+
+### Текущие результаты проверок
+- `ruff check .` — ✅
+- `pytest -q` — ❌ (есть флейки вне scope: confirm_generation_20clicks, webhook ack/dedup/smoke, redis renewal, webhook timeout regressions)
+- `python scripts/repro_webhook_timeouts.py` — ⚠️ (воспроизведены TIMEOUT/FAILED в логах, как ожидаемо)
+- `python scripts/smoke_webhook_flow.py` — ✅
+
+### Итог
+**STOP** — GO невозможен до зелёного `pytest -q` и отсутствия `*_TIMEOUT`/`*_FAILED` в последних логах.
+
 ## ✅ 2026-01-26 Incident: storage sync timeout + correlation flush lock storm → webhook timeouts
 
 ### Root cause (по логам)
