@@ -7833,6 +7833,7 @@ async def _build_main_menu_sections(
             resolved_lang = "ru"
         if user_id:
             _set_menu_dep_cache(menu_session, user_lang=resolved_lang)
+        storage_degraded = _is_storage_degraded()
 
     generation_types = await _await_with_timeout(
         asyncio.to_thread(get_generation_types),
@@ -7880,6 +7881,7 @@ async def _build_main_menu_sections(
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
         _set_menu_dep_cache(menu_session, remaining_free=remaining_free)
+        storage_degraded = _is_storage_degraded()
 
     if user_id:
         if cached_menu and "is_new" in cached_menu:
@@ -7903,6 +7905,7 @@ async def _build_main_menu_sections(
             is_new = True
     else:
         is_new = True
+    storage_degraded = _is_storage_degraded()
     referral_link = get_user_referral_link(user_id) if user_id else ""
     if user_id:
         if cached_menu and "referrals_count" in cached_menu:
@@ -8556,18 +8559,57 @@ async def _start_menu_with_fallback(
         fallback_max_ms = int(os.getenv("START_FALLBACK_MAX_MS", str(START_FALLBACK_MAX_MS)))
     except ValueError:
         fallback_max_ms = START_FALLBACK_MAX_MS
-    placeholder_result = await _show_minimal_menu(
-        update,
-        context,
-        source=source,
-        correlation_id=correlation_id,
-        prefer_edit=False,
-        timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
-        max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
-        fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
-        fallback_max_attempts=1,
-        action_prefix="start_placeholder",
-    )
+    fast_timeout_s = max(0.1, fallback_max_ms / 1000)
+    placeholder_result: dict
+    try:
+        placeholder_result = await asyncio.wait_for(
+            _show_minimal_menu(
+                update,
+                context,
+                source=source,
+                correlation_id=correlation_id,
+                prefer_edit=False,
+                timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+                max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
+                fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+                fallback_max_attempts=1,
+                action_prefix="start_placeholder",
+            ),
+            timeout=fast_timeout_s,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "START_PLACEHOLDER_TIMEOUT source=%s correlation_id=%s timeout_s=%s",
+            source,
+            correlation_id,
+            fast_timeout_s,
+        )
+        _create_background_task(
+            _show_minimal_menu(
+                update,
+                context,
+                source=source,
+                correlation_id=correlation_id,
+                prefer_edit=False,
+                timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+                max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
+                fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
+                fallback_max_attempts=1,
+                action_prefix="start_placeholder",
+            ),
+            action="start_placeholder_background",
+        )
+        placeholder_result = {
+            "correlation_id": correlation_id,
+            "user_id": update.effective_user.id if update.effective_user else None,
+            "chat_id": update.effective_chat.id if update.effective_chat else None,
+            "update_id": update.update_id,
+            "ui_context_before": None,
+            "ui_context_after": UI_CONTEXT_MAIN_MENU,
+            "used_edit": False,
+            "fallback_send": False,
+            "message_id": None,
+        }
     log_structured_event(
         correlation_id=correlation_id,
         user_id=update.effective_user.id if update.effective_user else None,
