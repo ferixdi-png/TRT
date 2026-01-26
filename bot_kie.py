@@ -7833,6 +7833,7 @@ async def _build_main_menu_sections(
             resolved_lang = "ru"
         if user_id:
             _set_menu_dep_cache(menu_session, user_lang=resolved_lang)
+        storage_degraded = _is_storage_degraded()
 
     generation_types = await _await_with_timeout(
         asyncio.to_thread(get_generation_types),
@@ -7880,6 +7881,7 @@ async def _build_main_menu_sections(
         except Exception as exc:
             logger.warning("Failed to resolve free generations: %s", exc)
         _set_menu_dep_cache(menu_session, remaining_free=remaining_free)
+        storage_degraded = _is_storage_degraded()
 
     if user_id:
         if cached_menu and "is_new" in cached_menu:
@@ -7903,6 +7905,7 @@ async def _build_main_menu_sections(
             is_new = True
     else:
         is_new = True
+    storage_degraded = _is_storage_degraded()
     referral_link = get_user_referral_link(user_id) if user_id else ""
     if user_id:
         if cached_menu and "referrals_count" in cached_menu:
