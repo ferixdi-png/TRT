@@ -98,9 +98,11 @@ async def test_ensure_webhook_mode_sets_webhook():
     """Тест: ensure_webhook_mode устанавливает webhook"""
     mock_bot = AsyncMock()
     mock_webhook_info = Mock()
-    mock_webhook_info.url = "https://example.com/webhook"
+    mock_webhook_info.url = None
+    mock_webhook_info_after = Mock()
+    mock_webhook_info_after.url = "https://example.com/webhook"
     mock_bot.set_webhook.return_value = True
-    mock_bot.get_webhook_info.return_value = mock_webhook_info
+    mock_bot.get_webhook_info.side_effect = [mock_webhook_info, mock_webhook_info_after]
     
     result = await ensure_webhook_mode(mock_bot, "https://example.com/webhook")
     assert result is True
