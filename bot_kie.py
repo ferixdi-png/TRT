@@ -596,6 +596,7 @@ async def inbound_update_logger(update: Update, context: ContextTypes.DEFAULT_TY
 
     correlation_id = ensure_correlation_id(update, context)
     ctx = set_update_context(update, context, correlation_id=correlation_id)
+    update_type = ctx.update_type or _resolve_update_type(update)
 
     command = None
     callback_data = None
@@ -612,13 +613,86 @@ async def inbound_update_logger(update: Update, context: ContextTypes.DEFAULT_TY
         update_id=ctx.update_id,
         user_id=ctx.user_id,
         chat_id=ctx.chat_id,
-        update_type=ctx.update_type,
+        update_type=update_type,
         action="TG_UPDATE_IN",
         action_path=action_path,
         command=_truncate_log_value(command),
         callback_data=_truncate_log_value(callback_data),
         outcome="received",
     )
+
+    app = getattr(context, "application", None)
+    if app is None:
+        return
+    logged = app.bot_data.setdefault("_user_action_logged", set())
+    log_key = (ctx.update_id, update_type)
+    if log_key in logged:
+        return
+    logged.add(log_key)
+    session_snapshot: Dict[str, Any] = {}
+    if ctx.user_id is not None:
+        store = get_session_store(context)
+        session = store.get(ctx.user_id, {}) if store else {}
+        if isinstance(session, dict):
+            price_quote = session.get("price_quote") if isinstance(session.get("price_quote"), dict) else {}
+            session_snapshot = {
+                "waiting_for": session.get("waiting_for"),
+                "current_param": session.get("current_param"),
+                "model_id": session.get("model_id"),
+                "sku_id": session.get("sku_id"),
+                "price_rub": price_quote.get("price_rub"),
+            }
+    if update_type == "callback" and update.callback_query:
+        query = update.callback_query
+        chat_id = query.message.chat_id if query.message else None
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=ctx.user_id,
+            chat_id=chat_id,
+            update_id=ctx.update_id,
+            update_type="callback",
+            action="USER_ACTION",
+            action_path=build_action_path(query.data),
+            callback_data=_truncate_log_value(query.data),
+            message_type=None,
+            model_id=session_snapshot.get("model_id"),
+            waiting_for=session_snapshot.get("waiting_for"),
+            sku_id=session_snapshot.get("sku_id"),
+            price_rub=session_snapshot.get("price_rub"),
+            stage="USER_ACTION_AUDIT",
+            outcome="observed",
+            param={
+                "handled_by": "inbound_update_logger",
+                "current_param": session_snapshot.get("current_param"),
+            },
+        )
+    elif update_type == "message" and update.message:
+        message = update.message
+        message_type = _resolve_message_type(message)
+        text_value = message.text or message.caption or ""
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=ctx.user_id,
+            chat_id=ctx.chat_id,
+            update_id=ctx.update_id,
+            update_type="message",
+            action="USER_ACTION",
+            action_path=f"message_input:{message_type}",
+            message_type=message_type,
+            text_length=len(text_value) if text_value else 0,
+            text_hash=_safe_text_hash(text_value),
+            text_preview=_safe_text_preview(text_value),
+            model_id=session_snapshot.get("model_id"),
+            waiting_for=session_snapshot.get("waiting_for"),
+            sku_id=session_snapshot.get("sku_id"),
+            price_rub=session_snapshot.get("price_rub"),
+            stage="USER_ACTION_AUDIT",
+            outcome="observed",
+            param={
+                "handled_by": "inbound_update_logger",
+                "current_param": session_snapshot.get("current_param"),
+            },
+        )
 
 
 async def user_action_audit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1978,13 +2052,26 @@ def _determine_primary_input(
         audio_param = "audio_input"
     elif "audio_url" in input_params:
         audio_param = "audio_url"
+    video_param = None
+    if "video_input" in input_params:
+        video_param = "video_input"
+    elif "video_url" in input_params:
+        video_param = "video_url"
+    elif "video_urls" in input_params:
+        video_param = "video_urls"
 
     if model_type in {"image_to_video", "image_to_image", "image_edit", "outpaint", "upscale", "video_upscale"}:
         if image_param:
             return {"type": "image", "param": image_param}
+        for param_name, param_info in input_params.items():
+            if _get_media_kind(param_name) == "image" and param_info.get("required", False):
+                return {"type": "image", "param": param_name}
     if model_type in {"speech_to_text", "audio_to_audio", "speech_to_video"}:
         if audio_param:
             return {"type": "audio", "param": audio_param}
+    if model_type in {"video_editing"}:
+        if video_param:
+            return {"type": "video", "param": video_param}
     if model_type in {"text_to_video", "text_to_image", "text_to_speech", "text_to_audio", "text"}:
         if "prompt" in input_params:
             return {"type": "prompt", "param": "prompt"}
@@ -1996,6 +2083,8 @@ def _determine_primary_input(
         return {"type": "image", "param": image_param}
     if audio_param and input_params.get(audio_param, {}).get("required", False):
         return {"type": "audio", "param": audio_param}
+    if video_param and input_params.get(video_param, {}).get("required", False):
+        return {"type": "video", "param": video_param}
     if "prompt" in input_params:
         return {"type": "prompt", "param": "prompt"}
     if "text" in input_params:
@@ -2453,7 +2542,6 @@ except ImportError:
 try:
     from app.config import BOT_TOKEN, BOT_MODE, WEBHOOK_URL
     from app.utils.mask import mask as mask_secret
-    from app.singleton_lock import get_singleton_lock
     from app.bot_mode import get_bot_mode, ensure_polling_mode, ensure_webhook_mode, handle_conflict_gracefully
 except ImportError:
     # Fallback для обратной совместимости (если app.config не доступен)
@@ -2484,8 +2572,8 @@ except ImportError:
                 mode = "webhook"
             else:
                 mode = "polling"
-        if mode not in ["polling", "webhook"]:
-            mode = "polling"
+        if mode not in ["polling", "webhook", "web", "smoke"]:
+            raise ValueError(f"Invalid BOT_MODE: {mode}")
         return mode
     
     async def ensure_polling_mode(bot):
@@ -2516,16 +2604,7 @@ except ImportError:
         logging.getLogger(__name__).error(f"Conflict detected in {mode} mode: {error}")
         sys.exit(0)
     
-    # Fallback для singleton_lock
-    class DummyLock:
-        def acquire(self, timeout=None):
-            return True
-        def release(self):
-            pass
-    
-    def get_singleton_lock(key: str):
-        """Fallback для get_singleton_lock"""
-        return DummyLock()
+    # Singleton lock fallback removed (use app.utils.singleton_lock instead).
 
 # Admin user ID (can be set via environment variable)
 try:
@@ -6381,13 +6460,7 @@ def _resolve_payment_details() -> tuple[str, str, str, str]:
     phone = os.getenv("PAYMENT_PHONE", "").strip()
     bank = os.getenv("PAYMENT_BANK", "").strip()
 
-    if not phone and not bank and not card_holder:
-        card_holder = os.getenv("OWNER_PAYMENT_CARD_HOLDER", "").strip()
-        phone = os.getenv("OWNER_PAYMENT_PHONE", "").strip()
-        bank = os.getenv("OWNER_PAYMENT_BANK", "").strip()
-        source = "owner"
-    else:
-        source = "partner"
+    source = "partner" if (phone or bank or card_holder) else "missing"
 
     return phone, bank, card_holder, source
 
@@ -6410,7 +6483,7 @@ def get_payment_details() -> str:
 
     if not phone and not bank and not card_holder:
         logger.warning("Payment details not found in environment variables!")
-        logger.warning("Set PAYMENT_* for partner or OWNER_PAYMENT_* for defaults.")
+        logger.warning("Set PAYMENT_PHONE, PAYMENT_BANK, and PAYMENT_CARD_HOLDER.")
 
     details = "💳 <b>Реквизиты для оплаты (СБП):</b>\n\n"
 
@@ -6424,9 +6497,9 @@ def get_payment_details() -> str:
     if not phone and not bank and not card_holder:
         details += "⚠️ <b>ВНИМАНИЕ: Реквизиты не настроены!</b>\n\n"
         details += "Администратору необходимо указать переменные окружения:\n"
-        details += "• <code>PAYMENT_PHONE</code> / <code>OWNER_PAYMENT_PHONE</code>\n"
-        details += "• <code>PAYMENT_BANK</code> / <code>OWNER_PAYMENT_BANK</code>\n"
-        details += "• <code>PAYMENT_CARD_HOLDER</code> / <code>OWNER_PAYMENT_CARD_HOLDER</code>\n\n"
+        details += "• <code>PAYMENT_PHONE</code>\n"
+        details += "• <code>PAYMENT_BANK</code>\n"
+        details += "• <code>PAYMENT_CARD_HOLDER</code>\n\n"
         details += "На Render: добавьте их в разделе Environment Variables\n"
         details += "Локально: добавьте в файл .env\n\n"
 
@@ -6490,12 +6563,7 @@ def _resolve_support_details() -> tuple[str, str, str]:
     support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip()
     support_text = os.getenv("SUPPORT_TEXT", "").strip()
 
-    if not support_telegram and not support_text:
-        support_telegram = os.getenv("OWNER_SUPPORT_TELEGRAM", "").strip()
-        support_text = os.getenv("OWNER_SUPPORT_TEXT", "").strip()
-        source = "owner"
-    else:
-        source = "partner"
+    source = "partner" if (support_telegram or support_text) else "missing"
 
     return support_telegram, support_text, source
 
@@ -6527,9 +6595,9 @@ def get_support_contact() -> str:
         contact += f"💬 <b>Telegram:</b> @{telegram_username}\n"
     else:
         logger.warning("Support contact not found in environment variables!")
-        logger.warning("Set SUPPORT_* for partner or OWNER_SUPPORT_* for defaults.")
+        logger.warning("Set SUPPORT_TELEGRAM and/or SUPPORT_TEXT.")
         contact += "⚠️ <b>Контактная информация не настроена.</b>\n\n"
-        contact += "Администратору необходимо указать SUPPORT_TELEGRAM или OWNER_SUPPORT_TELEGRAM.\n\n"
+        contact += "Администратору необходимо указать SUPPORT_TELEGRAM.\n\n"
         contact += "Обратитесь к администратору."
 
     return contact
@@ -8815,6 +8883,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query:
             user_id = query.from_user.id if query.from_user else None
             user_lang = get_user_language(user_id) if user_id else "ru"
+            data = query.data
+            if data == "back_to_menu":
+                pass
+            elif data == "check_balance":
+                pass
+            elif data == "show_models":
+                pass
+            elif data == "all_models":
+                pass
+            elif data == "cancel":
+                pass
             try:
                 await _answer_callback_early(
                     query,
@@ -15753,20 +15832,7 @@ async def _button_callback_impl(
             pass
 
     try:
-        menu_keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Меню", callback_data="back_to_menu")]]
-        )
-        message_text = (
-            f"Кнопка устарела. Лог: {correlation_id or 'corr-na'}"
-            if user_lang == "ru"
-            else f"Button outdated. Log: {correlation_id or 'corr-na'}"
-        )
-        if query and query.message:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=message_text,
-                reply_markup=menu_keyboard,
-            )
+        await ensure_main_menu(update, context, source="unknown_callback", prefer_edit=False)
     except Exception:
         logger.debug("Unknown callback menu send failed", exc_info=True)
     return ConversationHandler.END
@@ -26301,7 +26367,11 @@ async def main():
     
     # ==================== BOT MODE SELECTION ====================
     # КРИТИЧНО: Строгое разделение polling и webhook через BOT_MODE
-    bot_mode = get_bot_mode()
+    try:
+        bot_mode = get_bot_mode()
+    except ValueError as exc:
+        logger.error("❌ Invalid BOT_MODE: %s", exc)
+        raise SystemExit(2) from exc
     logger.info(f"📡 Bot mode: {bot_mode}")
     
     # Если webhook режим - НЕ запускаем polling
