@@ -10,15 +10,12 @@
 **Файл:** `render.yaml`
 
 ```yaml
-startCommand: python -m app.main
+startCommand: python entrypoints/run_bot.py
 ```
 
-**Entrypoint:** `app/main.py`
+**Entrypoint:** `entrypoints/run_bot.py` (канон)
 
-**Функции:**
-- `load_settings()` - загрузка настроек
-- `build_application()` - создание Application
-- `run()` - запуск бота
+**Примечание:** `app/main.py` используется только для локального polling/web и завершится с ошибкой при `BOT_MODE=webhook`.
 
 ---
 
@@ -48,7 +45,7 @@ startCommand: python -m app.main
 | Переменная | Описание | По умолчанию |
 |-----------|----------|--------------|
 | `STORAGE_MODE` | Режим хранения (auto/postgres/json) | `auto` |
-| `BOT_MODE` | Режим работы (polling/webhook) | `polling` |
+| `BOT_MODE` | Режим работы (polling/webhook/web/smoke) | `polling` |
 | `WEBHOOK_URL` | URL для webhook | Не задан |
 | `KIE_STUB` | Использовать stub вместо реального API | `0` (реальный API) |
 | `PAYMENT_PHONE` | Номер телефона для СБП | Не задан |
@@ -107,7 +104,7 @@ healthCheckGracePeriod: 60
 - Лог: "ANOTHER INSTANCE RUNNING"
 - `exit(0)` (не ошибка, чтобы Render не рестартил бесконечно)
 
-**Важно:** Lock получается ДО любых async операций в `app/main.py:run()`
+**Важно:** Lock получается ДО любых async операций в `entrypoints/run_bot.py`
 
 ---
 
@@ -152,7 +149,7 @@ services:
     name: telegram-bot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.main
+    startCommand: python entrypoints/run_bot.py
     envVars:
       - key: PYTHONPATH
         value: "."

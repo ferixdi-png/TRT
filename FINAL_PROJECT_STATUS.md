@@ -19,7 +19,7 @@
 - ✅ Release только на shutdown
 
 **Реализация:**
-- ✅ Файл: `render_singleton_lock.py` (140 строк)
+- ✅ Файл: `app/utils/singleton_lock.py` (140 строк)
 - ✅ Интегрирован в `bot_kie.py` (строки 24976-25071)
 - ✅ Webhook удаляется перед polling (строки 26365-26412)
 - ✅ Keep-alive задача проверяет соединение каждые 30 сек
@@ -208,7 +208,7 @@ grep "def handle_kie_generation" kie_universal_handler.py
 ## 📊 ИТОГОВАЯ СТАТИСТИКА
 
 ### Созданные файлы:
-1. ✅ `render_singleton_lock.py` - Advisory lock механизм
+1. ✅ `app/utils/singleton_lock.py` - Advisory lock механизм
 2. ✅ `models/kie_models.yaml` - 72 модели
 3. ✅ `kie_client.py` - Универсальный KIE client
 4. ✅ `kie_validator.py` - Валидатор схем

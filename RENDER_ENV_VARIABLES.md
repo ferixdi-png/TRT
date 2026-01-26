@@ -95,6 +95,18 @@ DB_MAXCONN=3
 
 ---
 
+## 🚀 КАКИЕ ФАЙЛЫ ЗАПУСКАТЬ
+
+| Режим | Что запускать | Команда |
+| --- | --- | --- |
+| polling | `entrypoints/run_bot.py` (канон) | `python entrypoints/run_bot.py` |
+| webhook | `entrypoints/run_bot.py` или `main_render.py` | `python entrypoints/run_bot.py` |
+| web (healthcheck) | `entrypoints/run_bot.py` | `BOT_MODE=web python entrypoints/run_bot.py` |
+
+**Важно:** `app/main.py` предназначен только для локального polling/web и завершится с ошибкой при `BOT_MODE=webhook`.
+
+---
+
 ## 📝 ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ В КОДЕ
 
 ```python
@@ -135,4 +147,3 @@ DRY_RUN = os.getenv('DRY_RUN', '0') == '1'
 ## ✅ ГОТОВО
 
 После настройки всех переменных окружения в Render, проект готов к деплою!
-

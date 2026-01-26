@@ -28,6 +28,11 @@ class WebhookHarness:
         self.handler = None
         self.outbox = WebhookOutbox()
         self.session_store = None
+        self._message_id_counter = 1000
+
+    def _next_message_id(self) -> int:
+        self._message_id_counter += 1
+        return self._message_id_counter
 
     async def setup(self) -> None:
         reset_settings()
@@ -40,20 +45,7 @@ class WebhookHarness:
         object.__setattr__(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
 
         async def mock_send_message(chat_id, text, **kwargs):
-            payload = {
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": kwargs.get("parse_mode"),
-                "reply_markup": kwargs.get("reply_markup"),
-            }
-            self.outbox.messages.append(payload)
-            mock_msg = MagicMock(spec=Message)
-            mock_msg.chat_id = chat_id
-            mock_msg.text = text
-            mock_msg.reply_markup = kwargs.get("reply_markup")
-            return mock_msg
-
-        async def mock_edit_message_text(chat_id=None, message_id=None, text=None, **kwargs):
+            message_id = self._next_message_id()
             payload = {
                 "chat_id": chat_id,
                 "message_id": message_id,
@@ -61,9 +53,27 @@ class WebhookHarness:
                 "parse_mode": kwargs.get("parse_mode"),
                 "reply_markup": kwargs.get("reply_markup"),
             }
+            self.outbox.messages.append(payload)
+            mock_msg = MagicMock(spec=Message)
+            mock_msg.chat_id = chat_id
+            mock_msg.message_id = message_id
+            mock_msg.text = text
+            mock_msg.reply_markup = kwargs.get("reply_markup")
+            return mock_msg
+
+        async def mock_edit_message_text(chat_id=None, message_id=None, text=None, **kwargs):
+            resolved_message_id = message_id or self._next_message_id()
+            payload = {
+                "chat_id": chat_id,
+                "message_id": resolved_message_id,
+                "text": text,
+                "parse_mode": kwargs.get("parse_mode"),
+                "reply_markup": kwargs.get("reply_markup"),
+            }
             self.outbox.edited_messages.append(payload)
             mock_msg = MagicMock(spec=Message)
             mock_msg.chat_id = chat_id
+            mock_msg.message_id = resolved_message_id
             mock_msg.text = text
             mock_msg.reply_markup = kwargs.get("reply_markup")
             return mock_msg
@@ -92,6 +102,9 @@ class WebhookHarness:
         main_render._seen_update_ids.clear()
         self.handler = main_render.build_webhook_handler(self.application, settings)
         self.session_store = get_session_store(application=self.application)
+        import bot_kie
+        bot_kie.user_sessions = self.session_store
+        bot_kie.generation_submit_locks.clear()
 
     async def teardown(self) -> None:
         if self.application:
@@ -100,6 +113,11 @@ class WebhookHarness:
         main_render._app_ready_event.clear()
         self.application = None
         self.handler = None
+        try:
+            import bot_kie
+            bot_kie.generation_submit_locks.clear()
+        except Exception:
+            pass
 
     async def _send_payload(self, payload: Dict[str, Any], *, request_id: str) -> web.StreamResponse:
         request = MagicMock(spec=web.Request)

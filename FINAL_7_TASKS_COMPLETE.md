@@ -10,7 +10,7 @@
 ### Реализовано:
 
 1. **PostgreSQL Advisory Lock:**
-   - ✅ Файл: `render_singleton_lock.py`
+   - ✅ Файл: `app/utils/singleton_lock.py`
    - ✅ Lock key зависит от `TELEGRAM_BOT_TOKEN`
    - ✅ Использует `pg_try_advisory_lock`
    - ✅ Если lock не получен → log + `os._exit(1)`
@@ -26,7 +26,7 @@
 **Критичные места:**
 - `bot_kie.py:24976-25048` - Advisory lock acquisition
 - `bot_kie.py:26352-26421` - Lock verification перед polling + keep-alive
-- `render_singleton_lock.py` - Полная реализация lock механизма
+- `app/utils/singleton_lock.py` - Полная реализация lock механизма
 
 **Результат:** ✅ Проект защищен от 409 Conflict
 
@@ -214,7 +214,7 @@ python tools/kie_sanity.py
 - ✅ **Моделей в реестре:** 72 (больше требуемых 47)
 - ✅ **Типов моделей:** 12 (все требуемые типы поддерживаются)
 - ✅ **Компонентов создано:** 6
-  1. `render_singleton_lock.py` - Advisory lock
+  1. `app/utils/singleton_lock.py` - Advisory lock
   2. `models/kie_models.yaml` - Model registry
   3. `kie_client.py` - KIE client
   4. `kie_validator.py` - Validator

@@ -19,7 +19,7 @@
 - ✅ Release только на shutdown
 
 **Реализация:**
-- ✅ Файл: `render_singleton_lock.py` (140 строк)
+- ✅ Файл: `app/utils/singleton_lock.py` (140 строк)
 - ✅ Интегрирован в `bot_kie.py` (10 упоминаний)
 - ✅ Webhook удаляется перед polling
 - ✅ Keep-alive проверяет соединение каждые 30 сек
@@ -224,7 +224,7 @@ UnboundLocalError: cannot access local variable 'os' where it is not associated 
 ## 📊 ИТОГОВАЯ СТАТИСТИКА
 
 ### Созданные файлы:
-1. ✅ `render_singleton_lock.py` - Advisory lock механизм
+1. ✅ `app/utils/singleton_lock.py` - Advisory lock механизм
 2. ✅ `models/kie_models.yaml` - 72 модели
 3. ✅ `kie_client.py` - Универсальный KIE client
 4. ✅ `kie_validator.py` - Валидатор схем
