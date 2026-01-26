@@ -58,3 +58,23 @@ async def test_health_server_idempotent_start(monkeypatch):
         assert status.get("health_server_running") is True
     finally:
         await stop_health_server()
+
+
+@pytest.mark.asyncio
+async def test_health_server_double_start_stop(monkeypatch):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    async def webhook_handler(request):
+        return web.Response(text="ok")
+
+    started = await start_health_server(port=port, webhook_handler=webhook_handler)
+    restarted = await start_health_server(port=port, webhook_handler=webhook_handler)
+    assert started is True
+    assert restarted is True
+
+    await stop_health_server()
+    await stop_health_server()
+    status = get_health_status()
+    assert status.get("health_server_running") is False

@@ -1117,6 +1117,12 @@ class PostgresStorage(BaseStorage):
                     filename,
                     json.dumps(updated) if updated else "{}",
                 )
+                if filename == "observability_correlations.json":
+                    logger.info(
+                        "METRIC_GAUGE name=correlation_store_lock_wait_ms_total value=%s filename=%s",
+                        lock_duration_ms,
+                        filename,
+                    )
                 return updated
 
     # ==================== UTILITY ====================
