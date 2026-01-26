@@ -672,3 +672,19 @@ Critical-пункты отсутствуют (см. таблицу рисков)
 
 ### STOP/GO
 * **STOP** — требуются полные прогонки `ruff`, `pytest -q`, `python scripts/smoke_webhook_flow.py`, `python scripts/repro_webhook_timeouts.py`.
+
+## ✅ 2026-02-01 — Single-flight confirm_generate + webhook setter cooldown + deterministic locks
+### Исправления
+* `confirm_generate`: single-flight ключ на `(partner_id, user_id, chat_id, prompt_hash)` с TTL + защита от параллельных кликов → один запуск/списание/история, остальные получают сообщение «Генерация уже запускается».  
+* Трекинг задач генерации: active_generation_tasks теперь фиксирует именно generation-task через `run_generation_with_tracking`, а не общий handler.  
+* Webhook setter: детерминированный jitter в TEST_MODE, охлаждение после серии таймаутов и логирование одного окна таймаутов.  
+* Redis singleton lock renewal: управляемый jitter через ENV + детерминизм в тестах; интервал обновления TTL стабилен.  
+* Webhook harness вынесен в `app/debug`, `scripts/repro_webhook_timeouts.py` работает без `PYTHONPATH=.`.
+* `/start` fallback: при fault-injection storage sleep мгновенно отправляется минимальное меню, чтобы не блокировать webhook SLA.
+
+### Риски сняты
+* Убрано зависание confirm_generate из-за параллельных кликов и долгого ожидания lock.  
+* В тестах webhook setter и redis renewal больше не флейкают из-за недетерминированного jitter.
+
+### STOP/GO
+* **STOP** — нужен финальный прогон `pytest -q` + проверка boot/webhook на отсутствие циклов таймаутов.

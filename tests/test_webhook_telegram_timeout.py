@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from tests.webhook_harness import WebhookHarness
+from app.debug.webhook_harness import WebhookHarness
 
 
 @pytest.mark.asyncio
