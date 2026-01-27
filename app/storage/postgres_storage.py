@@ -1105,6 +1105,7 @@ class PostgresStorage(BaseStorage):
         from app.utils.fault_injection import maybe_inject_sleep
 
         await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"postgres_storage.update:{filename}")
+        db_query_start = time.monotonic()
         pool = await self._get_pool()
         lock_key = self._advisory_lock_key_pair(filename)
         try:
@@ -1204,6 +1205,7 @@ class PostgresStorage(BaseStorage):
                         lock_wait_ms_total=lock_duration_ms,
                         lock_attempts=1,
                         lock_acquired=True,
+                        lock_backend="postgres",
                         param={
                             "lock_mode": resolved_lock_mode,
                             "filename": filename,
@@ -1246,6 +1248,26 @@ class PostgresStorage(BaseStorage):
                             lock_duration_ms,
                             filename,
                         )
+                    db_query_ms = int((time.monotonic() - db_query_start) * 1000)
+                    try:
+                        pool_size = pool.get_size() if hasattr(pool, "get_size") else None
+                        pool_in_use = pool_size - pool.get_idle_size() if hasattr(pool, "get_idle_size") else None
+                        pool_max = pool.get_max_size() if hasattr(pool, "get_max_size") else None
+                    except Exception:
+                        pool_in_use = None
+                        pool_max = None
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="DB_QUERY",
+                        action_path="postgres_storage.update_json_file",
+                        stage="STORAGE_DB",
+                        outcome="ok",
+                        db_query_ms=db_query_ms,
+                        pool_in_use=pool_in_use,
+                        pool_size=pool_max,
+                        param={"filename": filename},
+                        skip_correlation_store=True,
+                    )
                     return updated
         except Exception as exc:
             self._maybe_open_circuit(exc, context="update_json")

@@ -16,7 +16,7 @@ import aiohttp
 
 from app.utils.logging_config import get_logger
 from app.observability.trace import trace_event, url_summary
-from app.observability.structured_logs import log_structured_event
+from app.observability.structured_logs import log_critical_event, log_structured_event
 from app.resilience import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 
 logger = get_logger(__name__)
@@ -252,6 +252,16 @@ class KIEClient:
                     )
                     data = self._parse_json(text)
                     if status in (200, 201):
+                        log_structured_event(
+                            correlation_id=correlation_id,
+                            action="KIE_HTTP",
+                            action_path=f"kie_client.http:{method.lower()}",
+                            stage="KIE_HTTP",
+                            outcome="ok",
+                            kie_call_ms=latency_ms,
+                            retry_count=max(0, attempt - 1),
+                            param={"path": path, "status": status},
+                        )
                         return {
                             "ok": True,
                             "status": status,
@@ -270,6 +280,35 @@ class KIEClient:
                         continue
                     message = data.get("msg") or text or f"HTTP {status}"
                     error = self._classify_error(status=status, message=message, correlation_id=correlation_id)
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        action="KIE_HTTP",
+                        action_path=f"kie_client.http:{method.lower()}",
+                        stage="KIE_HTTP",
+                        outcome="failed",
+                        kie_call_ms=latency_ms,
+                        retry_count=max(0, attempt - 1),
+                        error_code=error.code,
+                        fix_hint="Проверьте KIE API и параметры запроса.",
+                        param={"path": path, "status": status, "message": message},
+                    )
+                    log_critical_event(
+                        correlation_id=correlation_id,
+                        update_id=None,
+                        stage="KIE_HTTP",
+                        latency_ms=latency_ms,
+                        retry_after=None,
+                        timeout_s=self.timeout.total,
+                        attempt=attempt,
+                        error_code=error.code,
+                        error_id="KIE_HTTP_ERROR",
+                        exception_class=type(last_error).__name__ if last_error else None,
+                        where=f"kie_client._request_json:{path}",
+                        fix_hint="Check KIE API availability and response payload.",
+                        retryable=attempt <= self.max_retries,
+                        upstream="kie",
+                        elapsed_ms=latency_ms,
+                    )
                     return {
                         "ok": False,
                         "status": status,
@@ -286,6 +325,34 @@ class KIEClient:
                     await asyncio.sleep(self._backoff_delay(attempt, status))
                     continue
                 error = self._classify_error(status=0, message=str(exc), correlation_id=correlation_id)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="KIE_HTTP",
+                    action_path=f"kie_client.http:{method.lower()}",
+                    stage="KIE_HTTP",
+                    outcome="failed",
+                    error_code=error.code,
+                    fix_hint="Проверьте KIE API и сетевое соединение.",
+                    retry_count=max(0, attempt - 1),
+                    param={"path": path, "error": str(exc)},
+                )
+                log_critical_event(
+                    correlation_id=correlation_id,
+                    update_id=None,
+                    stage="KIE_HTTP",
+                    latency_ms=None,
+                    retry_after=None,
+                    timeout_s=self.timeout.total,
+                    attempt=attempt,
+                    error_code=error.code,
+                    error_id="KIE_HTTP_TIMEOUT",
+                    exception_class=type(exc).__name__,
+                    where=f"kie_client._request_json:{path}",
+                    fix_hint="Increase KIE timeout or reduce load.",
+                    retryable=attempt <= self.max_retries,
+                    upstream="kie",
+                    elapsed_ms=None,
+                )
                 return {
                     "ok": False,
                     "status": 0,

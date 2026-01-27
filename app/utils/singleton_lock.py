@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.observability.trace import get_correlation_id
+from app.observability.structured_logs import log_critical_event, log_structured_event
 from app.utils.pg_advisory_lock import AdvisoryLockKeyPair, build_advisory_lock_key_pair
 
 logger = logging.getLogger(__name__)
@@ -292,6 +293,11 @@ def get_lock_mode() -> str:
 def is_lock_degraded() -> bool:
     """Return whether lock is in degraded mode."""
     return _lock_degraded
+
+
+def get_lock_degraded_reason() -> Optional[str]:
+    """Return degraded reason if any."""
+    return _lock_degraded_reason
 
 
 def get_lock_degradation_notice(lang: str = "ru") -> str:
@@ -588,23 +594,63 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
     """
     global _singleton_lock_instance
     
+    correlation_id = get_correlation_id() or "corr-na"
+    lock_started = time.monotonic()
     # Redis first (primary for multi-instance)
     redis_url = os.getenv("REDIS_URL", "").strip() or None
     if _locks_disabled():
         _set_lock_state("disabled", True, reason="lock_disabled_by_env")
         logger.info("[LOCK] singleton_disabled=true reason=disabled_by_env")
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="LOCK_ACQUIRE_DONE",
+            action_path="singleton_lock.acquire",
+            stage="LOCK",
+            outcome="ok",
+            lock_backend="disabled",
+            lock_wait_ms_total=int((time.monotonic() - lock_started) * 1000),
+            lock_attempts=0,
+            lock_ttl_s=None,
+            param={"reason": "lock_disabled_by_env"},
+            skip_correlation_store=True,
+        )
         return True
 
     if redis_url:
         ttl_seconds = _get_redis_lock_ttl_seconds()
         redis_attempts = _get_redis_connect_attempts()
         redis_acquired = False
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="LOCK_ACQUIRE_START",
+            action_path="singleton_lock.acquire",
+            stage="LOCK",
+            outcome="start",
+            lock_backend="redis",
+            lock_ttl_s=ttl_seconds,
+            lock_attempts=redis_attempts,
+            param={"redis_url": True},
+            skip_correlation_store=True,
+        )
         for attempt in range(1, redis_attempts + 1):
             redis_acquired = await _acquire_redis_lock(redis_url, ttl_seconds=ttl_seconds)
             if redis_acquired:
                 _set_lock_state("redis", True, reason=None)
                 logger.info("[LOCK] LOCK_MODE=redis lock_acquired=true for multi-instance scaling")
                 _start_redis_renewal(ttl_seconds)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="LOCK_ACQUIRE_DONE",
+                    action_path="singleton_lock.acquire",
+                    stage="LOCK",
+                    outcome="ok",
+                    lock_backend="redis",
+                    lock_wait_ms_total=int((time.monotonic() - lock_started) * 1000),
+                    lock_attempts=attempt,
+                    lock_ttl_s=ttl_seconds,
+                    param={"attempt": attempt},
+                    skip_correlation_store=True,
+                )
                 return True
             if attempt < redis_attempts:
                 logger.warning(
@@ -613,19 +659,73 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
                     redis_attempts,
                 )
         logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=redis_lock_failed attempts=%s", redis_attempts)
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="LOCK_STATUS",
+            action_path="singleton_lock.acquire",
+            stage="LOCK",
+            outcome="degraded",
+            lock_backend="redis",
+            lock_wait_ms_total=int((time.monotonic() - lock_started) * 1000),
+            lock_attempts=redis_attempts,
+            lock_ttl_s=ttl_seconds,
+            param={"degraded_reason": "redis_unavailable"},
+            skip_correlation_store=True,
+        )
 
     # Fallback to Postgres advisory lock before file lock.
     pg_dsn = dsn or os.getenv("DATABASE_URL", "").strip()
     if pg_dsn:
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="LOCK_ACQUIRE_START",
+            action_path="singleton_lock.acquire",
+            stage="LOCK",
+            outcome="start",
+            lock_backend="postgres",
+            lock_attempts=1,
+            param={"fallback": True},
+            skip_correlation_store=True,
+        )
         try:
             pg_timeout = _get_pg_lock_connect_timeout_seconds()
             acquired = await asyncio.wait_for(_acquire_postgres_lock(pg_dsn), timeout=pg_timeout)
         except asyncio.TimeoutError:
             acquired = False
             logger.warning("[LOCK] LOCK_MODE=postgres lock_acquire_failed=true reason=timeout")
+            log_critical_event(
+                correlation_id=correlation_id,
+                update_id=None,
+                stage="LOCK",
+                latency_ms=None,
+                retry_after=None,
+                timeout_s=pg_timeout,
+                attempt=1,
+                error_code="PG_LOCK_TIMEOUT",
+                error_id="PG_LOCK_TIMEOUT",
+                exception_class="TimeoutError",
+                where="singleton_lock.acquire_postgres",
+                fix_hint="Check Postgres connectivity and reduce lock contention.",
+                retryable=True,
+                upstream="db",
+                elapsed_ms=pg_timeout * 1000,
+            )
         if acquired:
             _set_lock_state("postgres", True, reason="redis_unavailable")
             logger.warning("[LOCK] LOCK_MODE=postgres fallback=true degraded=true reason=redis_unavailable")
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="LOCK_ACQUIRE_DONE",
+                action_path="singleton_lock.acquire",
+                stage="LOCK",
+                outcome="ok",
+                lock_backend="postgres",
+                lock_wait_ms_total=int((time.monotonic() - lock_started) * 1000),
+                lock_attempts=1,
+                lock_ttl_s=None,
+                param={"degraded_reason": "redis_unavailable"},
+                skip_correlation_store=True,
+            )
             return True
 
     # Fallback to file only in non-prod
@@ -638,6 +738,19 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
                 "[LOCK] LOCK_MODE=file fallback=true degraded=true single_instance=true "
                 "reason=redis_connect_timeout storage_mode=%s",
                 storage_mode,
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="LOCK_ACQUIRE_DONE",
+                action_path="singleton_lock.acquire",
+                stage="LOCK",
+                outcome="ok",
+                lock_backend="file",
+                lock_wait_ms_total=int((time.monotonic() - lock_started) * 1000),
+                lock_attempts=1,
+                lock_ttl_s=None,
+                param={"degraded_reason": "redis_connect_timeout"},
+                skip_correlation_store=True,
             )
             return True
         _set_lock_state("file", False, reason="file_lock_failed")
@@ -695,6 +808,7 @@ __all__ = [
     'get_safe_mode',
     'get_lock_mode',
     'is_lock_degraded',
+    'get_lock_degraded_reason',
     'get_lock_degradation_notice',
     'acquire_singleton_lock',
     'release_singleton_lock'
