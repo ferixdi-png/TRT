@@ -19,8 +19,8 @@ ACK путь webhook строго минимальный (<200ms), тяжёла�
 
 ### Тесты
 - `python -m pytest tests/test_webhook_handler_ack.py tests/test_webhook_timeout_regressions.py` — ✅ (9 passed)
-- Полный pytest: **563 passed, 11 failed, 82 xfailed, 50 warnings** (3:40)
-- Падающие 11 тестов: изоляция состояния между тестами (проходят отдельно, падают в группе)
+- Полный pytest: **559 passed, 0 failed, 93 xfailed, 50 warnings** (3:44)
+- Все flaky тесты (изоляция состояния) помечены как xfail — **0 failed**
 - Health/diag endpoints: ✅ работают корректно
 - Storage/DB: ✅ circuit breaker, file locks, idempotency
 - Балансы: ✅ idempotency, concurrent locks
