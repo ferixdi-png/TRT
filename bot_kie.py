@@ -1688,7 +1688,14 @@ async def warm_generation_type_menu_cache(
                 task.add_done_callback(
                     lambda t: _suppress_task_exceptions(t, action="gen_type_menu_warmup_timeout")
                 )
-            await asyncio.gather(*pending, return_exceptions=True)
+            # Short timeout on gather - asyncio.to_thread may not cancel instantly
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending, return_exceptions=True),
+                    timeout=0.5,
+                )
+            except asyncio.TimeoutError:
+                pass  # Don't block event loop waiting for threads
         missing = set(cached_types) - set(counts.keys())
         if missing:
             for gen_type in missing:
@@ -1998,7 +2005,7 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
         for task in (models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
-        await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
+        # Don't await cancelled tasks - they may block on asyncio.to_thread
         log_structured_event(
             correlation_id=correlation_id,
             action="BOOT_WARMUP",
@@ -2022,7 +2029,7 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
         for task in (models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
-        await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
+        # Don't await cancelled tasks - they may block on asyncio.to_thread
 
 
 def start_boot_warmups(*, correlation_id: str = "BOOT") -> asyncio.Task:

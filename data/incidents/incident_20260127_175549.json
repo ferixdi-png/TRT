@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-01-27T17:55:49.890299",
+  "error_type": "RuntimeError",
+  "error_message": "router boom",
+  "category": "missing_handler",
+  "stacktrace": "Traceback (most recent call last):\n  File \"C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site-packages\\telegram\\ext\\_application.py\", line 1264, in process_update\n    await coroutine\n  File \"C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site-packages\\telegram\\ext\\_handlers\\basehandler.py\", line 157, in handle_update\n    return await self.callback(update, context)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\User\\Downloads\\ПРОЕКТИК\\TRT\\tests\\test_router_exception_boundary.py\", line 20, in boom\n    raise RuntimeError(\"router boom\")\nRuntimeError: router boom\n",
+  "user_id": 12345,
+  "callback_data": "boom",
+  "last_action": "button_callback",
+  "env_snapshot": {},
+  "version": "b641a19",
+  "fixed": true,
+  "fix_applied": "fallback_handler_applied"
+}

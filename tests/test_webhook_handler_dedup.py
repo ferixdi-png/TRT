@@ -39,8 +39,9 @@ async def test_webhook_handler_deduplicates_update(harness, monkeypatch):
     }
 
     response_first = await handler(_build_request(payload))
+    await asyncio.sleep(0.01)  # Let background task start processing
     response_second = await handler(_build_request(payload))
-    await asyncio.sleep(0)
+    await asyncio.sleep(0.01)  # Let background task complete
 
     assert response_first.status == 200
     assert response_second.status == 200
