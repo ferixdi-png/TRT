@@ -12,6 +12,14 @@ ACK путь webhook строго минимальный (<200ms), тяжёла�
 - Webhook info probe в boot переведён в backoff-повтор с INFO на первых попытках и WARNING после порога.
 - BOOT warmup добавлен yield и увеличен default timeout меню типов генерации (best-effort, меньше noise).
 
+### Hotfix 2026-01-27: WEBHOOK_ACK_SLOW 499ms → <10ms
+**Root cause:** `asyncio.create_task()` начинает выполнение coroutine сразу до первого `await`, поэтому JSON parse и `Update.de_json` в background task блокировали ACK. Также `asyncio.to_thread` в boot warmup не отменяется при cancel, что блокировало event loop на 58 секунд.
+
+**Исправления:**
+- `main_render.py`: добавлен `await asyncio.sleep(0)` в начало `_process_raw_update` для немедленного yield и быстрого ACK
+- `bot_kie.py`: убран `await asyncio.gather()` после cancel в `_run_boot_warmups` — asyncio.to_thread не отменяется мгновенно
+- `bot_kie.py`: добавлен короткий timeout (0.5s) на gather после cancel в `warm_generation_type_menu_cache`
+
 ### Метрики (локально)
 | metric | p95 | p99 |
 | --- | --- | --- |
