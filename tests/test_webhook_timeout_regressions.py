@@ -92,6 +92,7 @@ async def test_start_placeholder_fast_under_storage_timeout(webhook_harness, mon
     monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
     monkeypatch.setenv("START_PLACEHOLDER_TIMEOUT_SECONDS", "1.0")
     monkeypatch.setenv("START_PLACEHOLDER_RETRY_ATTEMPTS", "1")
+    monkeypatch.setenv("START_FORCE_PLACEHOLDER", "1")
 
     async def slow_get_user_language(_user_id: int) -> str:
         await asyncio.sleep(2.0)
