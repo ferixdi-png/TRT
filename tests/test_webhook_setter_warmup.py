@@ -79,7 +79,7 @@ async def test_webhook_setter_hard_timeout(monkeypatch, caplog):
             break
     assert duration_ms is not None
     assert duration_ms < 3000
-    assert cancelled_event.is_set()
+    await asyncio.wait_for(cancelled_event.wait(), timeout=0.5)
     assert "next_retry_s=" in fail_logs[0]
 
 
@@ -94,6 +94,19 @@ async def test_webhook_setter_already_set_skips():
     result = await ensure_webhook_mode(mock_bot, "https://example.com/webhook")
     assert result is True
     mock_bot.set_webhook.assert_not_called()
+
+
+def test_auto_set_webhook_default_on_render(monkeypatch):
+    monkeypatch.setenv("RENDER", "1")
+    monkeypatch.delenv("AUTO_SET_WEBHOOK", raising=False)
+
+    assert bot_kie._auto_set_webhook_enabled() is False
+
+    monkeypatch.setenv("AUTO_SET_WEBHOOK", "0")
+    assert bot_kie._auto_set_webhook_enabled() is False
+
+    monkeypatch.setenv("AUTO_SET_WEBHOOK", "1")
+    assert bot_kie._auto_set_webhook_enabled() is True
 
 
 @pytest.mark.asyncio
@@ -119,7 +132,35 @@ async def test_warmup_timeout_cancels_task(monkeypatch):
     elapsed = time.monotonic() - start
 
     assert elapsed < 2.5
-    assert cancelled.is_set()
+    await asyncio.wait_for(cancelled.wait(), timeout=0.5)
+    assert bot_kie._GEN_TYPE_MENU_WARMUP_STATE.get("task") is None
+
+
+@pytest.mark.asyncio
+async def test_warmup_hard_timeout_with_blocking_to_thread(monkeypatch):
+    monkeypatch.setenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "0.05")
+    monkeypatch.setattr(
+        bot_kie,
+        "get_models_cached_only",
+        lambda: [{"id": "m1", "model_type": "text_to_image"}],
+    )
+
+    def _blocking_gen_type_lookup(gen_type: str):
+        time.sleep(0.5)
+        return [], "miss"
+
+    monkeypatch.setattr(bot_kie, "get_visible_models_by_generation_type_cached", _blocking_gen_type_lookup)
+
+    start = time.monotonic()
+    await bot_kie.warm_generation_type_menu_cache(
+        timeout_s=0.05,
+        retry_attempts=1,
+        force=True,
+        correlation_id="TEST",
+    )
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 0.3
     assert bot_kie._GEN_TYPE_MENU_WARMUP_STATE.get("task") is None
 
 

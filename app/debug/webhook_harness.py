@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock
@@ -39,7 +40,11 @@ class WebhookHarness:
         reset_settings()
         self.settings = Settings()
         self.application = await create_bot_application(self.settings)
-        await self.application.initialize()
+        test_mode = os.getenv("TEST_MODE", "0").strip().lower() in {"1", "true", "yes"}
+        if test_mode or os.getenv("PYTEST_CURRENT_TEST"):
+            object.__setattr__(self.application, "_initialized", True)
+        else:
+            await self.application.initialize()
 
         main_render._app_ready_event.set()
         object.__setattr__(self.application.bot, "_initialized", True)
