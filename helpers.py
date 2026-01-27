@@ -97,26 +97,30 @@ async def build_main_menu_keyboard(
 ) -> List[List[InlineKeyboardButton]]:
     """
     Строит главное меню клавиатуры.
-    Убрано дублирование - используется в start().
+    Обновлено согласно скриншоту идеального меню.
     """
     if user_lang == "ru":
         return [
-            [InlineKeyboardButton("🆓 FAST TOOLS", callback_data="free_tools")],
-            [InlineKeyboardButton("🎨 Генерация визуала", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton(" Генерация визуала", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Ремикс изображения", callback_data="gen_type:image-to-image")],
             [InlineKeyboardButton("🎬 Видео по сценарию", callback_data="gen_type:text-to-video")],
             [InlineKeyboardButton("🎞️ Анимировать изображение", callback_data="gen_type:image-to-video")],
-            [InlineKeyboardButton("🧰 Спец-инструменты", callback_data="other_models")],
+            [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
+            [InlineKeyboardButton("✍️ Текст/Перевод", callback_data="gen_type:text-to-text")],
+            [InlineKeyboardButton("�️ Улучшение качества", callback_data="gen_type:upscale")],
+            [InlineKeyboardButton("� Другие инструменты", callback_data="other_models")],
             [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
         ]
     return [
-        [InlineKeyboardButton("🆓 FAST TOOLS", callback_data="free_tools")],
         [InlineKeyboardButton("🎨 Visual generation", callback_data="gen_type:text-to-image")],
         [InlineKeyboardButton("🧩 Image remix", callback_data="gen_type:image-to-image")],
         [InlineKeyboardButton("🎬 Script to video", callback_data="gen_type:text-to-video")],
         [InlineKeyboardButton("🎞️ Animate image", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("🧰 Special tools", callback_data="other_models")],
+        [InlineKeyboardButton("🎵 Audio/Music", callback_data="gen_type:audio-to-audio")],
+        [InlineKeyboardButton("✍️ Text/Translate", callback_data="gen_type:text-to-text")],
+        [InlineKeyboardButton("🖼️ Quality enhance", callback_data="gen_type:upscale")],
+        [InlineKeyboardButton("🪄 Other tools", callback_data="other_models")],
         [InlineKeyboardButton("💳 Balance / Access", callback_data="check_balance")],
         [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
     ]
