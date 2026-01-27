@@ -1,5 +1,42 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-26 TRT: webhook setter hard deadline + auto-set guard
+
+### Root cause (по симптомам)
+- `WEBHOOK_SETTER_FAIL` показывал `timeout_s=2.8`, но `duration_ms=7000–9800`: цикл setter не имел жёсткого дедлайна вокруг реального сетевого вызова. В итоге `setWebhook/getWebhookInfo` продолжали жить дольше лимита и не отменялись по таймауту. (источник: `bot_kie.py`, `_run_webhook_setter_cycle`) 
+
+### Что сделано
+- WEBHOOK_SETTER: добавлен жёсткий `asyncio.wait_for` на весь цикл setter (probe+set), чтобы реальный вызов TG API был прерван <2.8s, плюс явные HTTP timeouts через `HTTPXRequest` (connect/read/write/pool). 
+- Идемпотентность: `getWebhookInfo` остаётся первым шагом, при совпадении URL — `ALREADY_SET`, `setWebhook` не вызывается.
+- Защитный флаг `AUTO_SET_WEBHOOK`: по умолчанию `false` на Render, чтобы избежать бесконечных попыток при проблемах сети; при `false` логируется `WEBHOOK_SETTER_SKIPPED`.
+
+### Тесты (полная команда + вывод)
+Команда:
+`pytest tests/test_webhook_setter_warmup.py`
+
+Вывод:
+```
+============================= test session starts ==============================
+platform linux -- Python 3.10.19, pytest-9.0.2, pluggy-1.6.0 -- /root/.pyenv/versions/3.10.19/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/TRT
+configfile: pytest.ini
+plugins: asyncio-1.3.0, anyio-4.12.1
+asyncio: mode=auto, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/test_webhook_setter_warmup.py::test_webhook_setter_hard_timeout PASSED [ 50%]
+tests/test_webhook_setter_warmup.py::test_webhook_setter_already_set_skips PASSED [100%]
+
+============================== 2 passed in 2.96s ===============================
+```
+
+### Логи (требуется прод-наблюдение)
+- Для GO нужно минимум 5 минут логов после деплоя без `WEBHOOK_SETTER_FAIL`. В текущей среде таких логов нет.
+
+### Итог
+**STOP** — нет прод‑логов 5+ минут после деплоя для подтверждения отсутствия `WEBHOOK_SETTER_FAIL`.
+
 ## ✅ 2026-01-26 TRT: webhook resiliency, warmup diagnostics, menu fallback + advisory lock drop
 
 ### Что изменено

@@ -9,6 +9,7 @@ import logging
 import json
 import asyncio
 import concurrent.futures
+import contextlib
 import sys
 import os
 import re
@@ -1486,6 +1487,7 @@ PRICING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("PRICING_PREFLIGHT_TIMEOUT_S
 BILLING_PREFLIGHT_TIMEOUT_SECONDS = float(os.getenv("BILLING_PREFLIGHT_TIMEOUT_SECONDS", "6.0"))
 MODEL_CACHE_WARMUP_TIMEOUT_SECONDS = float(os.getenv("MODEL_CACHE_WARMUP_TIMEOUT_SECONDS", "1.5"))
 BOOT_WARMUP_WATCHDOG_SECONDS = float(os.getenv("BOOT_WARMUP_WATCHDOG_SECONDS", "2.0"))
+BOOT_WARMUP_BUDGET_SECONDS = float(os.getenv("BOOT_WARMUP_BUDGET_SECONDS", "3.0"))
 
 _GEN_TYPE_MENU_WARMUP_STATE: Dict[str, Any] = {
     "task": None,
@@ -1497,6 +1499,7 @@ _BOOT_WARMUP_STATE: Dict[str, bool] = {
     "done": False,
     "cancelled": False,
     "watchdog_stopped": False,
+    "budget_exceeded": False,
 }
 
 
@@ -1553,6 +1556,7 @@ async def warm_generation_type_menu_cache(
     cache_ttl = GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS if cache_ttl_seconds is None else cache_ttl_seconds
     attempts = GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS if retry_attempts is None else retry_attempts
     start = time.monotonic()
+    deadline = start + timeout
     now = time.monotonic()
     current_task = asyncio.current_task()
     if (
@@ -1664,11 +1668,28 @@ async def warm_generation_type_menu_cache(
     try:
         last_exc: Optional[BaseException] = None
         for attempt in range(1, max(1, attempts) + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                elapsed_ms_real = int((time.monotonic() - start) * 1000)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    action="GEN_TYPE_MENU_WARMUP",
+                    action_path="boot:warmup",
+                    stage="BOOT",
+                    outcome="skipped_deadline",
+                    param={"elapsed_ms": elapsed_ms_real, "timeout_s": timeout},
+                )
+                logger.info(
+                    "GEN_TYPE_MENU_WARMUP_SKIP elapsed_ms=%s reason=deadline correlation_id=%s",
+                    elapsed_ms_real,
+                    correlation_id,
+                )
+                return
             attempt_start = time.monotonic()
             attempt_start_ms = int(time.time() * 1000)
+            warmup_task = asyncio.create_task(_warmup())
             try:
-                warmup_task = asyncio.create_task(_warmup())
-                counts = await asyncio.wait_for(warmup_task, timeout=timeout)
+                counts = await asyncio.wait_for(warmup_task, timeout=min(timeout, remaining))
                 if not isinstance(counts, dict):
                     counts = {}
                 if "counts" not in counts and "skipped" not in counts:
@@ -1741,8 +1762,8 @@ async def warm_generation_type_menu_cache(
                 return
             except asyncio.TimeoutError as exc:
                 last_exc = exc
+                warmup_task.cancel()
                 try:
-                    warmup_task.cancel()
                     await warmup_task
                 except asyncio.CancelledError:
                     pass
@@ -1759,15 +1780,12 @@ async def warm_generation_type_menu_cache(
                     attempts,
                     correlation_id,
                 )
-                if attempt < max(1, attempts):
-                    await asyncio.sleep(GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS)
-                    continue
                 log_structured_event(
                     correlation_id=correlation_id,
                     action="GEN_TYPE_MENU_WARMUP",
                     action_path="boot:warmup",
                     stage="BOOT",
-                    outcome="timeout",
+                    outcome="skipped_deadline",
                     error_code="GEN_TYPE_MENU_WARMUP_TIMEOUT",
                     param={
                         "elapsed_ms": elapsed_ms_real,
@@ -1781,6 +1799,19 @@ async def warm_generation_type_menu_cache(
                     },
                 )
                 return
+            except Exception as exc:
+                last_exc = exc
+                warmup_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await warmup_task
+                logger.info(
+                    "GEN_TYPE_MENU_WARMUP_FAILED attempt=%s error=%s correlation_id=%s",
+                    attempt,
+                    exc,
+                    correlation_id,
+                )
+                if attempt >= max(1, attempts):
+                    return
     except asyncio.CancelledError:
         elapsed_ms_real = int((time.monotonic() - start) * 1000)
         logger.info(
@@ -1881,87 +1912,65 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
     _BOOT_WARMUP_STATE["done"] = False
     _BOOT_WARMUP_STATE["cancelled"] = False
     _BOOT_WARMUP_STATE["watchdog_stopped"] = False
+    _BOOT_WARMUP_STATE["budget_exceeded"] = False
     log_structured_event(
         correlation_id=correlation_id,
         action="BOOT_WARMUP",
         action_path="boot:warmup",
         stage="BOOT",
         outcome="start",
-        param={"watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
+        param={
+            "watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS,
+            "budget_s": BOOT_WARMUP_BUDGET_SECONDS,
+        },
     )
     models_task = asyncio.create_task(_warm_models_cache(correlation_id=correlation_id))
     gen_type_task = asyncio.create_task(
         warm_generation_type_menu_cache(
             correlation_id=correlation_id,
-            retry_attempts=GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS,
+            retry_attempts=1,
             cache_ttl_seconds=GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS,
         )
     )
-    done_event = asyncio.Event()
-    watchdog_timed_out = False
-
-    async def _watchdog() -> None:
-        nonlocal watchdog_timed_out
-        done_wait = asyncio.create_task(done_event.wait())
-        ready_wait = asyncio.create_task(_webhook_app_ready_event.wait())
-        try:
-            done, pending = await asyncio.wait(
-                [done_wait, ready_wait],
-                timeout=BOOT_WARMUP_WATCHDOG_SECONDS,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if ready_wait in done:
-                _BOOT_WARMUP_STATE["watchdog_stopped"] = True
-                return
-            if done_wait in done:
-                return
-        except asyncio.TimeoutError:
-            if _BOOT_WARMUP_STATE["cancelled"] or _BOOT_WARMUP_STATE["done"]:
-                return
-            watchdog_timed_out = True
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            logger.info(
-                "BOOT_WARMUP_WATCHDOG_TIMEOUT elapsed_ms=%s watchdog_s=%s correlation_id=%s",
-                elapsed_ms,
-                BOOT_WARMUP_WATCHDOG_SECONDS,
-                correlation_id,
-            )
-            for task in (models_task, gen_type_task):
-                if task and not task.done():
-                    task.cancel()
-            await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
-            log_structured_event(
-                correlation_id=correlation_id,
-                action="BOOT_WARMUP",
-                action_path="boot:warmup",
-                stage="BOOT",
-                outcome="timeout",
-                param={"elapsed_ms": elapsed_ms, "watchdog_s": BOOT_WARMUP_WATCHDOG_SECONDS},
-            )
-        finally:
-            for task in (done_wait, ready_wait):
-                if task and not task.done():
-                    task.cancel()
-            await asyncio.gather(done_wait, ready_wait, return_exceptions=True)
-
-    watchdog_task = asyncio.create_task(_watchdog())
     try:
-        await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
+        await asyncio.wait_for(
+            asyncio.gather(models_task, gen_type_task, return_exceptions=True),
+            timeout=BOOT_WARMUP_BUDGET_SECONDS,
+        )
         elapsed_ms = int((time.monotonic() - start) * 1000)
-        if not watchdog_timed_out:
-            _BOOT_WARMUP_STATE["done"] = True
-            log_structured_event(
-                correlation_id=correlation_id,
-                action="BOOT_WARMUP",
-                action_path="boot:warmup",
-                stage="BOOT",
-                outcome="done",
-                param={"elapsed_ms": elapsed_ms},
-            )
+        _BOOT_WARMUP_STATE["done"] = True
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="BOOT_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="done",
+            param={"elapsed_ms": elapsed_ms},
+        )
+    except asyncio.TimeoutError:
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        _BOOT_WARMUP_STATE["budget_exceeded"] = True
+        logger.info(
+            "BOOT_WARMUP_BUDGET_EXCEEDED elapsed_ms=%s budget_s=%s correlation_id=%s",
+            elapsed_ms,
+            BOOT_WARMUP_BUDGET_SECONDS,
+            correlation_id,
+        )
+        for task in (models_task, gen_type_task):
+            if task and not task.done():
+                task.cancel()
+        await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
+        log_structured_event(
+            correlation_id=correlation_id,
+            action="BOOT_WARMUP",
+            action_path="boot:warmup",
+            stage="BOOT",
+            outcome="skipped_deadline",
+            param={"elapsed_ms": elapsed_ms, "budget_s": BOOT_WARMUP_BUDGET_SECONDS},
+        )
     except asyncio.CancelledError:
         elapsed_ms = int((time.monotonic() - start) * 1000)
         _BOOT_WARMUP_STATE["cancelled"] = True
-        done_event.set()
         logger.info("BOOT_WARMUP_CANCELLED elapsed_ms=%s correlation_id=%s", elapsed_ms, correlation_id)
         log_structured_event(
             correlation_id=correlation_id,
@@ -1975,13 +1984,6 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
             if task and not task.done():
                 task.cancel()
         await asyncio.gather(models_task, gen_type_task, return_exceptions=True)
-    finally:
-        done_event.set()
-        if watchdog_task:
-            try:
-                await watchdog_task
-            except asyncio.CancelledError:
-                pass
 
 
 def start_boot_warmups(*, correlation_id: str = "BOOT") -> asyncio.Task:
@@ -25874,78 +25876,221 @@ def _resolve_webhook_set_sleep(base: float, jitter_ratio: float) -> float:
     return base + rng.uniform(0.0, jitter)
 
 
-async def _run_webhook_setter_loop(webhook_url: str) -> None:
-    from app.bot_mode import get_webhook_set_last_failure_reason
+def _auto_set_webhook_enabled() -> bool:
+    raw_value = os.getenv("AUTO_SET_WEBHOOK")
+    if raw_value is None:
+        return not (os.getenv("RENDER", "").strip().lower() in {"1", "true", "yes"})
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
-    max_attempts = _read_int_env("WEBHOOK_SET_MAX_ATTEMPTS", 3, min_value=1, max_value=5)
+def _compute_webhook_set_next_retry(
+    *,
+    failure_count: int,
+    backoff_base: float,
+    backoff_cap: float,
+    jitter_ratio: float,
+    max_fast_retries: int,
+    long_sleep_seconds: float,
+) -> float:
+    if failure_count <= max_fast_retries:
+        backoff = min(backoff_cap, backoff_base * (2 ** (failure_count - 1)))
+        return _resolve_webhook_set_sleep(backoff, jitter_ratio)
+    return _resolve_webhook_set_sleep(long_sleep_seconds, jitter_ratio)
+
+
+async def _run_webhook_setter_cycle(
+    webhook_url: str,
+    *,
+    attempt_cycle: int,
+    cycle_timeout_s: float,
+) -> Dict[str, Any]:
+    from app.bot_mode import get_webhook_set_last_result
+    from telegram.request import HTTPXRequest
+
+    if not _auto_set_webhook_enabled():
+        log_structured_event(
+            action="WEBHOOK_SETTER_SKIPPED",
+            action_path="webhook:setter",
+            stage="WEBHOOK",
+            outcome="skipped",
+            param={"reason": "auto_set_disabled", "attempt": attempt_cycle},
+        )
+        logger.info("WEBHOOK_SETTER_SKIPPED cycle=%s reason=auto_set_disabled", attempt_cycle)
+        return {
+            "ok": True,
+            "outcome": "skipped",
+            "error_type": None,
+            "error": None,
+            "duration_ms": 0,
+        }
+
+    started = time.monotonic()
+    log_structured_event(
+        action="WEBHOOK_SETTER_START",
+        action_path="webhook:setter",
+        stage="WEBHOOK",
+        outcome="start",
+        param={"attempt": attempt_cycle, "timeout_s": cycle_timeout_s},
+    )
+    logger.info(
+        "WEBHOOK_SETTER_START cycle=%s timeout_s=%s",
+        attempt_cycle,
+        cycle_timeout_s,
+    )
+    try:
+        from telegram import Bot
+
+        connect_timeout = min(
+            _read_float_env("WEBHOOK_SET_CONNECT_TIMEOUT_SECONDS", 1.0),
+            cycle_timeout_s,
+        )
+        read_timeout = min(
+            _read_float_env("WEBHOOK_SET_READ_TIMEOUT_SECONDS", 1.5),
+            cycle_timeout_s,
+        )
+        write_timeout = min(
+            _read_float_env("WEBHOOK_SET_WRITE_TIMEOUT_SECONDS", 1.5),
+            cycle_timeout_s,
+        )
+        pool_timeout = min(
+            _read_float_env("WEBHOOK_SET_POOL_TIMEOUT_SECONDS", 1.0),
+            cycle_timeout_s,
+        )
+        request = HTTPXRequest(
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+            write_timeout=write_timeout,
+            pool_timeout=pool_timeout,
+        )
+        async with Bot(token=BOT_TOKEN, request=request) as temp_bot:
+            ok = await asyncio.wait_for(
+                ensure_webhook_mode(
+                    temp_bot,
+                    webhook_url,
+                    connect_timeout=connect_timeout,
+                    read_timeout=read_timeout,
+                    write_timeout=write_timeout,
+                    pool_timeout=pool_timeout,
+                    cycle_timeout_s=cycle_timeout_s,
+                ),
+                timeout=cycle_timeout_s,
+            )
+    except Conflict as exc:
+        handle_conflict_gracefully(exc, "webhook")
+        return {"ok": False, "outcome": "conflict", "error_type": "Conflict", "error": str(exc), "duration_ms": 0}
+    except asyncio.TimeoutError as exc:
+        duration_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "ok": False,
+            "outcome": "timeout",
+            "error_type": "TimeoutError",
+            "error": str(exc) or "hard_deadline",
+            "duration_ms": duration_ms,
+        }
+    except Exception as exc:
+        duration_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "ok": False,
+            "outcome": "failed",
+            "error_type": type(exc).__name__ or "Exception",
+            "error": str(exc),
+            "duration_ms": duration_ms,
+        }
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    result = get_webhook_set_last_result()
+    outcome = result.get("reason") or "unknown"
+    error_type = result.get("error_type") or "UnknownError"
+    error = result.get("error") or outcome
+    return {
+        "ok": ok,
+        "outcome": outcome,
+        "error_type": error_type,
+        "error": error,
+        "duration_ms": duration_ms,
+    }
+
+
+async def _run_webhook_setter_loop(webhook_url: str) -> None:
+    max_fast_retries = _read_int_env("WEBHOOK_SET_MAX_FAST_RETRIES", 6, min_value=1, max_value=12)
     backoff_base = _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1, max_value=10.0)
     backoff_cap = _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 5.0, min_value=0.5, max_value=30.0)
-    retry_interval = _read_float_env("WEBHOOK_SET_RETRY_INTERVAL_SECONDS", 10.0, min_value=1.0, max_value=120.0)
-    cooldown_seconds = _read_float_env("WEBHOOK_SET_COOLDOWN_SECONDS", 30.0, min_value=2.0, max_value=300.0)
-    timeout_window_seconds = _read_float_env(
-        "WEBHOOK_SET_TIMEOUT_LOG_WINDOW_SECONDS",
-        60.0,
-        min_value=10.0,
-        max_value=600.0,
-    )
     retry_jitter_ratio = _read_float_env(
         "WEBHOOK_SET_RETRY_JITTER_RATIO",
         0.2,
         min_value=0.0,
         max_value=1.0,
     )
+    long_sleep_seconds = _read_float_env(
+        "WEBHOOK_SET_LONG_SLEEP_SECONDS",
+        300.0,
+        min_value=60.0,
+        max_value=900.0,
+    )
+    cycle_timeout_s = _read_float_env(
+        "WEBHOOK_SET_CYCLE_TIMEOUT_SECONDS",
+        2.8,
+        min_value=1.0,
+        max_value=5.0,
+    )
     attempt_cycle = 0
-    timeout_cycles = 0
-    last_timeout_log_ts: Optional[float] = None
+    failure_count = 0
 
     while True:
         attempt_cycle += 1
         async with _webhook_setter_lock:
-            try:
-                from telegram import Bot
+            result = await _run_webhook_setter_cycle(
+                webhook_url,
+                attempt_cycle=attempt_cycle,
+                cycle_timeout_s=cycle_timeout_s,
+            )
 
-                async with Bot(token=BOT_TOKEN) as temp_bot:
-                    ok = await ensure_webhook_mode(
-                        temp_bot,
-                        webhook_url,
-                        attempts=max_attempts,
-                        backoff_base_seconds=backoff_base,
-                        backoff_cap_seconds=backoff_cap,
-                    )
-            except Conflict as exc:
-                handle_conflict_gracefully(exc, "webhook")
-                return
-            except Exception as exc:
-                logger.error("WEBHOOK_SETTER_FAILED cycle=%s error=%s", attempt_cycle, exc)
-                ok = False
-
-        if ok:
-            logger.info("action=WEBHOOK_SET_SUCCESS cycle=%s", attempt_cycle)
-            return
-        failure_reason = get_webhook_set_last_failure_reason()
-        if failure_reason == "timeout":
-            timeout_cycles += 1
-            now = time.monotonic()
-            if last_timeout_log_ts is None or (now - last_timeout_log_ts) >= timeout_window_seconds:
-                logger.warning(
-                    "WEBHOOK_SETTER_TIMEOUT_WINDOW cycle=%s consecutive_timeouts=%s cooldown_s=%s",
+        if result.get("ok"):
+            outcome = result.get("outcome")
+            if outcome == "already_set":
+                logger.info(
+                    "WEBHOOK_SETTER_ALREADY_SET cycle=%s duration_ms=%s timeout_s=%s",
                     attempt_cycle,
-                    timeout_cycles,
-                    cooldown_seconds,
+                    result.get("duration_ms"),
+                    cycle_timeout_s,
                 )
-                last_timeout_log_ts = now
-        else:
-            timeout_cycles = 0
+                return
+            if outcome == "skipped":
+                logger.info(
+                    "WEBHOOK_SETTER_SKIPPED cycle=%s duration_ms=%s timeout_s=%s",
+                    attempt_cycle,
+                    result.get("duration_ms"),
+                    cycle_timeout_s,
+                )
+                return
+            logger.info(
+                "WEBHOOK_SETTER_OK cycle=%s duration_ms=%s timeout_s=%s",
+                attempt_cycle,
+                result.get("duration_ms"),
+                cycle_timeout_s,
+            )
+            return
 
-        logger.warning(
-            "WEBHOOK_SET_RETRY_SCHEDULED cycle=%s retry_in_s=%s",
-            attempt_cycle,
-            retry_interval,
+        failure_count += 1
+        next_retry_s = _compute_webhook_set_next_retry(
+            failure_count=failure_count,
+            backoff_base=backoff_base,
+            backoff_cap=backoff_cap,
+            jitter_ratio=retry_jitter_ratio,
+            max_fast_retries=max_fast_retries,
+            long_sleep_seconds=long_sleep_seconds,
         )
-        sleep_for = _resolve_webhook_set_sleep(retry_interval, retry_jitter_ratio)
-        if timeout_cycles >= 2:
-            sleep_for = max(sleep_for, _resolve_webhook_set_sleep(cooldown_seconds, retry_jitter_ratio))
-        await asyncio.sleep(sleep_for)
+        error_type = result.get("error_type") or "UnknownError"
+        error = result.get("error") or error_type
+        logger.warning(
+            "WEBHOOK_SETTER_FAIL cycle=%s error_type=%s error=%s duration_ms=%s timeout_s=%s next_retry_s=%s",
+            attempt_cycle,
+            error_type,
+            error,
+            result.get("duration_ms"),
+            cycle_timeout_s,
+            next_retry_s,
+        )
+        await asyncio.sleep(next_retry_s)
 
 
 def _schedule_webhook_setter(webhook_url: str) -> None:
