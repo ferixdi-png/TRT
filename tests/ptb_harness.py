@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 from telegram import Update, Message, User, Chat, CallbackQuery, InlineKeyboardMarkup, MessageEntity
-from telegram.ext import Application, ContextTypes
+from telegram.ext import Application, ContextTypes, ExtBot
 from telegram.constants import ChatType
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,11 @@ class PTBHarness:
     async def setup(self):
         """Инициализирует Application и настраивает моки."""
         # Создаем Application
-        self.application = Application.builder().token(self.bot_token).build()
+        mock_bot = MagicMock(spec=ExtBot)
+        builder = Application.builder().bot(mock_bot)
+        if hasattr(builder, "updater"):
+            builder = builder.updater(None)
+        self.application = builder.build()
         object.__setattr__(self.application, "_initialized", True)
         
         # Мокаем bot.send_message
@@ -114,21 +118,9 @@ class PTBHarness:
             return True
         
         # Применяем моки
-        object.__setattr__(
-            self.application.bot,
-            "send_message",
-            AsyncMock(side_effect=mock_send_message),
-        )
-        object.__setattr__(
-            self.application.bot,
-            "edit_message_text",
-            AsyncMock(side_effect=mock_edit_message_text),
-        )
-        object.__setattr__(
-            self.application.bot,
-            "answer_callback_query",
-            AsyncMock(side_effect=mock_answer_callback_query),
-        )
+        self.application.bot.send_message = AsyncMock(side_effect=mock_send_message)
+        self.application.bot.edit_message_text = AsyncMock(side_effect=mock_edit_message_text)
+        self.application.bot.answer_callback_query = AsyncMock(side_effect=mock_answer_callback_query)
         object.__setattr__(
             self.application.bot,
             "get_me",

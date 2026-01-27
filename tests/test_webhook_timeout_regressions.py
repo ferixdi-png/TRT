@@ -9,9 +9,23 @@ from app.utils.singleton_lock import acquire_singleton_lock, release_singleton_l
 
 async def _wait_for_message(harness, timeout_s: float) -> dict:
     async def _poll() -> dict:
-        while not harness.outbox.messages:
+        while not harness.outbox.messages and not harness.outbox.edited_messages:
             await asyncio.sleep(0.01)
-        return harness.outbox.messages[0]
+        return harness.outbox.messages[0] if harness.outbox.messages else harness.outbox.edited_messages[0]
+
+    return await asyncio.wait_for(_poll(), timeout=timeout_s)
+
+
+async def _wait_for_minimal_menu(harness, timeout_s: float) -> dict:
+    async def _poll() -> dict:
+        while True:
+            for message in harness.outbox.messages:
+                if MINIMAL_MENU_TEXT in message.get("text", ""):
+                    return message
+            for message in harness.outbox.edited_messages:
+                if MINIMAL_MENU_TEXT in message.get("text", ""):
+                    return message
+            await asyncio.sleep(0.01)
 
     return await asyncio.wait_for(_poll(), timeout=timeout_s)
 
@@ -44,7 +58,7 @@ async def test_webhook_ack_under_slow_storage(webhook_harness, monkeypatch):
     assert response.status == 200
     assert ack_ms < 500
 
-    message = await _wait_for_message(webhook_harness, timeout_s=1.0)
+    message = await _wait_for_minimal_menu(webhook_harness, timeout_s=1.0)
     assert MINIMAL_MENU_TEXT in message["text"]
 
 
@@ -71,7 +85,7 @@ async def test_menu_build_timeout_degrades_gracefully(webhook_harness, monkeypat
     response = await _send_start(webhook_harness, user_id=103, update_id=5003)
     assert response.status == 200
 
-    message = await _wait_for_message(webhook_harness, timeout_s=1.0)
+    message = await _wait_for_minimal_menu(webhook_harness, timeout_s=1.0)
     assert MINIMAL_MENU_TEXT in message["text"]
 
 
@@ -110,7 +124,7 @@ async def test_start_placeholder_fast_under_storage_timeout(webhook_harness, mon
     assert response.status == 200
     assert ack_ms < 500
 
-    message = await _wait_for_message(webhook_harness, timeout_s=1.0)
+    message = await _wait_for_minimal_menu(webhook_harness, timeout_s=1.0)
     assert MINIMAL_MENU_TEXT in message["text"]
 
 

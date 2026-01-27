@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from aiohttp import web
 from telegram import Message
+from telegram.ext import ExtBot
 
 import main_render
 from app.config import Settings, reset_settings
@@ -41,12 +42,18 @@ class WebhookHarness:
         os.environ.setdefault("WEBHOOK_PROCESS_IN_BACKGROUND", "0")
         reset_settings()
         self.settings = Settings()
-        self.application = await create_bot_application(self.settings)
+        self.application = await create_bot_application(self.settings, bot_override=MagicMock(spec=ExtBot))
         await self.application.initialize()
 
         main_render._app_ready_event.set()
-        object.__setattr__(self.application.bot, "_initialized", True)
-        object.__setattr__(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
+        try:
+            object.__setattr__(self.application.bot, "_initialized", True)
+        except Exception:
+            setattr(self.application.bot, "_initialized", True)
+        try:
+            object.__setattr__(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
+        except Exception:
+            setattr(self.application.bot, "_bot_user", MagicMock(username="test_bot"))
 
         async def mock_send_message(chat_id, text, **kwargs):
             message_id = self._next_message_id()
@@ -101,7 +108,7 @@ class WebhookHarness:
             "send_audio": mock_send_message,
             "send_document": mock_send_message,
         }.items():
-            object.__setattr__(self.application.bot, name, AsyncMock(side_effect=fn))
+            setattr(self.application.bot, name, AsyncMock(side_effect=fn))
 
         main_render._seen_update_ids.clear()
         self.handler = main_render.build_webhook_handler(self.application, self.settings)
@@ -132,7 +139,7 @@ class WebhookHarness:
         request.method = "POST"
         request.path = "/webhook"
         request.content_length = len(json.dumps(payload))
-        request.json = AsyncMock(return_value=payload)
+        request.read = AsyncMock(return_value=json.dumps(payload).encode("utf-8"))
         response = await self.handler(request)
         await asyncio.sleep(0)
         return response
