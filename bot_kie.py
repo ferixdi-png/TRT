@@ -1221,7 +1221,6 @@ from app.models.registry import (
     get_generation_type_info,
     get_models_cached_only,
     get_models_static_only,
-    get_models_sync,
 )
 from app.models.canonical import canonicalize_model_id
 from app.utils.singleton_lock import get_lock_mode, is_lock_degraded, is_lock_acquired
@@ -2107,12 +2106,12 @@ def start_boot_warmups(*, correlation_id: str = "BOOT") -> asyncio.Task:
 
 def get_models_by_category_from_registry(category: str) -> List[Dict[str, Any]]:
     """Получает модели из реестра по категории"""
-    models = get_models_sync()
+    models = get_models_static_only()
     return filter_visible_models([m for m in models if m.get('category') == category])
 
 def get_categories_from_registry() -> List[str]:
     """Получает список категорий из реестра"""
-    models = get_models_sync()
+    models = get_models_static_only()
     categories = set()
     for model in models:
         cat = model.get('category')
