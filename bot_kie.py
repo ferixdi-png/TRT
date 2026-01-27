@@ -1657,11 +1657,14 @@ async def warm_generation_type_menu_cache(
                         return
                     start_gen = time.monotonic()
                     try:
+                        logger.info("GEN_TYPE_MENU_WARMUP_START gen_type=%s correlation_id=%s", gen_type, correlation_id)
                         models, cache_status = await asyncio.to_thread(
                             get_visible_models_by_generation_type_cached,
                             gen_type,
                             allow_api=False,  # Boot warmup: NO API calls!
                         )
+                        logger.info("GEN_TYPE_MENU_WARMUP_DONE gen_type=%s models=%d status=%s elapsed_ms=%d correlation_id=%s", 
+                                   gen_type, len(models), cache_status, int((time.monotonic() - start_gen) * 1000), correlation_id)
                     except asyncio.CancelledError:
                         raise
                     except Exception:
