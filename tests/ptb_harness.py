@@ -135,6 +135,7 @@ class PTBHarness:
 
             bot_kie.generation_submit_locks.clear()
             bot_kie._processed_update_ids.clear()
+            bot_kie._start_inflight_jobs.clear()
             from app.generations import request_dedupe_store
 
             request_dedupe_store._memory_entries.clear()
