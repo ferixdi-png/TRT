@@ -7015,7 +7015,7 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         log_timeout=False,
     )
     total_models = await _await_with_timeout(
-        asyncio.to_thread(lambda: len(get_models_sync())),
+        asyncio.to_thread(lambda: len(get_models_static_only())),
         timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
         label="models_count",
         correlation_id=correlation_id,
@@ -29903,3 +29903,17 @@ async def handle_gen_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 if __name__ == "__main__":
+    # Единая точка входа через asyncio.run
+    # НЕ запускаем бота при импортах - только при прямом вызове
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user (KeyboardInterrupt)")
+        sys.exit(0)
+    except asyncio.CancelledError:
+        logger.info("🛑 Bot shutdown requested (CancelledError)")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"❌ Fatal error in main(): {e}", exc_info=True)
+        logger.error("❌ Bot failed to start. Check logs above for details.")
+        sys.exit(1)
