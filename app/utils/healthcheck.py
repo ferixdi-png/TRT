@@ -156,6 +156,108 @@ async def billing_preflight_handler(request):
         )
 
 
+async def telegram_diag_handler(request):
+    """Telegram diagnostics: webhook info, webhook set (same URL), sendMessage to ADMIN_ID."""
+    from telegram import Bot
+    from telegram.request import HTTPXRequest
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        payload = {"ok": False, "status": "error", "error": "missing_bot_token"}
+        return web.Response(text=json.dumps(payload), content_type="application/json", status=503)
+
+    timeout_seconds = float(os.getenv("TELEGRAM_DIAG_TIMEOUT_SECONDS", "6.0"))
+    connect_timeout = float(os.getenv("TELEGRAM_HTTP_CONNECT_TIMEOUT_SECONDS", "5.0"))
+    read_timeout = float(os.getenv("TELEGRAM_HTTP_READ_TIMEOUT_SECONDS", "15.0"))
+    write_timeout = float(os.getenv("TELEGRAM_HTTP_WRITE_TIMEOUT_SECONDS", "15.0"))
+    pool_timeout = float(os.getenv("TELEGRAM_HTTP_POOL_TIMEOUT_SECONDS", "5.0"))
+    request = HTTPXRequest(
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        write_timeout=write_timeout,
+        pool_timeout=pool_timeout,
+    )
+
+    webhook_url = ""
+    try:
+        from app.config import get_settings
+
+        settings = get_settings()
+        webhook_url = settings.webhook_url
+    except Exception:
+        webhook_url = os.getenv("WEBHOOK_URL", "").strip()
+
+    admin_id_raw = os.getenv("ADMIN_ID", "").strip()
+    try:
+        admin_id = int(admin_id_raw.split(",")[0]) if admin_id_raw else 0
+    except ValueError:
+        admin_id = 0
+
+    result = {
+        "ok": True,
+        "status": "ok",
+        "webhook_info": None,
+        "webhook_set": None,
+        "send_message": None,
+    }
+
+    async with Bot(token=token, request=request) as bot:
+        try:
+            start = time.monotonic()
+            info = await asyncio.wait_for(bot.get_webhook_info(), timeout=timeout_seconds)
+            result["webhook_info"] = {
+                "ok": True,
+                "lat_ms": int((time.monotonic() - start) * 1000),
+                "url": getattr(info, "url", ""),
+                "pending_update_count": getattr(info, "pending_update_count", None),
+            }
+        except Exception as exc:
+            result["ok"] = False
+            result["webhook_info"] = {"ok": False, "error": str(exc)[:200]}
+
+        if webhook_url:
+            try:
+                start = time.monotonic()
+                await asyncio.wait_for(
+                    bot.set_webhook(url=webhook_url, drop_pending_updates=False),
+                    timeout=timeout_seconds,
+                )
+                result["webhook_set"] = {
+                    "ok": True,
+                    "lat_ms": int((time.monotonic() - start) * 1000),
+                    "url": webhook_url,
+                }
+            except Exception as exc:
+                result["ok"] = False
+                result["webhook_set"] = {"ok": False, "error": str(exc)[:200], "url": webhook_url}
+        else:
+            result["webhook_set"] = {"ok": False, "skipped": True, "reason": "missing_webhook_url"}
+
+        if admin_id:
+            try:
+                start = time.monotonic()
+                await asyncio.wait_for(
+                    bot.send_message(chat_id=admin_id, text="✅ Telegram diag ping"),
+                    timeout=timeout_seconds,
+                )
+                result["send_message"] = {
+                    "ok": True,
+                    "lat_ms": int((time.monotonic() - start) * 1000),
+                    "admin_id": admin_id,
+                }
+            except Exception as exc:
+                result["ok"] = False
+                result["send_message"] = {"ok": False, "error": str(exc)[:200], "admin_id": admin_id}
+        else:
+            result["send_message"] = {"ok": False, "skipped": True, "reason": "missing_admin_id"}
+
+    return web.Response(
+        text=json.dumps(result, ensure_ascii=False),
+        content_type="application/json",
+        status=200 if result["ok"] else 503,
+    )
+
+
 async def start_health_server(
     port: int = 8000,
     webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
@@ -187,6 +289,7 @@ async def start_health_server(
             app.router.add_get('/healthz', health_handler)
             app.router.add_get('/', health_handler)  # Для совместимости
             app.router.add_get('/__diag/billing_preflight', billing_preflight_handler)
+            app.router.add_get('/diag/telegram', telegram_diag_handler)
             app.router.add_post('/webhook/health', webhook_health_echo)
             if webhook_handler is not None:
                 try:
