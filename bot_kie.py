@@ -1952,6 +1952,52 @@ async def _warm_models_cache(
         )
 
 
+async def _warm_user_data_caches(*, correlation_id: str = "BOOT") -> None:
+    """Load user data caches (languages, gifts, free generations) at boot.
+    
+    This prevents blocking sync calls during request handling.
+    """
+    global _free_generations_cache, _free_generations_cache_time
+    
+    try:
+        from app.storage.factory import get_storage
+        storage = get_storage()
+        if not storage:
+            return
+        
+        # Load user languages
+        try:
+            languages = await storage.read_json_file("user_languages.json", {})
+            for user_key, lang in languages.items():
+                _user_language_cache[user_key] = lang
+                _user_language_cache_time[user_key] = time.time()
+            logger.info("BOOT_CACHE_LOADED cache=user_languages count=%d", len(languages))
+        except Exception as e:
+            logger.warning("Failed to load user_languages cache: %s", e)
+        
+        # Load gift claimed
+        try:
+            claimed = await storage.read_json_file("gift_claimed.json", {})
+            for user_key, status in claimed.items():
+                if status:
+                    _gift_claimed_cache[user_key] = True
+            logger.info("BOOT_CACHE_LOADED cache=gift_claimed count=%d", len(claimed))
+        except Exception as e:
+            logger.warning("Failed to load gift_claimed cache: %s", e)
+        
+        # Load free generations
+        try:
+            free_gens = await storage.read_json_file("free_generations.json", {})
+            _free_generations_cache = free_gens
+            _free_generations_cache_time = time.time()
+            logger.info("BOOT_CACHE_LOADED cache=free_generations count=%d", len(free_gens))
+        except Exception as e:
+            logger.warning("Failed to load free_generations cache: %s", e)
+            
+    except Exception as e:
+        logger.warning("BOOT_CACHE_WARMUP_FAILED error=%s", e)
+
+
 async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
     start = time.monotonic()
     _BOOT_WARMUP_STATE["done"] = False
@@ -1970,6 +2016,8 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
             "budget_s": BOOT_WARMUP_BUDGET_SECONDS,
         },
     )
+    # Load user data caches first (fast, non-blocking)
+    user_data_task = asyncio.create_task(_warm_user_data_caches(correlation_id=correlation_id))
     models_task = asyncio.create_task(_warm_models_cache(correlation_id=correlation_id))
     gen_type_task = asyncio.create_task(
         warm_generation_type_menu_cache(
@@ -1980,7 +2028,7 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
     )
     try:
         await asyncio.wait_for(
-            asyncio.gather(models_task, gen_type_task, return_exceptions=True),
+            asyncio.gather(user_data_task, models_task, gen_type_task, return_exceptions=True),
             timeout=BOOT_WARMUP_BUDGET_SECONDS,
         )
         elapsed_ms = int((time.monotonic() - start) * 1000)
@@ -2002,7 +2050,7 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
             BOOT_WARMUP_BUDGET_SECONDS,
             correlation_id,
         )
-        for task in (models_task, gen_type_task):
+        for task in (user_data_task, models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
         # Don't await cancelled tasks - they may block on asyncio.to_thread
@@ -2026,7 +2074,7 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
             outcome="cancelled",
             param={"elapsed_ms": elapsed_ms},
         )
-        for task in (models_task, gen_type_task):
+        for task in (user_data_task, models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
         # Don't await cancelled tasks - they may block on asyncio.to_thread
@@ -5510,57 +5558,124 @@ _user_language_cache_time = {}
 CACHE_TTL_LANGUAGE = 300  # 5 минут
 
 def get_user_language(user_id: int) -> str:
-    """Get user language preference (default: 'ru') with caching."""
+    """Get user language preference (default: 'ru') with caching.
+    
+    IMPORTANT: Never blocks event loop. Returns cached value or default 'ru'.
+    Background refresh happens via async path.
+    """
     user_key = str(user_id)
     
-    # Проверяем кэш
+    # Проверяем кэш - если есть, возвращаем сразу
     current_time = time.time()
     if user_key in _user_language_cache:
         cache_time = _user_language_cache_time.get(user_key, 0)
         if current_time - cache_time < CACHE_TTL_LANGUAGE:
             return _user_language_cache[user_key]
+        # Cache expired but still return cached value, don't block
+        return _user_language_cache[user_key]
     
-    # Загружаем из файла
-    languages = load_json_file(USER_LANGUAGES_FILE, {})
-    lang = languages.get(user_key, 'ru')  # Default to Russian
-    
-    # Обновляем кэш
-    _user_language_cache[user_key] = lang
-    _user_language_cache_time[user_key] = current_time
-    
-    return lang
+    # No cache - return default 'ru' immediately, don't block event loop
+    # The language will be loaded async when user explicitly sets it
+    return 'ru'
 
 def has_user_language_set(user_id: int) -> bool:
-    """Check if user has explicitly set their language preference."""
-    languages = load_json_file(USER_LANGUAGES_FILE, {})
-    return str(user_id) in languages
+    """Check if user has explicitly set their language preference.
+    
+    IMPORTANT: Never blocks event loop. Returns True only if cached.
+    """
+    user_key = str(user_id)
+    # Only check cache - don't block on storage read
+    return user_key in _user_language_cache
 
 
 def set_user_language(user_id: int, language: str):
-    """Set user language preference ('ru' or 'en') and update cache."""
-    user_key = str(user_id)
-    languages = load_json_file(USER_LANGUAGES_FILE, {})
-    languages[user_key] = language
-    save_json_file(USER_LANGUAGES_FILE, languages)
+    """Set user language preference ('ru' or 'en') and update cache.
     
-    # Обновляем кэш
+    Updates cache immediately, saves to storage in background.
+    """
+    user_key = str(user_id)
+    
+    # Обновляем кэш сразу - это не блокирует
     _user_language_cache[user_key] = language
     _user_language_cache_time[user_key] = time.time()
+    
+    # Сохраняем в storage в фоне
+    async def _save_language_async():
+        try:
+            from app.storage.factory import get_storage
+            storage = get_storage()
+            if storage:
+                storage_filename = os.path.basename(USER_LANGUAGES_FILE)
+                await storage.update_json_file(
+                    storage_filename,
+                    lambda data: {**data, user_key: language}
+                )
+        except Exception as e:
+            logger.warning("Failed to save user language to storage: %s", e)
+    
+    # Schedule background save
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_save_language_async())
+    except RuntimeError:
+        # No running loop - save synchronously (rare case)
+        try:
+            languages = load_json_file(USER_LANGUAGES_FILE, {})
+            languages[user_key] = language
+            save_json_file(USER_LANGUAGES_FILE, languages)
+        except Exception as e:
+            logger.warning("Failed to save user language: %s", e)
 
 
 # ==================== Gift System ====================
 
+# Cache for gift claimed status
+_gift_claimed_cache: dict[str, bool] = {}
+
 def has_claimed_gift(user_id: int) -> bool:
-    """Check if user has already claimed their gift."""
-    claimed = load_json_file(GIFT_CLAIMED_FILE, {})
-    return claimed.get(str(user_id), False)
+    """Check if user has already claimed their gift.
+    
+    IMPORTANT: Never blocks event loop. Returns cached value or False.
+    """
+    user_key = str(user_id)
+    # Only check cache - don't block on storage read
+    return _gift_claimed_cache.get(user_key, False)
 
 
 def set_gift_claimed(user_id: int):
-    """Mark gift as claimed for user."""
-    claimed = load_json_file(GIFT_CLAIMED_FILE, {})
-    claimed[str(user_id)] = True
-    save_json_file(GIFT_CLAIMED_FILE, claimed)
+    """Mark gift as claimed for user.
+    
+    Updates cache immediately, saves to storage in background.
+    """
+    user_key = str(user_id)
+    
+    # Update cache immediately
+    _gift_claimed_cache[user_key] = True
+    
+    # Save to storage in background
+    async def _save_gift_claimed_async():
+        try:
+            from app.storage.factory import get_storage
+            storage = get_storage()
+            if storage:
+                storage_filename = os.path.basename(GIFT_CLAIMED_FILE)
+                await storage.update_json_file(
+                    storage_filename,
+                    lambda data: {**data, user_key: True}
+                )
+        except Exception as e:
+            logger.warning("Failed to save gift claimed to storage: %s", e)
+    
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_save_gift_claimed_async())
+    except RuntimeError:
+        try:
+            claimed = load_json_file(GIFT_CLAIMED_FILE, {})
+            claimed[user_key] = True
+            save_json_file(GIFT_CLAIMED_FILE, claimed)
+        except Exception as e:
+            logger.warning("Failed to save gift claimed: %s", e)
 
 
 def spin_gift_wheel() -> float:
@@ -5573,18 +5688,68 @@ def spin_gift_wheel() -> float:
 
 # ==================== Free Generations System ====================
 
+# Cache for free generations data
+_free_generations_cache: dict = {}
+_free_generations_cache_time: float = 0
+FREE_GENERATIONS_CACHE_TTL = 60  # 1 minute
+
 def get_free_generations_data() -> dict:
-    """Get daily free generations data."""
-    return load_json_file(FREE_GENERATIONS_FILE, {})
+    """Get daily free generations data.
+    
+    IMPORTANT: Returns cached data or empty dict. Never blocks.
+    """
+    global _free_generations_cache_time
+    current_time = time.time()
+    
+    # Return cached data if fresh enough
+    if current_time - _free_generations_cache_time < FREE_GENERATIONS_CACHE_TTL:
+        return _free_generations_cache.copy()
+    
+    # Return cached data even if stale - don't block
+    if _free_generations_cache:
+        return _free_generations_cache.copy()
+    
+    # No cache - return empty, will be populated by async calls
+    return {}
 
 
 def save_free_generations_data(data: dict):
-    """Save daily free generations data."""
-    save_json_file(FREE_GENERATIONS_FILE, data)
+    """Save daily free generations data.
+    
+    Updates cache immediately, saves in background.
+    """
+    global _free_generations_cache, _free_generations_cache_time
+    
+    # Update cache immediately
+    _free_generations_cache = data.copy()
+    _free_generations_cache_time = time.time()
+    
+    # Save in background
+    async def _save_async():
+        try:
+            from app.storage.factory import get_storage
+            storage = get_storage()
+            if storage:
+                storage_filename = os.path.basename(FREE_GENERATIONS_FILE)
+                await storage.write_json_file(storage_filename, data)
+        except Exception as e:
+            logger.warning("Failed to save free generations data: %s", e)
+    
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_save_async())
+    except RuntimeError:
+        try:
+            save_json_file(FREE_GENERATIONS_FILE, data)
+        except Exception as e:
+            logger.warning("Failed to save free generations: %s", e)
 
 
 def get_user_free_generations_today(user_id: int) -> int:
-    """Get number of free generations used by user today."""
+    """Get number of free generations used by user today.
+    
+    IMPORTANT: Never blocks. Returns cached value or 0.
+    """
     from datetime import datetime
     
     data = get_free_generations_data()
