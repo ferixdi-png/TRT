@@ -11,7 +11,7 @@ import os
 import uuid
 import math
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import asyncpg
@@ -424,7 +424,7 @@ class PostgresStorage(BaseStorage):
                     "model_id": model_id,
                     "sku_id": sku_id,
                     "amount": amount,
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
                 logger.info(
                     "BALANCE_CHARGE_OK user_id=%s task_id=%s sku_id=%s model_id=%s amount=%.2f balance_after=%.2f",
@@ -579,7 +579,7 @@ class PostgresStorage(BaseStorage):
                     "user_id": user_id,
                     "sku_id": sku_id,
                     "source": source,
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
 
                 await conn.execute(
