@@ -1,5 +1,39 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-18 TRT: observability-first webhook stabilization (STOP/GO enforced)
+
+### Цель
+Webhook ACK всегда быстрый, обработка update уходит в фон, внешние вызовы (Telegram/KIE/DB/Redis) устойчивы к cold start, bursts, деградациям.
+
+### STOP/GO критерии (авто-отчет)
+**GO:** p95 webhook_ack_ms ≤ 150ms, p99 ≤ 250ms на burst; отсутствуют WEBHOOK_PROCESS_TIMEOUT/RequestTimeout; rate ошибок Telegram/KIE < 1% на тестах; lock degraded корректно отражён; /diag/ready возвращает READY.  
+**STOP:** есть случаи ack > 300ms, либо handler блокирует ack, либо таймауты Telegram/KIE/DB без ясного корня в логах.
+
+### Что сделано
+- Единый формат CRIT_EVENT (error_code/error_id/exception_class/fix_hint/upstream/deadline_s/elapsed_ms) и хранение последних 5 крит-событий для /diag.  
+- STRUCTURED_LOG расширен обязательными полями (route, partner_id) и таймингами (ack/handler/tg/kie/db/lock/pool/queue).  
+- Webhook ACK отделён от обработки: ACK_SCHEDULED + HANDLER_START/DONE, watchdog на зависание > WEBHOOK_HANDLER_STALL_SECONDS.  
+- Telegram send: retries с jitter, CRIT_EVENT для timeout/fail, idempotency_key с storage-backed dedup.  
+- Locks: явные LOCK_ACQUIRE_START/DONE, lock_backend и degraded_reason; fallback Redis → Postgres advisory lock отражён.  
+- /diag/ready: webhook URL, DB ping + pool stats, lock status, last_5 CRIT_EVENT ids, how_to_fix, READY/DEGRADED.  
+- Скрипт metrics_from_logs.py для p50/p95/p99 из STRUCTURED_LOG с автозаписью в TRT_REPORT.md.  
+- Тесты: burst 20 updates + mixed types + slow handler (ACK fast), idempotency send, /diag/ready, lock fallback + parallel start.
+
+### Метрики (p50/p95/p99 из STRUCTURED_LOG)
+<!-- METRICS_START -->
+| metric | p50 | p95 | p99 |
+| --- | --- | --- | --- |
+| ack_ms | n/a | n/a | n/a |
+| handler_total_ms | n/a | n/a | n/a |
+| tg_send_ms | n/a | n/a | n/a |
+| kie_call_ms | n/a | n/a | n/a |
+| db_query_ms | n/a | n/a | n/a |
+| lock_wait_ms_total | n/a | n/a | n/a |
+<!-- METRICS_END -->
+
+### Итог
+**STOP** — требуется прогон нагрузочного сценария и выгрузка метрик p95/p99 из STRUCTURED_LOG (см. scripts/metrics_from_logs.py) для подтверждения GO.
+
 ## ✅ 2026-02-18 TRT: Telegram timeout hardening + webhook ACK <200ms + diag/telegram
 
 ### Root cause (по симптомам)

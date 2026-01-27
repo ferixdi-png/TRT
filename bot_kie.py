@@ -7991,6 +7991,15 @@ async def _await_with_timeout(
                 retry_after=None,
                 timeout_s=timeout,
                 attempt=None,
+                error_code="MENU_DEP_TIMEOUT",
+                error_id="MENU_DEP_TIMEOUT",
+                exception_class=type(exc).__name__,
+                where=f"menu_dependency:{label}",
+                fix_hint="Check dependency latency and storage health.",
+                retryable=True,
+                upstream="db",
+                deadline_s=timeout,
+                elapsed_ms=timeout * 1000,
             )
         if raise_on_timeout:
             raise MenuDependencyTimeout(label) from exc
@@ -8543,6 +8552,8 @@ def _build_menu_fallback_keyboard(user_lang: str) -> InlineKeyboardMarkup:
 
 _telegram_retry_random = random.Random(0)
 _telegram_idempotency_cache: Dict[str, float] = {}
+_telegram_idempotency_inflight: set[str] = set()
+TELEGRAM_IDEMPOTENCY_STORAGE_FILE = "telegram_idempotency.json"
 
 
 def _telegram_idempotency_cleanup(now: float) -> None:
@@ -8569,6 +8580,75 @@ def _telegram_idempotency_mark(key: Optional[str]) -> None:
     now = time.monotonic()
     _telegram_idempotency_cleanup(now)
     _telegram_idempotency_cache[key] = now
+
+
+async def _resolve_idempotency_storage():
+    global storage
+    if storage is None:
+        try:
+            from app.storage import get_storage
+
+            storage = get_storage()
+        except Exception:
+            return None
+    return storage
+
+
+def _prune_idempotency_payload(payload: Dict[str, Any], *, now_s: float) -> Dict[str, float]:
+    raw_keys = payload.get("keys", {})
+    if not isinstance(raw_keys, dict):
+        raw_keys = {}
+    pruned = {}
+    for key, ts in raw_keys.items():
+        try:
+            ts_value = float(ts)
+        except (TypeError, ValueError):
+            continue
+        if now_s - ts_value <= TELEGRAM_IDEMPOTENCY_TTL_SECONDS:
+            pruned[key] = ts_value
+    return pruned
+
+
+async def _telegram_idempotency_store_hit(key: Optional[str]) -> bool:
+    if not key:
+        return False
+    if _telegram_idempotency_hit(key):
+        return True
+    storage_instance = await _resolve_idempotency_storage()
+    if storage_instance is None:
+        return False
+    now_s = time.time()
+    try:
+        payload = await storage_instance.read_json_file(TELEGRAM_IDEMPOTENCY_STORAGE_FILE, default={})
+    except Exception:
+        return False
+    pruned = _prune_idempotency_payload(payload, now_s=now_s)
+    return key in pruned
+
+
+async def _telegram_idempotency_store_mark(key: Optional[str]) -> None:
+    if not key:
+        return
+    storage_instance = await _resolve_idempotency_storage()
+    if storage_instance is None:
+        return
+    now_s = time.time()
+    def _updater(payload: Dict[str, Any]) -> Dict[str, Any]:
+        pruned = _prune_idempotency_payload(payload, now_s=now_s)
+        pruned[key] = now_s
+        payload["keys"] = pruned
+        payload["updated_at"] = now_s
+        payload["ttl_s"] = TELEGRAM_IDEMPOTENCY_TTL_SECONDS
+        return payload
+
+    try:
+        await storage_instance.update_json_file(
+            TELEGRAM_IDEMPOTENCY_STORAGE_FILE,
+            _updater,
+            lock_mode="redis",
+        )
+    except Exception:
+        return
 
 
 def _build_telegram_idempotency_key(
@@ -8785,7 +8865,7 @@ async def _run_telegram_request(
         callback_id=callback_id,
     )
 
-    if _telegram_idempotency_hit(resolved_idempotency_key):
+    if resolved_idempotency_key and resolved_idempotency_key in _telegram_idempotency_inflight:
         log_structured_event(
             correlation_id=correlation_id,
             update_id=update_id,
@@ -8794,114 +8874,171 @@ async def _run_telegram_request(
             action_path=f"telegram:{action}",
             stage="TG_SEND",
             outcome="deduped",
-            param={"idempotency_key": resolved_idempotency_key},
+            dedup_hit=True,
+            param={"idempotency_key": resolved_idempotency_key, "source": "inflight"},
         )
         return None, timeout_seen
 
-    for attempt in range(1, max(1, retry_attempts) + 1):
-        attempt_started = time.monotonic()
-        try:
-            await maybe_inject_sleep(
-                "TRT_FAULT_INJECT_TELEGRAM_CONNECT_SLEEP_MS",
-                label=f"telegram.{action}",
-            )
-            if os.getenv("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "").strip() in {"1", "true", "yes"}:
-                raise TimedOut("Injected Telegram connect timeout")
-            result = await asyncio.wait_for(request_fn(), timeout=resolved_timeout_s)
-            duration_ms = (time.monotonic() - attempt_started) * 1000
-            increment_update_metric("telegram_request_ok")
-            _telegram_idempotency_mark(resolved_idempotency_key)
-            log_structured_event(
-                correlation_id=correlation_id,
-                update_id=update_id,
-                chat_id=chat_id,
-                action="TG_SEND_TIMING",
-                action_path=f"telegram:{action}",
-                stage="TG_SEND",
-                outcome="ok",
-                param={
-                    "tg_send_ms": int(duration_ms),
-                    "http_connect_ms": None,
-                    "http_read_ms": None,
-                    "pool_acquire_ms": None,
-                    "timeout_s": resolved_timeout_s,
-                    "attempt": attempt,
-                },
-            )
-            return result, timeout_seen
-        except RetryAfter as exc:
-            delay = max(0.1, float(exc.retry_after or retry_backoff_s))
-            latency_ms = (time.monotonic() - attempt_started) * 1000
-            logger.warning(
-                "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s error=%s error_repr=%s",
-                action,
-                correlation_id,
-                attempt,
-                delay,
-                str(exc),
-                repr(exc),
-            )
-            log_critical_event(
-                correlation_id=correlation_id,
-                update_id=update_id,
-                stage="TG_SEND",
-                latency_ms=latency_ms,
-                retry_after=delay,
-                timeout_s=resolved_timeout_s,
-                attempt=attempt,
-            )
-            increment_update_metric("telegram_request_retry_after")
-            await asyncio.sleep(delay)
-        except (asyncio.TimeoutError, TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
-            timeout_seen = True
-            latency_ms = (time.monotonic() - attempt_started) * 1000
-            logger.warning(
-                "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
-                action,
-                correlation_id,
-                attempt,
-                str(exc),
-                repr(exc),
-                type(exc).__name__,
-            )
-            log_critical_event(
-                correlation_id=correlation_id,
-                update_id=update_id,
-                stage="TG_SEND",
-                latency_ms=latency_ms,
-                retry_after=None,
-                timeout_s=resolved_timeout_s,
-                attempt=attempt,
-            )
-            increment_update_metric("telegram_request_timeout")
-            if attempt >= retry_attempts:
-                return None, timeout_seen
-            await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
-        except Exception as exc:
-            latency_ms = (time.monotonic() - attempt_started) * 1000
-            logger.warning(
-                "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
-                action,
-                correlation_id,
-                attempt,
-                str(exc),
-                repr(exc),
-                type(exc).__name__,
-            )
-            log_critical_event(
-                correlation_id=correlation_id,
-                update_id=update_id,
-                stage="TG_SEND",
-                latency_ms=latency_ms,
-                retry_after=None,
-                timeout_s=resolved_timeout_s,
-                attempt=attempt,
-            )
-            increment_update_metric("telegram_request_failed")
-            if attempt >= retry_attempts:
-                return None, timeout_seen
-            await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
-    return None, timeout_seen
+    if await _telegram_idempotency_store_hit(resolved_idempotency_key):
+        log_structured_event(
+            correlation_id=correlation_id,
+            update_id=update_id,
+            chat_id=chat_id,
+            action="TELEGRAM_SEND_DEDUP",
+            action_path=f"telegram:{action}",
+            stage="TG_SEND",
+            outcome="deduped",
+            dedup_hit=True,
+            param={"idempotency_key": resolved_idempotency_key, "source": "storage"},
+        )
+        return None, timeout_seen
+
+    if resolved_idempotency_key:
+        _telegram_idempotency_inflight.add(resolved_idempotency_key)
+
+    try:
+        for attempt in range(1, max(1, retry_attempts) + 1):
+            attempt_started = time.monotonic()
+            try:
+                await maybe_inject_sleep(
+                    "TRT_FAULT_INJECT_TELEGRAM_CONNECT_SLEEP_MS",
+                    label=f"telegram.{action}",
+                )
+                if os.getenv("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "").strip() in {"1", "true", "yes"}:
+                    raise TimedOut("Injected Telegram connect timeout")
+                result = await asyncio.wait_for(request_fn(), timeout=resolved_timeout_s)
+                duration_ms = (time.monotonic() - attempt_started) * 1000
+                increment_update_metric("telegram_request_ok")
+                _telegram_idempotency_mark(resolved_idempotency_key)
+                await _telegram_idempotency_store_mark(resolved_idempotency_key)
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    chat_id=chat_id,
+                    action="TG_SEND_TIMING",
+                    action_path=f"telegram:{action}",
+                    stage="TG_SEND",
+                    outcome="ok",
+                    tg_send_ms=int(duration_ms),
+                    tg_retry_count=max(0, attempt - 1),
+                    param={
+                        "timeout_s": resolved_timeout_s,
+                        "attempt": attempt,
+                        "idempotency_key": resolved_idempotency_key,
+                    },
+                )
+                return result, timeout_seen
+            except RetryAfter as exc:
+                delay = max(0.1, float(exc.retry_after or retry_backoff_s))
+                latency_ms = (time.monotonic() - attempt_started) * 1000
+                logger.warning(
+                    "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s error=%s error_repr=%s",
+                    action,
+                    correlation_id,
+                    attempt,
+                    delay,
+                    str(exc),
+                    repr(exc),
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    chat_id=chat_id,
+                    action="TG_SEND_RETRY",
+                    action_path=f"telegram:{action}",
+                    stage="TG_SEND",
+                    outcome="retry",
+                    tg_retry_count=attempt,
+                    param={"delay_s": delay, "reason": "retry_after"},
+                )
+                log_critical_event(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    stage="TG_SEND",
+                    latency_ms=latency_ms,
+                    retry_after=delay,
+                    timeout_s=resolved_timeout_s,
+                    attempt=attempt,
+                    error_code="TELEGRAM_RETRY_AFTER",
+                    error_id="TELEGRAM_RETRY_AFTER",
+                    exception_class=type(exc).__name__,
+                    where="telegram.request",
+                    fix_hint="Respect retry_after and reduce send rate.",
+                    retryable=True,
+                    upstream="telegram",
+                    elapsed_ms=latency_ms,
+                )
+                increment_update_metric("telegram_request_retry_after")
+                await asyncio.sleep(delay)
+            except (asyncio.TimeoutError, TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                timeout_seen = True
+                latency_ms = (time.monotonic() - attempt_started) * 1000
+                logger.warning(
+                    "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
+                    action,
+                    correlation_id,
+                    attempt,
+                    str(exc),
+                    repr(exc),
+                    type(exc).__name__,
+                )
+                log_critical_event(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    stage="TG_SEND",
+                    latency_ms=latency_ms,
+                    retry_after=None,
+                    timeout_s=resolved_timeout_s,
+                    attempt=attempt,
+                    error_code="TELEGRAM_REQUEST_TIMEOUT",
+                    error_id="TELEGRAM_REQUEST_TIMEOUT",
+                    exception_class=type(exc).__name__,
+                    where="telegram.request",
+                    fix_hint="Increase timeouts or reduce payload size; verify Telegram API latency.",
+                    retryable=True,
+                    upstream="telegram",
+                    elapsed_ms=latency_ms,
+                )
+                increment_update_metric("telegram_request_timeout")
+                if attempt >= retry_attempts:
+                    return None, timeout_seen
+                await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
+            except Exception as exc:
+                latency_ms = (time.monotonic() - attempt_started) * 1000
+                logger.warning(
+                    "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
+                    action,
+                    correlation_id,
+                    attempt,
+                    str(exc),
+                    repr(exc),
+                    type(exc).__name__,
+                )
+                log_critical_event(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    stage="TG_SEND",
+                    latency_ms=latency_ms,
+                    retry_after=None,
+                    timeout_s=resolved_timeout_s,
+                    attempt=attempt,
+                    error_code="TELEGRAM_REQUEST_FAILED",
+                    error_id="TELEGRAM_REQUEST_FAILED",
+                    exception_class=type(exc).__name__,
+                    where="telegram.request",
+                    fix_hint="Inspect Telegram API errors and retry policy.",
+                    retryable=True,
+                    upstream="telegram",
+                    elapsed_ms=latency_ms,
+                )
+                increment_update_metric("telegram_request_failed")
+                if attempt >= retry_attempts:
+                    return None, timeout_seen
+                await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
+        return None, timeout_seen
+    finally:
+        if resolved_idempotency_key:
+            _telegram_idempotency_inflight.discard(resolved_idempotency_key)
 
 
 async def _show_minimal_menu(
@@ -27187,6 +27324,7 @@ async def create_webhook_handler():
     ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "200"))
     early_update_retry_after = int(os.getenv("WEBHOOK_EARLY_UPDATE_RETRY_AFTER", "2"))
     early_update_log_throttle_seconds = float(os.getenv("WEBHOOK_EARLY_UPDATE_LOG_THROTTLE_SECONDS", "30"))
+    handler_stall_seconds = float(os.getenv("WEBHOOK_HANDLER_STALL_SECONDS", "6.0"))
 
     ip_rate_limiter = (
         PerKeyRateLimiter(ip_rate_limit_per_sec, ip_rate_limit_burst)
@@ -27206,7 +27344,55 @@ async def create_webhook_handler():
         early_ack_enabled = not is_test_mode()
     else:
         early_ack_enabled = early_ack_raw.strip().lower() in {"1", "true", "yes", "on"}
-    ack_in_background = process_in_background or early_ack_enabled
+    ack_in_background = True
+
+    def _resolve_update_type(update: Update) -> str:
+        if update.callback_query:
+            return "callback"
+        if update.message:
+            return "message"
+        if update.edited_message:
+            return "edited_message"
+        if update.inline_query:
+            return "inline_query"
+        return "unknown"
+
+    async def _watchdog_handler_stall(
+        task: asyncio.Task,
+        *,
+        correlation_id: str,
+        update_id: Optional[int],
+        deadline_s: float,
+    ) -> None:
+        await asyncio.sleep(deadline_s)
+        if task.done():
+            return
+        where = None
+        try:
+            frames = task.get_stack(limit=3)
+            if frames:
+                frame = frames[-1]
+                where = f"{frame.f_code.co_filename}:{frame.f_lineno}:{frame.f_code.co_name}"
+        except Exception:
+            where = None
+        log_critical_event(
+            correlation_id=correlation_id,
+            update_id=update_id,
+            stage="HANDLER",
+            latency_ms=None,
+            retry_after=None,
+            timeout_s=None,
+            attempt=None,
+            error_code="HANDLER_STALL",
+            error_id="HANDLER_STALL",
+            exception_class=None,
+            where=where,
+            fix_hint="Check slow handler dependencies/locks; move heavy work off hot path.",
+            retryable=True,
+            upstream=None,
+            deadline_s=deadline_s,
+            elapsed_ms=deadline_s * 1000,
+        )
 
     async def _process_update_async(
         update: Update,
@@ -27214,6 +27400,8 @@ async def create_webhook_handler():
         correlation_id: str,
         client_ip: str,
         semaphore_acquired: bool,
+        route: str,
+        request_id: Optional[str],
     ) -> None:
         process_started = time.monotonic()
         update_id = getattr(update, "update_id", None)
@@ -27222,6 +27410,7 @@ async def create_webhook_handler():
         increment_update_metric("webhook_process_start")
         log_structured_event(
             correlation_id=correlation_id,
+            request_id=request_id,
             user_id=user_id,
             chat_id=chat_id,
             update_id=update_id,
@@ -27229,8 +27418,18 @@ async def create_webhook_handler():
             action_path="webhook:process_update",
             stage="WEBHOOK",
             outcome="start",
+            update_type=_resolve_update_type(update),
+            route=route,
         )
         process_task = asyncio.create_task(_application_for_webhook.process_update(update))
+        watchdog_task = asyncio.create_task(
+            _watchdog_handler_stall(
+                process_task,
+                correlation_id=correlation_id,
+                update_id=update_id,
+                deadline_s=handler_stall_seconds,
+            )
+        )
         release_in_finally = True
 
         def _release_after_task(done_task: asyncio.Task) -> None:
@@ -27240,6 +27439,7 @@ async def create_webhook_handler():
                 done_task.result()
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     user_id=user_id,
                     chat_id=chat_id,
                     update_id=update_id,
@@ -27248,10 +27448,13 @@ async def create_webhook_handler():
                     stage="WEBHOOK",
                     outcome="ok",
                     param={"duration_ms": int((time.monotonic() - process_started) * 1000)},
+                    update_type=_resolve_update_type(update),
+                    route=route,
                 )
             except Exception as exc:
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     user_id=user_id,
                     chat_id=chat_id,
                     update_id=update_id,
@@ -27261,14 +27464,18 @@ async def create_webhook_handler():
                     outcome="failed",
                     error_id="WEBHOOK_PROCESS_FAILED",
                     param={"error": str(exc)[:200]},
+                    update_type=_resolve_update_type(update),
+                    route=route,
                 )
 
+        outcome = "ok"
         try:
             await asyncio.shield(process_task)
             duration_ms = int((time.monotonic() - process_started) * 1000)
             increment_update_metric("webhook_process_done")
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 chat_id=chat_id,
                 update_id=update_id,
@@ -27277,12 +27484,17 @@ async def create_webhook_handler():
                 stage="WEBHOOK",
                 outcome="ok",
                 duration_ms=duration_ms,
+                handler_total_ms=duration_ms,
+                update_type=_resolve_update_type(update),
+                route=route,
             )
             logger.debug(f"[WEBHOOK] {correlation_id} update_processed")
         except Exception as exc:
+            outcome = "failed"
             increment_update_metric("webhook_process_done")
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 user_id=user_id,
                 chat_id=chat_id,
                 update_id=update_id,
@@ -27292,9 +27504,28 @@ async def create_webhook_handler():
                 outcome="failed",
                 error_id="WEBHOOK_PROCESS_FAILED",
                 param={"error": str(exc)[:200]},
+                update_type=_resolve_update_type(update),
+                route=route,
             )
             logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
         finally:
+            handler_total_ms = int((time.monotonic() - process_started) * 1000)
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update_id,
+                action="HANDLER_DONE",
+                action_path="webhook:handler",
+                stage="HANDLER",
+                outcome=outcome,
+                handler_total_ms=handler_total_ms,
+                update_type=_resolve_update_type(update),
+                route=route,
+            )
+            if not watchdog_task.done():
+                watchdog_task.cancel()
             if release_in_finally and webhook_semaphore is not None and semaphore_acquired:
                 webhook_semaphore.release()
 
@@ -27303,6 +27534,8 @@ async def create_webhook_handler():
         *,
         correlation_id: str,
         client_ip: str,
+        route: str,
+        request_id: Optional[str],
     ) -> None:
         semaphore_acquired = False
         if webhook_semaphore is not None:
@@ -27313,12 +27546,14 @@ async def create_webhook_handler():
                 retry_after = max(1, int(math.ceil(concurrency_timeout_seconds)))
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     action="WEBHOOK_BACKPRESSURE",
                     action_path="webhook:concurrency_limit",
                     outcome="throttled",
                     error_id="WEBHOOK_CONCURRENCY_LIMIT",
                     abuse_id="concurrency_limit",
                     param={"client_ip": client_ip, "retry_after": retry_after},
+                    route=route,
                 )
                 return
         await _process_update_async(
@@ -27326,6 +27561,8 @@ async def create_webhook_handler():
             correlation_id=correlation_id,
             client_ip=client_ip,
             semaphore_acquired=semaphore_acquired,
+            route=route,
+            request_id=request_id,
         )
 
     async def webhook_handler(request: web.Request) -> web.StreamResponse:
@@ -27333,6 +27570,8 @@ async def create_webhook_handler():
         handler_start = time.monotonic()
         correlation_id = "unknown"
         update_id: Optional[int] = None
+        request_id = None
+        ack_deadline_ms = ack_max_ms
         try:
             correlation_id = (
                 request.headers.get("X-Request-ID")
@@ -27340,7 +27579,19 @@ async def create_webhook_handler():
                 or request.headers.get("X-Trace-ID")
                 or str(uuid.uuid4())[:8]
             )
+            request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
             logger.debug(f"[WEBHOOK] {correlation_id} handler_invoked")
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                action="ACK_SCHEDULED",
+                action_path="webhook:ack",
+                stage="WEBHOOK",
+                outcome="scheduled",
+                ack_ms=0,
+                route=request.path,
+                param={"ack_deadline_ms": ack_deadline_ms},
+            )
 
             forwarded_for = request.headers.get("X-Forwarded-For", "")
             client_ip = (
@@ -27375,6 +27626,7 @@ async def create_webhook_handler():
                     outcome = "buffered" if buffered else "deduped"
                     log_structured_event(
                         correlation_id=correlation_id,
+                        request_id=request_id,
                         action="EARLY_UPDATE_BUFFERED",
                         action_path="webhook:early_update",
                         outcome=outcome,
@@ -27383,14 +27635,17 @@ async def create_webhook_handler():
                             "buffer_size": buffer_size,
                             "ready": False,
                         },
+                        route=request.path,
                     )
                     if update_id_int is not None and not buffered:
                         log_structured_event(
                             correlation_id=correlation_id,
+                            request_id=request_id,
                             action="DEDUP_HIT",
                             action_path="webhook:update_id",
                             outcome="deduped",
                             param={"update_id": update_id, "source": "early_update_buffer"},
+                            route=request.path,
                         )
                 if _should_log_webhook_early_update(time.monotonic(), early_update_log_throttle_seconds):
                     logger.info(
@@ -27410,12 +27665,14 @@ async def create_webhook_handler():
             if content_length is not None and content_length > max_payload_bytes:
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     action="WEBHOOK_ABUSE",
                     action_path="webhook:payload_too_large",
                     outcome="rejected",
                     error_id="WEBHOOK_PAYLOAD_TOO_LARGE",
                     abuse_id="payload_oversize",
                     param={"client_ip": client_ip, "content_length": content_length},
+                    route=request.path,
                 )
                 return web.Response(status=413, text="Payload too large")
 
@@ -27425,12 +27682,14 @@ async def create_webhook_handler():
                     retry_after_seconds = max(1, int(math.ceil(retry_after)))
                     log_structured_event(
                         correlation_id=correlation_id,
+                        request_id=request_id,
                         action="WEBHOOK_ABUSE",
                         action_path="webhook:rate_limit_ip",
                         outcome="throttled",
                         error_id="WEBHOOK_RATE_LIMIT",
                         abuse_id="rate_limit_ip",
                         param={"client_ip": client_ip, "retry_after": retry_after_seconds},
+                        route=request.path,
                     )
                     return web.Response(
                         status=429,
@@ -27438,15 +27697,16 @@ async def create_webhook_handler():
                         headers={"Retry-After": str(retry_after_seconds)},
                     )
 
-            request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
             if request_id and request_deduper.seen(request_id):
                 log_structured_event(
                     correlation_id=correlation_id,
+                    request_id=request_id,
                     action="WEBHOOK_DEDUP",
                     action_path="webhook:request_id",
                     outcome="deduped",
                     abuse_id="duplicate_request_id",
                     param={"client_ip": client_ip},
+                    route=request.path,
                 )
                 return web.Response(status=200, text="ok")
 
@@ -27466,14 +27726,17 @@ async def create_webhook_handler():
                     if update_id is not None and _update_deduper.seen(update_id):
                         log_structured_event(
                             correlation_id=correlation_id,
+                            request_id=request_id,
                             action="DEDUP_HIT",
                             action_path="webhook:update_id",
                             outcome="deduped",
                             param={"update_id": update_id, "source": "webhook_handler"},
+                            route=request.path,
                         )
                         increment_update_metric("webhook_update_in")
                         log_structured_event(
                             correlation_id=correlation_id,
+                            request_id=request_id,
                             user_id=user_id,
                             chat_id=chat_id,
                             update_id=update_id,
@@ -27481,11 +27744,14 @@ async def create_webhook_handler():
                             action_path="webhook:update",
                             stage="WEBHOOK",
                             outcome="deduped",
+                            update_type=_resolve_update_type(update),
+                            route=request.path,
                         )
                         return web.Response(status=200, text="ok")
                     increment_update_metric("webhook_update_in")
                     log_structured_event(
                         correlation_id=correlation_id,
+                        request_id=request_id,
                         user_id=user_id,
                         chat_id=chat_id,
                         update_id=update_id,
@@ -27493,14 +27759,31 @@ async def create_webhook_handler():
                         action_path="webhook:update",
                         stage="WEBHOOK",
                         outcome="received",
+                        update_type=_resolve_update_type(update),
+                        route=request.path,
                     )
                     logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        request_id=request_id,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        update_id=update_id,
+                        action="HANDLER_START",
+                        action_path="webhook:handler",
+                        stage="HANDLER",
+                        outcome="start",
+                        update_type=_resolve_update_type(update),
+                        route=request.path,
+                    )
                     if ack_in_background:
                         _create_background_task(
                             _process_update_with_semaphore(
                                 update,
                                 correlation_id=correlation_id,
                                 client_ip=client_ip,
+                                route=request.path,
+                                request_id=request_id,
                             ),
                             action="webhook_update",
                         )
@@ -27509,6 +27792,8 @@ async def create_webhook_handler():
                             update,
                             correlation_id=correlation_id,
                             client_ip=client_ip,
+                            route=request.path,
+                            request_id=request_id,
                         )
                     response = web.Response(status=200, text="ok")
                     return response
@@ -27517,20 +27802,57 @@ async def create_webhook_handler():
                     return web.Response(status=400, text="Invalid update")
             except Exception as exc:
                 logger.error(f"[WEBHOOK] {correlation_id} process_error={exc}", exc_info=True)
+                log_critical_event(
+                    correlation_id=correlation_id,
+                    update_id=update_id,
+                    stage="WEBHOOK",
+                    latency_ms=None,
+                    retry_after=None,
+                    timeout_s=process_timeout_seconds,
+                    attempt=None,
+                    error_code="WEBHOOK_PROCESS_ERROR",
+                    error_id="WEBHOOK_PROCESS_ERROR",
+                    exception_class=type(exc).__name__,
+                    where="webhook_handler.process_update",
+                    fix_hint="Check handler error and upstream dependencies.",
+                    retryable=False,
+                    upstream="telegram",
+                    elapsed_ms=(time.monotonic() - handler_start) * 1000,
+                )
                 return web.Response(status=500, text="Processing error")
         except Exception as exc:
             logger.error(f"[WEBHOOK] handler_exception={exc}", exc_info=True)
+            log_critical_event(
+                correlation_id=correlation_id,
+                update_id=update_id,
+                stage="WEBHOOK",
+                latency_ms=None,
+                retry_after=None,
+                timeout_s=process_timeout_seconds,
+                attempt=None,
+                error_code="WEBHOOK_HANDLER_EXCEPTION",
+                error_id="WEBHOOK_HANDLER_EXCEPTION",
+                exception_class=type(exc).__name__,
+                where="webhook_handler",
+                fix_hint="Inspect webhook handler error and payload parsing.",
+                retryable=False,
+                upstream="telegram",
+                elapsed_ms=(time.monotonic() - handler_start) * 1000,
+            )
             return web.Response(status=500, text="Internal error")
         finally:
             duration_ms = int((time.monotonic() - handler_start) * 1000)
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 update_id=update_id,
                 action="WEBHOOK_ACK",
                 action_path="webhook:handler",
                 stage="WEBHOOK",
                 outcome="ok",
-                param={"webhook_ack_ms": duration_ms},
+                ack_ms=duration_ms,
+                handler_total_ms=duration_ms,
+                route=request.path if "request" in locals() else None,
             )
             try:
                 loop = asyncio.get_running_loop()
@@ -27539,21 +27861,16 @@ async def create_webhook_handler():
                 event_loop_lag_ms = None
             log_structured_event(
                 correlation_id=correlation_id,
+                request_id=request_id,
                 update_id=update_id,
                 action="WEBHOOK_TIMING_PROFILE",
                 action_path="webhook:timing",
                 stage="WEBHOOK",
                 outcome="ok",
-                param={
-                    "webhook_ack_ms": duration_ms,
-                    "handler_total_ms": duration_ms,
-                    "event_loop_lag_ms": event_loop_lag_ms,
-                    "db_wait_ms": None,
-                    "tg_send_ms": None,
-                    "pool_acquire_ms": None,
-                    "http_connect_ms": None,
-                    "http_read_ms": None,
-                },
+                ack_ms=duration_ms,
+                handler_total_ms=duration_ms,
+                event_loop_lag_ms=event_loop_lag_ms,
+                route=request.path if "request" in locals() else None,
             )
             if duration_ms > ack_max_ms:
                 logger.warning("WEBHOOK_ACK_SLOW correlation_id=%s duration_ms=%s", correlation_id, duration_ms)
