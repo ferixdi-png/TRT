@@ -12,7 +12,7 @@ async def test_webhook_process_timeout_logs_deterministic(webhook_harness, monke
 
     monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
     monkeypatch.setenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "0.01")
-    webhook_harness.application.process_update = slow_process_update
+    webhook_harness.application.bot_data["process_update_override"] = slow_process_update
 
     caplog.set_level("INFO")
     response = await webhook_harness.send_message(user_id=19101, text="/start", update_id=19101)
@@ -41,7 +41,7 @@ async def test_telegram_request_timeout_logs_error_repr(monkeypatch, caplog):
         request_fn=slow_request,
     )
 
-    assert result is None
+    assert result == (None, True)  # (result, timeout_seen)
     timeout_logs = [record.message for record in caplog.records if "TELEGRAM_REQUEST_TIMEOUT" in record.message]
     assert timeout_logs
     assert "error_repr=" in timeout_logs[0]
