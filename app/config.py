@@ -24,7 +24,16 @@ logger = logging.getLogger(__name__)
 _settings: Optional['Settings'] = None
 
 # Явный экспорт для импорта
-__all__ = ['Settings', 'get_settings', 'reset_settings', 'BOT_TOKEN', 'BOT_MODE', 'WEBHOOK_URL', 'WEBHOOK_BASE_URL', 'resolve_webhook_url']
+__all__ = [
+    'Settings',
+    'get_settings',
+    'reset_settings',
+    'BOT_TOKEN',
+    'BOT_MODE',
+    'WEBHOOK_URL',
+    'WEBHOOK_BASE_URL',
+    'resolve_webhook_url',
+]
 
 
 def _normalize_webhook_url(url: str) -> str:
@@ -101,6 +110,10 @@ class Settings:
             logger.info("WEBHOOK_BASE_URL normalized: %s -> %s", raw_webhook_base_url, self.webhook_base_url)
         if self.webhook_base_url and not os.getenv('WEBHOOK_URL'):
             os.environ['WEBHOOK_URL'] = self.webhook_url
+
+        # Timeout configuration
+        self.telegram_request_timeout_seconds = float(os.getenv("TELEGRAM_REQUEST_TIMEOUT_SECONDS", "2.0"))
+        self.webhook_process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8.0"))
         
         # Port for healthcheck
         port_str = os.getenv('PORT', '0')

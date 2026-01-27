@@ -7587,10 +7587,12 @@ TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS",
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
 TELEGRAM_SEND_RETRY_JITTER_RATIO = float(os.getenv("TELEGRAM_SEND_RETRY_JITTER_RATIO", "0.2"))
+TELEGRAM_REQUEST_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_REQUEST_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_API_CONNECT_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_CONNECT_TIMEOUT_SECONDS", "1.5"))
 TELEGRAM_API_READ_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_READ_TIMEOUT_SECONDS", "2.5"))
 TELEGRAM_API_WRITE_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_WRITE_TIMEOUT_SECONDS", "2.5"))
 TELEGRAM_API_POOL_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_POOL_TIMEOUT_SECONDS", "2.0"))
+WEBHOOK_PROCESS_TIMEOUT_SECONDS = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8.0"))
 MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS = float(os.getenv("MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS", "1.5"))
 MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS = int(os.getenv("MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS", "2"))
 STORAGE_DEGRADED_COOLDOWN_SECONDS = float(os.getenv("STORAGE_DEGRADED_COOLDOWN_SECONDS", "15"))
@@ -26556,13 +26558,108 @@ def _is_production_env() -> bool:
     return env_name in {"prod", "production"}
 
 
+def _resolve_webhook_url_from_env() -> str:
+    try:
+        from app.bot_mode import get_webhook_url_from_env
+    except Exception:
+        return (os.getenv("WEBHOOK_URL") or "").strip()
+    return get_webhook_url_from_env()
+
+
+def _current_telegram_request_timeout_seconds() -> float:
+    return _read_float_env(
+        "TELEGRAM_REQUEST_TIMEOUT_SECONDS",
+        TELEGRAM_REQUEST_TIMEOUT_SECONDS,
+        min_value=0.2,
+        max_value=30.0,
+    )
+
+
+def _current_webhook_process_timeout_seconds() -> float:
+    return _read_float_env(
+        "WEBHOOK_PROCESS_TIMEOUT_SECONDS",
+        WEBHOOK_PROCESS_TIMEOUT_SECONDS,
+        min_value=0.2,
+        max_value=60.0,
+    )
+
+
+def _resolve_telegram_request_timeout(cycle_timeout_s: float) -> float:
+    return max(0.2, min(_current_telegram_request_timeout_seconds(), cycle_timeout_s))
+
+
 def _auto_set_webhook_enabled() -> bool:
     raw_value = os.getenv("AUTO_SET_WEBHOOK")
     if raw_value is not None:
         return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    bot_mode = os.getenv("BOT_MODE", "").strip().lower()
+    webhook_url = _resolve_webhook_url_from_env()
+    if bot_mode == "webhook" and webhook_url:
+        return True
+    render_flag = _is_render_environment() or os.getenv("ON_RENDER", "").strip().lower() in {"1", "true", "yes", "on"}
+    if bot_mode == "webhook" and render_flag:
+        return True
     if _is_render_environment() or _is_production_env():
         return False
     return True
+
+
+def _require_webhook_registered() -> bool:
+    raw_value = os.getenv("REQUIRE_WEBHOOK_REGISTERED")
+    if raw_value is not None:
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    return os.getenv("BOT_MODE", "").strip().lower() == "webhook"
+
+
+def _build_webhook_how_to_fix(expected_url: str) -> str:
+    return (
+        "HOW_TO_FIX curl -sS https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook "
+        f"-d url={expected_url} -d drop_pending_updates=true"
+    )
+
+
+async def _fetch_webhook_info(bot, *, timeout_s: float, label: str):
+    try:
+        return await bot.get_webhook_info(connect_timeout=timeout_s, read_timeout=timeout_s)
+    except Exception as exc:
+        logger.warning("WEBHOOK_INFO_CHECK_FAILED label=%s error=%s", label, exc)
+        return None
+
+
+async def _log_webhook_info(bot, expected_url: str, *, label: str) -> Optional[str]:
+    webhook_info = await _fetch_webhook_info(
+        bot,
+        timeout_s=_current_telegram_request_timeout_seconds(),
+        label=label,
+    )
+    if webhook_info is None:
+        logger.warning("WEBHOOK_INFO_MISSING label=%s expected_url=%s", label, expected_url)
+        return None
+    current_url = getattr(webhook_info, "url", "") or ""
+    pending_count = getattr(webhook_info, "pending_update_count", None)
+    last_error_date = getattr(webhook_info, "last_error_date", None)
+    last_error_message = getattr(webhook_info, "last_error_message", None)
+    logger.info(
+        "WEBHOOK_INFO label=%s expected_url=%s current_url=%s pending_update_count=%s last_error_date=%s last_error_message=%s",
+        label,
+        expected_url,
+        current_url,
+        pending_count,
+        last_error_date,
+        last_error_message,
+    )
+    return current_url
+
+
+async def _fail_fast_if_webhook_missing(bot, expected_url: str) -> None:
+    current_url = await _log_webhook_info(bot, expected_url, label="preflight")
+    if current_url is None:
+        logger.error(_build_webhook_how_to_fix(expected_url))
+        raise SystemExit(1)
+    if current_url != expected_url:
+        logger.error("WEBHOOK_URL_MISMATCH expected_url=%s current_url=%s", expected_url, current_url)
+        logger.error(_build_webhook_how_to_fix(expected_url))
+        raise SystemExit(1)
 
 
 async def _run_webhook_setter_cycle(
@@ -26590,11 +26687,12 @@ async def _run_webhook_setter_cycle(
         from telegram import Bot
         from telegram.request import HTTPXRequest
 
+        request_timeout = _resolve_telegram_request_timeout(cycle_timeout_s)
         request = HTTPXRequest(
-            connect_timeout=cycle_timeout_s,
-            read_timeout=cycle_timeout_s,
-            write_timeout=cycle_timeout_s,
-            pool_timeout=cycle_timeout_s,
+            connect_timeout=request_timeout,
+            read_timeout=request_timeout,
+            write_timeout=request_timeout,
+            pool_timeout=request_timeout,
         )
 
         async with Bot(token=BOT_TOKEN, request=request) as temp_bot:
@@ -26736,6 +26834,24 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
         await asyncio.sleep(next_retry_s)
 
 
+async def _run_webhook_info_probe(webhook_url: str, *, label: str) -> None:
+    try:
+        from telegram import Bot
+        from telegram.request import HTTPXRequest
+
+        request_timeout = _resolve_telegram_request_timeout(_current_telegram_request_timeout_seconds())
+        request = HTTPXRequest(
+            connect_timeout=request_timeout,
+            read_timeout=request_timeout,
+            write_timeout=request_timeout,
+            pool_timeout=request_timeout,
+        )
+        async with Bot(token=BOT_TOKEN, request=request) as temp_bot:
+            await _log_webhook_info(temp_bot, webhook_url, label=label)
+    except Exception as exc:
+        logger.warning("WEBHOOK_INFO_PROBE_FAILED label=%s error=%s", label, exc)
+
+
 def _schedule_webhook_setter(webhook_url: str) -> None:
     global _webhook_setter_task
     try:
@@ -26745,6 +26861,10 @@ def _schedule_webhook_setter(webhook_url: str) -> None:
 
     if is_lock_held is not None and not is_lock_held():
         logger.info("SKIPPED_AUTO_SET reason=not_leader_instance")
+        _create_background_task(
+            _run_webhook_info_probe(webhook_url, label="follower"),
+            action="webhook_info_probe",
+        )
         return
     if _webhook_setter_task and not _webhook_setter_task.done():
         return
@@ -26771,7 +26891,7 @@ async def create_webhook_handler():
     ip_rate_limit_per_sec = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_PER_SEC", "4"))
     ip_rate_limit_burst = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_BURST", "12"))
     request_dedup_ttl_seconds = float(os.getenv("WEBHOOK_REQUEST_DEDUP_TTL_SECONDS", "30"))
-    process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
+    process_timeout_seconds = _current_webhook_process_timeout_seconds()
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
     ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "500"))
@@ -27190,6 +27310,9 @@ async def _run_webhook_initialization(
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
     _schedule_early_update_drain(application, correlation_id="BOOT")
+    await _log_webhook_info(application.bot, webhook_url, label="startup")
+    if not _auto_set_webhook_enabled() and _require_webhook_registered():
+        await _fail_fast_if_webhook_missing(application.bot, webhook_url)
     _schedule_webhook_setter(webhook_url)
 
 
@@ -27305,6 +27428,11 @@ async def main():
 
     from app.config import get_settings
     settings = get_settings(validate=True)
+    logger.info(
+        "BOOT_TIMEOUTS telegram_request_timeout_s=%s webhook_process_timeout_s=%s",
+        settings.telegram_request_timeout_seconds,
+        settings.webhook_process_timeout_seconds,
+    )
     
     # CRITICAL: Ensure storage is reachable before anything else
     logger.info("🔒 Ensuring storage persistence...")
@@ -28410,7 +28538,7 @@ async def main():
         global _application_for_webhook
         await _register_webhook_application(application)  # Register app for webhook handler
         
-        webhook_url = WEBHOOK_URL or os.getenv("WEBHOOK_URL")
+        webhook_url = _resolve_webhook_url_from_env()
         if not webhook_url:
             logger.error("❌ WEBHOOK_URL not set for webhook mode!")
             logger.error("   Set WEBHOOK_URL environment variable or use BOT_MODE=polling")

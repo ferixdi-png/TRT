@@ -85,6 +85,21 @@ async def health_handler(request):
     )
 
 
+async def webhook_health_echo(request):
+    """Echo endpoint for webhook POST healthchecks."""
+    payload = {
+        "ok": True,
+        "status": "ok",
+        "path": "/webhook/health",
+        "method": request.method,
+    }
+    return web.Response(
+        text=json.dumps(payload),
+        content_type="application/json",
+        status=200,
+    )
+
+
 async def billing_preflight_handler(request):
     """Billing preflight diagnostic endpoint."""
     from app.diagnostics.billing_preflight import (
@@ -169,8 +184,10 @@ async def start_health_server(
 
             app = web.Application()
             app.router.add_get('/health', health_handler)
+            app.router.add_get('/healthz', health_handler)
             app.router.add_get('/', health_handler)  # Для совместимости
             app.router.add_get('/__diag/billing_preflight', billing_preflight_handler)
+            app.router.add_post('/webhook/health', webhook_health_echo)
             if webhook_handler is not None:
                 try:
                     app.router.add_post('/webhook', webhook_handler)

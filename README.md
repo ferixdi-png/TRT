@@ -47,6 +47,8 @@ BOT_MODE=polling python entrypoints/run_bot.py
 - `FAKE_KIE_MODE` - `1` для тестов (обязательно в CI)
 - `RENDER_API_KEY` - для чтения логов Render
 - `RENDER_SERVICE_ID` - для чтения логов Render
+- `AUTO_SET_WEBHOOK` - `1` чтобы принудительно включить авто-установку webhook в webhook-режиме
+- `REQUIRE_WEBHOOK_REGISTERED` - `1` чтобы падать при пустом/несовпадающем webhook в Telegram
 
 **Все секреты ТОЛЬКО через ENV, никаких .env файлов в репо!**
 
