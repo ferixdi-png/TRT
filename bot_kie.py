@@ -1952,10 +1952,11 @@ async def _warm_models_cache(
         )
 
 
-async def _warm_user_data_caches(*, correlation_id: str = "BOOT") -> None:
+async def _warm_user_data_caches(*, correlation_id: str = "BOOT", timeout_per_file: float = 1.0) -> None:
     """Load user data caches (languages, gifts, free generations) at boot.
     
     This prevents blocking sync calls during request handling.
+    Each file load has a timeout to prevent blocking boot.
     """
     global _free_generations_cache, _free_generations_cache_time
     
@@ -1963,36 +1964,52 @@ async def _warm_user_data_caches(*, correlation_id: str = "BOOT") -> None:
         from app.storage.factory import get_storage
         storage = get_storage()
         if not storage:
+            logger.info("BOOT_CACHE_SKIPPED reason=no_storage")
             return
         
-        # Load user languages
+        # Load user languages with timeout
         try:
-            languages = await storage.read_json_file("user_languages.json", {})
+            languages = await asyncio.wait_for(
+                storage.read_json_file("user_languages.json", {}),
+                timeout=timeout_per_file
+            )
             for user_key, lang in languages.items():
                 _user_language_cache[user_key] = lang
                 _user_language_cache_time[user_key] = time.time()
             logger.info("BOOT_CACHE_LOADED cache=user_languages count=%d", len(languages))
+        except asyncio.TimeoutError:
+            logger.warning("BOOT_CACHE_TIMEOUT cache=user_languages timeout_s=%.1f", timeout_per_file)
         except Exception as e:
-            logger.warning("Failed to load user_languages cache: %s", e)
+            logger.warning("BOOT_CACHE_FAILED cache=user_languages error=%s", e)
         
-        # Load gift claimed
+        # Load gift claimed with timeout
         try:
-            claimed = await storage.read_json_file("gift_claimed.json", {})
+            claimed = await asyncio.wait_for(
+                storage.read_json_file("gift_claimed.json", {}),
+                timeout=timeout_per_file
+            )
             for user_key, status in claimed.items():
                 if status:
                     _gift_claimed_cache[user_key] = True
             logger.info("BOOT_CACHE_LOADED cache=gift_claimed count=%d", len(claimed))
+        except asyncio.TimeoutError:
+            logger.warning("BOOT_CACHE_TIMEOUT cache=gift_claimed timeout_s=%.1f", timeout_per_file)
         except Exception as e:
-            logger.warning("Failed to load gift_claimed cache: %s", e)
+            logger.warning("BOOT_CACHE_FAILED cache=gift_claimed error=%s", e)
         
-        # Load free generations
+        # Load free generations with timeout
         try:
-            free_gens = await storage.read_json_file("free_generations.json", {})
+            free_gens = await asyncio.wait_for(
+                storage.read_json_file("free_generations.json", {}),
+                timeout=timeout_per_file
+            )
             _free_generations_cache = free_gens
             _free_generations_cache_time = time.time()
             logger.info("BOOT_CACHE_LOADED cache=free_generations count=%d", len(free_gens))
+        except asyncio.TimeoutError:
+            logger.warning("BOOT_CACHE_TIMEOUT cache=free_generations timeout_s=%.1f", timeout_per_file)
         except Exception as e:
-            logger.warning("Failed to load free_generations cache: %s", e)
+            logger.warning("BOOT_CACHE_FAILED cache=free_generations error=%s", e)
             
     except Exception as e:
         logger.warning("BOOT_CACHE_WARMUP_FAILED error=%s", e)
