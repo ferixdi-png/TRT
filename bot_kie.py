@@ -7499,9 +7499,11 @@ START_REFERRAL_TIMEOUT_SECONDS = float(os.getenv("START_REFERRAL_TIMEOUT_SECONDS
 START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
 START_PLACEHOLDER_TIMEOUT_SECONDS = float(os.getenv("START_PLACEHOLDER_TIMEOUT_SECONDS", "1.5"))
 START_PLACEHOLDER_RETRY_ATTEMPTS = int(os.getenv("START_PLACEHOLDER_RETRY_ATTEMPTS", "1"))
+START_HANDLER_BUDGET_MS = int(os.getenv("START_HANDLER_BUDGET_MS", "900"))
 TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
+TELEGRAM_SEND_RETRY_JITTER_RATIO = float(os.getenv("TELEGRAM_SEND_RETRY_JITTER_RATIO", "0.2"))
 TELEGRAM_API_CONNECT_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_CONNECT_TIMEOUT_SECONDS", "1.5"))
 TELEGRAM_API_READ_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_READ_TIMEOUT_SECONDS", "2.5"))
 TELEGRAM_API_WRITE_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_API_WRITE_TIMEOUT_SECONDS", "2.5"))
@@ -8284,6 +8286,35 @@ def _build_menu_fallback_keyboard(user_lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="back_to_menu")]])
 
 
+_telegram_retry_random = random.Random(0)
+
+
+def _resolve_telegram_send_timeout(timeout_s: Optional[float]) -> float:
+    resolved_timeout = TELEGRAM_SEND_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    webhook_budget_raw = os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "").strip()
+    if webhook_budget_raw:
+        try:
+            webhook_budget = float(webhook_budget_raw)
+        except ValueError:
+            webhook_budget = None
+        if webhook_budget:
+            headroom = float(os.getenv("TELEGRAM_SEND_BUDGET_HEADROOM_SECONDS", "0.5"))
+            capped = max(0.2, webhook_budget - max(0.0, headroom))
+            if capped < resolved_timeout:
+                resolved_timeout = capped
+    return max(0.1, resolved_timeout)
+
+
+def _resolve_retry_delay(backoff_s: float, attempt: int) -> float:
+    base_delay = max(0.05, backoff_s * (2 ** max(0, attempt - 1)))
+    jitter_ratio = max(0.0, min(0.5, TELEGRAM_SEND_RETRY_JITTER_RATIO))
+    if jitter_ratio <= 0:
+        return base_delay
+    rng = _telegram_retry_random if is_test_mode() else random
+    jitter = base_delay * jitter_ratio
+    return max(0.05, base_delay + rng.uniform(0.0, jitter))
+
+
 def _telegram_request_timeouts() -> Dict[str, float]:
     return {
         "connect_timeout": TELEGRAM_API_CONNECT_TIMEOUT_SECONDS,
@@ -8308,6 +8339,8 @@ async def _run_telegram_request(
 ) -> Optional[Any]:
     from app.utils.fault_injection import maybe_inject_sleep
 
+    resolved_timeout_s = _resolve_telegram_send_timeout(timeout_s)
+
     for attempt in range(1, max(1, retry_attempts) + 1):
         try:
             await maybe_inject_sleep(
@@ -8316,39 +8349,50 @@ async def _run_telegram_request(
             )
             if os.getenv("TRT_FAULT_INJECT_TELEGRAM_CONNECT_TIMEOUT", "").strip() in {"1", "true", "yes"}:
                 raise TimedOut("Injected Telegram connect timeout")
-            return await asyncio.wait_for(request_fn(), timeout=timeout_s)
+            result = await asyncio.wait_for(request_fn(), timeout=resolved_timeout_s)
+            increment_update_metric("telegram_request_ok")
+            return result
         except RetryAfter as exc:
             delay = max(0.1, float(exc.retry_after or retry_backoff_s))
             logger.warning(
-                "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s",
+                "TELEGRAM_REQUEST_RETRY_AFTER action=%s correlation_id=%s attempt=%s delay_s=%s error=%s error_repr=%s",
                 action,
                 correlation_id,
                 attempt,
                 delay,
+                str(exc),
+                repr(exc),
             )
+            increment_update_metric("telegram_request_retry_after")
             await asyncio.sleep(delay)
-        except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+        except (asyncio.TimeoutError, TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
             logger.warning(
-                "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s",
+                "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
                 action,
                 correlation_id,
                 attempt,
-                exc,
+                str(exc),
+                repr(exc),
+                type(exc).__name__,
             )
+            increment_update_metric("telegram_request_timeout")
             if attempt >= retry_attempts:
                 return None
-            await asyncio.sleep(retry_backoff_s * (2 ** (attempt - 1)))
+            await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
         except Exception as exc:
             logger.warning(
-                "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error=%s",
+                "TELEGRAM_REQUEST_FAILED action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
                 action,
                 correlation_id,
                 attempt,
-                exc,
+                str(exc),
+                repr(exc),
+                type(exc).__name__,
             )
+            increment_update_metric("telegram_request_failed")
             if attempt >= retry_attempts:
                 return None
-            await asyncio.sleep(retry_backoff_s * (2 ** (attempt - 1)))
+            await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
     return None
 
 
@@ -8379,7 +8423,7 @@ async def _show_minimal_menu(
     fallback_send = False
     send_ok = False
     telegram_timeouts = _telegram_request_timeouts()
-    resolved_timeout_s = TELEGRAM_SEND_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    resolved_timeout_s = _resolve_telegram_send_timeout(timeout_s)
     resolved_attempts = TELEGRAM_SEND_RETRY_ATTEMPTS if max_attempts is None else max_attempts
     resolved_fallback_timeout_s = (
         MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS if fallback_timeout_s is None else fallback_timeout_s
@@ -9523,22 +9567,64 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     update_id=update.update_id,
                     chat_id=chat_id,
                 )
-            await _start_menu_with_fallback(
-                update,
-                context,
-                source="/start",
-                correlation_id=correlation_id,
-            )
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                update_id=update.update_id,
-                action="START_OK",
-                action_path="command:/start",
-                stage="UI_ROUTER",
-                outcome="ok",
-            )
+            budget_ms = max(0, int(START_HANDLER_BUDGET_MS))
+            start_budget_timeout = False
+            try:
+                if budget_ms > 0:
+                    await asyncio.wait_for(
+                        _start_menu_with_fallback(
+                            update,
+                            context,
+                            source="/start",
+                            correlation_id=correlation_id,
+                        ),
+                        timeout=budget_ms / 1000,
+                    )
+                else:
+                    await _start_menu_with_fallback(
+                        update,
+                        context,
+                        source="/start",
+                        correlation_id=correlation_id,
+                    )
+            except asyncio.TimeoutError:
+                start_budget_timeout = True
+                logger.warning(
+                    "START_BUDGET_TIMEOUT source=/start correlation_id=%s budget_ms=%s",
+                    correlation_id,
+                    budget_ms,
+                )
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="START_BUDGET_TIMEOUT",
+                    action_path="command:/start",
+                    stage="UI_ROUTER",
+                    outcome="timeout",
+                    param={"budget_ms": budget_ms},
+                )
+                _create_background_task(
+                    _start_menu_with_fallback(
+                        update,
+                        context,
+                        source="/start",
+                        correlation_id=correlation_id,
+                    ),
+                    action="start_budget_fallback",
+                )
+            if not start_budget_timeout:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="START_OK",
+                    action_path="command:/start",
+                    stage="UI_ROUTER",
+                    outcome="ok",
+                )
             if referral_parse.valid and referral_parse.referrer_id and user_id:
                 _create_background_task(
                     _award_referral_bonus_with_timeout(
@@ -9551,6 +9637,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ),
                     action="referral_bonus",
                 )
+            if start_budget_timeout:
+                return
         except Exception as exc:
             logger.error(
                 "❌ /start handler failed handler=start user_id=%s partner_id=%s correlation_id=%s error=%s",
@@ -26206,6 +26294,12 @@ async def create_webhook_handler():
         process_in_background = not is_test_mode()
     else:
         process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
+    early_ack_raw = os.getenv("WEBHOOK_EARLY_ACK")
+    if early_ack_raw is None:
+        early_ack_enabled = not is_test_mode()
+    else:
+        early_ack_enabled = early_ack_raw.strip().lower() in {"1", "true", "yes", "on"}
+    ack_in_background = process_in_background or early_ack_enabled
 
     async def _process_update_async(
         update: Update,
@@ -26514,7 +26608,7 @@ async def create_webhook_handler():
                         outcome="received",
                     )
                     logger.debug(f"[WEBHOOK] {correlation_id} update_received user={update.effective_user.id if update.effective_user else 'unknown'}")
-                    if process_in_background:
+                    if ack_in_background:
                         _create_background_task(
                             _process_update_with_semaphore(
                                 update,
