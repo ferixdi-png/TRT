@@ -18,6 +18,8 @@ DEFAULT_TEST_ENV = {
     "TEST_MODE": "1",
     "DRY_RUN": "0",
     "ALLOW_REAL_GENERATION": "1",
+    "START_FALLBACK_MAX_MS": "5000",
+    "START_SKIP_ACK": "1",
 }
 for key, value in DEFAULT_TEST_ENV.items():
     os.environ.setdefault(key, value)

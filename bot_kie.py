@@ -10355,14 +10355,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             correlation_id = uuid.uuid4().hex
             logger.error("❌ Failed to build correlation_id in /start: %s", exc, exc_info=True)
-        try:
-            start_ack_message_id = await _send_start_ack(
-                update,
-                context,
-                correlation_id=correlation_id,
-            )
-        except Exception as exc:
-            logger.debug("START_ACK_FAILED correlation_id=%s error=%s", correlation_id, exc)
+        if os.getenv("START_SKIP_ACK", "").strip().lower() not in {"1", "true", "yes", "on"}:
+            try:
+                start_ack_message_id = await _send_start_ack(
+                    update,
+                    context,
+                    correlation_id=correlation_id,
+                )
+            except Exception as exc:
+                logger.debug("START_ACK_FAILED correlation_id=%s error=%s", correlation_id, exc)
         try:
             _create_background_task(
                 upsert_user_registry_entry(update.effective_user, correlation_id=correlation_id),
