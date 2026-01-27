@@ -3,11 +3,12 @@ Healthcheck endpoint для Render
 Легкий aiohttp endpoint без потоков
 """
 
-import time
-import os
-import logging
-import json
 import asyncio
+import inspect
+import json
+import logging
+import os
+import time
 from aiohttp import web
 from typing import Optional, Callable, Awaitable, Dict, Any, List
 
@@ -112,7 +113,7 @@ async def billing_preflight_handler(request):
         timeout_seconds = float(os.getenv("BILLING_PREFLIGHT_HTTP_TIMEOUT_SECONDS", "5.0"))
         storage = get_storage()
         db_pool = None
-        if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
+        if hasattr(storage, "_get_pool") and inspect.iscoroutinefunction(storage._get_pool):
             db_pool = await storage._get_pool()
 
         report = await asyncio.wait_for(
@@ -341,14 +342,14 @@ async def ready_diag_handler(request):
         db_meta: Dict[str, Any] = {}
         try:
             start = time.monotonic()
-            if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
+            if hasattr(storage, "ping") and inspect.iscoroutinefunction(storage.ping):
                 ping_ok = await asyncio.wait_for(storage.ping(), timeout=timeout_seconds)
             else:
                 ping_ok = True
             latency_ms = int((time.monotonic() - start) * 1000)
             pool_in_use = None
             pool_size = None
-            if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
+            if hasattr(storage, "_get_pool") and inspect.iscoroutinefunction(storage._get_pool):
                 pool = await storage._get_pool()
                 try:
                     pool_size = pool.get_max_size() if hasattr(pool, "get_max_size") else None

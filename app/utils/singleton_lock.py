@@ -443,7 +443,7 @@ async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
             logger.info("[LOCK] LOCK_MODE=redis lock_acquired=true ttl=%s", ttl_seconds)
             return True
         else:
-            await _redis_client.close()
+            await _redis_client.aclose()
             _redis_client = None
             logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=already_held")
             return False
@@ -451,7 +451,7 @@ async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
         logger.warning("[LOCK] LOCK_MODE=redis lock_acquire_failed=true reason=timeout")
         if _redis_client:
             try:
-                await _redis_client.close()
+                await _redis_client.aclose()
             except Exception:
                 pass
             _redis_client = None
@@ -460,7 +460,7 @@ async def _acquire_redis_lock(redis_url: str, ttl_seconds: int = 30) -> bool:
         logger.error("[LOCK] LOCK_MODE=redis lock_acquire_failed=true reason=%s", exc)
         if _redis_client:
             try:
-                await _redis_client.close()
+                await _redis_client.aclose()
             except Exception:
                 pass
             _redis_client = None
@@ -493,7 +493,7 @@ end
     finally:
         if _redis_client:
             try:
-                await _redis_client.close()
+                await _redis_client.aclose()
             except Exception:
                 pass
             _redis_client = None

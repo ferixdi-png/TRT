@@ -6,6 +6,7 @@ Can be executed directly or invoked via the Node.js wrapper.
 """
 
 import asyncio
+import inspect
 import logging
 import os
 import signal
@@ -64,7 +65,7 @@ def _read_float_env(name: str, default: float) -> float:
 async def _check_storage_connectivity(storage) -> bool:
     if storage is None:
         return False
-    if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
+    if hasattr(storage, "ping") and inspect.iscoroutinefunction(storage.ping):
         return await storage.ping()
     if hasattr(storage, "test_connection"):
         return await asyncio.to_thread(storage.test_connection)
@@ -316,7 +317,7 @@ async def main() -> None:
 
         if storage is not None and hasattr(storage, "close"):
             close_fn = storage.close
-            if asyncio.iscoroutinefunction(close_fn):
+            if inspect.iscoroutinefunction(close_fn):
                 await _safe_async_cleanup(loop, "storage_close", close_fn())
             else:
                 if loop.is_closed():
