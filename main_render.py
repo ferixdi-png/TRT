@@ -396,6 +396,8 @@ def build_webhook_handler(
         route: str,
         request_id: Optional[str],
     ) -> None:
+        # Yield immediately to let webhook ACK return first
+        await asyncio.sleep(0)
         process_started = time.monotonic()
         update_id: Optional[int] = None
         payload: Optional[dict] = None

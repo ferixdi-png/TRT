@@ -67,7 +67,7 @@ async def test_webhook_handler_processes_update_when_ready(harness):
     }
 
     response = await handler(_build_request(payload, request_id="corr-ready-55"))
-    await asyncio.sleep(0)
+    await asyncio.sleep(0.01)  # Let background task process
 
     assert response.status == 200
     assert process_update.call_count == 1

@@ -1,0 +1,50 @@
+{
+  "8888": [
+    {
+      "event_id": "task-123",
+      "user_id": 8888,
+      "kind": "generation",
+      "payload": {
+        "model_id": "test-model",
+        "model_name": "Test Model",
+        "price": 0.0,
+        "result_urls": [
+          "https://example.com/result.png"
+        ]
+      },
+      "created_at": "2026-01-27T13:51:54.469397"
+    }
+  ],
+  "9911": [
+    {
+      "event_id": "task-123",
+      "user_id": 9911,
+      "kind": "generation",
+      "payload": {
+        "model_id": "test-model",
+        "model_name": "Test Model",
+        "price": 0.0,
+        "result_urls": [
+          "https://example.com/result.png"
+        ]
+      },
+      "created_at": "2026-01-27T13:52:03.749607"
+    }
+  ],
+  "7777": [
+    {
+      "event_id": "task-123",
+      "user_id": 7777,
+      "kind": "generation",
+      "payload": {
+        "model_id": "test-model",
+        "model_name": "Test Model",
+        "price": 0.0,
+        "result_urls": [
+          "https://example.com/result.png"
+        ]
+      },
+      "created_at": "2026-01-27T13:52:03.914638"
+    }
+  ]
+}
