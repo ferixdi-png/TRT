@@ -73,6 +73,8 @@ render/
   - `TELEGRAM_BOT_TOKEN=...`
   - `WEBHOOK_URL=https://<service>.onrender.com/webhook`
   - `PORT=10000` (healthcheck server)
+  - `AUTO_SET_WEBHOOK=1` (авто-установка webhook при старте)
+  - `REQUIRE_WEBHOOK_REGISTERED=1` (fail-fast если webhook не зарегистрирован)
 - **Хранилище:**
   - `STORAGE_MODE=db` + `DATABASE_URL=...` (Postgres)
   - `REDIS_URL=...` (опционально, быстрые distributed locks)
