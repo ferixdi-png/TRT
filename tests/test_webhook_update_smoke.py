@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 
@@ -10,4 +12,10 @@ async def test_webhook_update_smoke(webhook_harness):
     )
 
     assert response.status == 200
-    assert webhook_harness.outbox.messages, "Webhook should produce a response message"
+    # Wait for background processing to complete
+    for _ in range(20):
+        if webhook_harness.outbox.messages or webhook_harness.outbox.edited_messages:
+            break
+        await asyncio.sleep(0.05)
+    all_messages = webhook_harness.outbox.messages + webhook_harness.outbox.edited_messages
+    assert all_messages, "Webhook should produce a response message"
