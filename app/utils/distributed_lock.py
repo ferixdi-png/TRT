@@ -133,9 +133,17 @@ async def _init_redis() -> bool:
         except asyncio.TimeoutError as exc:
             last_error = exc
             reason = "redis_connect_timeout"
+            logger.warning(
+                "[DISTRIBUTED_LOCK] redis_connect_attempt=%s/%s reason=%s timeout_s=%.1f",
+                attempt, connect_attempts, reason, connect_deadline
+            )
         except Exception as exc:
             last_error = exc
             reason = "redis_connect_failed"
+            logger.warning(
+                "[DISTRIBUTED_LOCK] redis_connect_attempt=%s/%s reason=%s error=%s error_type=%s",
+                attempt, connect_attempts, reason, str(exc)[:100], type(exc).__name__
+            )
         if client:
             try:
                 await client.close()
