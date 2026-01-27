@@ -25890,6 +25890,21 @@ def _compute_webhook_set_next_retry(
     return _resolve_webhook_set_sleep(long_sleep_seconds, jitter_ratio)
 
 
+def _is_render_environment() -> bool:
+    return bool(
+        os.getenv("RENDER")
+        or os.getenv("RENDER_SERVICE_NAME")
+        or os.getenv("RENDER_EXTERNAL_URL")
+    )
+
+
+def _auto_set_webhook_enabled() -> bool:
+    raw_value = os.getenv("AUTO_SET_WEBHOOK")
+    if raw_value is not None:
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    return not _is_render_environment()
+
+
 async def _run_webhook_setter_cycle(
     webhook_url: str,
     *,
@@ -25913,13 +25928,33 @@ async def _run_webhook_setter_cycle(
     )
     try:
         from telegram import Bot
+        from telegram.request import HTTPXRequest
 
-        async with Bot(token=BOT_TOKEN) as temp_bot:
-            ok = await ensure_webhook_mode(
-                temp_bot,
-                webhook_url,
-                cycle_timeout_s=cycle_timeout_s,
+        request = HTTPXRequest(
+            connect_timeout=cycle_timeout_s,
+            read_timeout=cycle_timeout_s,
+            write_timeout=cycle_timeout_s,
+            pool_timeout=cycle_timeout_s,
+        )
+
+        async with Bot(token=BOT_TOKEN, request=request) as temp_bot:
+            ok = await asyncio.wait_for(
+                ensure_webhook_mode(
+                    temp_bot,
+                    webhook_url,
+                    cycle_timeout_s=cycle_timeout_s,
+                ),
+                timeout=cycle_timeout_s,
             )
+    except asyncio.TimeoutError as exc:
+        duration_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "ok": False,
+            "outcome": "timeout",
+            "error_type": "Timeout",
+            "error": str(exc) or "webhook_setter_deadline",
+            "duration_ms": duration_ms,
+        }
     except Conflict as exc:
         handle_conflict_gracefully(exc, "webhook")
         return {"ok": False, "outcome": "conflict", "error_type": "Conflict", "error": str(exc), "duration_ms": 0}
@@ -25948,7 +25983,11 @@ async def _run_webhook_setter_cycle(
 
 
 async def _run_webhook_setter_loop(webhook_url: str) -> None:
-    max_fast_retries = _read_int_env("WEBHOOK_SET_MAX_FAST_RETRIES", 6, min_value=1, max_value=12)
+    if not _auto_set_webhook_enabled():
+        logger.info("SKIPPED_AUTO_SET reason=auto_set_webhook_disabled")
+        return
+
+    max_fast_retries = _read_int_env("WEBHOOK_SET_MAX_FAST_RETRIES", 0, min_value=0, max_value=12)
     backoff_base = _read_float_env("WEBHOOK_SET_BACKOFF_BASE_SECONDS", 0.5, min_value=0.1, max_value=10.0)
     backoff_cap = _read_float_env("WEBHOOK_SET_BACKOFF_CAP_SECONDS", 5.0, min_value=0.5, max_value=30.0)
     retry_jitter_ratio = _read_float_env(
@@ -25959,9 +25998,9 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
     )
     long_sleep_seconds = _read_float_env(
         "WEBHOOK_SET_LONG_SLEEP_SECONDS",
-        300.0,
+        900.0,
         min_value=60.0,
-        max_value=900.0,
+        max_value=1800.0,
     )
     cycle_timeout_s = _read_float_env(
         "WEBHOOK_SET_CYCLE_TIMEOUT_SECONDS",

@@ -13,8 +13,9 @@ from app.bot_mode import ensure_webhook_mode
 
 
 class _HangingBot:
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, *, cancelled_event: asyncio.Event) -> None:
         self.token = token
+        self._cancelled_event = cancelled_event
 
     async def __aenter__(self):
         return self
@@ -26,20 +27,30 @@ class _HangingBot:
         return SimpleNamespace(url="", pending_update_count=0)
 
     async def set_webhook(self, **kwargs):
-        await asyncio.sleep(10)
-        return True
+        try:
+            await asyncio.sleep(10)
+            return True
+        except asyncio.CancelledError:
+            self._cancelled_event.set()
+            raise
 
 
 @pytest.mark.asyncio
-async def test_webhook_setter_timeout_is_enforced(monkeypatch, caplog):
+async def test_webhook_setter_hard_timeout(monkeypatch, caplog):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("WEBHOOK_SET_CYCLE_TIMEOUT_SECONDS", "2.5")
     monkeypatch.setenv("WEBHOOK_SET_BACKOFF_BASE_SECONDS", "0.1")
     monkeypatch.setenv("WEBHOOK_SET_BACKOFF_CAP_SECONDS", "0.1")
     monkeypatch.setenv("WEBHOOK_SET_LONG_SLEEP_SECONDS", "1.0")
     monkeypatch.setenv("WEBHOOK_SET_MAX_FAST_RETRIES", "1")
+    monkeypatch.setenv("AUTO_SET_WEBHOOK", "1")
     monkeypatch.setenv("TEST_MODE", "1")
-    monkeypatch.setattr(telegram, "Bot", _HangingBot)
+    cancelled_event = asyncio.Event()
+
+    def _build_bot(token: str, **kwargs):
+        return _HangingBot(token, cancelled_event=cancelled_event)
+
+    monkeypatch.setattr(telegram, "Bot", _build_bot)
 
     start = time.monotonic()
     with caplog.at_level(logging.WARNING):
@@ -59,7 +70,16 @@ async def test_webhook_setter_timeout_is_enforced(monkeypatch, caplog):
     assert elapsed < 3.0
     fail_logs = [record.message for record in caplog.records if "WEBHOOK_SETTER_FAIL" in record.message]
     assert fail_logs
-    assert "error_type=TimeoutError" in fail_logs[0]
+    assert "error_type=Timeout" in fail_logs[0]
+    duration_token = "duration_ms="
+    duration_ms = None
+    for part in fail_logs[0].split():
+        if part.startswith(duration_token):
+            duration_ms = int(part[len(duration_token):])
+            break
+    assert duration_ms is not None
+    assert duration_ms < 3000
+    assert cancelled_event.is_set()
     assert "next_retry_s=" in fail_logs[0]
 
 
