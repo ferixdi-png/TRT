@@ -154,6 +154,7 @@ UPDATE_DEDUP_TTL_SECONDS = float(os.getenv("TG_UPDATE_DEDUP_TTL_SECONDS", "60"))
 CALLBACK_DEDUP_TTL_SECONDS = float(os.getenv("TG_CALLBACK_DEDUP_TTL_SECONDS", "30"))
 CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "8"))
 CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "2.0"))
+START_INFLIGHT_TTL_SECONDS = float(os.getenv("START_INFLIGHT_TTL_SECONDS", "12.0"))
 STORAGE_IO_TIMEOUT_SECONDS = float(os.getenv("STORAGE_IO_TIMEOUT_SECONDS", "2.5"))
 STORAGE_OP_TIMEOUT_SECONDS = max(0.1, float(os.getenv("STORAGE_OP_TIMEOUT_MS", "2000")) / 1000)
 GEN_TYPE_MENU_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_TIMEOUT_SECONDS", "6.0"))
@@ -165,6 +166,7 @@ _callback_rate_limiter = PerUserRateLimiter(CALLBACK_RATE_LIMIT_PER_SEC, CALLBAC
 _callback_data_rate_limiter = PerKeyRateLimiter(CALLBACK_DATA_RATE_LIMIT_PER_SEC, CALLBACK_DATA_RATE_LIMIT_BURST)
 _update_deduper = TTLCache(UPDATE_DEDUP_TTL_SECONDS)
 _callback_deduper = TTLCache(CALLBACK_DEDUP_TTL_SECONDS)
+_start_inflight_deduper = TTLCache(START_INFLIGHT_TTL_SECONDS)
 _callback_semaphore = asyncio.Semaphore(CALLBACK_CONCURRENCY_LIMIT) if CALLBACK_CONCURRENCY_LIMIT > 0 else None
 KIE_CREDITS_CACHE_TTL_SECONDS = float(os.getenv("KIE_CREDITS_CACHE_TTL_SECONDS", "120"))
 KIE_CREDITS_TIMEOUT_SECONDS = float(os.getenv("KIE_CREDITS_TIMEOUT_SECONDS", "2.0"))
@@ -4081,6 +4083,18 @@ _data_cache = {
 # Cache TTL in seconds (5 minutes)
 CACHE_TTL = 300
 _last_save_time = {}
+USER_REGISTRY_DEBOUNCE_SECONDS = float(os.getenv("USER_REGISTRY_DEBOUNCE_SECONDS", "60.0"))
+USER_REGISTRY_FLUSH_INTERVAL_SECONDS = float(os.getenv("USER_REGISTRY_FLUSH_INTERVAL_SECONDS", "1.5"))
+USER_REGISTRY_FLUSH_MAX_BATCH = int(os.getenv("USER_REGISTRY_FLUSH_MAX_BATCH", "200"))
+USER_REGISTRY_PERSIST_TIMEOUT_SECONDS = float(
+    os.getenv("USER_REGISTRY_PERSIST_TIMEOUT_SECONDS", "2.5")
+)
+
+_user_registry_debouncer = TTLCache(USER_REGISTRY_DEBOUNCE_SECONDS)
+_user_registry_pending: Dict[int, Dict[str, Any]] = {}
+_user_registry_flush_task: Optional[asyncio.Task[Any]] = None
+_user_registry_flush_lock: Optional[asyncio.Lock] = None
+_user_registry_flush_event: Optional[asyncio.Event] = None
 
 # Storage paths - storage backend handles persistence (DB only).
 DATA_DIR = os.getenv("DATA_DIR", "").strip()
@@ -4328,15 +4342,10 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
         logger.error(f"❌ CRITICAL ERROR saving {filename}: {e}", exc_info=True)
 
 
-async def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
-    """Store basic user identity for admin lookup (async, non-blocking in handlers)."""
-    if user is None:
+async def _persist_user_registry_batch(batch: Dict[int, Dict[str, Any]]) -> None:
+    if not batch:
         return
     try:
-        user_id = user.id
-        username = user.username or ""
-        first_name = user.first_name or ""
-        last_name = user.last_name or ""
         from app.storage.factory import get_storage
 
         storage = get_storage()
@@ -4344,32 +4353,103 @@ async def upsert_user_registry_entry(user: Optional["telegram.User"]) -> None:
 
         def updater(data: dict) -> dict:
             payload = dict(data or {})
-            user_key = str(user_id)
-            existing = payload.get(user_key, {})
-            if (
-                existing.get("username") == username
-                and existing.get("first_name") == first_name
-                and existing.get("last_name") == last_name
-            ):
-                return payload
-            payload[user_key] = {
-                **existing,
-                "user_id": user_id,
-                "username": username,
-                "first_name": first_name,
-                "last_name": last_name,
-                "updated_at": datetime.now().isoformat(),
-            }
+            for user_id, entry in batch.items():
+                user_key = str(user_id)
+                existing = payload.get(user_key, {})
+                payload[user_key] = {**existing, **entry}
             return payload
 
         await asyncio.wait_for(
             storage.update_json_file(storage_filename, updater),
-            timeout=STORAGE_OP_TIMEOUT_SECONDS,
+            timeout=USER_REGISTRY_PERSIST_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        logger.error("❌ User registry update timed out user_id=%s", getattr(user, "id", None))
-    except Exception as e:
-        logger.error(f"❌ Failed to update user registry: {e}", exc_info=True)
+        logger.warning(
+            "USER_REGISTRY_PERSIST_TIMEOUT batch_size=%s timeout_s=%s",
+            len(batch),
+            USER_REGISTRY_PERSIST_TIMEOUT_SECONDS,
+        )
+        _mark_storage_degraded("user_registry_update_timeout")
+    except Exception as exc:
+        logger.warning("USER_REGISTRY_PERSIST_FAILED batch_size=%s error=%s", len(batch), exc)
+
+
+async def _user_registry_flush_worker() -> None:
+    global _user_registry_flush_event, _user_registry_flush_lock
+    if _user_registry_flush_event is None:
+        _user_registry_flush_event = asyncio.Event()
+    if _user_registry_flush_lock is None:
+        _user_registry_flush_lock = asyncio.Lock()
+    while True:
+        await _user_registry_flush_event.wait()
+        await asyncio.sleep(USER_REGISTRY_FLUSH_INTERVAL_SECONDS)
+        async with _user_registry_flush_lock:
+            if not _user_registry_pending:
+                _user_registry_flush_event.clear()
+                continue
+            pending = dict(_user_registry_pending)
+            _user_registry_pending.clear()
+            _user_registry_flush_event.clear()
+        user_ids = list(pending.keys())
+        for idx in range(0, len(user_ids), max(1, USER_REGISTRY_FLUSH_MAX_BATCH)):
+            batch_ids = user_ids[idx : idx + USER_REGISTRY_FLUSH_MAX_BATCH]
+            batch = {uid: pending[uid] for uid in batch_ids}
+            await _persist_user_registry_batch(batch)
+
+
+def _ensure_user_registry_worker() -> None:
+    global _user_registry_flush_task
+    if _user_registry_flush_task and not _user_registry_flush_task.done():
+        return
+    loop = None
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if not loop or not loop.is_running():
+        return
+    _user_registry_flush_task = _create_background_task(
+        _user_registry_flush_worker(),
+        action="user_registry_flush_worker",
+    )
+
+
+async def upsert_user_registry_entry(
+    user: Optional["telegram.User"],
+    *,
+    correlation_id: Optional[str] = None,
+) -> None:
+    """Queue user registry update (debounced + batched) for background persistence."""
+    if user is None:
+        return
+    user_id = user.id
+    if _user_registry_debouncer.seen(user_id):
+        return
+    global _user_registry_flush_lock, _user_registry_flush_event
+    entry = {
+        "user_id": user_id,
+        "username": user.username or "",
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "updated_at": datetime.now().isoformat(),
+    }
+    if _user_registry_flush_lock is None:
+        _user_registry_flush_lock = asyncio.Lock()
+    if _user_registry_flush_event is None:
+        _user_registry_flush_event = asyncio.Event()
+    async with _user_registry_flush_lock:
+        _user_registry_pending[user_id] = entry
+        _user_registry_flush_event.set()
+    _ensure_user_registry_worker()
+    log_structured_event(
+        correlation_id=correlation_id,
+        user_id=user_id,
+        action="REGISTRY_UPDATE_QUEUED",
+        action_path="user_registry:queue",
+        stage="STORAGE",
+        outcome="queued",
+        param={"debounce_s": USER_REGISTRY_DEBOUNCE_SECONDS},
+    )
 
 
 def get_user_registry_entry(user_id: int) -> dict:
@@ -7500,6 +7580,9 @@ START_FALLBACK_MAX_MS = int(os.getenv("START_FALLBACK_MAX_MS", "1000"))
 START_PLACEHOLDER_TIMEOUT_SECONDS = float(os.getenv("START_PLACEHOLDER_TIMEOUT_SECONDS", "1.5"))
 START_PLACEHOLDER_RETRY_ATTEMPTS = int(os.getenv("START_PLACEHOLDER_RETRY_ATTEMPTS", "1"))
 START_HANDLER_BUDGET_MS = int(os.getenv("START_HANDLER_BUDGET_MS", "900"))
+START_TELEGRAM_TIMEOUT_CAP_SECONDS = float(os.getenv("START_TELEGRAM_TIMEOUT_CAP_SECONDS", "0.8"))
+START_TELEGRAM_ULTRA_TIMEOUT_SECONDS = float(os.getenv("START_TELEGRAM_ULTRA_TIMEOUT_SECONDS", "0.4"))
+START_TELEGRAM_RETRY_ATTEMPTS = int(os.getenv("START_TELEGRAM_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
@@ -7515,6 +7598,7 @@ SAFE_MENU_RENDER_DEDUP_TTL_SECONDS = float(os.getenv("SAFE_MENU_RENDER_DEDUP_TTL
 SAFE_MENU_RENDER_MAX_ENTRIES = int(os.getenv("SAFE_MENU_RENDER_MAX_ENTRIES", "512"))
 MAIN_MENU_DEP_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_DEP_CACHE_TTL_SECONDS", "30.0"))
 MAIN_MENU_LANG_CACHE_TTL_SECONDS = float(os.getenv("MAIN_MENU_LANG_CACHE_TTL_SECONDS", "300.0"))
+MENU_DEP_REFRESH_TTL_SECONDS = float(os.getenv("MENU_DEP_REFRESH_TTL_SECONDS", "30.0"))
 _MENU_DEP_CACHE_KEY = "_menu_dep_cache"
 
 
@@ -7559,6 +7643,30 @@ _safe_menu_renderer = SafeMenuRenderer(
     SAFE_MENU_RENDER_MAX_ENTRIES,
 )
 
+_start_inflight_jobs: Dict[int, Dict[str, Any]] = {}
+
+
+def _claim_start_inflight_job(user_id: int) -> tuple[bool, str]:
+    now = time.monotonic()
+    entry = _start_inflight_jobs.get(user_id)
+    if entry and entry.get("expires_at", 0.0) > now:
+        return False, str(entry.get("job_id"))
+    job_id = f"start-{user_id}-{uuid.uuid4().hex[:8]}"
+    _start_inflight_jobs[user_id] = {
+        "job_id": job_id,
+        "expires_at": now + START_INFLIGHT_TTL_SECONDS,
+    }
+    _start_inflight_deduper.seen(f"{user_id}:start")
+    return True, job_id
+
+
+def _release_start_inflight_job(user_id: int, job_id: Optional[str]) -> None:
+    if not job_id:
+        return
+    entry = _start_inflight_jobs.get(user_id)
+    if entry and entry.get("job_id") == job_id:
+        _start_inflight_jobs.pop(user_id, None)
+
 
 def _get_menu_dep_cache(session: Optional[Dict[str, Any]], ttl_seconds: float) -> Optional[Dict[str, Any]]:
     if not isinstance(session, dict):
@@ -7574,14 +7682,26 @@ def _get_menu_dep_cache(session: Optional[Dict[str, Any]], ttl_seconds: float) -
     return cache
 
 
+def _menu_dep_needs_refresh(cache: Optional[Dict[str, Any]], key: str, ttl_seconds: float) -> bool:
+    if not isinstance(cache, dict):
+        return True
+    timestamp = cache.get(f"{key}_ts")
+    if not isinstance(timestamp, (int, float)):
+        return True
+    return (time.monotonic() - timestamp) > ttl_seconds
+
+
 def _set_menu_dep_cache(session: Optional[Dict[str, Any]], **values: Any) -> None:
     if not isinstance(session, dict):
         return
     cache = session.get(_MENU_DEP_CACHE_KEY)
     if not isinstance(cache, dict):
         cache = {}
-    cache.update(values)
-    cache["timestamp"] = time.monotonic()
+    now = time.monotonic()
+    for key, value in values.items():
+        cache[key] = value
+        cache[f"{key}_ts"] = now
+    cache["timestamp"] = now
     session[_MENU_DEP_CACHE_KEY] = cache
 
 
@@ -7646,6 +7766,136 @@ async def _refresh_menu_language_cache(
     session = user_sessions.ensure(user_id)
     _set_menu_dep_cache(session, user_lang=resolved_lang)
 
+
+async def _refresh_menu_dependencies(
+    user_id: int,
+    *,
+    correlation_id: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+    menu_session: Optional[Dict[str, Any]] = None,
+) -> None:
+    if _is_storage_degraded():
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            action="MENU_DEPS_SKIPPED",
+            action_path="menu:dependencies_refresh",
+            stage="UI_ROUTER",
+            outcome="read_fast",
+            param={"reason": _storage_degraded_reason},
+        )
+        return
+    timeout = MAIN_MENU_DEP_TIMEOUT_SECONDS if timeout_s is None else timeout_s
+    session = menu_session or user_sessions.ensure(user_id)
+    try:
+        from app.services.user_service import (
+            get_user_free_generations_remaining as get_free_remaining_async,
+            get_user_language as get_user_language_async,
+        )
+        resolved_lang = await _await_with_timeout(
+            get_user_language_async(user_id),
+            timeout=timeout,
+            label="menu_lang_refresh",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=user_id,
+            update_id=None,
+            default=None,
+            raise_on_timeout=False,
+            log_timeout=True,
+            degrade_storage_on_timeout=True,
+        )
+    except Exception as exc:
+        logger.debug("MENU_LANG_REFRESH_FAILED user_id=%s correlation_id=%s error=%s", user_id, correlation_id, exc)
+        resolved_lang = None
+    if resolved_lang:
+        _set_menu_dep_cache(session, user_lang=resolved_lang)
+
+    try:
+        remaining_free = await _await_with_timeout(
+            get_free_remaining_async(user_id),
+            timeout=timeout,
+            label="menu_free_remaining",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=user_id,
+            update_id=None,
+            default=None,
+            raise_on_timeout=False,
+            log_timeout=False,
+            degrade_storage_on_timeout=False,
+        )
+    except Exception as exc:
+        logger.debug("MENU_FREE_REMAINING_REFRESH_FAILED user_id=%s correlation_id=%s error=%s", user_id, correlation_id, exc)
+        remaining_free = None
+    if remaining_free is not None:
+        _set_menu_dep_cache(session, remaining_free=remaining_free)
+
+    try:
+        is_new = await _await_with_timeout(
+            is_new_user_async(user_id),
+            timeout=timeout,
+            label="menu_is_new_user",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=user_id,
+            update_id=None,
+            default=None,
+            raise_on_timeout=False,
+            log_timeout=False,
+            degrade_storage_on_timeout=False,
+        )
+    except Exception as exc:
+        logger.debug("MENU_IS_NEW_REFRESH_FAILED user_id=%s correlation_id=%s error=%s", user_id, correlation_id, exc)
+        is_new = None
+    if is_new is not None:
+        _set_menu_dep_cache(session, is_new=is_new)
+
+    try:
+        referrals = await _await_with_timeout(
+            get_user_referrals(user_id),
+            timeout=timeout,
+            label="referrals_list",
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=user_id,
+            update_id=None,
+            default=None,
+            raise_on_timeout=False,
+            log_timeout=True,
+            degrade_storage_on_timeout=True,
+        )
+        referrals_count = len(referrals) if isinstance(referrals, list) else 0
+    except Exception as exc:
+        logger.debug("MENU_REFERRALS_REFRESH_FAILED user_id=%s correlation_id=%s error=%s", user_id, correlation_id, exc)
+        referrals_count = None
+    if referrals_count is not None:
+        _set_menu_dep_cache(session, referrals_count=referrals_count)
+
+
+def _schedule_menu_dependency_refresh(
+    *,
+    user_id: Optional[int],
+    correlation_id: Optional[str],
+    menu_session: Optional[Dict[str, Any]],
+) -> None:
+    if not user_id or _is_storage_degraded():
+        return
+    cache = _get_menu_dep_cache(menu_session, MAIN_MENU_DEP_CACHE_TTL_SECONDS)
+    needs_refresh = any(
+        _menu_dep_needs_refresh(cache, key, MENU_DEP_REFRESH_TTL_SECONDS)
+        for key in ("user_lang", "remaining_free", "is_new", "referrals_count")
+    )
+    if not needs_refresh:
+        return
+    _create_background_task(
+        _refresh_menu_dependencies(
+            user_id,
+            correlation_id=correlation_id,
+            menu_session=menu_session,
+        ),
+        action="menu_deps_refresh",
+    )
 
 async def _await_with_timeout(
     coro,
@@ -7810,45 +8060,42 @@ async def _build_main_menu_sections(
     user = update.effective_user
     user_id = user.id if user else None
     storage_degraded = _is_storage_degraded()
+    cached_menu = _get_menu_dep_cache(menu_session, MAIN_MENU_DEP_CACHE_TTL_SECONDS)
+    if cached_menu:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update.update_id,
+            action="MENU_CACHE_HIT",
+            action_path="menu:dependencies",
+            stage="UI_ROUTER",
+            outcome="hit",
+            param={"keys": sorted(cached_menu.keys())},
+        )
     if storage_degraded:
         log_structured_event(
             correlation_id=correlation_id,
             user_id=user_id,
             chat_id=update.effective_chat.id if update.effective_chat else None,
             update_id=update.update_id,
-            action="STORAGE_DEGRADED",
+            action="MENU_DEPS_SKIPPED",
             action_path="menu:dependencies",
             stage="UI_ROUTER",
-            outcome="skip",
+            outcome="read_fast",
             param={"reason": _storage_degraded_reason},
         )
     resolved_lang = user_lang or "ru"
-    cached_menu = _get_menu_dep_cache(menu_session, MAIN_MENU_DEP_CACHE_TTL_SECONDS)
     cached_lang = cached_menu.get("user_lang") if cached_menu else None
     if cached_lang and user_lang is None:
         resolved_lang = cached_lang
-    if user_id and user_lang is None and not cached_lang and not storage_degraded:
+    if user_lang is None and not cached_lang:
         try:
-            from app.services.user_service import get_user_language as get_user_language_async
-            resolved_lang = await _await_with_timeout(
-                get_user_language_async(user_id),
-                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-                label="user_language",
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=update.effective_chat.id if update.effective_chat else None,
-                update_id=update.update_id,
-                default="ru",
-                raise_on_timeout=False,
-                log_timeout=False,
-                degrade_storage_on_timeout=True,
-            )
-        except Exception as exc:
-            logger.warning("Failed to resolve user language: %s", exc)
+            if update.effective_user and update.effective_user.language_code:
+                lang_code = update.effective_user.language_code.lower()
+                resolved_lang = "en" if lang_code.startswith("en") else "ru"
+        except Exception:
             resolved_lang = "ru"
-        if user_id:
-            _set_menu_dep_cache(menu_session, user_lang=resolved_lang)
-        storage_degraded = _is_storage_degraded()
 
     generation_types = await _await_with_timeout(
         asyncio.to_thread(get_generation_types),
@@ -7877,70 +8124,17 @@ async def _build_main_menu_sections(
     remaining_free = (
         cached_menu.get("remaining_free") if cached_menu and "remaining_free" in cached_menu else FREE_GENERATIONS_PER_DAY
     )
-    if user_id and (not cached_menu or "remaining_free" not in cached_menu) and not storage_degraded:
-        try:
-            from app.services.user_service import get_user_free_generations_remaining as get_free_remaining_async
-            remaining_free = await _await_with_timeout(
-                get_free_remaining_async(user_id),
-                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-                label="free_remaining",
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=update.effective_chat.id if update.effective_chat else None,
-                update_id=update.update_id,
-                default=FREE_GENERATIONS_PER_DAY,
-                raise_on_timeout=False,
-                log_timeout=False,
-                degrade_storage_on_timeout=True,
-            )
-        except Exception as exc:
-            logger.warning("Failed to resolve free generations: %s", exc)
-        _set_menu_dep_cache(menu_session, remaining_free=remaining_free)
-        storage_degraded = _is_storage_degraded()
-
     if user_id:
         if cached_menu and "is_new" in cached_menu:
             is_new = cached_menu["is_new"]
-        elif not storage_degraded:
-            is_new = await _await_with_timeout(
-                is_new_user_async(user_id),
-                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-                label="is_new_user",
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=update.effective_chat.id if update.effective_chat else None,
-                update_id=update.update_id,
-                default=True,
-                raise_on_timeout=False,
-                log_timeout=False,
-                degrade_storage_on_timeout=True,
-            )
-            _set_menu_dep_cache(menu_session, is_new=is_new)
         else:
             is_new = True
     else:
         is_new = True
-    storage_degraded = _is_storage_degraded()
     referral_link = get_user_referral_link(user_id) if user_id else ""
     if user_id:
         if cached_menu and "referrals_count" in cached_menu:
             referrals_count = cached_menu["referrals_count"]
-        elif not storage_degraded:
-            referrals = await _await_with_timeout(
-                get_user_referrals(user_id),
-                timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
-                label="referrals_list",
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=update.effective_chat.id if update.effective_chat else None,
-                update_id=update.update_id,
-                default=[],
-                raise_on_timeout=False,
-                log_timeout=False,
-                degrade_storage_on_timeout=True,
-            )
-            referrals_count = len(referrals)
-            _set_menu_dep_cache(menu_session, referrals_count=referrals_count)
         else:
             referrals_count = 0
     else:
@@ -8261,9 +8455,13 @@ async def send_long_message(
     return sent_messages
 
 
-def _build_minimal_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
+def _build_minimal_menu_keyboard(user_lang: str, *, include_refresh: bool = False) -> InlineKeyboardMarkup:
+    rows: List[List[InlineKeyboardButton]] = []
+    if include_refresh:
+        label = "🔄 Refresh" if user_lang == "en" else "🔄 Обновить"
+        rows.append([InlineKeyboardButton(label, callback_data="back_to_menu")])
     if user_lang == "en":
-        return InlineKeyboardMarkup(
+        rows.extend(
             [
                 [InlineKeyboardButton("Models", callback_data="show_models")],
                 [InlineKeyboardButton("Balance / Payment", callback_data="check_balance")],
@@ -8271,14 +8469,16 @@ def _build_minimal_menu_keyboard(user_lang: str) -> InlineKeyboardMarkup:
                 [InlineKeyboardButton("Profile", callback_data="my_generations")],
             ]
         )
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("Модели", callback_data="show_models")],
-            [InlineKeyboardButton("Баланс / Оплата", callback_data="check_balance")],
-            [InlineKeyboardButton("Помощь", callback_data="help_menu")],
-            [InlineKeyboardButton("Профиль", callback_data="my_generations")],
-        ]
-    )
+    else:
+        rows.extend(
+            [
+                [InlineKeyboardButton("Модели", callback_data="show_models")],
+                [InlineKeyboardButton("Баланс / Оплата", callback_data="check_balance")],
+                [InlineKeyboardButton("Помощь", callback_data="help_menu")],
+                [InlineKeyboardButton("Профиль", callback_data="my_generations")],
+            ]
+        )
+    return InlineKeyboardMarkup(rows)
 
 
 def _build_menu_fallback_keyboard(user_lang: str) -> InlineKeyboardMarkup:
@@ -8305,6 +8505,11 @@ def _resolve_telegram_send_timeout(timeout_s: Optional[float]) -> float:
     return max(0.1, resolved_timeout)
 
 
+def _resolve_start_send_timeout(timeout_s: Optional[float] = None) -> float:
+    requested = START_TELEGRAM_TIMEOUT_CAP_SECONDS if timeout_s is None else timeout_s
+    return _resolve_telegram_send_timeout(min(requested, START_TELEGRAM_TIMEOUT_CAP_SECONDS))
+
+
 def _resolve_retry_delay(backoff_s: float, attempt: int) -> float:
     base_delay = max(0.05, backoff_s * (2 ** max(0, attempt - 1)))
     jitter_ratio = max(0.0, min(0.5, TELEGRAM_SEND_RETRY_JITTER_RATIO))
@@ -8328,6 +8533,83 @@ def _minimal_menu_fallback_text(user_lang: str) -> str:
     return "Main menu" if user_lang == "en" else "Главное меню"
 
 
+async def _send_ultra_minimal_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    correlation_id: Optional[str],
+    user_lang: str,
+    action_prefix: str,
+) -> bool:
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id:
+        return False
+    ultra_text = (
+        "Menu is updating, please wait." if user_lang == "en" else "Меню обновляется, подождите."
+    )
+    telegram_timeouts = _telegram_request_timeouts()
+    result, _timed_out = await _run_telegram_request(
+        f"{action_prefix}_ultra_minimal",
+        correlation_id=correlation_id,
+        timeout_s=_resolve_start_send_timeout(START_TELEGRAM_ULTRA_TIMEOUT_SECONDS),
+        retry_attempts=1,
+        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+        request_fn=lambda: context.bot.send_message(
+            chat_id=chat_id,
+            text=ultra_text,
+            **telegram_timeouts,
+        ),
+    )
+    if result is not None:
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=update.effective_user.id if update.effective_user else None,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="SEND_ULTRA_MINIMAL_USED",
+            action_path=f"menu:{action_prefix}",
+            stage="UI_ROUTER",
+            outcome="used",
+            param={"reason": "timeout"},
+        )
+        increment_update_metric("send_message")
+        return True
+    return False
+
+
+async def _send_start_inflight_notice(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    correlation_id: Optional[str],
+    job_id: str,
+) -> None:
+    user_lang = "ru"
+    try:
+        if update.effective_user and update.effective_user.language_code == "en":
+            user_lang = "en"
+    except Exception:
+        user_lang = "ru"
+    text = (
+        f"Menu is already updating. Please wait.\n\njob_id: {job_id}"
+        if user_lang == "en"
+        else f"Меню уже обновляется. Пожалуйста, подождите.\n\njob_id: {job_id}"
+    )
+    telegram_timeouts = _telegram_request_timeouts()
+    await _run_telegram_request(
+        "start_inflight_notice",
+        correlation_id=correlation_id,
+        timeout_s=_resolve_start_send_timeout(),
+        retry_attempts=START_TELEGRAM_RETRY_ATTEMPTS,
+        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+        request_fn=lambda: context.bot.send_message(
+            chat_id=update.effective_chat.id if update.effective_chat else update.effective_user.id,
+            text=text,
+            **telegram_timeouts,
+        ),
+    )
+
+
 async def _run_telegram_request(
     action: str,
     *,
@@ -8336,10 +8618,11 @@ async def _run_telegram_request(
     retry_attempts: int,
     retry_backoff_s: float,
     request_fn: Callable[[], Awaitable[Any]],
-) -> Optional[Any]:
+) -> tuple[Optional[Any], bool]:
     from app.utils.fault_injection import maybe_inject_sleep
 
     resolved_timeout_s = _resolve_telegram_send_timeout(timeout_s)
+    timeout_seen = False
 
     for attempt in range(1, max(1, retry_attempts) + 1):
         try:
@@ -8351,7 +8634,7 @@ async def _run_telegram_request(
                 raise TimedOut("Injected Telegram connect timeout")
             result = await asyncio.wait_for(request_fn(), timeout=resolved_timeout_s)
             increment_update_metric("telegram_request_ok")
-            return result
+            return result, timeout_seen
         except RetryAfter as exc:
             delay = max(0.1, float(exc.retry_after or retry_backoff_s))
             logger.warning(
@@ -8366,6 +8649,7 @@ async def _run_telegram_request(
             increment_update_metric("telegram_request_retry_after")
             await asyncio.sleep(delay)
         except (asyncio.TimeoutError, TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            timeout_seen = True
             logger.warning(
                 "TELEGRAM_REQUEST_TIMEOUT action=%s correlation_id=%s attempt=%s error=%s error_repr=%s error_type=%s",
                 action,
@@ -8377,7 +8661,7 @@ async def _run_telegram_request(
             )
             increment_update_metric("telegram_request_timeout")
             if attempt >= retry_attempts:
-                return None
+                return None, timeout_seen
             await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
         except Exception as exc:
             logger.warning(
@@ -8391,9 +8675,9 @@ async def _run_telegram_request(
             )
             increment_update_metric("telegram_request_failed")
             if attempt >= retry_attempts:
-                return None
+                return None, timeout_seen
             await asyncio.sleep(_resolve_retry_delay(retry_backoff_s, attempt))
-    return None
+    return None, timeout_seen
 
 
 async def _show_minimal_menu(
@@ -8408,6 +8692,7 @@ async def _show_minimal_menu(
     fallback_timeout_s: Optional[float] = None,
     fallback_max_attempts: Optional[int] = None,
     action_prefix: str = "minimal_menu",
+    include_refresh: bool = False,
 ) -> dict:
     user_id = update.effective_user.id if update.effective_user else None
     user_lang = "ru"
@@ -8417,23 +8702,33 @@ async def _show_minimal_menu(
     except Exception:
         user_lang = "ru"
     chat_id = update.effective_chat.id if update.effective_chat else user_id
-    reply_markup = _build_minimal_menu_keyboard(user_lang)
+    reply_markup = _build_minimal_menu_keyboard(user_lang, include_refresh=include_refresh)
     message_id = None
     used_edit = False
     fallback_send = False
     send_ok = False
     telegram_timeouts = _telegram_request_timeouts()
-    resolved_timeout_s = _resolve_telegram_send_timeout(timeout_s)
-    resolved_attempts = TELEGRAM_SEND_RETRY_ATTEMPTS if max_attempts is None else max_attempts
+    is_start_flow = source.startswith("/start") or action_prefix.startswith("start")
+    resolved_timeout_s = (
+        _resolve_start_send_timeout(timeout_s) if is_start_flow else _resolve_telegram_send_timeout(timeout_s)
+    )
+    resolved_attempts = (
+        START_TELEGRAM_RETRY_ATTEMPTS if max_attempts is None and is_start_flow else TELEGRAM_SEND_RETRY_ATTEMPTS
+        if max_attempts is None
+        else max_attempts
+    )
     resolved_fallback_timeout_s = (
         MINIMAL_MENU_FALLBACK_TIMEOUT_SECONDS if fallback_timeout_s is None else fallback_timeout_s
     )
     resolved_fallback_attempts = (
         MINIMAL_MENU_FALLBACK_RETRY_ATTEMPTS if fallback_max_attempts is None else fallback_max_attempts
     )
+    if is_start_flow:
+        resolved_fallback_timeout_s = min(resolved_fallback_timeout_s, START_TELEGRAM_TIMEOUT_CAP_SECONDS)
+    timeout_seen = False
 
     if update.callback_query and prefer_edit:
-        edit_result = await _run_telegram_request(
+        edit_result, edit_timeout = await _run_telegram_request(
             f"{action_prefix}_edit",
             correlation_id=correlation_id,
             timeout_s=resolved_timeout_s,
@@ -8445,6 +8740,7 @@ async def _show_minimal_menu(
                 **telegram_timeouts,
             ),
         )
+        timeout_seen = timeout_seen or edit_timeout
         if edit_result is not None:
             used_edit = True
             send_ok = True
@@ -8463,7 +8759,7 @@ async def _show_minimal_menu(
             fallback_send = True
 
     if chat_id and not used_edit:
-        send_result = await _run_telegram_request(
+        send_result, send_timeout = await _run_telegram_request(
             f"{action_prefix}_send",
             correlation_id=correlation_id,
             timeout_s=resolved_timeout_s,
@@ -8476,6 +8772,7 @@ async def _show_minimal_menu(
                 **telegram_timeouts,
             ),
         )
+        timeout_seen = timeout_seen or send_timeout
         if send_result is not None:
             send_ok = True
             message_id = getattr(send_result, "message_id", None)
@@ -8494,7 +8791,7 @@ async def _show_minimal_menu(
         logger.warning("MENU_RENDER_FAIL corr_id=%s source=%s fallback=attempt", correlation_id, source)
         fallback_text = _minimal_menu_fallback_text(user_lang)
         fallback_keyboard = _build_menu_fallback_keyboard(user_lang)
-        fallback_result = await _run_telegram_request(
+        fallback_result, fallback_timeout = await _run_telegram_request(
             f"{action_prefix}_fallback",
             correlation_id=correlation_id,
             timeout_s=resolved_fallback_timeout_s,
@@ -8507,6 +8804,7 @@ async def _show_minimal_menu(
                 **telegram_timeouts,
             ),
         )
+        timeout_seen = timeout_seen or fallback_timeout
         fallback_send = True
         if fallback_result is not None:
             send_ok = True
@@ -8515,6 +8813,15 @@ async def _show_minimal_menu(
             increment_update_metric("send_message")
         else:
             logger.warning("MENU_RENDER_FAIL corr_id=%s fallback_ok=false", correlation_id)
+
+    if not send_ok and timeout_seen and source.startswith("/start"):
+        send_ok = await _send_ultra_minimal_menu(
+            update,
+            context,
+            correlation_id=correlation_id,
+            user_lang=user_lang,
+            action_prefix=action_prefix,
+        )
 
     log_structured_event(
         correlation_id=correlation_id,
@@ -8685,6 +8992,7 @@ async def _start_menu_with_fallback(
                 fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
                 fallback_max_attempts=1,
                 action_prefix="start_placeholder",
+                include_refresh=_is_storage_degraded(),
             ),
             timeout=fast_timeout_s,
         )
@@ -8707,6 +9015,7 @@ async def _start_menu_with_fallback(
                 fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
                 fallback_max_attempts=1,
                 action_prefix="start_placeholder",
+                include_refresh=_is_storage_degraded(),
             ),
             action="start_placeholder_background",
         )
@@ -8793,6 +9102,28 @@ async def show_main_menu(
     if user_id and user_id in user_sessions:
         previous_welcome_version = user_sessions[user_id].get("welcome_version")
 
+    if _is_storage_degraded():
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id,
+            action="MENU_DEPS_SKIPPED",
+            action_path=f"menu:{source}",
+            stage="UI_ROUTER",
+            outcome="read_fast",
+            param={"reason": _storage_degraded_reason},
+        )
+        return await _show_minimal_menu(
+            update,
+            context,
+            source=source,
+            correlation_id=correlation_id,
+            prefer_edit=prefer_edit,
+            include_refresh=True,
+            action_prefix="minimal_menu",
+        )
+
     try:
         if user_id:
             cached_lang = _get_menu_dep_cache(session, MAIN_MENU_LANG_CACHE_TTL_SECONDS)
@@ -8806,11 +9137,31 @@ async def show_main_menu(
                 except Exception:
                     user_lang = "ru"
                 _set_menu_dep_cache(session, user_lang=user_lang)
-                if not _is_storage_degraded():
-                    _create_background_task(
-                        _refresh_menu_language_cache(user_id, correlation_id=correlation_id),
-                        action="menu_lang_refresh",
-                    )
+
+        if user_id:
+            _schedule_menu_dependency_refresh(
+                user_id=user_id,
+                correlation_id=correlation_id,
+                menu_session=session,
+            )
+            cached_menu = _get_menu_dep_cache(session, MAIN_MENU_DEP_CACHE_TTL_SECONDS) or {}
+            missing_keys = [
+                key
+                for key in ("user_lang", "remaining_free", "is_new", "referrals_count")
+                if key not in cached_menu
+            ]
+            if missing_keys:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="MENU_DEPS_SKIPPED",
+                    action_path=f"menu:{source}",
+                    stage="UI_ROUTER",
+                    outcome="background_refresh",
+                    param={"missing": missing_keys},
+                )
 
         if user_id:
             reset_session_context(
@@ -8829,6 +9180,10 @@ async def show_main_menu(
                 update_id=update.update_id,
                 chat_id=chat_id,
             )
+
+        is_start_flow = source.startswith("/start")
+        telegram_timeouts = _telegram_request_timeouts()
+        start_timeout_seen = False
 
         async def _build_menu_payload(*, timeout: float) -> tuple[InlineKeyboardMarkup, str]:
             from app.utils.fault_injection import maybe_inject_sleep
@@ -8890,13 +9245,30 @@ async def show_main_menu(
             if not chat_id:
                 return
             try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=header_text_retry,
-                    reply_markup=reply_markup_retry,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                if is_start_flow:
+                    await _run_telegram_request(
+                        "start_menu_retry_send",
+                        correlation_id=correlation_id,
+                        timeout_s=_resolve_start_send_timeout(),
+                        retry_attempts=START_TELEGRAM_RETRY_ATTEMPTS,
+                        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                        request_fn=lambda: context.bot.send_message(
+                            chat_id=chat_id,
+                            text=header_text_retry,
+                            reply_markup=reply_markup_retry,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                            **telegram_timeouts,
+                        ),
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=header_text_retry,
+                        reply_markup=reply_markup_retry,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                 log_structured_event(
                     correlation_id=correlation_id,
                     user_id=user_id,
@@ -9035,14 +9407,35 @@ async def show_main_menu(
             and len(header_text) <= TELEGRAM_TEXT_LIMIT
         ):
             try:
-                edit_result = await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=edit_message_id,
-                    text=header_text,
-                    reply_markup=reply_markup,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                if is_start_flow:
+                    edit_result, edit_timeout = await _run_telegram_request(
+                        "start_menu_edit",
+                        correlation_id=correlation_id,
+                        timeout_s=_resolve_start_send_timeout(),
+                        retry_attempts=START_TELEGRAM_RETRY_ATTEMPTS,
+                        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                        request_fn=lambda: context.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=edit_message_id,
+                            text=header_text,
+                            reply_markup=reply_markup,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                            **telegram_timeouts,
+                        ),
+                    )
+                    start_timeout_seen = start_timeout_seen or edit_timeout
+                    if edit_result is None:
+                        raise RuntimeError("start_menu_edit_failed")
+                else:
+                    edit_result = await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=edit_message_id,
+                        text=header_text,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                 used_edit = True
                 message_id = getattr(edit_result, "message_id", None) or edit_message_id
                 log_structured_event(
@@ -9104,11 +9497,29 @@ async def show_main_menu(
         if not used_edit and update.callback_query and prefer_edit and len(header_text) <= TELEGRAM_TEXT_LIMIT:
             query = update.callback_query
             try:
-                edit_result = await query.edit_message_text(
-                    header_text,
-                    reply_markup=reply_markup,
-                    parse_mode="HTML",
-                )
+                if is_start_flow:
+                    edit_result, edit_timeout = await _run_telegram_request(
+                        "start_menu_edit_query",
+                        correlation_id=correlation_id,
+                        timeout_s=_resolve_start_send_timeout(),
+                        retry_attempts=START_TELEGRAM_RETRY_ATTEMPTS,
+                        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                        request_fn=lambda: query.edit_message_text(
+                            header_text,
+                            reply_markup=reply_markup,
+                            parse_mode="HTML",
+                            **telegram_timeouts,
+                        ),
+                    )
+                    start_timeout_seen = start_timeout_seen or edit_timeout
+                    if edit_result is None:
+                        raise RuntimeError("start_menu_edit_query_failed")
+                else:
+                    edit_result = await query.edit_message_text(
+                        header_text,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                    )
                 used_edit = True
                 message_id = getattr(edit_result, "message_id", None) or (
                     query.message.message_id if query.message else None
@@ -9169,13 +9580,33 @@ async def show_main_menu(
 
         if chat_id and not used_edit:
             try:
-                send_result = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=header_text,
-                    reply_markup=reply_markup,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                if is_start_flow:
+                    send_result, send_timeout = await _run_telegram_request(
+                        "start_menu_send",
+                        correlation_id=correlation_id,
+                        timeout_s=_resolve_start_send_timeout(),
+                        retry_attempts=START_TELEGRAM_RETRY_ATTEMPTS,
+                        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+                        request_fn=lambda: context.bot.send_message(
+                            chat_id=chat_id,
+                            text=header_text,
+                            reply_markup=reply_markup,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                            **telegram_timeouts,
+                        ),
+                    )
+                    start_timeout_seen = start_timeout_seen or send_timeout
+                    if send_result is None:
+                        raise RuntimeError("start_menu_send_failed")
+                else:
+                    send_result = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=header_text,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                 message_id = getattr(send_result, "message_id", None)
                 log_structured_event(
                     correlation_id=correlation_id,
@@ -9219,12 +9650,33 @@ async def show_main_menu(
                     exc,
                     exc_info=True,
                 )
+                if is_start_flow and start_timeout_seen:
+                    ultra_ok = await _send_ultra_minimal_menu(
+                        update,
+                        context,
+                        correlation_id=correlation_id,
+                        user_lang=user_lang,
+                        action_prefix="start_menu",
+                    )
+                    if ultra_ok:
+                        return {
+                            "correlation_id": correlation_id,
+                            "user_id": user_id,
+                            "chat_id": chat_id,
+                            "update_id": update.update_id,
+                            "ui_context_before": ui_context_before,
+                            "ui_context_after": UI_CONTEXT_MAIN_MENU,
+                            "used_edit": False,
+                            "fallback_send": False,
+                            "message_id": None,
+                        }
                 result = await _show_minimal_menu(
                     update,
                     context,
                     source=source,
                     correlation_id=correlation_id,
                     prefer_edit=prefer_edit,
+                    include_refresh=_is_storage_degraded(),
                 )
                 return result
 
@@ -9277,6 +9729,7 @@ async def show_main_menu(
             source=source,
             correlation_id=correlation_id,
             prefer_edit=prefer_edit,
+            include_refresh=_is_storage_degraded(),
         )
         return result
     finally:
@@ -9287,6 +9740,7 @@ async def show_main_menu(
                 source=source,
                 correlation_id=correlation_id,
                 prefer_edit=prefer_edit,
+                include_refresh=_is_storage_degraded(),
             )
         _safe_menu_renderer.record(correlation_id, update.update_id, result)
 
@@ -9468,22 +9922,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     correlation_id: Optional[str] = None
     user_id: Optional[int] = None
     chat_id: Optional[int] = None
+    start_job_id: Optional[str] = None
+    start_job_claimed = False
     partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
     try:
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
         try:
-            _create_background_task(
-                upsert_user_registry_entry(update.effective_user),
-                action="user_registry_upsert",
-            )
-        except Exception as exc:
-            logger.error("❌ Failed to update user registry in /start: %s", exc, exc_info=True)
-        try:
             correlation_id = ensure_correlation_id(update, context)
         except Exception as exc:
             correlation_id = uuid.uuid4().hex
             logger.error("❌ Failed to build correlation_id in /start: %s", exc, exc_info=True)
+        try:
+            _create_background_task(
+                upsert_user_registry_entry(update.effective_user, correlation_id=correlation_id),
+                action="user_registry_upsert",
+            )
+        except Exception as exc:
+            logger.error("❌ Failed to queue user registry update in /start: %s", exc, exc_info=True)
+        if user_id:
+            start_job_claimed, start_job_id = _claim_start_inflight_job(user_id)
+            if not start_job_claimed:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    update_id=update.update_id,
+                    action="START_DEDUP_HIT",
+                    action_path="command:/start",
+                    stage="HANDLER",
+                    outcome="coalesced",
+                    job_id=start_job_id,
+                    param={"reason": "inflight_guard"},
+                )
+                await _send_start_inflight_notice(
+                    update,
+                    context,
+                    correlation_id=correlation_id,
+                    job_id=start_job_id or "unknown",
+                )
+                return
         try:
             logger.info(
                 "START_HANDLER_ENTER correlation_id=%s user_id=%s chat_id=%s",
@@ -9500,6 +9978,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action_path="command:/start",
                 stage="HANDLER",
                 outcome="enter",
+                job_id=start_job_id,
                 param={"duration_ms": 0},
             )
             log_structured_event(
@@ -9510,6 +9989,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action="COMMAND_START",
                 action_path="command:/start",
                 outcome="received",
+                job_id=start_job_id,
             )
         except Exception as exc:
             logger.error("❌ /start structured log failed: %s", exc, exc_info=True)
@@ -9698,6 +10178,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 source="/start",
                 correlation_id=correlation_id,
                 prefer_edit=False,
+                include_refresh=_is_storage_degraded(),
             )
     except Exception as exc:
         fallback_correlation_id = correlation_id or uuid.uuid4().hex
@@ -9736,12 +10217,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 source="/start",
                 correlation_id=fallback_correlation_id,
                 prefer_edit=False,
+                include_refresh=_is_storage_degraded(),
             )
         except Exception:
             logger.debug("start minimal menu fallback failed", exc_info=True)
     finally:
         increment_update_metric("handler_exit")
         _log_handler_latency("start", start_ts, update)
+        handler_total_ms = int((time.monotonic() - start_ts) * 1000)
+        if correlation_id:
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                update_id=update.update_id,
+                action="HANDLER_TOTAL",
+                action_path="command:/start",
+                stage="HANDLER",
+                outcome="done",
+                param={"handler_total_ms": handler_total_ms},
+            )
+        if user_id and start_job_claimed:
+            _release_start_inflight_job(user_id, start_job_id)
 
 
 async def reset_wizard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -26636,6 +27133,14 @@ async def create_webhook_handler():
             return web.Response(status=500, text="Internal error")
         finally:
             duration_ms = int((time.monotonic() - handler_start) * 1000)
+            log_structured_event(
+                correlation_id=correlation_id,
+                action="WEBHOOK_ACK",
+                action_path="webhook:handler",
+                stage="WEBHOOK",
+                outcome="ok",
+                param={"webhook_ack_ms": duration_ms},
+            )
             if duration_ms > ack_max_ms:
                 logger.warning("WEBHOOK_ACK_SLOW correlation_id=%s duration_ms=%s", correlation_id, duration_ms)
     
