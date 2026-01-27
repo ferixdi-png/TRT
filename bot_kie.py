@@ -1485,7 +1485,7 @@ def get_visible_models_by_generation_type_cached(gen_type: str) -> tuple[List[Di
 
 
 GEN_TYPE_MENU_WARMUP_DEGRADED = False
-GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "2.0"))
+GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_TIMEOUT_SECONDS", "4.0"))
 GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_CACHE_TTL_SECONDS", "300.0"))
 GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS = int(os.getenv("GEN_TYPE_MENU_WARMUP_RETRY_ATTEMPTS", "2"))
 GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS = float(os.getenv("GEN_TYPE_MENU_WARMUP_RETRY_DELAY_SECONDS", "0.3"))
@@ -1951,6 +1951,7 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
     _BOOT_WARMUP_STATE["cancelled"] = False
     _BOOT_WARMUP_STATE["watchdog_stopped"] = False
     _BOOT_WARMUP_STATE["budget_exceeded"] = False
+    await asyncio.sleep(0)
     log_structured_event(
         correlation_id=correlation_id,
         action="BOOT_WARMUP",
@@ -27045,22 +27046,26 @@ def _build_webhook_how_to_fix(expected_url: str) -> str:
     )
 
 
-async def _fetch_webhook_info(bot, *, timeout_s: float, label: str):
+async def _fetch_webhook_info(bot, *, timeout_s: float) -> Optional[object]:
     try:
         return await bot.get_webhook_info(connect_timeout=timeout_s, read_timeout=timeout_s)
-    except Exception as exc:
-        logger.warning("WEBHOOK_INFO_CHECK_FAILED label=%s error=%s", label, exc)
+    except Exception:
         return None
 
 
-async def _log_webhook_info(bot, expected_url: str, *, label: str) -> Optional[str]:
+async def _log_webhook_info(
+    bot,
+    expected_url: str,
+    *,
+    label: str,
+    failure_level: int = logging.WARNING,
+) -> Optional[str]:
     webhook_info = await _fetch_webhook_info(
         bot,
         timeout_s=_current_telegram_request_timeout_seconds(),
-        label=label,
     )
     if webhook_info is None:
-        logger.warning("WEBHOOK_INFO_MISSING label=%s expected_url=%s", label, expected_url)
+        logger.log(failure_level, "WEBHOOK_INFO_MISSING label=%s expected_url=%s", label, expected_url)
         return None
     current_url = getattr(webhook_info, "url", "") or ""
     pending_count = getattr(webhook_info, "pending_update_count", None)
@@ -27273,10 +27278,26 @@ async def _run_webhook_info_probe(webhook_url: str, *, label: str) -> None:
             write_timeout=request_timeout,
             pool_timeout=request_timeout,
         )
+        warn_after = _read_int_env("WEBHOOK_INFO_WARN_AFTER", 3, min_value=1, max_value=10)
+        max_attempts = _read_int_env("WEBHOOK_INFO_MAX_ATTEMPTS", 5, min_value=1, max_value=20)
+        backoff_base = _read_float_env("WEBHOOK_INFO_BACKOFF_BASE_SECONDS", 0.4, min_value=0.1, max_value=5.0)
+        backoff_cap = _read_float_env("WEBHOOK_INFO_BACKOFF_CAP_SECONDS", 3.0, min_value=0.5, max_value=10.0)
         async with Bot(token=BOT_TOKEN, request=request) as temp_bot:
-            await _log_webhook_info(temp_bot, webhook_url, label=label)
+            for attempt in range(1, max_attempts + 1):
+                failure_level = logging.INFO if attempt <= warn_after else logging.WARNING
+                current_url = await _log_webhook_info(
+                    temp_bot,
+                    webhook_url,
+                    label=label,
+                    failure_level=failure_level,
+                )
+                if current_url is not None:
+                    return
+                if attempt < max_attempts:
+                    backoff_s = min(backoff_cap, backoff_base * (2 ** (attempt - 1)))
+                    await asyncio.sleep(backoff_s)
     except Exception as exc:
-        logger.warning("WEBHOOK_INFO_PROBE_FAILED label=%s error=%s", label, exc)
+        logger.info("WEBHOOK_INFO_PROBE_FAILED label=%s error=%s", label, exc)
 
 
 def _schedule_webhook_setter(webhook_url: str) -> None:
@@ -27921,7 +27942,10 @@ async def _run_webhook_initialization(
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
     _schedule_early_update_drain(application, correlation_id="BOOT")
-    await _log_webhook_info(application.bot, webhook_url, label="startup")
+    _create_background_task(
+        _run_webhook_info_probe(webhook_url, label="startup"),
+        action="webhook_info_probe",
+    )
     if not _auto_set_webhook_enabled() and _require_webhook_registered():
         await _fail_fast_if_webhook_missing(application.bot, webhook_url)
     _schedule_webhook_setter(webhook_url)

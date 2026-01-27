@@ -15,6 +15,7 @@ import logging
 import math
 import os
 import time
+import uuid
 from typing import Awaitable, Callable, Optional
 
 from aiohttp import web
@@ -166,18 +167,42 @@ def build_webhook_handler(
             elapsed_ms=deadline_s * 1000,
         )
 
-    def _schedule_task(coro: Awaitable[None], *, correlation_id: str) -> None:
-        task = asyncio.create_task(coro)
-
+    def _attach_task_guard(task: asyncio.Task, *, correlation_id: str, stage: str) -> None:
         def _on_done(done_task: asyncio.Task) -> None:
             try:
                 done_task.result()
             except asyncio.CancelledError:
-                logger.info("WEBHOOK correlation_id=%s background_task_cancelled=true", correlation_id)
-            except Exception:
-                logger.exception("WEBHOOK correlation_id=%s background_task_failed=true", correlation_id)
+                logger.info("WEBHOOK correlation_id=%s background_task_cancelled=true stage=%s", correlation_id, stage)
+            except Exception as exc:
+                error_id = f"webhook-bg-{uuid.uuid4().hex[:8]}"
+                logger.exception(
+                    "WEBHOOK correlation_id=%s background_task_failed=true stage=%s error_id=%s",
+                    correlation_id,
+                    stage,
+                    error_id,
+                )
+                log_critical_event(
+                    correlation_id=correlation_id,
+                    update_id=None,
+                    stage="WEBHOOK",
+                    latency_ms=None,
+                    retry_after=None,
+                    timeout_s=process_timeout_seconds,
+                    attempt=None,
+                    error_code="WEBHOOK_BACKGROUND_EXCEPTION",
+                    error_id=error_id,
+                    exception_class=type(exc).__name__,
+                    where=stage,
+                    fix_hint="Ensure webhook background tasks are guarded and non-blocking.",
+                    retryable=False,
+                    upstream=None,
+                )
 
         task.add_done_callback(_on_done)
+
+    def _schedule_task(coro: Awaitable[None], *, correlation_id: str, stage: str) -> None:
+        task = asyncio.create_task(coro)
+        _attach_task_guard(task, correlation_id=correlation_id, stage=stage)
 
     async def _process_update_async(
         update: Update,
@@ -356,6 +381,206 @@ def build_webhook_handler(
             request_id=request_id,
         )
 
+    async def _process_raw_update(
+        raw_body: bytes,
+        *,
+        correlation_id: str,
+        client_ip: str,
+        route: str,
+        request_id: Optional[str],
+    ) -> None:
+        process_started = time.monotonic()
+        update_id: Optional[int] = None
+        payload: Optional[dict] = None
+        try:
+            if request_id and request_deduper.seen(request_id):
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    request_id=request_id,
+                    action="WEBHOOK_DEDUP",
+                    action_path="webhook:request_id",
+                    outcome="deduped",
+                    abuse_id="duplicate_request_id",
+                    param={"client_ip": client_ip},
+                    route=route,
+                )
+                return
+            if not raw_body:
+                logger.warning("WEBHOOK correlation_id=%s payload_empty=true", correlation_id)
+                return
+            if len(raw_body) > max_payload_bytes:
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    request_id=request_id,
+                    action="WEBHOOK_ABUSE",
+                    action_path="webhook:payload_too_large",
+                    outcome="rejected",
+                    error_id="WEBHOOK_PAYLOAD_TOO_LARGE",
+                    abuse_id="payload_oversize",
+                    param={"client_ip": client_ip, "content_length": len(raw_body)},
+                    route=route,
+                )
+                return
+
+            payload = json.loads(raw_body)
+            if not isinstance(payload, dict):
+                logger.warning("WEBHOOK correlation_id=%s payload_not_dict=true", correlation_id)
+                return
+            update_id = payload.get("update_id")
+        except Exception as exc:
+            logger.warning("WEBHOOK correlation_id=%s payload_parse_failed=true error=%s", correlation_id, exc)
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                update_id=update_id,
+                action="WEBHOOK_PARSE_FAILED",
+                action_path="webhook:parse",
+                stage="WEBHOOK",
+                outcome="failed",
+                error_id="WEBHOOK_PARSE_FAILED",
+                param={"error": str(exc)[:200]},
+                route=route,
+            )
+            return
+
+        if not _app_ready_event.is_set() or not _is_application_initialized(application):
+            increment_update_metric("webhook_update_in")
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                update_id=update_id,
+                action="WEBHOOK_EARLY_UPDATE",
+                action_path="webhook:update",
+                stage="WEBHOOK",
+                outcome="deferred",
+                route=route,
+                param={"retry_after": early_update_retry_after},
+            )
+            return
+
+        update = Update.de_json(payload, application.bot)
+        update_id = getattr(update, "update_id", None)
+        if _is_duplicate(update_id):
+            increment_update_metric("webhook_update_in")
+            log_structured_event(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                user_id=update.effective_user.id if update.effective_user else None,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update_id,
+                action="WEBHOOK_UPDATE_IN",
+                action_path="webhook:update",
+                stage="WEBHOOK",
+                outcome="deduped",
+                update_type=_resolve_update_type(update),
+                route=route,
+                param={"dedup_hit": True},
+            )
+            logger.info("WEBHOOK correlation_id=%s update_duplicate=true", correlation_id)
+            return
+
+        increment_update_metric("webhook_update_in")
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            user_id=update.effective_user.id if update.effective_user else None,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update_id,
+            action="WEBHOOK_UPDATE_IN",
+            action_path="webhook:update",
+            stage="WEBHOOK",
+            outcome="received",
+            update_type=_resolve_update_type(update),
+            route=route,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            user_id=update.effective_user.id if update.effective_user else None,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+            update_id=update_id,
+            action="HANDLER_START",
+            action_path="webhook:handler",
+            stage="HANDLER",
+            outcome="start",
+            update_type=_resolve_update_type(update),
+            route=route,
+        )
+        await _process_update_with_semaphore(
+            update,
+            correlation_id=correlation_id,
+            client_ip=client_ip,
+            route=route,
+            request_id=request_id,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            update_id=update_id,
+            action="WEBHOOK_PROCESS_ENQUEUE",
+            action_path="webhook:background",
+            stage="WEBHOOK",
+            outcome="ok",
+            duration_ms=int((time.monotonic() - process_started) * 1000),
+            route=route,
+        )
+
+    async def _process_raw_update_guarded(
+        raw_body: bytes,
+        *,
+        correlation_id: str,
+        client_ip: str,
+        route: str,
+        request_id: Optional[str],
+    ) -> None:
+        try:
+            await asyncio.wait_for(
+                _process_raw_update(
+                    raw_body,
+                    correlation_id=correlation_id,
+                    client_ip=client_ip,
+                    route=route,
+                    request_id=request_id,
+                ),
+                timeout=process_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            log_critical_event(
+                correlation_id=correlation_id,
+                update_id=None,
+                stage="WEBHOOK",
+                latency_ms=None,
+                retry_after=None,
+                timeout_s=process_timeout_seconds,
+                attempt=None,
+                error_code="WEBHOOK_PROCESS_TIMEOUT",
+                error_id="WEBHOOK_PROCESS_TIMEOUT",
+                exception_class="TimeoutError",
+                where="process_raw_update",
+                fix_hint="Move heavy parsing or IO off the webhook background path.",
+                retryable=True,
+                upstream=None,
+                elapsed_ms=process_timeout_seconds * 1000,
+            )
+        except Exception as exc:
+            logger.exception("WEBHOOK correlation_id=%s process_raw_failed=true error=%s", correlation_id, exc)
+            log_critical_event(
+                correlation_id=correlation_id,
+                update_id=None,
+                stage="WEBHOOK",
+                latency_ms=None,
+                retry_after=None,
+                timeout_s=process_timeout_seconds,
+                attempt=None,
+                error_code="WEBHOOK_PROCESS_EXCEPTION",
+                error_id="WEBHOOK_PROCESS_EXCEPTION",
+                exception_class=type(exc).__name__,
+                where="process_raw_update",
+                fix_hint="Inspect webhook background processing logic.",
+                retryable=False,
+                upstream=None,
+            )
+
     async def _handler(request: web.Request) -> web.StreamResponse:
         global _early_update_count
         handler_start = time.monotonic()
@@ -375,151 +600,21 @@ def build_webhook_handler(
             route=request.path,
             param={"ack_deadline_ms": ack_deadline_ms},
         )
+        raw_body: bytes = b""
         try:
-            if not _app_ready_event.is_set() or not _is_application_initialized(application):
-                _early_update_count += 1
-                update_id = None
-                try:
-                    payload = await request.json()
-                    if isinstance(payload, dict):
-                        update_id = payload.get("update_id")
-                except Exception:
-                    update_id = None
-                if _should_log_early_update(time.monotonic(), early_update_log_throttle_seconds):
-                    logger.info(
-                        "action=WEBHOOK_EARLY_UPDATE correlation_id=%s update_id=%s ready=false "
-                        "outcome=defer early_update_count=%s retry_after=%s",
-                        correlation_id,
-                        update_id,
-                        _early_update_count,
-                        early_update_retry_after,
-                    )
-                return web.Response(status=204, headers={"Retry-After": str(early_update_retry_after)})
-
+            raw_body = await request.read()
             logger.info("WEBHOOK correlation_id=%s update_received=true", correlation_id)
-
-            content_length = request.content_length
-            if content_length is not None and content_length > max_payload_bytes:
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    request_id=request_id,
-                    action="WEBHOOK_ABUSE",
-                    action_path="webhook:payload_too_large",
-                    outcome="rejected",
-                    error_id="WEBHOOK_PAYLOAD_TOO_LARGE",
-                    abuse_id="payload_oversize",
-                    param={"client_ip": client_ip, "content_length": content_length},
-                    route=request.path,
-                )
-                return web.json_response({"ok": False, "error": "payload_too_large"}, status=413)
-
-            if ip_rate_limiter is not None:
-                allowed, retry_after = ip_rate_limiter.check(client_ip)
-                if not allowed:
-                    retry_after_seconds = max(1, int(math.ceil(retry_after)))
-                    log_structured_event(
-                        correlation_id=correlation_id,
-                        request_id=request_id,
-                        action="WEBHOOK_ABUSE",
-                        action_path="webhook:rate_limit_ip",
-                        outcome="throttled",
-                        error_id="WEBHOOK_RATE_LIMIT",
-                        abuse_id="rate_limit_ip",
-                        param={"client_ip": client_ip, "retry_after": retry_after_seconds},
-                        route=request.path,
-                    )
-                    return web.json_response(
-                        {"ok": False, "retry_after": retry_after_seconds},
-                        status=429,
-                        headers={"Retry-After": str(retry_after_seconds)},
-                    )
-
-            if request_id and request_deduper.seen(request_id):
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    request_id=request_id,
-                    action="WEBHOOK_DEDUP",
-                    action_path="webhook:request_id",
-                    outcome="deduped",
-                    abuse_id="duplicate_request_id",
-                    param={"client_ip": client_ip},
-                    route=request.path,
-                )
-                return web.json_response({"ok": True}, status=200)
-
-            try:
-                payload = await request.json()
-            except Exception:
-                logger.warning("WEBHOOK correlation_id=%s payload_parse_failed=true", correlation_id)
-                return web.json_response({"ok": False}, status=400)
-
-            update = Update.de_json(payload, application.bot)
-            update_id = getattr(update, "update_id", None)
-            if _is_duplicate(update_id):
-                increment_update_metric("webhook_update_in")
-                log_structured_event(
-                    correlation_id=correlation_id,
-                    request_id=request_id,
-                    user_id=update.effective_user.id if update.effective_user else None,
-                    chat_id=update.effective_chat.id if update.effective_chat else None,
-                    update_id=update_id,
-                    action="WEBHOOK_UPDATE_IN",
-                    action_path="webhook:update",
-                    stage="WEBHOOK",
-                    outcome="deduped",
-                    update_type=_resolve_update_type(update),
-                    route=request.path,
-                )
-                logger.info("WEBHOOK correlation_id=%s update_duplicate=true", correlation_id)
-                return web.json_response({"ok": True}, status=200)
-            increment_update_metric("webhook_update_in")
-            log_structured_event(
-                correlation_id=correlation_id,
-                request_id=request_id,
-                user_id=update.effective_user.id if update.effective_user else None,
-                chat_id=update.effective_chat.id if update.effective_chat else None,
-                update_id=update_id,
-                action="WEBHOOK_UPDATE_IN",
-                action_path="webhook:update",
-                stage="WEBHOOK",
-                outcome="received",
-                update_type=_resolve_update_type(update),
-                route=request.path,
-            )
-            log_structured_event(
-                correlation_id=correlation_id,
-                request_id=request_id,
-                user_id=update.effective_user.id if update.effective_user else None,
-                chat_id=update.effective_chat.id if update.effective_chat else None,
-                update_id=update_id,
-                action="HANDLER_START",
-                action_path="webhook:handler",
-                stage="HANDLER",
-                outcome="start",
-                update_type=_resolve_update_type(update),
-                route=request.path,
-            )
-            if ack_in_background:
-                logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
-                _schedule_task(
-                    _process_update_with_semaphore(
-                        update,
-                        correlation_id=correlation_id,
-                        client_ip=client_ip,
-                        route=request.path,
-                        request_id=request_id,
-                    ),
-                    correlation_id=correlation_id,
-                )
-            else:
-                await _process_update_with_semaphore(
-                    update,
+            _schedule_task(
+                _process_raw_update_guarded(
+                    raw_body,
                     correlation_id=correlation_id,
                     client_ip=client_ip,
                     route=request.path,
                     request_id=request_id,
-                )
-            return web.json_response({"ok": True}, status=200)
+                ),
+                correlation_id=correlation_id,
+                stage="process_raw_update",
+            )
         except Exception as exc:
             logger.exception("WEBHOOK correlation_id=%s handler_failed=true error=%s", correlation_id, exc)
             log_critical_event(
@@ -539,41 +634,39 @@ def build_webhook_handler(
                 upstream="telegram",
                 elapsed_ms=(time.monotonic() - handler_start) * 1000,
             )
-            return web.json_response({"ok": False, "error": "handler_failed"}, status=500)
-        finally:
-            duration_ms = int((time.monotonic() - handler_start) * 1000)
-            try:
-                loop = asyncio.get_running_loop()
-                event_loop_lag_ms = max(0.0, (time.monotonic() - loop.time()) * 1000)
-            except RuntimeError:
-                event_loop_lag_ms = None
-            log_structured_event(
-                correlation_id=correlation_id,
-                request_id=request_id,
-                update_id=update_id,
-                action="WEBHOOK_ACK",
-                action_path="webhook:handler",
-                stage="WEBHOOK",
-                outcome="ok",
-                ack_ms=duration_ms,
-                handler_total_ms=duration_ms,
-                route=request.path,
-            )
-            log_structured_event(
-                correlation_id=correlation_id,
-                request_id=request_id,
-                update_id=update_id,
-                action="WEBHOOK_TIMING_PROFILE",
-                action_path="webhook:timing",
-                stage="WEBHOOK",
-                outcome="ok",
-                ack_ms=duration_ms,
-                handler_total_ms=duration_ms,
-                event_loop_lag_ms=event_loop_lag_ms,
-                route=request.path,
-            )
-            if duration_ms > ack_max_ms:
-                logger.warning("WEBHOOK_ACK_SLOW correlation_id=%s duration_ms=%s", correlation_id, duration_ms)
+
+        duration_ms = int((time.monotonic() - handler_start) * 1000)
+        try:
+            loop = asyncio.get_running_loop()
+            event_loop_lag_ms = max(0.0, (time.monotonic() - loop.time()) * 1000)
+        except RuntimeError:
+            event_loop_lag_ms = None
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            update_id=update_id,
+            action="WEBHOOK_ACK",
+            action_path="webhook:handler",
+            stage="WEBHOOK",
+            outcome="ok",
+            ack_ms=duration_ms,
+            route=request.path,
+        )
+        log_structured_event(
+            correlation_id=correlation_id,
+            request_id=request_id,
+            update_id=update_id,
+            action="WEBHOOK_TIMING_PROFILE",
+            action_path="webhook:timing",
+            stage="WEBHOOK",
+            outcome="ok",
+            ack_ms=duration_ms,
+            event_loop_lag_ms=event_loop_lag_ms,
+            route=request.path,
+        )
+        if duration_ms > ack_max_ms:
+            logger.warning("WEBHOOK_ACK_SLOW correlation_id=%s duration_ms=%s", correlation_id, duration_ms)
+        return web.Response(status=200)
 
     _handler_ready = True
     return _handler
