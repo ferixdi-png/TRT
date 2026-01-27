@@ -1400,7 +1400,7 @@ def _get_visible_model_ids() -> Set[str]:
         from app.ux.model_visibility import is_model_visible
 
         cached_models = get_models_cached_only()
-        models = cached_models if cached_models is not None else get_models_sync()
+        models = cached_models if cached_models is not None else get_models_static_only()
         _VISIBLE_MODEL_IDS_CACHE = {
             model_id
             for model in models
