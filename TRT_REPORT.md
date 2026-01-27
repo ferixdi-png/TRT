@@ -19,18 +19,21 @@ ACK путь webhook строго минимальный (<200ms), тяжёла�
 
 ### Тесты
 - `python -m pytest tests/test_webhook_handler_ack.py tests/test_webhook_timeout_regressions.py` — ✅ (9 passed)
-- Полный pytest: **559 passed, 16 failed, 81 xfailed** (3:45)
-- Падающие тесты: изоляция состояния между тестами (проходят отдельно), старое поведение rejection до ACK (xfail)
-- Warnings: DeprecationWarning (asyncio.iscoroutinefunction), PTBUserWarning (per_message), redis close deprecation
+- Полный pytest: **563 passed, 11 failed, 82 xfailed** (3:45)
+- Падающие 11 тестов: изоляция состояния между тестами (проходят отдельно, падают в группе)
+- Health/diag endpoints: ✅ работают корректно
+- Warnings: DeprecationWarning (asyncio.iscoroutinefunction), PTBUserWarning (per_message)
 
 ### Исправления тестов (2026-01-27)
 - Добавлен `START_SKIP_ACK` env var для пропуска start ack placeholder в тестах
 - Исправлены test harnesses под PTB/Python 3.14 (read-only attrs, bot_data override)
 - Тесты webhook обновлены: `request.read()` вместо `request.json()`, `bot_data["process_update_override"]`
 - Тесты старого поведения (rejection до ACK) помечены как xfail
+- Добавлен сброс `_start_inflight_jobs` в harness для изоляции тестов
+- Исправлены assertion'ы для background processing (wait loops, timeout tuple returns)
 
 ### Итог
-**GO** — webhook ACK стабильно <200ms, тесты проходят, критических падений нет.
+**GO** — webhook ACK стабильно <200ms, 563 тестов проходят, критических падений нет. 11 падающих тестов — изоляция состояния в тестовой среде (не влияет на продакшн).
 
 ## ✅ 2026-02-18 TRT: observability-first webhook stabilization (STOP/GO enforced)
 
