@@ -12,7 +12,9 @@ def _build_request(payload):
     request.headers = {"X-Request-ID": "corr-webhook-dedup"}
     request.method = "POST"
     request.path = "/webhook"
-    request.content_length = len(json.dumps(payload))
+    raw_body = json.dumps(payload).encode("utf-8")
+    request.content_length = len(raw_body)
+    request.read = AsyncMock(return_value=raw_body)
     request.json = AsyncMock(return_value=payload)
     return request
 
@@ -22,7 +24,7 @@ async def test_webhook_handler_deduplicates_update(harness, monkeypatch):
     monkeypatch.setattr(main_render, "_handler_ready", True)
 
     process_update = AsyncMock()
-    object.__setattr__(harness.application, "process_update", process_update)
+    harness.application.bot_data["process_update_override"] = process_update
     handler = main_render.build_webhook_handler(harness.application, MagicMock())
 
     payload = {
