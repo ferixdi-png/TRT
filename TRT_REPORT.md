@@ -747,3 +747,19 @@ Critical-пункты отсутствуют (см. таблицу рисков)
 
 ### STOP/GO
 * **STOP** — нужен финальный прогон `pytest -q` + проверка boot/webhook на отсутствие циклов таймаутов.
+
+## ✅ 2026-02-05 — Webhook setter hard deadline + авто-выключение на Render
+### Root cause (short)
+* `WEBHOOK_SETTER_FAIL` показывал `timeout_s=2.8`, но `duration_ms` доходил до 7–9с, потому что `ensure_webhook_mode` вызывался без внешнего hard deadline, а HTTPXRequest не имел общего total-timeout — запросы Telegram могли зависать дольше лимита.  
+* Авто-сеттер всегда запускался в webhook режиме, даже на Render, что усиливало повторные таймауты при сетевых сбоях.
+
+### Исправления
+* В `_run_webhook_setter_cycle` добавлен единый `asyncio.wait_for` на весь цикл (probe+set) и настройка `HTTPXRequest` с жесткими таймаутами по фазам.  
+* Добавлен флаг `AUTO_SET_WEBHOOK` (по умолчанию `false` на Render) с логом `SKIPPED_AUTO_SET`.  
+* Уменьшена агрессивность быстрых retry: по умолчанию только редкая проверка каждые 10–30 минут через `WEBHOOK_SET_LONG_SLEEP_SECONDS`.
+
+### Тесты
+* `pytest tests/test_webhook_setter_warmup.py::test_webhook_setter_hard_timeout tests/test_webhook_setter_warmup.py::test_webhook_setter_already_set_skips`
+
+### STOP/GO
+* **STOP** — требуется 5+ минут лог-наблюдения после деплоя (ожидаются только `SKIPPED_AUTO_SET`/`ALREADY_SET`, без `WEBHOOK_SETTER_FAIL`).
