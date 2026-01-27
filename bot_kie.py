@@ -27567,7 +27567,7 @@ async def create_webhook_handler():
         )
 
     async def _handle_webhook_payload(
-        data: Dict[str, Any],
+        payload: Any,
         *,
         correlation_id: str,
         client_ip: str,
@@ -27576,10 +27576,12 @@ async def create_webhook_handler():
     ) -> None:
         update_id = None
         try:
-            if not isinstance(data, dict):
-                logger.warning("[WEBHOOK] %s payload_type_invalid type=%s", correlation_id, type(data).__name__)
+            if isinstance(payload, (bytes, bytearray)):
+                payload = json.loads(payload.decode("utf-8"))
+            if not isinstance(payload, dict):
+                logger.warning("[WEBHOOK] %s payload_type_invalid type=%s", correlation_id, type(payload).__name__)
                 return
-            update = Update.de_json(data, _application_for_webhook.bot)
+            update = Update.de_json(payload, _application_for_webhook.bot)
             if update:
                 update_id = getattr(update, "update_id", None)
                 user_id = update.effective_user.id if update.effective_user else None
@@ -27828,12 +27830,18 @@ async def create_webhook_handler():
 
             try:
                 raw_body = await request.read()
+            except Exception as exc:
+                logger.warning(f"[WEBHOOK] {correlation_id} read_error={exc}")
+                return _ack_response(status=400, text="Invalid request body")
+            try:
                 data = json.loads(raw_body.decode("utf-8"))
+                if isinstance(data, dict):
+                    update_id = data.get("update_id")
             except Exception as exc:
                 logger.warning(f"[WEBHOOK] {correlation_id} parse_error={exc}")
-                return _ack_response(status=400, text="Invalid JSON")
-            if isinstance(data, dict):
-                update_id = data.get("update_id")
+                if not ack_in_background:
+                    return _ack_response(status=400, text="Invalid JSON")
+                data = raw_body
 
             # Process update
             try:

@@ -357,7 +357,7 @@ def build_webhook_handler(
         )
 
     async def _handle_webhook_payload(
-        payload: Dict[str, Any],
+        payload: Any,
         *,
         correlation_id: str,
         client_ip: str,
@@ -366,6 +366,8 @@ def build_webhook_handler(
     ) -> None:
         update_id = None
         try:
+            if isinstance(payload, (bytes, bytearray)):
+                payload = json.loads(payload.decode("utf-8"))
             if not isinstance(payload, dict):
                 logger.warning(
                     "WEBHOOK correlation_id=%s payload_type_invalid type=%s",
@@ -552,12 +554,18 @@ def build_webhook_handler(
 
             try:
                 raw_body = await request.read()
+            except Exception:
+                logger.warning("WEBHOOK correlation_id=%s payload_read_failed=true", correlation_id)
+                return _ack_response(web.json_response({"ok": False}, status=400))
+            try:
                 payload = json.loads(raw_body.decode("utf-8"))
+                if isinstance(payload, dict):
+                    update_id = payload.get("update_id")
             except Exception:
                 logger.warning("WEBHOOK correlation_id=%s payload_parse_failed=true", correlation_id)
-                return _ack_response(web.json_response({"ok": False}, status=400))
-            if isinstance(payload, dict):
-                update_id = payload.get("update_id")
+                if not ack_in_background:
+                    return _ack_response(web.json_response({"ok": False}, status=400))
+                payload = raw_body
 
             if ack_in_background:
                 logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
