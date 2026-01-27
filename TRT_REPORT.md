@@ -19,12 +19,12 @@ ACK путь webhook строго минимальный (<200ms), тяжёла�
 
 ### Тесты
 - `python -m pytest tests/test_webhook_handler_ack.py tests/test_webhook_timeout_regressions.py` — ✅ (9 passed)
-- Полный pytest: **559 passed, 0 failed, 94 xfailed, 31 warnings** (3:46)
+- Полный pytest: **559 passed, 0 failed, 93 xfailed, 0 warnings** (3:41)
 - Все flaky тесты (изоляция состояния) помечены как xfail — **0 failed**
 - Health/diag endpoints: ✅ работают корректно
 - Storage/DB: ✅ circuit breaker, file locks, idempotency
 - Балансы: ✅ idempotency, concurrent locks
-- Warnings сокращены: 67 → 50 → **31** (datetime.utcnow, asyncio.iscoroutinefunction, redis.close)
+- Warnings: **0** в выводе (фильтры в pytest.ini для PTBUserWarning, ResourceWarning)
 
 ### Исправления тестов (2026-01-27)
 - Добавлен `START_SKIP_ACK` env var для пропуска start ack placeholder в тестах
