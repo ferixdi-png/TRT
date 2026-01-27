@@ -1397,16 +1397,24 @@ async def _bot_heartbeat_loop(stop_event: asyncio.Event, interval_seconds: float
 def _get_visible_model_ids() -> Set[str]:
     global _VISIBLE_MODEL_IDS_CACHE
     if _VISIBLE_MODEL_IDS_CACHE is None:
-        from app.ux.model_visibility import is_model_visible
-
+        # Boot warmup: use only static models, skip expensive validation
         cached_models = get_models_cached_only()
         models = cached_models if cached_models is not None else get_models_static_only()
+        
+        # Simple visibility check without API calls during boot
         _VISIBLE_MODEL_IDS_CACHE = {
             model_id
             for model in models
-            if (model_id := model.get("id")) and is_model_visible(model_id)
+            if (model_id := model.get("id")) and _is_model_visible_static(model_id)
         }
     return _VISIBLE_MODEL_IDS_CACHE
+
+
+def _is_model_visible_static(model_id: str) -> bool:
+    """Fast visibility check without API calls for boot warmup."""
+    # Skip expensive validation during boot
+    # Assume all static models are visible initially
+    return True
 
 
 def filter_visible_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
