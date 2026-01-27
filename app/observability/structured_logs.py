@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
+from collections import deque
 from typing import Any, Optional
 
 from app.observability.trace import get_correlation_id as get_trace_correlation_id
@@ -37,6 +39,23 @@ _ACTIONS_REQUIRING_IDS = {
     "KIE_POLL",
     "KIE_PARSE",
 }
+
+_recent_critical_event_ids: deque[str] = deque(maxlen=5)
+
+
+def get_recent_critical_event_ids() -> list[str]:
+    """Return the last critical event ids for diagnostics."""
+    return list(_recent_critical_event_ids)
+
+
+def _resolve_partner_id(fields: dict[str, Any], context_fields: dict[str, Any]) -> Optional[str]:
+    partner_id = fields.get("partner_id") or fields.get("tenant_id")
+    if partner_id:
+        return partner_id
+    partner_id = context_fields.get("partner_id") if isinstance(context_fields, dict) else None
+    if partner_id:
+        return partner_id
+    return (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or None)
 
 
 def get_correlation_id(update_id: Optional[int], user_id: Optional[int]) -> str:
@@ -130,6 +149,7 @@ def log_structured_event(**fields: Any) -> None:
                 reason=reason,
             )
 
+    partner_id = _resolve_partner_id(fields, context_fields)
     payload = {
         "correlation_id": correlation_id,
         "request_id": request_id,
@@ -138,6 +158,9 @@ def log_structured_event(**fields: Any) -> None:
         "chat_id": fields.get("chat_id") or context_fields.get("chat_id"),
         "update_id": fields.get("update_id") or context_fields.get("update_id"),
         "update_type": fields.get("update_type") or context_fields.get("update_type"),
+        "partner_id": partner_id,
+        "tenant_id": partner_id,
+        "route": fields.get("route"),
         "action": fields.get("action"),
         "action_path": fields.get("action_path"),
         "command": fields.get("command"),
@@ -157,11 +180,22 @@ def log_structured_event(**fields: Any) -> None:
         "param": fields.get("param"),
         "outcome": outcome,
         "duration_ms": fields.get("duration_ms"),
+        "ack_ms": fields.get("ack_ms"),
+        "handler_total_ms": fields.get("handler_total_ms"),
+        "event_loop_lag_ms": fields.get("event_loop_lag_ms"),
+        "tg_send_ms": fields.get("tg_send_ms"),
+        "tg_retry_count": fields.get("tg_retry_count"),
+        "kie_call_ms": fields.get("kie_call_ms"),
+        "db_query_ms": fields.get("db_query_ms"),
         "lock_key": fields.get("lock_key"),
         "lock_wait_ms_total": fields.get("lock_wait_ms_total"),
         "lock_attempts": fields.get("lock_attempts"),
+        "lock_backend": fields.get("lock_backend"),
         "lock_ttl_s": fields.get("lock_ttl_s"),
         "lock_acquired": fields.get("lock_acquired"),
+        "pool_in_use": fields.get("pool_in_use"),
+        "pool_size": fields.get("pool_size"),
+        "queue_depth": fields.get("queue_depth"),
         "poll_attempt": fields.get("poll_attempt"),
         "poll_latency_ms": fields.get("poll_latency_ms"),
         "total_wait_ms": fields.get("total_wait_ms"),
@@ -187,10 +221,31 @@ def log_critical_event(
     retry_after: Optional[float],
     timeout_s: Optional[float],
     attempt: Optional[int],
+    error_code: Optional[str] = None,
+    error_id: Optional[str] = None,
+    exception_class: Optional[str] = None,
+    where: Optional[str] = None,
+    fix_hint: Optional[str] = None,
+    retryable: Optional[bool] = None,
+    upstream: Optional[str] = None,
+    deadline_s: Optional[float] = None,
+    elapsed_ms: Optional[float] = None,
+    pool_in_use: Optional[int] = None,
+    pool_size: Optional[int] = None,
+    lock_backend: Optional[str] = None,
+    lock_wait_ms_total: Optional[float] = None,
+    lock_attempts: Optional[int] = None,
+    lock_ttl_s: Optional[float] = None,
+    queue_depth: Optional[int] = None,
 ) -> None:
     """Emit a critical event line with a unified key-value format."""
+    if error_id:
+        _recent_critical_event_ids.append(error_id)
     logger.warning(
-        "CRIT_EVENT correlation_id=%s update_id=%s stage=%s latency_ms=%s retry_after=%s timeout_s=%s attempt=%s",
+        "CRIT_EVENT correlation_id=%s update_id=%s stage=%s latency_ms=%s retry_after=%s timeout_s=%s "
+        "attempt=%s error_code=%s error_id=%s exception_class=%s where=%s fix_hint=%s retryable=%s "
+        "upstream=%s deadline_s=%s elapsed_ms=%s pool_in_use=%s pool_size=%s lock_backend=%s "
+        "lock_wait_ms_total=%s lock_attempts=%s lock_ttl_s=%s queue_depth=%s",
         correlation_id or "na",
         update_id,
         stage,
@@ -198,4 +253,20 @@ def log_critical_event(
         retry_after,
         timeout_s,
         attempt,
+        error_code,
+        error_id,
+        exception_class,
+        where,
+        fix_hint,
+        retryable,
+        upstream,
+        deadline_s,
+        f"{elapsed_ms:.1f}" if isinstance(elapsed_ms, (int, float)) else elapsed_ms,
+        pool_in_use,
+        pool_size,
+        lock_backend,
+        lock_wait_ms_total,
+        lock_attempts,
+        lock_ttl_s,
+        queue_depth,
     )
