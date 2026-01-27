@@ -29,11 +29,15 @@ async def test_webhook_handler_acknowledges_update(caplog, harness, monkeypatch)
     request.method = "POST"
     request.path = "/webhook"
     request.content_length = len(json.dumps(payload))
-    request.json = AsyncMock(return_value=payload)
+    request.read = AsyncMock(return_value=json.dumps(payload).encode("utf-8"))
 
     caplog.set_level(logging.INFO)
     response = await handler(request)
-    await asyncio.sleep(0)
+    deadline = time.monotonic() + 0.5
+    while time.monotonic() < deadline:
+        if any("forwarded_to_ptb=true" in message for message in caplog.messages):
+            break
+        await asyncio.sleep(0.01)
 
     assert response.status == 200
     assert any("update_received=true" in message for message in caplog.messages)

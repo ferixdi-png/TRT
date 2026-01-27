@@ -1,5 +1,25 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-19 TRT: observability-first webhook ACK <200ms (background raw processing)
+
+### Цель
+ACK путь webhook строго минимальный (<200ms), тяжёлая обработка (JSON parse, Update.de_json, дедуп, process_update, locks/DB) вынесена в background с guard для unobserved exceptions.
+
+### Что сделано
+- ACK путь в `main_render.py` оставляет только `request.read()` + немедленный `web.Response(status=200)`; parse/update/dedup/process вынесены в `_process_raw_update_guarded` background task.
+- Добавлен централизованный task guard с `CRIT_EVENT` (error_id/error_code/fix_hint) для background исключений.
+- ACK метрика (`WEBHOOK_ACK`) теперь измеряется строго до возврата 200; отдельно от `WEBHOOK_PROCESS_*`.
+- Webhook info probe в boot переведён в backoff-повтор с INFO на первых попытках и WARNING после порога.
+- BOOT warmup добавлен yield и увеличен default timeout меню типов генерации (best-effort, меньше noise).
+
+### Метрики (локально)
+| metric | p95 | p99 |
+| --- | --- | --- |
+| ack_ms | TBD | TBD |
+
+### Итог
+**STOP** — нужно прогнать pytest (webhook suite или полный) и заполнить p95/p99 ack_ms из локального прогона.
+
 ## ✅ 2026-02-18 TRT: observability-first webhook stabilization (STOP/GO enforced)
 
 ### Цель
