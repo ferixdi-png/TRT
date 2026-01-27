@@ -1221,6 +1221,7 @@ from app.models.registry import (
     get_generation_type_info,
     get_models_cached_only,
     get_models_static_only,
+    get_models_sync,
 )
 from app.models.canonical import canonicalize_model_id
 from app.utils.singleton_lock import get_lock_mode, is_lock_degraded, is_lock_acquired
