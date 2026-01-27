@@ -58,6 +58,10 @@ if _flush_interval_ms_raw:
     except ValueError:
         logger.warning("OBS_FLUSH_INTERVAL_MS invalid: %s", _flush_interval_ms_raw)
 _persist_timeout_seconds = float(os.getenv("CORRELATION_STORE_PERSIST_TIMEOUT_SECONDS", "2.5"))
+_flush_timeout_log_interval_seconds = float(
+    os.getenv("CORRELATION_STORE_FLUSH_TIMEOUT_LOG_INTERVAL_SECONDS", "30.0")
+)
+_flush_timeout_last_log_ts = 0.0
 _flush_max_records = int(os.getenv("CORRELATION_STORE_FLUSH_MAX_RECORDS", "200"))
 _queue_max_records = int(os.getenv("OBS_QUEUE_MAX", "1000"))
 _dropped_records_total = 0
@@ -139,11 +143,24 @@ def _schedule_debounced_persist(
                     timeout=_persist_timeout_seconds,
                 )
             except asyncio.TimeoutError:
-                logger.warning(
-                    "correlation_store_flush_timeout batch_size=%s timeout_s=%.2f",
-                    len(batch),
-                    _persist_timeout_seconds,
-                )
+                global _flush_timeout_last_log_ts
+                now = time.monotonic()
+                if (
+                    _flush_timeout_log_interval_seconds <= 0
+                    or (now - _flush_timeout_last_log_ts) >= _flush_timeout_log_interval_seconds
+                ):
+                    _flush_timeout_last_log_ts = now
+                    logger.warning(
+                        "correlation_store_flush_timeout batch_size=%s timeout_s=%.2f",
+                        len(batch),
+                        _persist_timeout_seconds,
+                    )
+                else:
+                    logger.debug(
+                        "correlation_store_flush_timeout_suppressed batch_size=%s timeout_s=%.2f",
+                        len(batch),
+                        _persist_timeout_seconds,
+                    )
                 async with _flush_lock:
                     _pending_records.update(batch)
                     _pending_sources.update(batch_sources)
@@ -513,3 +530,5 @@ def reset_correlation_store() -> None:
     _pending_storage = None
     _pending_records.clear()
     _pending_sources.clear()
+    global _flush_timeout_last_log_ts
+    _flush_timeout_last_log_ts = 0.0
