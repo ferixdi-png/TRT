@@ -1,5 +1,28 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-17 TRT: webhook ACK fast-path + /start budget + Telegram timeout retries + correlation backpressure
+
+### Root cause (2026-01-27 лог-срез)
+- `WEBHOOK_PROCESS_TIMEOUT`: webhook ждёт `/start` + storage/registry I/O и меню, цепочка превышает budget.  
+- `TELEGRAM_REQUEST_TIMEOUT/FAILED` с пустым `error`: исключения сериализовались только через `str(exc)` без `repr`, а timeout ловился разными типами.  
+- `User registry update timed out`: registry update мог попадать в критический путь.  
+- `redis_connect_timeout`: lock пытался подключаться слишком долго без явного перехода в single-instance режим.  
+- `correlation_store_flush_timeout`: flush таски блокировали обработчики и шумели без backpressure.  
+
+### Что сделано
+- Webhook: ранний ACK оставлен по умолчанию, в TEST_MODE синхронный режим сохранён; на проде обработка уходит в background после ACK.  
+- `/start`: введён жёсткий budget, по таймауту — fallback в background; registry update остаётся асинхронным.  
+- Telegram send: единый timeout cap (< webhook budget), экспоненциальный retry + jitter, логирование `error_repr`/`error_type`, метрики по outcome.  
+- correlation_store: backpressure очередь flush с лимитом batch_size, timeout логика с debug деградацией, retries не блокируют handlers.  
+- Redis fallback: ограничены попытки connect, быстрый переход в single-instance lock с явной меткой.  
+- Добавлены детерминированные регрессии на `WEBHOOK_PROCESS_TIMEOUT` и `TELEGRAM_REQUEST_TIMEOUT`.  
+
+### Тесты
+- `pytest` — ✅ (571 passed, 4 skipped, 76 xfailed, 2 xpassed)
+
+### Итог
+**GO** — тайм-ауты воспроизводятся детерминированно, webhook ACK быстрый, /start ограничен бюджетом, I/O вынесен из критического пути.
+
 ## ✅ 2026-02-16 TRT: webhook defaults + /start fast-path gate + deterministic webhook tests
 
 ### Что сделано

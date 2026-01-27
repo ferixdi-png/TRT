@@ -64,12 +64,17 @@ _flush_timeout_log_interval_seconds = float(
 _flush_timeout_last_log_ts: Optional[float] = None
 _flush_max_records = int(os.getenv("CORRELATION_STORE_FLUSH_MAX_RECORDS", "200"))
 _queue_max_records = int(os.getenv("OBS_QUEUE_MAX", "1000"))
+_flush_queue_max_batches = int(os.getenv("CORRELATION_STORE_FLUSH_QUEUE_MAX", "40"))
 _dropped_records_total = 0
+_flush_queue_dropped_total = 0
+_flush_queue_drop_last_log_ts: Optional[float] = None
 _pending_records: Dict[str, CorrelationRecord] = {}
 _pending_sources: Dict[str, Optional[str]] = {}
 _flush_task: Optional[asyncio.Task[Any]] = None
 _pending_storage: Optional[Any] = None
 _flush_lock: Optional[asyncio.Lock] = None
+_flush_queue: Optional[asyncio.Queue[tuple[Dict[str, CorrelationRecord], Dict[str, Optional[str]], Optional[Any]]]] = None
+_flush_worker_task: Optional[asyncio.Task[Any]] = None
 
 
 def _register_persist_task(task: asyncio.Task[Any]) -> None:
@@ -87,6 +92,57 @@ def _register_debounce_task(correlation_id: str, task: asyncio.Task[Any]) -> Non
     task.add_done_callback(_cleanup)
     _register_persist_task(task)
 
+
+def _ensure_flush_worker(loop: asyncio.AbstractEventLoop) -> None:
+    global _flush_queue, _flush_worker_task, _flush_lock
+    if _flush_lock is None:
+        _flush_lock = asyncio.Lock()
+    if _flush_queue is None:
+        _flush_queue = asyncio.Queue(maxsize=max(1, _flush_queue_max_batches))
+    if _flush_worker_task is not None and not _flush_worker_task.done():
+        return
+
+    async def _flush_worker() -> None:
+        while True:
+            batch, batch_sources, storage_instance = await _flush_queue.get()
+            try:
+                await asyncio.wait_for(
+                    _persist_records_batch(batch, storage=storage_instance, sources=batch_sources),
+                    timeout=_persist_timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                _handle_flush_timeout(len(batch))
+                async with _flush_lock:
+                    _pending_records.update(batch)
+                    _pending_sources.update(batch_sources)
+                await asyncio.sleep(_flush_interval_seconds)
+            finally:
+                _flush_queue.task_done()
+
+    _flush_worker_task = loop.create_task(_flush_worker(), name="correlation-store:flush-worker")
+    _register_persist_task(_flush_worker_task)
+
+
+def _handle_flush_timeout(batch_size: int) -> None:
+    global _flush_timeout_last_log_ts
+    now = time.monotonic()
+    if (
+        _flush_timeout_log_interval_seconds <= 0
+        or _flush_timeout_last_log_ts is None
+        or (now - _flush_timeout_last_log_ts) >= _flush_timeout_log_interval_seconds
+    ):
+        _flush_timeout_last_log_ts = now
+        logger.warning(
+            "correlation_store_flush_timeout batch_size=%s timeout_s=%.2f",
+            batch_size,
+            _persist_timeout_seconds,
+        )
+    else:
+        logger.debug(
+            "correlation_store_flush_timeout_suppressed batch_size=%s timeout_s=%.2f",
+            batch_size,
+            _persist_timeout_seconds,
+        )
 
 def _schedule_debounced_persist(
     *,
@@ -129,6 +185,7 @@ def _schedule_debounced_persist(
     async def _flush_pending() -> None:
         if _persist_debounce_seconds > 0:
             await asyncio.sleep(_persist_debounce_seconds)
+        _ensure_flush_worker(loop)
         while True:
             async with _flush_lock:
                 if not _pending_records:
@@ -137,36 +194,37 @@ def _schedule_debounced_persist(
                 batch = {key: _pending_records.pop(key) for key in batch_keys}
                 batch_sources = {key: _pending_sources.pop(key, None) for key in batch_keys}
                 storage_instance = _pending_storage or storage
-            try:
-                await asyncio.wait_for(
-                    _persist_records_batch(batch, storage=storage_instance, sources=batch_sources),
-                    timeout=_persist_timeout_seconds,
-                )
-            except asyncio.TimeoutError:
-                global _flush_timeout_last_log_ts
-                now = time.monotonic()
-                if (
-                    _flush_timeout_log_interval_seconds <= 0
-                    or _flush_timeout_last_log_ts is None
-                    or (now - _flush_timeout_last_log_ts) >= _flush_timeout_log_interval_seconds
-                ):
-                    _flush_timeout_last_log_ts = now
-                    logger.warning(
-                        "correlation_store_flush_timeout batch_size=%s timeout_s=%.2f",
-                        len(batch),
-                        _persist_timeout_seconds,
-                    )
-                else:
-                    logger.debug(
-                        "correlation_store_flush_timeout_suppressed batch_size=%s timeout_s=%.2f",
-                        len(batch),
-                        _persist_timeout_seconds,
-                    )
+            if _flush_queue is None:
+                _ensure_flush_worker(loop)
+            if _flush_queue is None:
                 async with _flush_lock:
                     _pending_records.update(batch)
                     _pending_sources.update(batch_sources)
-                await asyncio.sleep(_flush_interval_seconds)
-                continue
+                return
+            try:
+                _flush_queue.put_nowait((batch, batch_sources, storage_instance))
+            except asyncio.QueueFull:
+                global _flush_queue_dropped_total, _flush_queue_drop_last_log_ts
+                _flush_queue_dropped_total += len(batch)
+                now = time.monotonic()
+                if (
+                    _flush_queue_drop_last_log_ts is None
+                    or (now - _flush_queue_drop_last_log_ts) >= _flush_timeout_log_interval_seconds
+                ):
+                    _flush_queue_drop_last_log_ts = now
+                    logger.warning(
+                        "correlation_store_flush_backpressure dropped_total=%s queue_max=%s batch_size=%s",
+                        _flush_queue_dropped_total,
+                        _flush_queue_max_batches,
+                        len(batch),
+                    )
+                else:
+                    logger.debug(
+                        "correlation_store_flush_backpressure_suppressed dropped_total=%s queue_max=%s batch_size=%s",
+                        _flush_queue_dropped_total,
+                        _flush_queue_max_batches,
+                        len(batch),
+                    )
             if _pending_records:
                 await asyncio.sleep(_flush_interval_seconds)
             else:
@@ -528,6 +586,11 @@ def reset_correlation_store() -> None:
     if _flush_task:
         _cancel_task_safe(_flush_task)
     _flush_task = None
+    global _flush_worker_task, _flush_queue
+    if _flush_worker_task:
+        _cancel_task_safe(_flush_worker_task)
+    _flush_worker_task = None
+    _flush_queue = None
     _pending_storage = None
     _pending_records.clear()
     _pending_sources.clear()
