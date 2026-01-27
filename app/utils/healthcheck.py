@@ -9,7 +9,7 @@ import logging
 import json
 import asyncio
 from aiohttp import web
-from typing import Optional, Callable, Awaitable, Dict
+from typing import Optional, Callable, Awaitable, Dict, Any, List
 
 from app.utils.logging_config import get_logger
 
@@ -258,6 +258,143 @@ async def telegram_diag_handler(request):
     )
 
 
+async def ready_diag_handler(request):
+    """Production-ready diagnostics: webhook info, DB ping, lock status, recent CRIT events."""
+    from telegram import Bot
+    from telegram.request import HTTPXRequest
+    from app.storage.factory import get_storage
+    from app.utils.singleton_lock import get_lock_degraded_reason, get_lock_mode, is_lock_degraded
+    from app.observability.structured_logs import get_recent_critical_event_ids
+
+    timeout_seconds = float(os.getenv("READY_DIAG_TIMEOUT_SECONDS", "6.0"))
+    connect_timeout = float(os.getenv("TELEGRAM_HTTP_CONNECT_TIMEOUT_SECONDS", "5.0"))
+    read_timeout = float(os.getenv("TELEGRAM_HTTP_READ_TIMEOUT_SECONDS", "15.0"))
+    write_timeout = float(os.getenv("TELEGRAM_HTTP_WRITE_TIMEOUT_SECONDS", "15.0"))
+    pool_timeout = float(os.getenv("TELEGRAM_HTTP_POOL_TIMEOUT_SECONDS", "5.0"))
+    request_cfg = HTTPXRequest(
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        write_timeout=write_timeout,
+        pool_timeout=pool_timeout,
+    )
+
+    webhook_url = ""
+    try:
+        from app.config import get_settings
+
+        settings = get_settings()
+        webhook_url = settings.webhook_url
+    except Exception:
+        webhook_url = os.getenv("WEBHOOK_URL", "").strip()
+
+    result: Dict[str, Any] = {
+        "ok": True,
+        "status": "READY",
+        "webhook": {},
+        "db": {},
+        "lock": {},
+        "crit_event_ids": get_recent_critical_event_ids(),
+        "how_to_fix": [],
+    }
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if token:
+        async with Bot(token=token, request=request_cfg) as bot:
+            try:
+                start = time.monotonic()
+                info = await asyncio.wait_for(bot.get_webhook_info(), timeout=timeout_seconds)
+                latency_ms = int((time.monotonic() - start) * 1000)
+                current_url = getattr(info, "url", "") or ""
+                result["webhook"] = {
+                    "ok": True,
+                    "latency_ms": latency_ms,
+                    "current_url": current_url,
+                    "expected_url": webhook_url,
+                    "pending_update_count": getattr(info, "pending_update_count", None),
+                    "match": bool(webhook_url and current_url == webhook_url),
+                }
+                if webhook_url and current_url != webhook_url:
+                    result["ok"] = False
+                    result["status"] = "DEGRADED"
+                    result["how_to_fix"].append("Set Telegram webhook URL to match WEBHOOK_URL.")
+            except Exception as exc:
+                result["ok"] = False
+                result["status"] = "DEGRADED"
+                result["webhook"] = {"ok": False, "error": str(exc)[:200]}
+                result["how_to_fix"].append("Check Telegram API connectivity and webhook configuration.")
+    else:
+        result["ok"] = False
+        result["status"] = "DEGRADED"
+        result["webhook"] = {"ok": False, "error": "missing_bot_token"}
+        result["how_to_fix"].append("Set TELEGRAM_BOT_TOKEN for webhook diagnostics.")
+
+    storage = None
+    try:
+        storage = get_storage()
+    except Exception as exc:
+        result["ok"] = False
+        result["status"] = "DEGRADED"
+        result["db"] = {"ok": False, "error": str(exc)[:200]}
+        result["how_to_fix"].append("Ensure storage backend is configured and reachable.")
+
+    if storage is not None:
+        db_meta: Dict[str, Any] = {}
+        try:
+            start = time.monotonic()
+            if hasattr(storage, "ping") and asyncio.iscoroutinefunction(storage.ping):
+                ping_ok = await asyncio.wait_for(storage.ping(), timeout=timeout_seconds)
+            else:
+                ping_ok = True
+            latency_ms = int((time.monotonic() - start) * 1000)
+            pool_in_use = None
+            pool_size = None
+            if hasattr(storage, "_get_pool") and asyncio.iscoroutinefunction(storage._get_pool):
+                pool = await storage._get_pool()
+                try:
+                    pool_size = pool.get_max_size() if hasattr(pool, "get_max_size") else None
+                    if hasattr(pool, "get_size") and hasattr(pool, "get_idle_size"):
+                        pool_in_use = pool.get_size() - pool.get_idle_size()
+                except Exception:
+                    pool_in_use = None
+                    pool_size = None
+            db_meta = {
+                "ok": bool(ping_ok),
+                "latency_ms": latency_ms,
+                "pool_in_use": pool_in_use,
+                "pool_size": pool_size,
+            }
+            if not ping_ok:
+                result["ok"] = False
+                result["status"] = "DEGRADED"
+                result["how_to_fix"].append("Check DATABASE_URL connectivity and pool saturation.")
+        except Exception as exc:
+            result["ok"] = False
+            result["status"] = "DEGRADED"
+            db_meta = {"ok": False, "error": str(exc)[:200]}
+            result["how_to_fix"].append("Inspect database connectivity and credentials.")
+        result["db"] = db_meta
+
+    lock_mode = get_lock_mode()
+    degraded_reason = get_lock_degraded_reason()
+    lock_degraded = is_lock_degraded()
+    result["lock"] = {
+        "ok": not lock_degraded,
+        "mode": lock_mode,
+        "degraded": lock_degraded,
+        "degraded_reason": degraded_reason,
+    }
+    if lock_degraded:
+        result["ok"] = False
+        result["status"] = "DEGRADED"
+        result["how_to_fix"].append("Restore Redis lock backend or ensure Postgres advisory lock is reachable.")
+
+    return web.Response(
+        text=json.dumps(result, ensure_ascii=False),
+        content_type="application/json",
+        status=200 if result["ok"] else 503,
+    )
+
+
 async def start_health_server(
     port: int = 8000,
     webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
@@ -290,6 +427,7 @@ async def start_health_server(
             app.router.add_get('/', health_handler)  # Для совместимости
             app.router.add_get('/__diag/billing_preflight', billing_preflight_handler)
             app.router.add_get('/diag/telegram', telegram_diag_handler)
+            app.router.add_get('/diag/ready', ready_diag_handler)
             app.router.add_post('/webhook/health', webhook_health_echo)
             if webhook_handler is not None:
                 try:
