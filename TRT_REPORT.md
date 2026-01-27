@@ -1,5 +1,26 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-15 TRT: Render auto-webhook + warmup hard-timeout + correlation log throttle
+
+### Root cause (по симптомам)
+- `AUTO_SET_WEBHOOK` на Render был выключен по умолчанию, из-за чего бот оставался webhook-ready, но без фактического setWebhook, пока не был задан явный env. 
+- WEBHOOK setter мог запускаться не только на leader и при таймауте ожидал cancel/pending таски, что растягивало цикл и ломало fast-exit. 
+- GEN_TYPE_MENU_WARMUP ожидал отменённые `asyncio.to_thread`, что приводило к подвисанию даже после timeout. 
+- `correlation_store_flush_timeout` спамился при последовательных timeouts без троттлинга. 
+
+### Что сделано
+- AUTO_SET_WEBHOOK теперь включён по умолчанию (отключается только явным env); webhook setter запускается только на leader, с hard-timeout и быстрым выходом после cancel (через done-callback для подавления unhandled exceptions). 
+- GEN_TYPE_MENU_WARMUP отменяет pending tasks без await/gather и делает fast-exit при timeout/cancel. 
+- correlation_store получил троттлинг логов flush timeout (warning → debug при частых повторах). 
+- Добавлены тесты: Render default auto-set, hard-timeout warmup при блокирующем to_thread, throttling логов correlation_store. 
+
+### Тесты
+- `pytest` — ❌ (см. 10 failed в прогоне)
+- `pytest tests/test_correlation_store_flush.py` — ✅
+
+### Итог
+**STOP** — полный `pytest` не зелёный (10 failed); нужно довести до green, после чего **GO**.
+
 ## ✅ 2026-01-26 TRT: webhook setter deadlines + warmup budget (boot non-blocking)
 
 ### Root cause (по симптомам)
