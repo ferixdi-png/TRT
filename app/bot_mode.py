@@ -220,7 +220,7 @@ async def ensure_webhook_mode(
                 return True
         except TimeoutError as exc:
             logger.warning("WEBHOOK_INFO_CHECK_TIMEOUT error=%s", exc)
-            _set_webhook_set_result("timeout", error_type="TimeoutError", error=str(exc))
+            _set_webhook_set_result("timeout", error_type="Timeout", error=str(exc))
             return False
         except Exception as exc:
             logger.warning("WEBHOOK_INFO_CHECK_FAILED error=%s", exc)
@@ -258,7 +258,7 @@ async def ensure_webhook_mode(
             raise
         except (TimedOut, httpx.ConnectTimeout, httpx.ReadTimeout, TimeoutError) as exc:
             logger.warning("WEBHOOK_SET_TIMEOUT error=%s", exc)
-            _set_webhook_set_result("timeout", error_type="TimeoutError", error=str(exc))
+            _set_webhook_set_result("timeout", error_type="Timeout", error=str(exc))
             return False
         except asyncio.CancelledError as exc:
             logger.warning("WEBHOOK_SET_CANCELLED error=%s", exc)
