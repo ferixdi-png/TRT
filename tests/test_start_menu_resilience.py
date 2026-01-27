@@ -71,6 +71,73 @@ async def test_gen_type_menu_warmup_timeout_sets_degraded(monkeypatch):
     assert bot_kie.GEN_TYPE_MENU_WARMUP_DEGRADED is True
 
 
+@pytest.mark.asyncio
+async def test_start_ack_sent_on_inflight_dedup(harness, monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_menu(update, context, *, source, correlation_id, edit_message_id=None):
+        started.set()
+        await release.wait()
+        return {
+            "correlation_id": correlation_id,
+            "user_id": update.effective_user.id if update.effective_user else None,
+            "chat_id": update.effective_chat.id if update.effective_chat else None,
+            "update_id": update.update_id,
+            "ui_context_before": None,
+            "ui_context_after": bot_kie.UI_CONTEXT_MAIN_MENU,
+            "used_edit": False,
+            "fallback_send": False,
+            "message_id": edit_message_id,
+        }
+
+    monkeypatch.setattr("bot_kie._start_menu_with_fallback", slow_menu)
+    harness.application.add_handler(CommandHandler("start", start))
+
+    update_primary = harness.create_mock_update_command("/start", user_id=90101, update_id=1)
+    harness._attach_bot(update_primary)
+    update_secondary = harness.create_mock_update_command("/start", user_id=90101, update_id=2)
+    harness._attach_bot(update_secondary)
+
+    task_primary = asyncio.create_task(harness.application.process_update(update_primary))
+    await started.wait()
+
+    await harness.application.process_update(update_secondary)
+
+    assert harness.outbox.messages
+    assert any("Готовлю меню" in msg["text"] or "Preparing the menu" in msg["text"] for msg in harness.outbox.messages)
+
+    release.set()
+    await task_primary
+
+
+@pytest.mark.asyncio
+async def test_start_ack_latency_under_dependency_degradation(harness, monkeypatch):
+    async def slow_keyboard(*_args, **_kwargs):
+        await asyncio.sleep(0.2)
+        return [[InlineKeyboardButton("X", callback_data="back_to_menu")]]
+
+    async def slow_sections(*_args, **_kwargs):
+        await asyncio.sleep(0.2)
+        return "Header", "Details"
+
+    monkeypatch.setattr("bot_kie.build_main_menu_keyboard", slow_keyboard)
+    monkeypatch.setattr("bot_kie._build_main_menu_sections", slow_sections)
+    monkeypatch.setattr("bot_kie.START_FALLBACK_MAX_MS", 40)
+    monkeypatch.setattr("bot_kie.START_HANDLER_BUDGET_MS", 80)
+    monkeypatch.setattr("bot_kie.MAIN_MENU_TOTAL_TIMEOUT_SECONDS", 0.05)
+
+    harness.application.add_handler(CommandHandler("start", start))
+    started = asyncio.get_event_loop().time()
+    result = await harness.process_command("/start", user_id=90111)
+    elapsed = asyncio.get_event_loop().time() - started
+
+    assert result["success"]
+    assert harness.outbox.messages
+    assert "Готовлю меню" in harness.outbox.messages[0]["text"] or "Preparing the menu" in harness.outbox.messages[0]["text"]
+    assert elapsed < 0.3
+
+
 def test_disabled_models_hidden_from_menu(monkeypatch):
     models = get_models_sync()
     assert models
