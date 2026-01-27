@@ -1638,24 +1638,46 @@ async def warm_generation_type_menu_cache(
         cache_hits = 0
         cache_misses = 0
 
-        semaphore = asyncio.Semaphore(max(1, GEN_TYPE_MENU_WARMUP_CONCURRENCY))
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        for gen_type in cached_types:
+            queue.put_nowait(gen_type)
 
-        async def _warm_gen_type(gen_type: str) -> None:
+        max_workers = max(1, min(GEN_TYPE_MENU_WARMUP_CONCURRENCY, len(cached_types)))
+
+        async def _worker() -> None:
             nonlocal cache_hits, cache_misses
-            async with semaphore:
-                start_gen = time.monotonic()
-                models, cache_status = await asyncio.to_thread(get_visible_models_by_generation_type_cached, gen_type)
-                elapsed_ms = int((time.monotonic() - start_gen) * 1000)
-                per_gen_type_ms[gen_type] = elapsed_ms
-                if elapsed_ms >= GEN_TYPE_MENU_WARMUP_SLOW_MS:
-                    slow_gen_types.append(gen_type)
-                counts[gen_type] = {"count": len(models), "cache": cache_status}
-                if cache_status == "hit":
-                    cache_hits += 1
-                else:
-                    cache_misses += 1
+            while True:
+                try:
+                    gen_type = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                try:
+                    if asyncio.current_task() and asyncio.current_task().cancelled():
+                        return
+                    start_gen = time.monotonic()
+                    try:
+                        models, cache_status = await asyncio.to_thread(
+                            get_visible_models_by_generation_type_cached,
+                            gen_type,
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        models = []
+                        cache_status = "error"
+                    elapsed_ms = int((time.monotonic() - start_gen) * 1000)
+                    per_gen_type_ms[gen_type] = elapsed_ms
+                    if elapsed_ms >= GEN_TYPE_MENU_WARMUP_SLOW_MS:
+                        slow_gen_types.append(gen_type)
+                    counts[gen_type] = {"count": len(models), "cache": cache_status}
+                    if cache_status == "hit":
+                        cache_hits += 1
+                    else:
+                        cache_misses += 1
+                finally:
+                    queue.task_done()
 
-        tasks = [asyncio.create_task(_warm_gen_type(gen_type)) for gen_type in cached_types]
+        tasks = [asyncio.create_task(_worker()) for _ in range(max_workers)]
         timeout_triggered = False
         done, pending = await asyncio.wait(tasks, timeout=timeout)
         if pending:
@@ -1665,10 +1687,12 @@ async def warm_generation_type_menu_cache(
                 task.add_done_callback(
                     lambda t: _suppress_task_exceptions(t, action="gen_type_menu_warmup_timeout")
                 )
-            for gen_type, task in zip(cached_types, tasks):
-                if task in pending and gen_type not in counts:
-                    counts[gen_type] = {"count": None, "cache": "timeout"}
-                    per_gen_type_ms[gen_type] = int(timeout * 1000)
+            await asyncio.gather(*pending, return_exceptions=True)
+        missing = set(cached_types) - set(counts.keys())
+        if missing:
+            for gen_type in missing:
+                counts[gen_type] = {"count": None, "cache": "timeout" if timeout_triggered else "skipped"}
+                per_gen_type_ms[gen_type] = int(timeout * 1000)
         return {
             "counts": counts,
             "per_gen_type_ms": per_gen_type_ms,
@@ -7583,6 +7607,7 @@ START_HANDLER_BUDGET_MS = int(os.getenv("START_HANDLER_BUDGET_MS", "900"))
 START_TELEGRAM_TIMEOUT_CAP_SECONDS = float(os.getenv("START_TELEGRAM_TIMEOUT_CAP_SECONDS", "0.8"))
 START_TELEGRAM_ULTRA_TIMEOUT_SECONDS = float(os.getenv("START_TELEGRAM_ULTRA_TIMEOUT_SECONDS", "0.4"))
 START_TELEGRAM_RETRY_ATTEMPTS = int(os.getenv("START_TELEGRAM_RETRY_ATTEMPTS", "2"))
+START_ACK_TIMEOUT_SECONDS = float(os.getenv("START_ACK_TIMEOUT_SECONDS", "0.4"))
 TELEGRAM_SEND_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_SEND_TIMEOUT_SECONDS", "2.0"))
 TELEGRAM_SEND_RETRY_ATTEMPTS = int(os.getenv("TELEGRAM_SEND_RETRY_ATTEMPTS", "2"))
 TELEGRAM_SEND_RETRY_BACKOFF_SECONDS = float(os.getenv("TELEGRAM_SEND_RETRY_BACKOFF_SECONDS", "0.4"))
@@ -8535,6 +8560,49 @@ def _minimal_menu_fallback_text(user_lang: str) -> str:
     return "Main menu" if user_lang == "en" else "Главное меню"
 
 
+def _build_start_ack_text(user_lang: str) -> str:
+    return "⏳ Preparing the menu..." if user_lang == "en" else "⏳ Готовлю меню..."
+
+
+async def _send_start_ack(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    correlation_id: Optional[str],
+    text_override: Optional[str] = None,
+) -> Optional[int]:
+    user_lang = "ru"
+    try:
+        if update.effective_user and update.effective_user.language_code:
+            lang_code = update.effective_user.language_code.lower()
+            user_lang = "en" if lang_code.startswith("en") else "ru"
+    except Exception:
+        user_lang = "ru"
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id and update.effective_user:
+        chat_id = update.effective_user.id
+    if not chat_id:
+        return None
+    text = text_override or _build_start_ack_text(user_lang)
+    telegram_timeouts = _telegram_request_timeouts()
+    result, _timeout_seen = await _run_telegram_request(
+        "start_ack_send",
+        correlation_id=correlation_id,
+        timeout_s=_resolve_start_send_timeout(START_ACK_TIMEOUT_SECONDS),
+        retry_attempts=1,
+        retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+        request_fn=lambda: context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            **telegram_timeouts,
+        ),
+    )
+    if result is None:
+        return None
+    increment_update_metric("send_message")
+    return getattr(result, "message_id", None)
+
+
 async def _send_ultra_minimal_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -8689,6 +8757,7 @@ async def _show_minimal_menu(
     source: str,
     correlation_id: Optional[str],
     prefer_edit: bool = True,
+    edit_message_id: Optional[int] = None,
     timeout_s: Optional[float] = None,
     max_attempts: Optional[int] = None,
     fallback_timeout_s: Optional[float] = None,
@@ -8751,6 +8820,37 @@ async def _show_minimal_menu(
             )
             logger.info(
                 "MINIMAL_MENU_RENDER corr_id=%s method=edit source=%s user_id=%s chat_id=%s",
+                correlation_id,
+                source,
+                user_id,
+                chat_id,
+            )
+            increment_update_metric("send_message")
+        else:
+            fallback_send = True
+
+    if chat_id and not used_edit and edit_message_id and prefer_edit:
+        edit_result, edit_timeout = await _run_telegram_request(
+            f"{action_prefix}_edit_message_id",
+            correlation_id=correlation_id,
+            timeout_s=resolved_timeout_s,
+            retry_attempts=resolved_attempts,
+            retry_backoff_s=TELEGRAM_SEND_RETRY_BACKOFF_SECONDS,
+            request_fn=lambda: context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=edit_message_id,
+                text=MINIMAL_MENU_TEXT,
+                reply_markup=reply_markup,
+                **telegram_timeouts,
+            ),
+        )
+        timeout_seen = timeout_seen or edit_timeout
+        if edit_result is not None:
+            used_edit = True
+            send_ok = True
+            message_id = getattr(edit_result, "message_id", None) or edit_message_id
+            logger.info(
+                "MINIMAL_MENU_RENDER corr_id=%s method=edit_message_id source=%s user_id=%s chat_id=%s",
                 correlation_id,
                 source,
                 user_id,
@@ -8920,6 +9020,7 @@ async def _start_menu_with_fallback(
     *,
     source: str,
     correlation_id: Optional[str],
+    edit_message_id: Optional[int] = None,
 ) -> dict:
     force_placeholder = bool(
         os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip()
@@ -8939,7 +9040,7 @@ async def _start_menu_with_fallback(
                 source=source,
                 correlation_id=correlation_id,
                 prefer_edit=True,
-                edit_message_id=None,
+                edit_message_id=edit_message_id,
             ),
         )
         try:
@@ -8988,7 +9089,8 @@ async def _start_menu_with_fallback(
                 context,
                 source=source,
                 correlation_id=correlation_id,
-                prefer_edit=False,
+                prefer_edit=bool(edit_message_id),
+                edit_message_id=edit_message_id,
                 timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
                 max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
                 fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
@@ -9011,7 +9113,8 @@ async def _start_menu_with_fallback(
                 context,
                 source=source,
                 correlation_id=correlation_id,
-                prefer_edit=False,
+                prefer_edit=bool(edit_message_id),
+                edit_message_id=edit_message_id,
                 timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
                 max_attempts=START_PLACEHOLDER_RETRY_ATTEMPTS,
                 fallback_timeout_s=START_PLACEHOLDER_TIMEOUT_SECONDS,
@@ -9030,7 +9133,7 @@ async def _start_menu_with_fallback(
             "ui_context_after": UI_CONTEXT_MAIN_MENU,
             "used_edit": False,
             "fallback_send": False,
-            "message_id": None,
+            "message_id": edit_message_id,
         }
     log_structured_event(
         correlation_id=correlation_id,
@@ -9046,7 +9149,7 @@ async def _start_menu_with_fallback(
             "reason": "forced_placeholder" if force_placeholder else "fast_path_timeout",
         },
     )
-    placeholder_message_id = placeholder_result.get("message_id")
+    placeholder_message_id = placeholder_result.get("message_id") or edit_message_id
 
     if os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip():
         return placeholder_result
@@ -9924,6 +10027,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     correlation_id: Optional[str] = None
     user_id: Optional[int] = None
     chat_id: Optional[int] = None
+    start_ack_message_id: Optional[int] = None
     start_job_id: Optional[str] = None
     start_job_claimed = False
     partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
@@ -9935,6 +10039,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             correlation_id = uuid.uuid4().hex
             logger.error("❌ Failed to build correlation_id in /start: %s", exc, exc_info=True)
+        try:
+            start_ack_message_id = await _send_start_ack(
+                update,
+                context,
+                correlation_id=correlation_id,
+            )
+        except Exception as exc:
+            logger.debug("START_ACK_FAILED correlation_id=%s error=%s", correlation_id, exc)
         try:
             _create_background_task(
                 upsert_user_registry_entry(update.effective_user, correlation_id=correlation_id),
@@ -9957,12 +10069,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     job_id=start_job_id,
                     param={"reason": "inflight_guard"},
                 )
-                await _send_start_inflight_notice(
-                    update,
-                    context,
-                    correlation_id=correlation_id,
-                    job_id=start_job_id or "unknown",
-                )
+                if start_ack_message_id is None:
+                    await _send_start_ack(
+                        update,
+                        context,
+                        correlation_id=correlation_id,
+                    )
                 return
         try:
             logger.info(
@@ -10036,6 +10148,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context,
                 source="/start-dedup",
                 correlation_id=correlation_id,
+                edit_message_id=start_ack_message_id,
             )
             return
         logger.info(f"🔥 /start command received from user_id={user_id if user_id else 'None'}")
@@ -10059,6 +10172,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             context,
                             source="/start",
                             correlation_id=correlation_id,
+                            edit_message_id=start_ack_message_id,
                         ),
                         timeout=budget_ms / 1000,
                     )
@@ -10068,6 +10182,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         context,
                         source="/start",
                         correlation_id=correlation_id,
+                        edit_message_id=start_ack_message_id,
                     )
             except asyncio.TimeoutError:
                 start_budget_timeout = True
@@ -10093,6 +10208,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         context,
                         source="/start",
                         correlation_id=correlation_id,
+                        edit_message_id=start_ack_message_id,
                     ),
                     action="start_budget_fallback",
                 )
