@@ -8376,7 +8376,7 @@ async def _build_main_menu_sections(
         log_timeout=False,
     )
     total_models = await _await_with_timeout(
-        asyncio.to_thread(lambda: len(get_models_sync())),
+        asyncio.to_thread(lambda: len(get_models_static_only())),
         timeout=MAIN_MENU_DEP_TIMEOUT_SECONDS,
         label="models_count",
         correlation_id=correlation_id,
@@ -29801,7 +29801,6 @@ if __name__ == '__main__':
     else:
         logger.info("ℹ️ Health server disabled (ENABLE_HEALTH_SERVER=0) - running as Worker")
 
-    # Единая точка входа через asyncio.run
     # НЕ запускаем бота при импортах - только при прямом вызове
     try:
         asyncio.run(main())
@@ -29815,3 +29814,92 @@ if __name__ == '__main__':
         logger.error(f"❌ Fatal error in main(): {e}", exc_info=True)
         logger.error("❌ Bot failed to start. Check logs above for details.")
         sys.exit(1)
+
+
+async def handle_gen_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработчик выбора типа генерации."""
+    query = update.callback_query
+    if not query:
+        return ConversationHandler.END
+    
+    user_id = query.from_user.id if query.from_user else None
+    user_lang = get_user_language(user_id) if user_id else "ru"
+    
+    # Извлекаем тип генерации из callback_data
+    gen_type = query.data.split(":", 1)[1] if ":" in query.data else ""
+    
+    if not gen_type:
+        logger.warning(f"Invalid gen_type callback data: {query.data}")
+        return ConversationHandler.END
+    
+    logger.info(f"User {user_id} selected gen_type: {gen_type}")
+    
+    # Устанавливаем контекст сессии
+    set_session_context(
+        user_id,
+        to_context="MODEL_MENU",
+        reason=f"gen_type:{gen_type}",
+        correlation_id=ensure_correlation_id(update, context),
+        update_id=update.update_id,
+        chat_id=query.message.chat_id if query.message else None,
+    )
+    
+    # Сохраняем выбранный тип генерации
+    session = get_session_cached(context, get_session_store(context), user_id, update.update_id, default={})
+    if isinstance(session, dict):
+        session["active_gen_type"] = gen_type
+        session["gen_type"] = gen_type
+    
+    # Показываем меню моделей для этого типа генерации
+    try:
+        from app.helpers.models_menu import build_models_menu_for_type
+        from app.models.registry import _gen_type_to_model_type
+        
+        # Конвертируем gen_type в model_type
+        model_type = _gen_type_to_model_type(gen_type)
+        
+        keyboard_markup, models_count = build_models_menu_for_type(user_lang, model_type)
+        
+        if user_lang == "ru":
+            header_text = (
+                f"🎯 <b>Выбран тип:</b> {gen_type}\n\n"
+                f"Доступно моделей: <b>{models_count}</b>\n\n"
+                "Выберите модель ниже:"
+            )
+        else:
+            header_text = (
+                f"🎯 <b>Selected type:</b> {gen_type}\n\n"
+                f"Available models: <b>{models_count}</b>\n\n"
+                "Select a model below:"
+            )
+        
+        await query.edit_message_text(
+            header_text,
+            reply_markup=keyboard_markup,
+            parse_mode="HTML",
+        )
+        
+    except Exception as e:
+        logger.error(f"Error building models menu for gen_type {gen_type}: {e}")
+        
+        # Показываем fallback меню
+        from helpers import build_back_to_menu_keyboard
+        
+        fallback_text = (
+            "⚠️ <b>Временная ошибка</b>\n\n"
+            "Не удалось загрузить модели. Попробуйте позже."
+            if user_lang == "ru" else
+            "⚠️ <b>Temporary error</b>\n\n"
+            "Failed to load models. Please try again later."
+        )
+        
+        await query.edit_message_text(
+            fallback_text,
+            reply_markup=build_back_to_menu_keyboard(user_lang),
+            parse_mode="HTML",
+        )
+    
+    return ConversationHandler.END
+
+
+if __name__ == "__main__":
