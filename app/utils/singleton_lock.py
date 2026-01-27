@@ -116,6 +116,14 @@ def _get_redis_connect_attempts() -> int:
     return max(1, attempts)
 
 
+def _get_pg_lock_connect_timeout_seconds() -> float:
+    try:
+        timeout_s = float(os.getenv("PG_LOCK_CONNECT_TIMEOUT_SECONDS", "0.6"))
+    except ValueError:
+        timeout_s = 0.6
+    return max(0.1, timeout_s)
+
+
 async def _stop_redis_renewal() -> None:
     global _redis_renew_task, _redis_renew_stop, _redis_renew_loop, _redis_renew_thread
     if _redis_renew_stop is not None:
@@ -605,6 +613,20 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
                     redis_attempts,
                 )
         logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=redis_lock_failed attempts=%s", redis_attempts)
+
+    # Fallback to Postgres advisory lock before file lock.
+    pg_dsn = dsn or os.getenv("DATABASE_URL", "").strip()
+    if pg_dsn:
+        try:
+            pg_timeout = _get_pg_lock_connect_timeout_seconds()
+            acquired = await asyncio.wait_for(_acquire_postgres_lock(pg_dsn), timeout=pg_timeout)
+        except asyncio.TimeoutError:
+            acquired = False
+            logger.warning("[LOCK] LOCK_MODE=postgres lock_acquire_failed=true reason=timeout")
+        if acquired:
+            _set_lock_state("postgres", True, reason="redis_unavailable")
+            logger.warning("[LOCK] LOCK_MODE=postgres fallback=true degraded=true reason=redis_unavailable")
+            return True
 
     # Fallback to file only in non-prod
     storage_mode = os.getenv("STORAGE_MODE", "auto").lower()

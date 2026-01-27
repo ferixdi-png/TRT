@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 from aiohttp import web
@@ -37,3 +38,34 @@ async def test_webhook_handler_acknowledges_update(caplog, harness, monkeypatch)
     assert response.status == 200
     assert any("update_received=true" in message for message in caplog.messages)
     assert any("forwarded_to_ptb=true" in message for message in caplog.messages)
+
+
+async def test_webhook_ack_burst_under_200ms(webhook_harness, monkeypatch):
+    monkeypatch.setenv("WEBHOOK_PROCESS_IN_BACKGROUND", "1")
+    monkeypatch.setenv("WEBHOOK_EARLY_ACK", "1")
+    monkeypatch.setenv("WEBHOOK_ACK_MAX_MS", "200")
+
+    async def _send_burst(idx: int) -> float:
+        start_ts = time.monotonic()
+        response = await webhook_harness.send_message(
+            user_id=200 + idx,
+            text="/start",
+            update_id=6000 + idx,
+            request_id=f"corr-webhook-burst-{idx}",
+        )
+        elapsed_ms = (time.monotonic() - start_ts) * 1000
+        assert response.status == 200
+        return elapsed_ms
+
+    durations = await asyncio.gather(*[_send_burst(i) for i in range(5)])
+    assert all(duration < 200 for duration in durations)
+
+    async def _wait_for_outbox(timeout_s: float) -> None:
+        start = time.monotonic()
+        while time.monotonic() - start < timeout_s:
+            if len(webhook_harness.outbox.messages) >= 5:
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError("Expected send_message to be enqueued")
+
+    await _wait_for_outbox(timeout_s=1.5)

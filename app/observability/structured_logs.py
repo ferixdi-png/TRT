@@ -176,3 +176,26 @@ def log_structured_event(**fields: Any) -> None:
     }
     payload["param"] = param
     logger.info("STRUCTURED_LOG %s", json.dumps(payload, ensure_ascii=False, default=str))
+
+
+def log_critical_event(
+    *,
+    correlation_id: Optional[str],
+    update_id: Optional[int],
+    stage: str,
+    latency_ms: Optional[float],
+    retry_after: Optional[float],
+    timeout_s: Optional[float],
+    attempt: Optional[int],
+) -> None:
+    """Emit a critical event line with a unified key-value format."""
+    logger.warning(
+        "CRIT_EVENT correlation_id=%s update_id=%s stage=%s latency_ms=%s retry_after=%s timeout_s=%s attempt=%s",
+        correlation_id or "na",
+        update_id,
+        stage,
+        f"{latency_ms:.1f}" if isinstance(latency_ms, (int, float)) else latency_ms,
+        retry_after,
+        timeout_s,
+        attempt,
+    )

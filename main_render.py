@@ -93,7 +93,7 @@ def build_webhook_handler(
     process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
-    ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "500"))
+    ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "200"))
     early_update_retry_after = int(os.getenv("WEBHOOK_EARLY_UPDATE_RETRY_AFTER", "2"))
     early_update_log_throttle_seconds = float(os.getenv("WEBHOOK_EARLY_UPDATE_LOG_THROTTLE_SECONDS", "30"))
 
@@ -186,7 +186,7 @@ def build_webhook_handler(
                 )
 
         try:
-            await asyncio.wait_for(asyncio.shield(process_task), timeout=process_timeout_seconds)
+            await asyncio.shield(process_task)
             duration_ms = int((time.monotonic() - process_started) * 1000)
             increment_update_metric("webhook_process_done")
             log_structured_event(
@@ -201,24 +201,6 @@ def build_webhook_handler(
                 duration_ms=duration_ms,
             )
             logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
-        except asyncio.TimeoutError:
-            retry_after = max(1, int(math.ceil(process_timeout_seconds)))
-            increment_update_metric("webhook_process_done")
-            log_structured_event(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                chat_id=chat_id,
-                update_id=update_id,
-                action="WEBHOOK_PROCESS_DONE",
-                action_path="webhook:process_update",
-                stage="WEBHOOK",
-                outcome="timeout",
-                error_id="WEBHOOK_PROCESS_TIMEOUT",
-                param={"client_ip": client_ip, "retry_after": retry_after},
-            )
-            process_task.add_done_callback(_release_after_task)
-            release_in_finally = False
-            return
         except Exception as exc:
             increment_update_metric("webhook_process_done")
             log_structured_event(
@@ -279,6 +261,7 @@ def build_webhook_handler(
         handler_start = time.monotonic()
         correlation_id = _resolve_correlation_id(request)
         client_ip = _resolve_client_ip(request)
+        update_id: Optional[int] = None
         try:
             if not _app_ready_event.is_set() or not _is_application_initialized(application):
                 _early_update_count += 1
@@ -398,6 +381,29 @@ def build_webhook_handler(
             return web.json_response({"ok": True}, status=200)
         finally:
             duration_ms = int((time.monotonic() - handler_start) * 1000)
+            try:
+                loop = asyncio.get_running_loop()
+                event_loop_lag_ms = max(0.0, (time.monotonic() - loop.time()) * 1000)
+            except RuntimeError:
+                event_loop_lag_ms = None
+            log_structured_event(
+                correlation_id=correlation_id,
+                update_id=update_id,
+                action="WEBHOOK_TIMING_PROFILE",
+                action_path="webhook:timing",
+                stage="WEBHOOK",
+                outcome="ok",
+                param={
+                    "webhook_ack_ms": duration_ms,
+                    "handler_total_ms": duration_ms,
+                    "event_loop_lag_ms": event_loop_lag_ms,
+                    "db_wait_ms": None,
+                    "tg_send_ms": None,
+                    "pool_acquire_ms": None,
+                    "http_connect_ms": None,
+                    "http_read_ms": None,
+                },
+            )
             if duration_ms > ack_max_ms:
                 logger.warning("WEBHOOK_ACK_SLOW correlation_id=%s duration_ms=%s", correlation_id, duration_ms)
 
