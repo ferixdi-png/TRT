@@ -8568,11 +8568,65 @@ async def _start_menu_with_fallback(
     source: str,
     correlation_id: Optional[str],
 ) -> dict:
+    force_placeholder = bool(
+        os.getenv("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", "").strip()
+        or os.getenv("TRT_FAULT_INJECT_MENU_SLEEP_MS", "").strip()
+        or os.getenv("START_FORCE_PLACEHOLDER", "").strip().lower() in {"1", "true", "yes", "on"}
+    )
     try:
         fallback_max_ms = int(os.getenv("START_FALLBACK_MAX_MS", str(START_FALLBACK_MAX_MS)))
     except ValueError:
         fallback_max_ms = START_FALLBACK_MAX_MS
     fast_timeout_s = max(0.1, fallback_max_ms / 1000)
+    if not force_placeholder:
+        fast_menu_task = asyncio.create_task(
+            show_main_menu(
+                update,
+                context,
+                source=source,
+                correlation_id=correlation_id,
+                prefer_edit=True,
+                edit_message_id=None,
+            ),
+        )
+        try:
+            result = await asyncio.wait_for(fast_menu_task, timeout=fast_timeout_s)
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=update.effective_user.id if update.effective_user else None,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update.update_id,
+                action="START_FAST_PATH",
+                action_path=f"menu:{source}",
+                stage="UI_ROUTER",
+                outcome="full_menu",
+                param={"fallback_ms": fallback_max_ms},
+            )
+            return result
+        except asyncio.TimeoutError:
+            if not fast_menu_task.done():
+                fast_menu_task.cancel()
+                fast_menu_task.add_done_callback(
+                    lambda t: _suppress_task_exceptions(t, action="start_fast_path_timeout")
+                )
+            logger.warning(
+                "START_FAST_PATH_TIMEOUT source=%s correlation_id=%s timeout_s=%s",
+                source,
+                correlation_id,
+                fast_timeout_s,
+            )
+        except Exception as exc:
+            if not fast_menu_task.done():
+                fast_menu_task.cancel()
+                fast_menu_task.add_done_callback(
+                    lambda t: _suppress_task_exceptions(t, action="start_fast_path_failed")
+                )
+            logger.warning(
+                "START_FAST_PATH_FAILED source=%s correlation_id=%s error=%s",
+                source,
+                correlation_id,
+                exc,
+            )
     placeholder_result: dict
     try:
         placeholder_result = await asyncio.wait_for(
@@ -8632,7 +8686,10 @@ async def _start_menu_with_fallback(
         action_path=f"menu:{source}",
         stage="UI_ROUTER",
         outcome="degraded",
-        param={"fallback_ms": fallback_max_ms, "reason": "placeholder_first"},
+        param={
+            "fallback_ms": fallback_max_ms,
+            "reason": "forced_placeholder" if force_placeholder else "fast_path_timeout",
+        },
     )
     placeholder_message_id = placeholder_result.get("message_id")
 
@@ -25909,10 +25966,17 @@ def _is_render_environment() -> bool:
     )
 
 
+def _is_production_env() -> bool:
+    env_name = os.getenv("ENV", "").strip().lower()
+    return env_name in {"prod", "production"}
+
+
 def _auto_set_webhook_enabled() -> bool:
     raw_value = os.getenv("AUTO_SET_WEBHOOK")
     if raw_value is not None:
         return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    if _is_render_environment() or _is_production_env():
+        return False
     return True
 
 
@@ -26139,7 +26203,7 @@ async def create_webhook_handler():
     early_update_buffer = _get_early_update_buffer()
     process_in_background_raw = os.getenv("WEBHOOK_PROCESS_IN_BACKGROUND")
     if process_in_background_raw is None:
-        process_in_background = True
+        process_in_background = not is_test_mode()
     else:
         process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
 

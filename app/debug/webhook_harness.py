@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -36,6 +37,8 @@ class WebhookHarness:
         return self._message_id_counter
 
     async def setup(self) -> None:
+        os.environ.setdefault("TEST_MODE", "1")
+        os.environ.setdefault("WEBHOOK_PROCESS_IN_BACKGROUND", "0")
         reset_settings()
         self.settings = Settings()
         self.application = await create_bot_application(self.settings)
