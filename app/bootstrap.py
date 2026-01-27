@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 
 from telegram.ext import Application
 from telegram import Bot
+from telegram.request import HTTPXRequest
 
 from app.config import Settings, get_settings
 from app.storage import get_storage
@@ -200,9 +201,17 @@ async def create_application(settings: Optional[Settings] = None) -> Application
                 await result
             logger.info("[OK] Storage closed")
 
+    request = HTTPXRequest(
+        connect_timeout=settings.telegram_http_connect_timeout_seconds,
+        read_timeout=settings.telegram_http_read_timeout_seconds,
+        write_timeout=settings.telegram_http_write_timeout_seconds,
+        pool_timeout=settings.telegram_http_pool_timeout_seconds,
+        connection_pool_size=settings.telegram_http_connection_pool_size,
+    )
     application = (
         Application.builder()
         .token(settings.telegram_bot_token)
+        .request(request)
         .post_init(post_init)
         .post_shutdown(post_shutdown)
         .build()

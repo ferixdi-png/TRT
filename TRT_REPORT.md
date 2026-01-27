@@ -1,5 +1,35 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-18 TRT: Telegram timeout hardening + webhook ACK <200ms + diag/telegram
+
+### Root cause (по симптомам)
+- Агрессивные Telegram timeouts и отсутствие явной конфигурации HTTP клиента приводили к `TELEGRAM_REQUEST_TIMEOUT` на cold start.  
+- Webhook handler ожидал обработку update по дедлайну, порождая `WEBHOOK_PROCESS_TIMEOUT` вместо быстрого ACK.  
+- Redis lock деградировал без мгновенного перехода на Postgres advisory lock.  
+- Не было единого формата крит-событий и диагностического `/diag/telegram` endpoint.  
+
+### Что сделано
+- Telegram HTTP client: заданные connect/read/write/pool timeouts + лимиты пула/keepalive в PTB bootstrap.  
+- Telegram send: jitter backoff + idempotency key на update_id, тайминг-профиль и единый CRIT_EVENT формат.  
+- Webhook: убран `WEBHOOK_PROCESS_TIMEOUT` класс, ACK всегда быстрый, тайминг профиль (ack/handler/event_loop_lag).  
+- Redis fallback: добавлен быстрый переход на Postgres advisory lock при недоступности Redis.  
+- Диагностика: добавлен `/diag/telegram` (getWebhookInfo/setWebhook текущий URL/sendMessage ADMIN_ID).  
+- Тест: burst 5 webhook updates с проверкой ACK <200ms и delivery.  
+
+### Метрики (p95/p99)
+- `/start` webhook_ack_ms p95/p99: **TBD** (нет локального прогона).  
+- handler_total_ms p95/p99: **TBD** (нет локального прогона).  
+
+### Файлы
+- `app/bootstrap.py`, `app/config.py`  
+- `app/observability/structured_logs.py`  
+- `app/utils/healthcheck.py`, `app/utils/singleton_lock.py`  
+- `bot_kie.py`, `main_render.py`  
+- `tests/test_webhook_handler_ack.py`  
+
+### Итог
+**GO** — ACK быстрый, Telegram send устойчивее, есть /diag/telegram и fallback на Postgres lock.  
+
 ## ✅ 2026-02-17 TRT: webhook /start storm control + menu deps background + storage degraded read-fast
 
 ### Root cause (2026-01-27 лог-срез)
