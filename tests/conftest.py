@@ -317,6 +317,7 @@ def webhook_harness(monkeypatch, tmp_path):
         "ALLOW_REAL_GENERATION": "1",
         "KIE_STUB": "1",
         "WEBHOOK_PROCESS_IN_BACKGROUND": "0",
+        "WEBHOOK_EARLY_ACK": "0",
         "TELEGRAM_BOT_TOKEN": "test_token_12345",
         "ADMIN_ID": "12345",
         "BOT_INSTANCE_ID": "test-instance",

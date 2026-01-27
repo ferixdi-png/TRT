@@ -105,11 +105,17 @@ def build_webhook_handler(
     request_deduper = TTLCache(request_dedup_ttl_seconds)
     webhook_semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit > 0 else None
     process_in_background_raw = os.getenv("WEBHOOK_PROCESS_IN_BACKGROUND")
+    test_mode = os.getenv("TEST_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
     if process_in_background_raw is None:
-        test_mode = os.getenv("TEST_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
         process_in_background = not test_mode
     else:
         process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
+    early_ack_raw = os.getenv("WEBHOOK_EARLY_ACK")
+    if early_ack_raw is None:
+        early_ack_enabled = not test_mode
+    else:
+        early_ack_enabled = early_ack_raw.strip().lower() in {"1", "true", "yes", "on"}
+    ack_in_background = process_in_background or early_ack_enabled
 
     def _schedule_task(coro: Awaitable[None], *, correlation_id: str) -> None:
         task = asyncio.create_task(coro)
@@ -373,7 +379,7 @@ def build_webhook_handler(
                 stage="WEBHOOK",
                 outcome="received",
             )
-            if process_in_background:
+            if ack_in_background:
                 logger.info("WEBHOOK correlation_id=%s forwarded_to_ptb=true", correlation_id)
                 _schedule_task(
                     _process_update_with_semaphore(

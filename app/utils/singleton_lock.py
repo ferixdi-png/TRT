@@ -108,6 +108,14 @@ def _get_redis_max_wait_seconds() -> float:
     return max(0.05, timeout_ms / 1000)
 
 
+def _get_redis_connect_attempts() -> int:
+    try:
+        attempts = int(os.getenv("REDIS_LOCK_CONNECT_ATTEMPTS", "1"))
+    except ValueError:
+        attempts = 1
+    return max(1, attempts)
+
+
 async def _stop_redis_renewal() -> None:
     global _redis_renew_task, _redis_renew_stop, _redis_renew_loop, _redis_renew_thread
     if _redis_renew_stop is not None:
@@ -581,21 +589,34 @@ async def acquire_singleton_lock(dsn=None, *, require_lock: bool = False) -> boo
 
     if redis_url:
         ttl_seconds = _get_redis_lock_ttl_seconds()
-        redis_acquired = await _acquire_redis_lock(redis_url, ttl_seconds=ttl_seconds)
-        if redis_acquired:
-            _set_lock_state("redis", True, reason=None)
-            logger.info("[LOCK] LOCK_MODE=redis lock_acquired=true for multi-instance scaling")
-            _start_redis_renewal(ttl_seconds)
-            return True
-        logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=redis_lock_failed")
+        redis_attempts = _get_redis_connect_attempts()
+        redis_acquired = False
+        for attempt in range(1, redis_attempts + 1):
+            redis_acquired = await _acquire_redis_lock(redis_url, ttl_seconds=ttl_seconds)
+            if redis_acquired:
+                _set_lock_state("redis", True, reason=None)
+                logger.info("[LOCK] LOCK_MODE=redis lock_acquired=true for multi-instance scaling")
+                _start_redis_renewal(ttl_seconds)
+                return True
+            if attempt < redis_attempts:
+                logger.warning(
+                    "[LOCK] LOCK_MODE=redis lock_acquire_retry attempt=%s attempts_total=%s",
+                    attempt,
+                    redis_attempts,
+                )
+        logger.warning("[LOCK] LOCK_MODE=redis lock_acquired=false reason=redis_lock_failed attempts=%s", redis_attempts)
 
     # Fallback to file only in non-prod
     storage_mode = os.getenv("STORAGE_MODE", "auto").lower()
     if _allow_file_fallback():
         acquired = _acquire_file_lock()
         if acquired:
-            _set_lock_state("file", True, reason="file_lock_fallback")
-            logger.warning("[LOCK] LOCK_MODE=file fallback=true degraded=true storage_mode=%s", storage_mode)
+            _set_lock_state("file", True, reason="redis_connect_timeout")
+            logger.warning(
+                "[LOCK] LOCK_MODE=file fallback=true degraded=true single_instance=true "
+                "reason=redis_connect_timeout storage_mode=%s",
+                storage_mode,
+            )
             return True
         _set_lock_state("file", False, reason="file_lock_failed")
         return False

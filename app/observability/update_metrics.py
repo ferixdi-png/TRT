@@ -10,6 +10,10 @@ _metrics: Dict[str, int] = {
     "handler_enter": 0,
     "handler_exit": 0,
     "send_message": 0,
+    "telegram_request_ok": 0,
+    "telegram_request_timeout": 0,
+    "telegram_request_failed": 0,
+    "telegram_request_retry_after": 0,
 }
 
 
