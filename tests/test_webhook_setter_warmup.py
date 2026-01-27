@@ -98,9 +98,11 @@ async def test_webhook_setter_already_set_skips():
 
 def test_auto_set_webhook_default_on_render(monkeypatch):
     monkeypatch.setenv("RENDER", "1")
+    monkeypatch.setenv("BOT_MODE", "webhook")
+    monkeypatch.setenv("WEBHOOK_BASE_URL", "https://example.com")
     monkeypatch.delenv("AUTO_SET_WEBHOOK", raising=False)
 
-    assert bot_kie._auto_set_webhook_enabled() is False
+    assert bot_kie._auto_set_webhook_enabled() is True
 
     monkeypatch.setenv("AUTO_SET_WEBHOOK", "1")
     assert bot_kie._auto_set_webhook_enabled() is True
