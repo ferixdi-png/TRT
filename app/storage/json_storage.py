@@ -10,7 +10,7 @@ import logging
 import math
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import aiofiles
 
@@ -322,7 +322,7 @@ class JsonStorage(BaseStorage):
             "model_id": model_id,
             "sku_id": sku_id,
             "amount": amount,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await self._save_json(self.balance_deductions_file, deductions)
         logger.info(
@@ -452,7 +452,7 @@ class JsonStorage(BaseStorage):
             "user_id": user_id,
             "sku_id": sku_id,
             "source": source,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await self._save_json(self.free_generations_file, free_data)
         await self._save_json(self.free_deductions_file, deductions)

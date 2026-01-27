@@ -7,7 +7,7 @@ import os
 import re
 import socket
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
 
@@ -226,7 +226,7 @@ async def _check_db_query(database_url: str) -> Dict[str, Any]:
 async def _storage_rw_smoke(storage: Any) -> Dict[str, Any]:
     if storage is None:
         return _status_entry(STATUS_FAIL, details="storage unavailable", hint="Fix DATABASE_URL/BOT_INSTANCE_ID")
-    payload = {"ts": datetime.utcnow().isoformat(), "ok": True}
+    payload = {"ts": datetime.now(timezone.utc).isoformat(), "ok": True}
     try:
         await storage.write_json_file(_BOOT_REPORT_KEY, payload)
         loaded = await storage.read_json_file(_BOOT_REPORT_KEY, default={})
@@ -339,7 +339,7 @@ async def _persist_boot_report(storage: Any, report: Dict[str, Any]) -> None:
 
 
 async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = None) -> Dict[str, Any]:
-    diagnostics_started = datetime.utcnow().isoformat()
+    diagnostics_started = datetime.now(timezone.utc).isoformat()
     summary: Dict[str, Any] = {}
     critical_failures: Dict[str, str] = {}
     degraded_notes: Dict[str, str] = {}

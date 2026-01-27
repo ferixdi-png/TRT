@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.storage.base import BaseStorage
@@ -42,7 +42,7 @@ async def append_event(
                 "user_id": user_id,
                 "kind": kind,
                 "payload": payload,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
             }
         )
         updated[user_key] = events

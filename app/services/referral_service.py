@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 
 from app.observability.structured_logs import log_structured_event
@@ -280,7 +280,7 @@ async def award_referral_bonus(
             )
         else:
             key = _get_event_key(partner_id, int(referred_user_id))
-            created_at = datetime.utcnow().isoformat()
+            created_at = datetime.now(timezone.utc).isoformat()
 
             def updater(data: Dict[str, Any]) -> Dict[str, Any]:
                 nonlocal created
