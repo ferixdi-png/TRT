@@ -38,6 +38,65 @@ def get_health_status() -> Dict[str, Optional[object]]:
     }
 
 
+async def check_database_health() -> Dict[str, Any]:
+    """Проверяет здоровье базы данных."""
+    try:
+        database_url = os.getenv("DATABASE_URL", "").strip()
+        if not database_url:
+            return {"status": "error", "message": "DATABASE_URL not set"}
+        
+        # Простая проверка подключения
+        import asyncpg
+        conn = await asyncpg.connect(database_url, timeout=2.0)
+        await conn.execute("SELECT 1")
+        await conn.close()
+        
+        return {"status": "healthy", "message": "Database connection OK"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+async def check_redis_health() -> Dict[str, Any]:
+    """Проверяет здоровье Redis."""
+    try:
+        redis_url = os.getenv("REDIS_URL", "").strip()
+        if not redis_url:
+            return {"status": "warning", "message": "REDIS_URL not set"}
+        
+        import redis.asyncio as redis
+        client = redis.from_url(redis_url, socket_timeout=2.0)
+        await client.ping()
+        await client.close()
+        
+        return {"status": "healthy", "message": "Redis connection OK"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+async def check_kie_api_health() -> Dict[str, Any]:
+    """Проверяет здоровье KIE API."""
+    try:
+        kie_api_url = os.getenv("KIE_API_URL", "https://api.kie.ai").strip()
+        kie_api_key = os.getenv("KIE_API_KEY", "").strip()
+        
+        if not kie_api_key:
+            return {"status": "warning", "message": "KIE_API_KEY not set"}
+        
+        # Простая проверка доступности API
+        import aiohttp
+        timeout = aiohttp.ClientTimeout(total=3.0)
+        
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            headers = {"Authorization": f"Bearer {kie_api_key}"}
+            async with session.get(f"{kie_api_url}/health", headers=headers) as resp:
+                if resp.status == 200:
+                    return {"status": "healthy", "message": "KIE API accessible"}
+                else:
+                    return {"status": "error", "message": f"KIE API returned {resp.status}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 async def health_handler(request):
     """Обработчик healthcheck запросов"""
     import os
@@ -61,14 +120,34 @@ async def health_handler(request):
     if not os.getenv("KIE_API_KEY"):
         kie_mode = "disabled"
     
+    # Проверяем здоровье компонентов
+    health_checks = {}
+    try:
+        health_checks["database"] = await check_database_health()
+        health_checks["redis"] = await check_redis_health()
+        health_checks["kie_api"] = await check_kie_api_health()
+    except Exception as e:
+        logger.warning(f"Health check failed: {e}")
+        health_checks["error"] = str(e)
+    
+    # Определяем общий статус
+    overall_status = "ok"
+    for check_name, check_result in health_checks.items():
+        if check_result.get("status") == "error":
+            overall_status = "error"
+            break
+        elif check_result.get("status") == "warning":
+            overall_status = "warning"
+    
     # Формируем JSON ответ
     response_data = {
-        "ok": True,
-        "status": "ok",
+        "ok": overall_status == "ok",
+        "status": overall_status,
         "uptime": uptime,
         "storage": storage_mode,
         "kie_mode": kie_mode,
         "webhook_route_registered": _webhook_route_registered,
+        "health_checks": health_checks,
     }
     try:
         from app.config import get_settings
@@ -79,10 +158,13 @@ async def health_handler(request):
         response_data["bot_mode"] = os.getenv("BOT_MODE", "")
         response_data["instance"] = os.getenv("BOT_INSTANCE_ID", "")
     
+    # Возвращаем соответствующий HTTP статус
+    status_code = 200 if overall_status == "ok" else 503
+    
     return web.Response(
         text=json.dumps(response_data),
         content_type="application/json",
-        status=200
+        status=status_code
     )
 
 
