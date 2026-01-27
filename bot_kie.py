@@ -181,6 +181,15 @@ def _log_background_task_result(task: asyncio.Task, *, action: str) -> None:
         logger.error("TASK_FAILED action=%s", action, exc_info=True)
 
 
+def _suppress_task_exceptions(task: asyncio.Task, *, action: str = "background") -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        return
+    except Exception as exc:
+        logger.debug("TASK_SUPPRESSED action=%s error=%s", action, exc, exc_info=True)
+
+
 def _register_background_task(task: asyncio.Task, *, action: str = "background") -> None:
     _background_tasks.add(task)
 
@@ -1651,7 +1660,9 @@ async def warm_generation_type_menu_cache(
             timeout_triggered = True
             for task in pending:
                 task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+                task.add_done_callback(
+                    lambda t: _suppress_task_exceptions(t, action="gen_type_menu_warmup_timeout")
+                )
             for gen_type, task in zip(cached_types, tasks):
                 if task in pending and gen_type not in counts:
                     counts[gen_type] = {"count": None, "cache": "timeout"}
@@ -1763,10 +1774,9 @@ async def warm_generation_type_menu_cache(
             except asyncio.TimeoutError as exc:
                 last_exc = exc
                 warmup_task.cancel()
-                try:
-                    await warmup_task
-                except asyncio.CancelledError:
-                    pass
+                warmup_task.add_done_callback(
+                    lambda t: _suppress_task_exceptions(t, action="gen_type_menu_warmup_cancel")
+                )
                 GEN_TYPE_MENU_WARMUP_DEGRADED = True
                 elapsed_ms_real = int((time.monotonic() - attempt_start) * 1000)
                 total_elapsed_ms = int((time.monotonic() - start) * 1000)
@@ -1802,8 +1812,9 @@ async def warm_generation_type_menu_cache(
             except Exception as exc:
                 last_exc = exc
                 warmup_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await warmup_task
+                warmup_task.add_done_callback(
+                    lambda t: _suppress_task_exceptions(t, action="gen_type_menu_warmup_error")
+                )
                 logger.info(
                     "GEN_TYPE_MENU_WARMUP_FAILED attempt=%s error=%s correlation_id=%s",
                     attempt,
@@ -25902,7 +25913,7 @@ def _auto_set_webhook_enabled() -> bool:
     raw_value = os.getenv("AUTO_SET_WEBHOOK")
     if raw_value is not None:
         return raw_value.strip().lower() in {"1", "true", "yes", "on"}
-    return not _is_render_environment()
+    return True
 
 
 async def _run_webhook_setter_cycle(
@@ -25938,14 +25949,29 @@ async def _run_webhook_setter_cycle(
         )
 
         async with Bot(token=BOT_TOKEN, request=request) as temp_bot:
-            ok = await asyncio.wait_for(
+            webhook_task = asyncio.create_task(
                 ensure_webhook_mode(
                     temp_bot,
                     webhook_url,
                     cycle_timeout_s=cycle_timeout_s,
-                ),
-                timeout=cycle_timeout_s,
+                )
             )
+            done, pending = await asyncio.wait({webhook_task}, timeout=cycle_timeout_s)
+            if pending:
+                for task in pending:
+                    task.cancel()
+                    task.add_done_callback(
+                        lambda t: _suppress_task_exceptions(t, action="webhook_setter_timeout")
+                    )
+                duration_ms = int((time.monotonic() - started) * 1000)
+                return {
+                    "ok": False,
+                    "outcome": "timeout",
+                    "error_type": "Timeout",
+                    "error": "webhook_setter_deadline",
+                    "duration_ms": duration_ms,
+                }
+            ok = list(done)[0].result()
     except asyncio.TimeoutError as exc:
         duration_ms = int((time.monotonic() - started) * 1000)
         return {
@@ -26063,6 +26089,14 @@ async def _run_webhook_setter_loop(webhook_url: str) -> None:
 
 def _schedule_webhook_setter(webhook_url: str) -> None:
     global _webhook_setter_task
+    try:
+        from app.locking.single_instance import is_lock_held
+    except Exception:
+        is_lock_held = None
+
+    if is_lock_held is not None and not is_lock_held():
+        logger.info("SKIPPED_AUTO_SET reason=not_leader_instance")
+        return
     if _webhook_setter_task and not _webhook_setter_task.done():
         return
     _webhook_setter_task = _create_background_task(
