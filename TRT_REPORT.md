@@ -1,5 +1,29 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-17 TRT: webhook /start storm control + menu deps background + storage degraded read-fast
+
+### Root cause (2026-01-27 лог-срез)
+- /start storm создаёт параллельные цепочки: конкурирующие sendMessage → `WEBHOOK_PROCESS_TIMEOUT` и `TELEGRAM_REQUEST_TIMEOUT` на minimal_menu_send/minimal_menu_fallback.  
+- В критическом пути `show_main_menu`: `menu_lang_refresh/referrals_list` + `is_new_user` + `free_remaining` дергают storage и попадают под `STORAGE_DEGRADED` и `MENU_BUILD_TIMEOUT`.  
+- User registry update идёт в пользовательском пути и ловит таймауты storage.  
+- `correlation_store` flush на таймауте возвращал batch обратно и накапливал backpressure.  
+
+### Что сделано
+- `/start` storm control: per-user inflight guard + coalescing; повторный `/start` отвечает "меню уже обновляется" и реюзит job_id.  
+- Menu deps refresh вынесены в background; синхронный путь читает только cache и быстро деградирует.  
+- Storage degraded: read-fast режим 15s — меню показывается в минимальном виде с кнопкой "Обновить".  
+- Telegram send cap: для `/start` введён timeout cap (< webhook budget) + 1 retry с jitter; при timeout отправляется ultra-minimal текст без клавиатуры.  
+- User registry update вынесен в очередь с debounce + batch write; таймауты помечают storage degraded.  
+- correlation_store flush: bounded queue + drop/skip при timeout, единый лог batch_size/wait_ms/dropped_count на окно.  
+- Observability: добавлены метки start_dedup_hit/menu_cache_hit/menu_deps_skipped/send_ultra_minimal_used/registry_update_queued/webhook_ack_ms/handler_total_ms.  
+
+### Метрики (p95/p99)
+- `/start` webhook_ack_ms p95/p99: **TBD** (нет локального прогона).  
+- handler_total_ms p95/p99: **TBD** (нет локального прогона).  
+
+### Итог
+**STOP** — требуется прогон 3 нагрузочных сценариев и подтверждение отсутствия `WEBHOOK_PROCESS_TIMEOUT`/`MINIMAL_MENU_SEND_FAILED` при storm `/start`.  
+
 ## ✅ 2026-02-17 TRT: webhook ACK fast-path + /start budget + Telegram timeout retries + correlation backpressure
 
 ### Root cause (2026-01-27 лог-срез)
