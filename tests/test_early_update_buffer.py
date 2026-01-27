@@ -80,7 +80,7 @@ async def test_early_update_buffer_integration_drain_order(harness, monkeypatch)
     monkeypatch.setattr(bot_kie, "_early_update_buffer", buffer)
 
     process_update = AsyncMock()
-    object.__setattr__(harness.application, "process_update", process_update)
+    harness.application.bot_data["process_update_override"] = process_update
 
     payloads = [
         {"update_id": 3, "message": {"message_id": 1, "date": 0, "chat": {"id": 1, "type": "private"}}},
