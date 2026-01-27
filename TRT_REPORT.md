@@ -1,5 +1,19 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-16 TRT: webhook defaults + /start fast-path gate + deterministic webhook tests
+
+### Что сделано
+- AUTO_SET_WEBHOOK теперь по умолчанию выключен на Render/production и включается только явным `AUTO_SET_WEBHOOK=1`. 
+- `/start` fast-path использует gated timeout: в норме быстрый full menu отрисовывается сразу, а при fault-injection/placeholder — сначала уходит минимальное меню. 
+- Webhook тестовый harness всегда включает `TEST_MODE` и детерминирует фоновые режимы; в тестовом контексте webhook handler больше не зависит от фоновой обработки. 
+- В `correlation_store` первое timeout-сообщение больше не подавляется интервалом. 
+
+### Тесты
+- `pytest -q` — ✅ (569 passed, 4 skipped, 76 xfailed, 2 xpassed)
+
+### Итог
+**GO** — тесты зелёные, /start fast-path gated, webhook defaults и test harness синхронизированы.
+
 ## ✅ 2026-02-15 TRT: Render auto-webhook + warmup hard-timeout + correlation log throttle
 
 ### Root cause (по симптомам)

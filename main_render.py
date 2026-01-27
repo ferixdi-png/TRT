@@ -106,7 +106,8 @@ def build_webhook_handler(
     webhook_semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit > 0 else None
     process_in_background_raw = os.getenv("WEBHOOK_PROCESS_IN_BACKGROUND")
     if process_in_background_raw is None:
-        process_in_background = True
+        test_mode = os.getenv("TEST_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+        process_in_background = not test_mode
     else:
         process_in_background = process_in_background_raw.strip().lower() in {"1", "true", "yes", "on"}
 

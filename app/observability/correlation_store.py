@@ -61,7 +61,7 @@ _persist_timeout_seconds = float(os.getenv("CORRELATION_STORE_PERSIST_TIMEOUT_SE
 _flush_timeout_log_interval_seconds = float(
     os.getenv("CORRELATION_STORE_FLUSH_TIMEOUT_LOG_INTERVAL_SECONDS", "30.0")
 )
-_flush_timeout_last_log_ts = 0.0
+_flush_timeout_last_log_ts: Optional[float] = None
 _flush_max_records = int(os.getenv("CORRELATION_STORE_FLUSH_MAX_RECORDS", "200"))
 _queue_max_records = int(os.getenv("OBS_QUEUE_MAX", "1000"))
 _dropped_records_total = 0
@@ -147,6 +147,7 @@ def _schedule_debounced_persist(
                 now = time.monotonic()
                 if (
                     _flush_timeout_log_interval_seconds <= 0
+                    or _flush_timeout_last_log_ts is None
                     or (now - _flush_timeout_last_log_ts) >= _flush_timeout_log_interval_seconds
                 ):
                     _flush_timeout_last_log_ts = now
@@ -531,4 +532,4 @@ def reset_correlation_store() -> None:
     _pending_records.clear()
     _pending_sources.clear()
     global _flush_timeout_last_log_ts
-    _flush_timeout_last_log_ts = 0.0
+    _flush_timeout_last_log_ts = None
