@@ -8615,6 +8615,8 @@ async def _telegram_idempotency_store_hit(key: Optional[str]) -> bool:
         return False
     if _telegram_idempotency_hit(key):
         return True
+    if os.getenv("TEST_MODE", "").strip() == "1":
+        return False
     storage_instance = await _resolve_idempotency_storage()
     if storage_instance is None:
         return False
@@ -8629,6 +8631,8 @@ async def _telegram_idempotency_store_hit(key: Optional[str]) -> bool:
 
 async def _telegram_idempotency_store_mark(key: Optional[str]) -> None:
     if not key:
+        return
+    if os.getenv("TEST_MODE", "").strip() == "1":
         return
     storage_instance = await _resolve_idempotency_storage()
     if storage_instance is None:
@@ -26309,7 +26313,7 @@ def acquire_single_instance_lock_or_exit() -> None:
     atexit.register(release_lock_on_exit)
 
 
-async def create_bot_application(settings) -> Application:
+async def create_bot_application(settings: Settings, *, bot_override=None) -> Application:
     """
     Создает и настраивает Telegram Application с зарегистрированными handlers.
     НЕ запускает polling/webhook - только создает и настраивает application.
@@ -26399,7 +26403,7 @@ async def create_bot_application(settings) -> Application:
     
     # Create the Application через bootstrap (с dependency container)
     from app.bootstrap import create_application
-    application = await create_application(settings)
+    application = await create_application(settings, bot_override=bot_override)
     
     # Для обратной совместимости: сохраняем в глобальные переменные
     # NOTE: удалить после полного рефакторинга handlers

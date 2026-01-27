@@ -166,7 +166,7 @@ def get_deps(application: Application) -> DependencyContainer:
     return application.bot_data["deps"]
 
 
-async def create_application(settings: Optional[Settings] = None) -> Application:
+async def create_application(settings: Optional[Settings] = None, *, bot_override: Optional[Bot] = None) -> Application:
     """
     Создает Telegram Application с dependency container
     
@@ -208,19 +208,26 @@ async def create_application(settings: Optional[Settings] = None) -> Application
         pool_timeout=settings.telegram_http_pool_timeout_seconds,
         connection_pool_size=settings.telegram_http_connection_pool_size,
     )
-    application = (
-        Application.builder()
-        .token(settings.telegram_bot_token)
-        .request(request)
+    if bot_override is not None:
+        builder = Application.builder().bot(bot_override)
+    else:
+        builder = Application.builder().token(settings.telegram_bot_token)
+    if bot_override is None:
+        builder = builder.request(request)
+    builder = (
+        builder
         .post_init(post_init)
         .post_shutdown(post_shutdown)
-        .build()
     )
+    if settings.test_mode and hasattr(builder, "updater"):
+        builder = builder.updater(None)
+    application = builder.build()
     if settings.test_mode:
-        async def _skip_bot_initialize() -> None:
+        try:
             object.__setattr__(application.bot, "_initialized", True)
-
-        object.__setattr__(application.bot, "initialize", _skip_bot_initialize)
+        except Exception:
+            setattr(application.bot, "_initialized", True)
+        setattr(application, "_initialized", True)
     ensure_error_handler_registered(application)
     install_safe_handler_wrapper(application)
     

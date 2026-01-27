@@ -54,7 +54,7 @@ async def test_webhook_ack_burst_under_200ms(webhook_harness, monkeypatch):
         await asyncio.sleep(0.15)
         processed.append(getattr(update, "update_id", 0))
 
-    webhook_harness.application.process_update = slow_process_update
+    webhook_harness.application.bot_data["process_update_override"] = slow_process_update
 
     async def _send_burst(idx: int) -> float:
         start_ts = time.monotonic()

@@ -17,6 +17,10 @@ ACK путь webhook строго минимальный (<200ms), тяжёла�
 | --- | --- | --- |
 | ack_ms | TBD | TBD |
 
+### Тесты
+- `python -m pytest tests/test_webhook_handler_ack.py tests/test_webhook_timeout_regressions.py` — ✅ (9 passed)
+- Warnings: DeprecationWarning (asyncio.iscoroutinefunction), PTBUserWarning (per_message), redis close deprecation
+
 ### Итог
 **STOP** — нужно прогнать pytest (webhook suite или полный) и заполнить p95/p99 ack_ms из локального прогона.
 

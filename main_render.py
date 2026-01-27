@@ -231,7 +231,14 @@ def build_webhook_handler(
             update_type=_resolve_update_type(update),
             route=route,
         )
-        process_task = asyncio.create_task(application.process_update(update))
+        process_override = None
+        if hasattr(application, "bot_data"):
+            try:
+                process_override = application.bot_data.get("process_update_override")
+            except Exception:
+                process_override = None
+        process_fn = process_override or application.process_update
+        process_task = asyncio.create_task(process_fn(update))
         watchdog_task = asyncio.create_task(
             _watchdog_handler_stall(
                 process_task,

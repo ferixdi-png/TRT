@@ -108,7 +108,7 @@ def log_structured_event(**fields: Any) -> None:
     stage = fields.get("stage")
     param = fields.get("param")
 
-    if not skip_correlation_store:
+    if not skip_correlation_store and os.getenv("TEST_MODE", "").strip() != "1":
         register_ids(
             correlation_id=correlation_id,
             request_id=request_id,

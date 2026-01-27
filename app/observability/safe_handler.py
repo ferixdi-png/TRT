@@ -137,5 +137,8 @@ def install_safe_handler_wrapper(application: Any) -> None:
         _wrap_handler(handler)
         return original_add_handler(handler, *args, **kwargs)
 
-    application.add_handler = _wrapped_add_handler  # type: ignore[assignment]
-    application._safe_handler_wrapper_installed = True
+    try:
+        application.add_handler = _wrapped_add_handler  # type: ignore[assignment]
+        application._safe_handler_wrapper_installed = True
+    except Exception:
+        logger.debug("SAFE_HANDLER_WRAPPER_SKIP reason=readonly_add_handler", exc_info=True)
