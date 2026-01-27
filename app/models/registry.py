@@ -60,6 +60,25 @@ def get_models_cached_only() -> Optional[List[Dict[str, Any]]]:
     return _model_cache
 
 
+def get_models_static_only() -> Optional[List[Dict[str, Any]]]:
+    """Return models from YAML registry without API calls."""
+    if YAML_REGISTRY_AVAILABLE:
+        try:
+            yaml_models_dict = load_yaml_models()
+            if yaml_models_dict:
+                normalized = []
+                for model_id, yaml_data in yaml_models_dict.items():
+                    try:
+                        norm_model = normalize_yaml_model(model_id, yaml_data, enrich_from=None)
+                        normalized.append(norm_model)
+                    except Exception:
+                        continue
+                return normalized
+        except Exception:
+            pass
+    return []
+
+
 def get_models_sync_fast() -> List[Dict[str, Any]]:
     """Fast path: load minimal models from YAML without expensive imports."""
     global _model_cache, _model_source, _model_timestamp, _model_cache_is_minimal, _kie_models_import_cache

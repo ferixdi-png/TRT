@@ -1216,11 +1216,11 @@ from helpers import (
 from price_confirmation import show_price_confirmation, build_confirmation_text
 # Используем registry как единый источник моделей
 from app.models.registry import (
-    get_models_sync,
     get_generation_types,
     get_models_by_generation_type,
     get_generation_type_info,
     get_models_cached_only,
+    get_models_static_only,
 )
 from app.models.canonical import canonicalize_model_id
 from app.utils.singleton_lock import get_lock_mode, is_lock_degraded, is_lock_acquired
@@ -1462,13 +1462,13 @@ def get_visible_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]
     return models
 
 
-def get_visible_models_by_generation_type_cached(gen_type: str) -> tuple[List[Dict[str, Any]], str]:
+def get_visible_models_by_generation_type_cached(gen_type: str, *, allow_api: bool = True) -> tuple[List[Dict[str, Any]], str]:
     """Return visible models and cache status without triggering IO."""
     cached = _get_cached_gen_type_models(gen_type, allow_stale=False)
     if cached is not None:
         return cached, "hit"
 
-    cached_models = get_models_cached_only()
+    cached_models = get_models_cached_only() if allow_api else get_models_static_only()
     if cached_models is None:
         logger.warning(
             "GEN_TYPE_MODELS_CACHE_MISS gen_type=%s reason=models_cache_empty",
@@ -1660,6 +1660,7 @@ async def warm_generation_type_menu_cache(
                         models, cache_status = await asyncio.to_thread(
                             get_visible_models_by_generation_type_cached,
                             gen_type,
+                            allow_api=False,  # Boot warmup: NO API calls!
                         )
                     except asyncio.CancelledError:
                         raise
