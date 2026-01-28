@@ -491,21 +491,15 @@ async def main() -> None:
 def run() -> None:
     """Synchronous wrapper for running via __main__."""
     try:
-        # P0 FIX: Для webhook режима делаем preflight через asyncio.run(), затем sync webhook
         bot_mode = os.getenv("BOT_MODE", "").lower().strip()
         if bot_mode == "webhook":
-            logger.info("Webhook mode detected: running preflight then sync webhook")
-            import asyncio
-            
-            # Шаг 1: Выполняем async preflight (healthcheck, storage, diagnostics, bot init)
-            logger.info("Step 1: Running async preflight...")
-            application = asyncio.run(run_bot_preflight())
-            
-            # Шаг 2: Запускаем webhook в sync режиме - PTB сам управляет loop
-            logger.info("Step 2: Starting webhook in sync mode...")
-            from bot_kie import run_webhook_sync
-            run_webhook_sync(application)
-            
+            # P0 FIX: Для webhook режима используем main_render.py который:
+            # 1. Сначала биндит порт (health server)
+            # 2. Регистрирует webhook handler
+            # 3. Держит event loop открытым
+            logger.info("Webhook mode detected: delegating to main_render.py")
+            import main_render
+            asyncio.run(main_render.main())
         else:
             # Для polling режима оставляем как было
             asyncio.run(main())

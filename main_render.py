@@ -22,6 +22,7 @@ from aiohttp import web
 from telegram import Update
 
 from app.bootstrap import create_application
+from bot_kie import create_bot_application
 from app.middleware.rate_limit import PerKeyRateLimiter, TTLCache
 from app.observability.structured_logs import log_critical_event, log_structured_event
 from app.observability.update_metrics import increment_metric as increment_update_metric
@@ -703,7 +704,9 @@ def build_webhook_handler(
 
 async def _initialize_application(settings):
     init_started = time.monotonic()
-    application = await create_application(settings)
+    # Используем create_bot_application из bot_kie.py который регистрирует все хендлеры
+    # вместо create_application из app/bootstrap.py
+    application = await create_bot_application(settings)
     if os.getenv("TEST_MODE", "").strip() == "1":
         logger.info("TEST_MODE enabled; skipping Telegram API initialization.")
         setattr(application, "_initialized", True)
@@ -730,21 +733,40 @@ async def _get_initialized_application(settings):
 async def main() -> None:
     """Start webhook-mode PTB application and healthcheck server."""
     setup_logging()
+    logger.info("[RENDER] Starting webhook mode...")
+    
     settings = None
     try:
         from app.config import Settings
-
         settings = Settings()
-    except Exception:
+    except Exception as e:
+        logger.warning("[RENDER] Failed to load settings: %s", e)
         settings = None
 
+    port = int(os.getenv("PORT", "10000"))
+    
+    # P0 FIX: Сначала запускаем health server без webhook handler
+    # чтобы порт был открыт мгновенно (Render требует port bind < 5s)
+    logger.info("[RENDER] Step 1: Starting health server on port %s (before app init)", port)
+    await start_health_server(port=port, webhook_handler=None, self_check=True)
+    logger.info("[RENDER] Health server started, port %s is now open", port)
+    
+    # Теперь инициализируем application (может занять время)
+    logger.info("[RENDER] Step 2: Initializing application...")
     application = await _get_initialized_application(settings)
+    logger.info("[RENDER] Application initialized")
+    
     if _early_update_count:
         logger.warning("WEBHOOK early_updates=%s gate=ready", _early_update_count)
 
-    port = int(os.getenv("PORT", "10000"))
+    # Строим webhook handler и обновляем health server
+    logger.info("[RENDER] Step 3: Registering webhook handler...")
     webhook_handler = build_webhook_handler(application, settings)
+    
+    # Перезапускаем health server с webhook handler
+    await stop_health_server()
     await start_health_server(port=port, webhook_handler=webhook_handler, self_check=True)
+    logger.info("[RENDER] Webhook handler registered, ready to receive updates")
 
     try:
         await asyncio.Event().wait()
