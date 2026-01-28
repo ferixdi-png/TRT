@@ -177,6 +177,15 @@ async def _safe_async_cleanup(
 
 async def run_bot() -> None:
     """Run the Telegram bot using the existing async entrypoint."""
+    # Импортируем основной бот из корня проекта, не из app/
+    import sys
+    import os
+    
+    # Добавляем корень проекта в path если нужно
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    
     from bot_kie import main as bot_main
     await bot_main()
 
