@@ -1,5 +1,31 @@
 # TRT_REPORT.md
 
+## ✅ 2026-01-28 TEST CLEANUP (SESSION 7)
+
+### СТАТУС: GO — 672 ТЕСТОВ ПРОХОДЯТ
+
+**Результаты тестов:**
+```
+672 passed, 4 skipped, 109 xfailed, 5 xpassed, 1 warning
+```
+
+### Исправлено в этой сессии:
+1. ✅ **Удалено 6 тестов из KNOWN_XFAIL_TESTS** — теперь стабильно проходят
+2. ✅ **Убран xfail из test_start_falls_back_to_minimal_menu_on_timeout** — тест стабилен
+
+### Коммиты в main:
+```
+8254bb8 Remove 6 stably passing tests from KNOWN_XFAIL_TESTS
+995a0b5 Remove outdated xfail marker from test_start_falls_back_to_minimal_menu_on_timeout
+```
+
+### Прогресс тестов:
+- Session 5: 663 passed
+- Session 6: 665 passed (+2)
+- Session 7: 672 passed (+7)
+
+---
+
 ## ✅ 2026-01-28 CLEANUP & FIXES (SESSION 6)
 
 ### СТАТУС: GO — 665 ТЕСТОВ ПРОХОДЯТ
