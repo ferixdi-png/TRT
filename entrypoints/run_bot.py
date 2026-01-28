@@ -275,6 +275,18 @@ async def run_bot_preflight() -> None:
         # Запускаем main() для инициализации, но не для webhook
         await bot_kie_module.main()
         
+        # Cleanup background tasks чтобы предотвратить GatheringFuture exceptions
+        if hasattr(bot_kie_module, '_background_tasks') and bot_kie_module._background_tasks:
+            logger.info(f"Cleaning up {len(bot_kie_module._background_tasks)} background tasks in preflight")
+            # Отменяем все задачи
+            for task in list(bot_kie_module._background_tasks):
+                if not task.done():
+                    task.cancel()
+            # Собираем отменённые задачи
+            if bot_kie_module._background_tasks:
+                await asyncio.gather(*bot_kie_module._background_tasks, return_exceptions=True)
+            bot_kie_module._background_tasks.clear()
+        
         # Возвращаем application для webhook запуска
         return bot_kie_module.application
 
@@ -488,40 +500,6 @@ def run() -> None:
             # Шаг 1: Выполняем async preflight (healthcheck, storage, diagnostics, bot init)
             logger.info("Step 1: Running async preflight...")
             application = asyncio.run(run_bot_preflight())
-            
-            # Cleanup background tasks после preflight чтобы предотвратить GatheringFuture exceptions
-            import bot_kie
-            if hasattr(bot_kie, '_background_tasks') and bot_kie._background_tasks:
-                logger.info(f"Cleaning up {len(bot_kie._background_tasks)} background tasks after preflight")
-                import asyncio
-                
-                def handle_asyncio_exception(loop, context):
-                    """Глобальный handler для asyncio exceptions"""
-                    msg = context.get("message", "Unknown asyncio error")
-                    exception = context.get("exception")
-                    if exception and "CancelledError" in str(type(exception)):
-                        # Игнорируем CancelledError - это штатная ситуация
-                        logger.debug(f"Ignoring CancelledError in asyncio: {msg}")
-                        return
-                    logger.error(f"Asyncio error: {msg}", exc_info=exception)
-                
-                # Создаем временный loop для cleanup
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.set_exception_handler(handle_asyncio_exception)
-                try:
-                    # Отменяем все задачи
-                    for task in list(bot_kie._background_tasks):
-                        if not task.done():
-                            task.cancel()
-                    # Собираем отменённые задачи
-                    if bot_kie._background_tasks:
-                        loop.run_until_complete(asyncio.gather(*bot_kie._background_tasks, return_exceptions=True))
-                    bot_kie._background_tasks.clear()
-                except Exception as e:
-                    logger.warning(f"Error during background tasks cleanup: {e}")
-                finally:
-                    loop.close()
             
             # Шаг 2: Запускаем webhook в sync режиме - PTB сам управляет loop
             logger.info("Step 2: Starting webhook in sync mode...")
