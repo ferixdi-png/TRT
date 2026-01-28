@@ -2082,7 +2082,10 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
         for task in (user_data_task, models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
-        # Don't await cancelled tasks - they may block on asyncio.to_thread
+        # Корректно собираем отменённые задачи, чтобы избежать "exception was never retrieved"
+        cancelled_tasks = [t for t in (user_data_task, models_task, gen_type_task) if t and not t.done()]
+        if cancelled_tasks:
+            await asyncio.gather(*cancelled_tasks, return_exceptions=True)
         log_structured_event(
             correlation_id=correlation_id,
             action="BOOT_WARMUP",
@@ -2106,7 +2109,10 @@ async def _run_boot_warmups(*, correlation_id: str = "BOOT") -> None:
         for task in (user_data_task, models_task, gen_type_task):
             if task and not task.done():
                 task.cancel()
-        # Don't await cancelled tasks - they may block on asyncio.to_thread
+        # Корректно собираем отменённые задачи, чтобы избежать "exception was never retrieved"
+        cancelled_tasks = [t for t in (user_data_task, models_task, gen_type_task) if t and not t.done()]
+        if cancelled_tasks:
+            await asyncio.gather(*cancelled_tasks, return_exceptions=True)
 
 
 def start_boot_warmups(*, correlation_id: str = "BOOT") -> asyncio.Task:
@@ -29957,6 +29963,7 @@ def run_webhook_sync(application):
     Даёт PTB полный контроль над event loop lifecycle.
     """
     import os
+    import asyncio
     from telegram import Update
     
     webhook_url = _resolve_webhook_url_from_env()
@@ -29964,6 +29971,16 @@ def run_webhook_sync(application):
         raise RuntimeError("WEBHOOK_URL not set for webhook mode!")
     
     logger.info(f"🚀 Starting webhook server in sync mode: {webhook_url}")
+    
+    # Гарантируем наличие event loop в MainThread
+    try:
+        current_loop = asyncio.get_event_loop()
+        logger.debug(f"✅ Found existing event loop: {current_loop}")
+    except RuntimeError:
+        logger.info("🔄 No event loop in MainThread, creating new one for PTB")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        logger.debug(f"✅ Created new event loop: {loop}")
     
     # Запускаем webhook в sync режиме - PTB сам управляет loop
     # Cleanup будет происходить автоматически при остановке
