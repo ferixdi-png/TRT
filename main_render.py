@@ -687,10 +687,12 @@ async def _initialize_application(settings):
     if os.getenv("TEST_MODE", "").strip() == "1":
         logger.info("TEST_MODE enabled; skipping Telegram API initialization.")
         setattr(application, "_initialized", True)
+        setattr(application, "initialized", True)
     else:
         await application.initialize()
-        # Гарантируем установку _initialized атрибута после инициализации
+        # Гарантируем установку обоих атрибутов после инициализации
         setattr(application, "_initialized", True)
+        setattr(application, "initialized", True)
     init_ms = int((time.monotonic() - init_started) * 1000)
     _app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
