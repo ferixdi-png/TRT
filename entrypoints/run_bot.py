@@ -175,6 +175,125 @@ async def _safe_async_cleanup(
         logger.warning("shutdown_failed action=%s error=%s", action, exc, exc_info=True)
 
 
+async def run_bot_preflight() -> None:
+    """Async preflight: healthcheck, storage, diagnostics, bot initialization."""
+    configure_logging()
+    port = resolve_port()
+    logger.info("Python entrypoint starting preflight for webhook mode")
+
+    # P0 FIX: В webhook режиме не стартуем healthcheck чтобы избежать конфликта портов
+    bot_mode = os.getenv("BOT_MODE", "").lower().strip()
+    if bot_mode == "webhook":
+        logger.info("Webhook mode detected: skipping healthcheck server to avoid port conflicts")
+        health_started = False
+    else:
+        logger.info("Polling mode detected: starting healthcheck server")
+        health_started = await start_healthcheck(port)
+
+    loop = asyncio.get_running_loop()
+    storage = None
+
+    try:
+        from app.storage import get_storage
+        from app.diagnostics.billing_preflight import (
+            format_billing_preflight_report,
+            run_billing_preflight,
+        )
+        from app.diagnostics.boot import log_boot_report, run_boot_diagnostics
+
+        storage = get_storage()
+        db_ok = False
+        try:
+            db_ok = await _wait_for_storage(storage)
+        except Exception as exc:
+            logger.error("DB connectivity check failed: %s", exc, exc_info=True)
+            db_ok = False
+
+        if not db_ok:
+            if is_storage_preflight_strict():
+                logger.error("DB connection failed, aborting startup before Telegram updates.")
+                await stop_healthcheck(health_started)
+                sys.exit(1)
+            logger.warning("DB connection failed, continuing startup in degraded mode.")
+        else:
+            logger.info("DB connection OK, running billing preflight.")
+
+        boot_timeout = _read_float_env("BOOT_DIAGNOSTICS_TIMEOUT_SECONDS", 5.0)
+        try:
+            boot_report = await asyncio.wait_for(
+                run_boot_diagnostics(os.environ, storage=storage, redis_client=None),
+                timeout=boot_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("BOOT_DIAGNOSTICS_TIMEOUT timeout_s=%s", boot_timeout)
+            boot_report = {
+                "meta": {"bot_mode": os.getenv("BOT_MODE", ""), "port": port},
+                "summary": {},
+                "result": "DEGRADED",
+            }
+        log_boot_report(boot_report)
+        if boot_report.get("result") == "FAIL":
+            logger.error("Boot diagnostics reported FAIL.")
+            if is_boot_diagnostics_strict():
+                logger.error("Boot diagnostics strict mode enabled; aborting startup before Telegram updates.")
+                await stop_healthcheck(health_started)
+                sys.exit(1)
+            logger.warning("Boot diagnostics strict mode disabled; continuing startup.")
+
+        if db_ok:
+            preflight_timeout = _read_float_env("BILLING_PREFLIGHT_TIMEOUT_SECONDS", 6.0)
+            try:
+                preflight_report = await asyncio.wait_for(
+                    run_billing_preflight(storage, db_pool=None),
+                    timeout=preflight_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("BILLING_PREFLIGHT_TIMEOUT timeout_s=%s", preflight_timeout)
+                preflight_report = {"result": "DEGRADED", "how_to_fix": ["Preflight timeout"], "sections": {}}
+            preflight_result = preflight_report.get("result")
+            logger.info("Billing preflight result: %s", preflight_result)
+            if preflight_result == "FAIL":
+                logger.error("Billing preflight failed: %s", format_billing_preflight_report(preflight_report))
+                how_to_fix = preflight_report.get("how_to_fix") or []
+                if how_to_fix:
+                    logger.error("Billing preflight suggested fixes: %s", "; ".join(how_to_fix))
+                if is_preflight_strict():
+                    logger.error("Billing preflight strict mode enabled; aborting startup before Telegram updates.")
+                    await stop_healthcheck(health_started)
+                    sys.exit(1)
+                logger.warning("Billing preflight strict mode disabled; continuing startup.")
+        else:
+            logger.warning("Billing preflight skipped due to failed DB connectivity.")
+
+        # Инициализация бота (без запуска webhook)
+        import importlib.util
+        bot_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "bot_kie.py")
+        spec = importlib.util.spec_from_file_location("bot_kie_main", bot_file_path)
+        bot_kie_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bot_kie_module)
+        
+        # Запускаем main() для инициализации, но не для webhook
+        await bot_kie_module.main()
+        
+        # Возвращаем application для webhook запуска
+        return bot_kie_module.application
+
+    finally:
+        await _safe_async_cleanup(loop, "healthcheck_stop", stop_healthcheck(health_started))
+        if storage is not None and hasattr(storage, "close"):
+            close_fn = storage.close
+            if inspect.iscoroutinefunction(close_fn):
+                await _safe_async_cleanup(loop, "storage_close", close_fn())
+            else:
+                if loop.is_closed():
+                    logger.info("shutdown_skip reason=loop_closed action=storage_close")
+                else:
+                    try:
+                        close_fn()
+                    except Exception as exc:
+                        logger.warning("shutdown_failed action=storage_close error=%s", exc, exc_info=True)
+
+
 async def run_bot() -> None:
     """Run the Telegram bot using the existing async entrypoint."""
     # Используем абсолютный импорт с указанием полного пути
@@ -360,21 +479,21 @@ async def main() -> None:
 def run() -> None:
     """Synchronous wrapper for running via __main__."""
     try:
-        # P0 FIX: Для webhook режима запускаем main() как coroutine без asyncio.run()
+        # P0 FIX: Для webhook режима делаем preflight через asyncio.run(), затем sync webhook
         bot_mode = os.getenv("BOT_MODE", "").lower().strip()
         if bot_mode == "webhook":
-            # В webhook режиме запускаем main() напрямую как coroutine
-            logger.info("Webhook mode detected: running main() as coroutine")
+            logger.info("Webhook mode detected: running preflight then sync webhook")
             import asyncio
             
-            # Создаем новый loop и запускаем main() как coroutine
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(main())
-            finally:
-                # Не закрываем loop - пусть PTB сам управляет им
-                logger.info("Webhook mode completed, leaving loop management to PTB")
+            # Шаг 1: Выполняем async preflight (healthcheck, storage, diagnostics, bot init)
+            logger.info("Step 1: Running async preflight...")
+            application = asyncio.run(run_bot_preflight())
+            
+            # Шаг 2: Запускаем webhook в sync режиме - PTB сам управляет loop
+            logger.info("Step 2: Starting webhook in sync mode...")
+            from bot_kie import run_webhook_sync
+            run_webhook_sync(application)
+            
         else:
             # Для polling режима оставляем как было
             asyncio.run(main())

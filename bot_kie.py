@@ -28457,6 +28457,9 @@ async def main():
     from app.bootstrap import create_application
     application = await create_application(settings)
     
+    # Сохраняем application глобально для доступа из run_webhook_sync
+    globals()['application'] = application
+    
     # Для обратной совместимости: сохраняем в глобальные переменные
     # NOTE: удалить после полного рефакторинга handlers
     global storage, kie
@@ -29424,18 +29427,12 @@ async def main():
             logger.error("   Set WEBHOOK_URL environment variable or use BOT_MODE=polling")
             return
         
-        logger.info(f"🌐 Starting webhook mode: {webhook_url}")
+        logger.info(f"🌐 Webhook mode configured: {webhook_url}")
+        logger.info("🔄 Webhook server will be started by sync entrypoint")
         
-        # Запуск webhook сервера (оригинальный способ)
-        await application.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.getenv("PORT", "10000")),
-            url_path=webhook_url.split("/")[-1],  # webhook
-            webhook_url=webhook_url,
-            drop_pending_updates=True,
-            secret_token=os.getenv("WEBHOOK_SECRET_TOKEN"),
-        )
-        return  # Этот return сработает только после остановки webhook сервера
+        # НЕ запускаем webhook здесь - это сделает sync entrypoint
+        # чтобы PTB мог полностью управлять lifecycle event loop
+        return  # Выходим из main(), webhook запустится из sync кода
     else:
         logger.info("🔍 POLLING_MODE_ENTERED webhook_skipped=true")
 
@@ -29952,6 +29949,44 @@ async def handle_gen_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
     
     return ConversationHandler.END
+
+
+def run_webhook_sync(application):
+    """
+    Sync функция для запуска webhook сервера.
+    Даёт PTB полный контроль над event loop lifecycle.
+    """
+    import os
+    from telegram import Update
+    
+    webhook_url = _resolve_webhook_url_from_env()
+    if not webhook_url:
+        raise RuntimeError("WEBHOOK_URL not set for webhook mode!")
+    
+    logger.info(f"🚀 Starting webhook server in sync mode: {webhook_url}")
+    
+    # Добавляем post_shutdown хук для очистки singleton_lock
+    async def cleanup_on_shutdown():
+        try:
+            from app.utils.singleton_lock import release_singleton_lock
+            await release_singleton_lock()
+            logger.info("✅ Singleton lock released on shutdown")
+        except Exception as exc:
+            logger.warning("⚠️ Failed to release singleton lock on shutdown: %s", exc)
+    
+    # Регистрируем cleanup хук
+    application.add_post_shutdown_hook(cleanup_on_shutdown)
+    
+    # Запускаем webhook в sync режиме - PTB сам управляет loop
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", "10000")),
+        url_path="webhook",
+        webhook_url=f"{webhook_url}",
+        drop_pending_updates=True,
+        secret_token=os.getenv("WEBHOOK_SECRET_TOKEN"),
+        allowed_updates=Update.ALL_TYPES,
+    )
 
 
 if __name__ == "__main__":
