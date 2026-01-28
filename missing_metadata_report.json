@@ -1,0 +1,1371 @@
+{
+  "summary": {
+    "total_models": 75,
+    "models_with_issues": 75,
+    "issues_by_type": {
+      "missing_names": 74,
+      "missing_descriptions": 74,
+      "missing_emoji": 74,
+      "missing_pricing": 1
+    }
+  },
+  "issues": {
+    "missing_names": [
+      "bytedance/seedream",
+      "bytedance/seedream-v4-edit",
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/v1-pro-fast-image-to-video",
+      "elevenlabs/audio-isolation",
+      "elevenlabs/sound-effect",
+      "elevenlabs/speech-to-text",
+      "elevenlabs/text-to-speech",
+      "flux-2/flex-image-to-image",
+      "flux-2/flex-text-to-image",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "flux/kontext",
+      "google/imagen4",
+      "google/imagen4-fast",
+      "google/imagen4-ultra",
+      "google/nano-banana",
+      "google/nano-banana-edit",
+      "google/nanobanana-gemini-2.5-flash",
+      "google/veo-3",
+      "google/veo-3.1",
+      "grok-imagine/text-to-image",
+      "grok-imagine/text-to-video",
+      "grok/imagine",
+      "hailuo/02-image-to-video-pro",
+      "hailuo/02-image-to-video-standard",
+      "hailuo/02-text-to-video-pro",
+      "hailuo/02-text-to-video-standard",
+      "hailuo/2.3",
+      "ideogram/character",
+      "ideogram/character-edit",
+      "ideogram/character-remix",
+      "ideogram/v3-edit",
+      "ideogram/v3-reframe",
+      "ideogram/v3-remix",
+      "ideogram/v3-text-to-image",
+      "infinitalk/from-audio",
+      "kling-2.6/image-to-video",
+      "kling-2.6/text-to-video",
+      "kling/ai-avatar-v1-pro",
+      "kling/v1-avatar-standard",
+      "kling/v2-1-master-image-to-video",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-standard",
+      "kling/v2-5-turbo",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "midjourney/api",
+      "nano-banana-pro",
+      "openai/4o-image",
+      "qwen/image-edit",
+      "qwen/image-to-image",
+      "qwen/text-to-image",
+      "recraft/crisp-upscale",
+      "recraft/remove-background",
+      "runway/gen-4",
+      "seedream/4.5-edit",
+      "seedream/4.5-text-to-image",
+      "sora-2-image-to-video",
+      "sora-2-pro-image-to-video",
+      "sora-2-pro-storyboard",
+      "sora-2-pro-text-to-video",
+      "sora-2-text-to-video",
+      "sora-watermark-remover",
+      "suno/v5",
+      "topaz/image-upscale",
+      "topaz/video-upscale",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "wan/2-2-animate-move",
+      "wan/2-2-animate-replace",
+      "wan/2-5-image-to-video",
+      "wan/2-5-text-to-video",
+      "z-image"
+    ],
+    "missing_descriptions": [
+      "bytedance/seedream",
+      "bytedance/seedream-v4-edit",
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/v1-pro-fast-image-to-video",
+      "elevenlabs/audio-isolation",
+      "elevenlabs/sound-effect",
+      "elevenlabs/speech-to-text",
+      "elevenlabs/text-to-speech",
+      "flux-2/flex-image-to-image",
+      "flux-2/flex-text-to-image",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "flux/kontext",
+      "google/imagen4",
+      "google/imagen4-fast",
+      "google/imagen4-ultra",
+      "google/nano-banana",
+      "google/nano-banana-edit",
+      "google/nanobanana-gemini-2.5-flash",
+      "google/veo-3",
+      "google/veo-3.1",
+      "grok-imagine/text-to-image",
+      "grok-imagine/text-to-video",
+      "grok/imagine",
+      "hailuo/02-image-to-video-pro",
+      "hailuo/02-image-to-video-standard",
+      "hailuo/02-text-to-video-pro",
+      "hailuo/02-text-to-video-standard",
+      "hailuo/2.3",
+      "ideogram/character",
+      "ideogram/character-edit",
+      "ideogram/character-remix",
+      "ideogram/v3-edit",
+      "ideogram/v3-reframe",
+      "ideogram/v3-remix",
+      "ideogram/v3-text-to-image",
+      "infinitalk/from-audio",
+      "kling-2.6/image-to-video",
+      "kling-2.6/text-to-video",
+      "kling/ai-avatar-v1-pro",
+      "kling/v1-avatar-standard",
+      "kling/v2-1-master-image-to-video",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-standard",
+      "kling/v2-5-turbo",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "midjourney/api",
+      "nano-banana-pro",
+      "openai/4o-image",
+      "qwen/image-edit",
+      "qwen/image-to-image",
+      "qwen/text-to-image",
+      "recraft/crisp-upscale",
+      "recraft/remove-background",
+      "runway/gen-4",
+      "seedream/4.5-edit",
+      "seedream/4.5-text-to-image",
+      "sora-2-image-to-video",
+      "sora-2-pro-image-to-video",
+      "sora-2-pro-storyboard",
+      "sora-2-pro-text-to-video",
+      "sora-2-text-to-video",
+      "sora-watermark-remover",
+      "suno/v5",
+      "topaz/image-upscale",
+      "topaz/video-upscale",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "wan/2-2-animate-move",
+      "wan/2-2-animate-replace",
+      "wan/2-5-image-to-video",
+      "wan/2-5-text-to-video",
+      "z-image"
+    ],
+    "missing_emoji": [
+      "bytedance/seedream",
+      "bytedance/seedream-v4-edit",
+      "bytedance/seedream-v4-text-to-image",
+      "bytedance/v1-pro-fast-image-to-video",
+      "elevenlabs/audio-isolation",
+      "elevenlabs/sound-effect",
+      "elevenlabs/speech-to-text",
+      "elevenlabs/text-to-speech",
+      "flux-2/flex-image-to-image",
+      "flux-2/flex-text-to-image",
+      "flux-2/pro-image-to-image",
+      "flux-2/pro-text-to-image",
+      "flux/kontext",
+      "google/imagen4",
+      "google/imagen4-fast",
+      "google/imagen4-ultra",
+      "google/nano-banana",
+      "google/nano-banana-edit",
+      "google/nanobanana-gemini-2.5-flash",
+      "google/veo-3",
+      "google/veo-3.1",
+      "grok-imagine/text-to-image",
+      "grok-imagine/text-to-video",
+      "grok/imagine",
+      "hailuo/02-image-to-video-pro",
+      "hailuo/02-image-to-video-standard",
+      "hailuo/02-text-to-video-pro",
+      "hailuo/02-text-to-video-standard",
+      "hailuo/2.3",
+      "ideogram/character",
+      "ideogram/character-edit",
+      "ideogram/character-remix",
+      "ideogram/v3-edit",
+      "ideogram/v3-reframe",
+      "ideogram/v3-remix",
+      "ideogram/v3-text-to-image",
+      "infinitalk/from-audio",
+      "kling-2.6/image-to-video",
+      "kling-2.6/text-to-video",
+      "kling/ai-avatar-v1-pro",
+      "kling/v1-avatar-standard",
+      "kling/v2-1-master-image-to-video",
+      "kling/v2-1-master-text-to-video",
+      "kling/v2-1-pro",
+      "kling/v2-1-standard",
+      "kling/v2-5-turbo",
+      "kling/v2-5-turbo-image-to-video-pro",
+      "kling/v2-5-turbo-text-to-video-pro",
+      "midjourney/api",
+      "nano-banana-pro",
+      "openai/4o-image",
+      "qwen/image-edit",
+      "qwen/image-to-image",
+      "qwen/text-to-image",
+      "recraft/crisp-upscale",
+      "recraft/remove-background",
+      "runway/gen-4",
+      "seedream/4.5-edit",
+      "seedream/4.5-text-to-image",
+      "sora-2-image-to-video",
+      "sora-2-pro-image-to-video",
+      "sora-2-pro-storyboard",
+      "sora-2-pro-text-to-video",
+      "sora-2-text-to-video",
+      "sora-watermark-remover",
+      "suno/v5",
+      "topaz/image-upscale",
+      "topaz/video-upscale",
+      "wan/2-2-a14b-speech-to-video-turbo",
+      "wan/2-2-animate-move",
+      "wan/2-2-animate-replace",
+      "wan/2-5-image-to-video",
+      "wan/2-5-text-to-video",
+      "z-image"
+    ],
+    "missing_input_schema": [],
+    "missing_pricing": [
+      "wan/2-6-text-to-video"
+    ],
+    "visibility_issues": [],
+    "parameter_issues": []
+  },
+  "detailed_analysis": {
+    "bytedance/seedream": {
+      "model_id": "bytedance/seedream",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "bytedance/seedream-v4-edit": {
+      "model_id": "bytedance/seedream-v4-edit",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "bytedance/seedream-v4-text-to-image": {
+      "model_id": "bytedance/seedream-v4-text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "bytedance/v1-pro-fast-image-to-video": {
+      "model_id": "bytedance/v1-pro-fast-image-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "elevenlabs/audio-isolation": {
+      "model_id": "elevenlabs/audio-isolation",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "elevenlabs/sound-effect": {
+      "model_id": "elevenlabs/sound-effect",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "elevenlabs/speech-to-text": {
+      "model_id": "elevenlabs/speech-to-text",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "elevenlabs/text-to-speech": {
+      "model_id": "elevenlabs/text-to-speech",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "flux-2/flex-image-to-image": {
+      "model_id": "flux-2/flex-image-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "flux-2/flex-text-to-image": {
+      "model_id": "flux-2/flex-text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "flux-2/pro-image-to-image": {
+      "model_id": "flux-2/pro-image-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "flux-2/pro-text-to-image": {
+      "model_id": "flux-2/pro-text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "flux/kontext": {
+      "model_id": "flux/kontext",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/imagen4": {
+      "model_id": "google/imagen4",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/imagen4-fast": {
+      "model_id": "google/imagen4-fast",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/imagen4-ultra": {
+      "model_id": "google/imagen4-ultra",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/nano-banana": {
+      "model_id": "google/nano-banana",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/nano-banana-edit": {
+      "model_id": "google/nano-banana-edit",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/nanobanana-gemini-2.5-flash": {
+      "model_id": "google/nanobanana-gemini-2.5-flash",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/veo-3": {
+      "model_id": "google/veo-3",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "google/veo-3.1": {
+      "model_id": "google/veo-3.1",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "grok-imagine/text-to-image": {
+      "model_id": "grok-imagine/text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "grok-imagine/text-to-video": {
+      "model_id": "grok-imagine/text-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "grok/imagine": {
+      "model_id": "grok/imagine",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "hailuo/02-image-to-video-pro": {
+      "model_id": "hailuo/02-image-to-video-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "hailuo/02-image-to-video-standard": {
+      "model_id": "hailuo/02-image-to-video-standard",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "hailuo/02-text-to-video-pro": {
+      "model_id": "hailuo/02-text-to-video-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "hailuo/02-text-to-video-standard": {
+      "model_id": "hailuo/02-text-to-video-standard",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "hailuo/2.3": {
+      "model_id": "hailuo/2.3",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/character": {
+      "model_id": "ideogram/character",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/character-edit": {
+      "model_id": "ideogram/character-edit",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/character-remix": {
+      "model_id": "ideogram/character-remix",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/v3-edit": {
+      "model_id": "ideogram/v3-edit",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/v3-reframe": {
+      "model_id": "ideogram/v3-reframe",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/v3-remix": {
+      "model_id": "ideogram/v3-remix",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "ideogram/v3-text-to-image": {
+      "model_id": "ideogram/v3-text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "infinitalk/from-audio": {
+      "model_id": "infinitalk/from-audio",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling-2.6/image-to-video": {
+      "model_id": "kling-2.6/image-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling-2.6/text-to-video": {
+      "model_id": "kling-2.6/text-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/ai-avatar-v1-pro": {
+      "model_id": "kling/ai-avatar-v1-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v1-avatar-standard": {
+      "model_id": "kling/v1-avatar-standard",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-1-master-image-to-video": {
+      "model_id": "kling/v2-1-master-image-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-1-master-text-to-video": {
+      "model_id": "kling/v2-1-master-text-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-1-pro": {
+      "model_id": "kling/v2-1-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-1-standard": {
+      "model_id": "kling/v2-1-standard",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-5-turbo": {
+      "model_id": "kling/v2-5-turbo",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-5-turbo-image-to-video-pro": {
+      "model_id": "kling/v2-5-turbo-image-to-video-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "kling/v2-5-turbo-text-to-video-pro": {
+      "model_id": "kling/v2-5-turbo-text-to-video-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "midjourney/api": {
+      "model_id": "midjourney/api",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "nano-banana-pro": {
+      "model_id": "nano-banana-pro",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "openai/4o-image": {
+      "model_id": "openai/4o-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "qwen/image-edit": {
+      "model_id": "qwen/image-edit",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "qwen/image-to-image": {
+      "model_id": "qwen/image-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "qwen/text-to-image": {
+      "model_id": "qwen/text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "recraft/crisp-upscale": {
+      "model_id": "recraft/crisp-upscale",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "recraft/remove-background": {
+      "model_id": "recraft/remove-background",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "runway/gen-4": {
+      "model_id": "runway/gen-4",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "seedream/4.5-edit": {
+      "model_id": "seedream/4.5-edit",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "seedream/4.5-text-to-image": {
+      "model_id": "seedream/4.5-text-to-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "sora-2-image-to-video": {
+      "model_id": "sora-2-image-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "sora-2-pro-image-to-video": {
+      "model_id": "sora-2-pro-image-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "sora-2-pro-storyboard": {
+      "model_id": "sora-2-pro-storyboard",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "sora-2-pro-text-to-video": {
+      "model_id": "sora-2-pro-text-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "sora-2-text-to-video": {
+      "model_id": "sora-2-text-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "sora-watermark-remover": {
+      "model_id": "sora-watermark-remover",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "suno/v5": {
+      "model_id": "suno/v5",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "topaz/image-upscale": {
+      "model_id": "topaz/image-upscale",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "topaz/video-upscale": {
+      "model_id": "topaz/video-upscale",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "wan/2-2-a14b-speech-to-video-turbo": {
+      "model_id": "wan/2-2-a14b-speech-to-video-turbo",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "wan/2-2-animate-move": {
+      "model_id": "wan/2-2-animate-move",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "wan/2-2-animate-replace": {
+      "model_id": "wan/2-2-animate-replace",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "wan/2-5-image-to-video": {
+      "model_id": "wan/2-5-image-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "wan/2-5-text-to-video": {
+      "model_id": "wan/2-5-text-to-video",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    },
+    "wan/2-6-text-to-video": {
+      "model_id": "wan/2-6-text-to-video",
+      "issues": [
+        "Отсутствует price_rub в pricing/config.yaml"
+      ],
+      "sources": {
+        "kie_models": false,
+        "pricing_config": true,
+        "models_pricing": false
+      }
+    },
+    "z-image": {
+      "model_id": "z-image",
+      "issues": [
+        "Отсутствует name_ru",
+        "Отсутствует name_en",
+        "Отсутствует или короткое description_ru",
+        "Отсутствует или короткое description_en",
+        "Отсутствует emoji"
+      ],
+      "sources": {
+        "kie_models": true,
+        "pricing_config": false,
+        "models_pricing": false
+      }
+    }
+  }
+}
