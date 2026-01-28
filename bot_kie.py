@@ -198,7 +198,11 @@ def _register_background_task(task: asyncio.Task, *, action: str = "background")
 
     def _on_done(done_task: asyncio.Task) -> None:
         _background_tasks.discard(done_task)
-        _log_background_task_result(done_task, action=action)
+        try:
+            _log_background_task_result(done_task, action=action)
+        except Exception as e:
+            # Дополнительная защита от исключений в callback
+            logger.debug("Background task callback error action=%s error=%s", action, e)
 
     task.add_done_callback(_on_done)
 

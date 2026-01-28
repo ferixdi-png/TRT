@@ -793,7 +793,11 @@ async def release_singleton_lock() -> None:
         try:
             await _release_redis_lock()
         except RuntimeError as exc:
-            logger.warning("LOCK_RELEASE_SKIPPED reason=loop_closed error=%s", exc)
+            # Event loop closed - это штатная ситуация при shutdown, не ошибка
+            if "Event loop is closed" in str(exc) or "no running event loop" in str(exc).lower():
+                logger.info("[LOCK] LOCK_RELEASE_SKIPPED reason=loop_closed")
+            else:
+                logger.warning("[LOCK] LOCK_RELEASE_FAILED reason=runtime_error error=%s", exc)
             return
 
     if _lock_mode == "postgres":

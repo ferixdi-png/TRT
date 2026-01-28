@@ -1,5 +1,5 @@
-# Telegram Bot (фиксированная версия для стабильности)
-python-telegram-bot==20.8
+# Telegram Bot (фиксированная версия для стабильности с webhook поддержкой)
+python-telegram-bot[webhooks]==20.8
 
 # HTTP Client
 aiohttp>=3.8.0
