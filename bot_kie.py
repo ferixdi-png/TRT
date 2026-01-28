@@ -28662,8 +28662,8 @@ async def main():
         port = int(os.getenv("PORT", "10000"))
         url_path = os.getenv("URL_PATH", "/webhook")
         listen_address = os.getenv("LISTEN_ADDRESS", "0.0.0.0")
-        drop_pending_updates = settings.telegram_drop_pending_updates
-        allowed_updates = settings.telegram_allowed_updates
+        drop_pending_updates = True
+        allowed_updates = None
         
         logger.info(
             "🌐 Webhook configuration: url=%s port=%s path=%s listen=%s",
