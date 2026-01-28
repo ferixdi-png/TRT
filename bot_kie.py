@@ -28623,11 +28623,30 @@ async def main():
             allowed_updates=settings.telegram_allowed_updates,
         )
     elif bot_mode == "webhook":
-        ensure_webhook_mode()
-        logger.info("🌐 Starting bot in webhook mode...")
-        
         # Получаем webhook URL и порт из настроек или переменных окружения
         webhook_url = os.getenv("WEBHOOK_URL") or settings.webhook_url
+        
+        # Вызываем ensure_webhook_mode с правильными аргументами
+        from telegram import Bot
+        from telegram.request import HTTPXRequest
+        
+        request_timeout = _resolve_telegram_request_timeout(30)  # 30s timeout для webhook setup
+        request = HTTPXRequest(
+            connect_timeout=request_timeout,
+            read_timeout=request_timeout,
+            write_timeout=request_timeout,
+            pool_timeout=request_timeout,
+        )
+        
+        async with Bot(token=settings.telegram_bot_token, request=request) as temp_bot:
+            await ensure_webhook_mode(
+                temp_bot,
+                webhook_url,
+                cycle_timeout_s=30,
+            )
+        
+        logger.info("🌐 Starting bot in webhook mode...")
+        
         port = int(os.getenv("PORT", settings.webhook_port))
         url_path = os.getenv("URL_PATH", settings.webhook_path)
         listen_address = os.getenv("LISTEN_ADDRESS", settings.webhook_listen_address)
