@@ -4,8 +4,9 @@
 
 from .validation import ConfigValidator, ConfigValidationError, validate_config_on_startup
 
-# Глобальная переменная для кэша функции
+# Глобальные переменные для кэша
 _original_get_settings = None
+_Settings_class = None
 
 def get_settings(validate: bool = False):
     """Получить глобальный экземпляр Settings (singleton)"""
@@ -24,9 +25,30 @@ def get_settings(validate: bool = False):
     
     return _original_get_settings(validate)
 
+def get_Settings_class():
+    """Получить класс Settings для импорта"""
+    global _Settings_class
+    if _Settings_class is None:
+        # Отложенный импорт только при вызове функции
+        import importlib.util
+        import os
+        
+        # Импортируем app/config.py (не корневой config.py)
+        app_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.py")
+        spec = importlib.util.spec_from_file_location("app_config_module", app_config_path)
+        app_config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(app_config_module)
+        _Settings_class = app_config_module.Settings
+    
+    return _Settings_class
+
+# Создаем alias для Settings
+Settings = get_Settings_class()
+
 __all__ = [
     "ConfigValidator",
     "ConfigValidationError", 
     "validate_config_on_startup",
-    "get_settings"
+    "get_settings",
+    "Settings"
 ]
