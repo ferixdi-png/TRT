@@ -9706,6 +9706,44 @@ async def _start_menu_with_fallback(
     return placeholder_result
 
 
+async def show_free_tools_menu(query, user_id: int, user_lang: str, top_models: List[Any]):
+    """
+    Отображает меню бесплатных инструментов FAST TOOLS.
+    
+    Args:
+        query: CallbackQuery объект
+        user_id: ID пользователя
+        user_lang: Язык пользователя
+        top_models: Список топ-5 моделей из PricingService
+    """
+    try:
+        # Формируем сообщение
+        text = (
+            "⚡ <b>FREE FAST TOOLS</b>\n\n"
+            f"🎁 <b>Бесплатные генерации:</b> {await get_user_free_generations_remaining(user_id)} шт.\n\n"
+            "Выберите бесплатную модель:\n\n"
+        )
+        
+        # Формируем клавиатуру с top-5 моделями
+        keyboard = []
+        for top_model in top_models:
+            keyboard.append([InlineKeyboardButton(
+                f"{top_model.model_emoji} {top_model.model_name}",
+                callback_data=f"model:{top_model.model_id}"
+            )])
+        
+        keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
+        
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error in show_free_tools_menu: {e}", exc_info=True)
+        raise
+
+
 async def show_main_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
