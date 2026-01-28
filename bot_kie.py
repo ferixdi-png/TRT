@@ -29965,19 +29965,8 @@ def run_webhook_sync(application):
     
     logger.info(f"🚀 Starting webhook server in sync mode: {webhook_url}")
     
-    # Добавляем post_shutdown хук для очистки singleton_lock
-    async def cleanup_on_shutdown():
-        try:
-            from app.utils.singleton_lock import release_singleton_lock
-            await release_singleton_lock()
-            logger.info("✅ Singleton lock released on shutdown")
-        except Exception as exc:
-            logger.warning("⚠️ Failed to release singleton lock on shutdown: %s", exc)
-    
-    # Регистрируем cleanup хук
-    application.add_post_shutdown_hook(cleanup_on_shutdown)
-    
     # Запускаем webhook в sync режиме - PTB сам управляет loop
+    # Cleanup будет происходить автоматически при остановке
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", "10000")),
