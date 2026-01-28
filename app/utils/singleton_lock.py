@@ -475,7 +475,11 @@ async def _release_redis_lock() -> None:
     try:
         await _stop_redis_renewal()
     except RuntimeError as exc:
-        logger.warning("[LOCK] LOCK_MODE=redis lock_release_failed=true reason=loop_closed error=%s", exc)
+        # Event loop closed - это штатная ситуация при shutdown, не ошибка
+        if "Event loop is closed" in str(exc) or "no running event loop" in str(exc).lower():
+            logger.info("[LOCK] LOCK_MODE=redis lock_release_skipped=true reason=loop_closed")
+        else:
+            logger.warning("[LOCK] LOCK_MODE=redis lock_release_failed=true reason=runtime_error error=%s", exc)
         return
     try:
         # Use Lua script for atomic check-and-delete
