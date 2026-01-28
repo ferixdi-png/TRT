@@ -28659,9 +28659,9 @@ async def main():
         
         logger.info("🌐 Starting bot in webhook mode...")
         
-        port = int(os.getenv("PORT", settings.webhook_port))
-        url_path = os.getenv("URL_PATH", settings.webhook_path)
-        listen_address = os.getenv("LISTEN_ADDRESS", settings.webhook_listen_address)
+        port = int(os.getenv("PORT", "10000"))
+        url_path = os.getenv("URL_PATH", "/webhook")
+        listen_address = os.getenv("LISTEN_ADDRESS", "0.0.0.0")
         drop_pending_updates = settings.telegram_drop_pending_updates
         allowed_updates = settings.telegram_allowed_updates
         
