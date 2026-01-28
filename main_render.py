@@ -42,8 +42,15 @@ _early_update_log_last_ts: Optional[float] = None
 def _is_application_initialized(application) -> bool:
     initialized_attr = getattr(application, "initialized", None)
     if isinstance(initialized_attr, bool):
-        return initialized_attr
-    return bool(getattr(application, "_initialized", False))
+        result = initialized_attr
+    else:
+        result = bool(getattr(application, "_initialized", False))
+    
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+    logger.info("🔍 APP_INIT_CHECK initialized=%s _initialized=%s result=%s", 
+                initialized_attr, getattr(application, "_initialized", None), result)
+    
+    return result
 
 
 def _should_log_early_update(now: float, throttle_seconds: float) -> bool:
@@ -453,6 +460,10 @@ def build_webhook_handler(
             return
 
         if not _app_ready_event.is_set() or not _is_application_initialized(application):
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 EARLY_UPDATE_CHECK app_ready=%s app_init=%s", 
+                        _app_ready_event.is_set(), _is_application_initialized(application))
+            
             increment_update_metric("webhook_update_in")
             log_structured_event(
                 correlation_id=correlation_id,
