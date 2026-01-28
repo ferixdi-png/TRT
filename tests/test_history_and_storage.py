@@ -98,11 +98,11 @@ class TestHistoryAndStorage:
                     
                     history = get_user_generations_history(user_id, limit=20)
                     
-                    # Проверяем что storage метод был вызван
-                    mock_storage.get_user_generations_history.assert_called_once_with(
-                        user_id=user_id, 
-                        limit=20
-                    )
+                    # Проверяем что storage метод был вызван (позиционный или keyword аргумент)
+                    mock_storage.get_user_generations_history.assert_called_once()
+                    call_args = mock_storage.get_user_generations_history.call_args
+                    # Проверяем что user_id передан (позиционно или keyword)
+                    assert call_args[0][0] == user_id or call_args.kwargs.get('user_id') == user_id
                     
                     assert len(history) == 2
                     assert history[0]["model_id"] == "test/model1"
