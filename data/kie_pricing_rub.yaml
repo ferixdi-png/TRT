@@ -1494,7 +1494,7 @@ models:
         price_rub: 47.14
         params: {}
         notes: reference-to-video Fast
-  - id: kling/v2-5-turbo:
+  - id: kling/v2-5-turbo
     skus:
       - unit: image
         price_rub: 33.0
