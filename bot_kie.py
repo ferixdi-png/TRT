@@ -27546,9 +27546,17 @@ def _schedule_webhook_setter(webhook_url: str) -> None:
 
 async def _register_webhook_application(application: Application) -> None:
     global _application_for_webhook
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+    logger.info("🔍 WEBHOOK_REGISTER_START app_is_none=%s", _application_for_webhook is None)
+    
     async with _webhook_init_lock:
         if _application_for_webhook is None:
             _application_for_webhook = application
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 WEBHOOK_REGISTER_DONE app_registered=true")
+        else:
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 WEBHOOK_REGISTER_SKIP app_already_registered=true")
 
 
 async def create_webhook_handler():
@@ -27842,6 +27850,10 @@ async def create_webhook_handler():
                 if forwarded_for
                 else request.headers.get("X-Real-IP") or request.remote or "unknown"
             )
+
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 WEBHOOK_READY_CHECK app_ready=%s app_is_none=%s", 
+                        _webhook_app_ready_event.is_set(), _application_for_webhook is None)
 
             if not _webhook_app_ready_event.is_set() or not _webhook_is_application_initialized(_application_for_webhook):
                 update_id = None
