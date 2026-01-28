@@ -102,15 +102,15 @@ async def build_main_menu_keyboard(
     if user_lang == "ru":
         return [
             [InlineKeyboardButton("⚡ FREE FAST TOOLS", callback_data="fast_tools")],
-            [InlineKeyboardButton(" Генерация визуала", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton("🎨 Генерация изображения", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Ремикс изображения", callback_data="gen_type:image-to-image")],
-            [InlineKeyboardButton("🎬 Видео по сценарию", callback_data="gen_type:text-to-video")],
-            [InlineKeyboardButton("🎞️ Анимировать изображение", callback_data="gen_type:image-to-video")],
+            [InlineKeyboardButton("🎬 Создание видео", callback_data="gen_type:text-to-video")],
+            [InlineKeyboardButton("🎞️ Анимация изображения", callback_data="gen_type:image-to-video")],
             [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
-            [InlineKeyboardButton("✍️ Текст/Перевод", callback_data="gen_type:text-to-text")],
-            [InlineKeyboardButton("🖼️ Улучшение качества", callback_data="gen_type:upscale")],
-            [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
-            [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
+            [InlineKeyboardButton("✍️ Работа с текстом", callback_data="gen_type:text-to-text")],
+            [InlineKeyboardButton("🖼️ Улучшение изображения", callback_data="gen_type:upscale")],
+            [InlineKeyboardButton("💳 Мой баланс", callback_data="check_balance")],
+            [InlineKeyboardButton("🤝 Партнёрская программа", callback_data="referral_info")],
         ]
     else:
         return [
