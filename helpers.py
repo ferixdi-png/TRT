@@ -112,18 +112,19 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
         ]
-    return [
-        [InlineKeyboardButton("⚡ FREE FAST TOOLS", callback_data="fast_tools")],
-        [InlineKeyboardButton("🎨 Visual generation", callback_data="gen_type:text-to-image")],
-        [InlineKeyboardButton("🧩 Image remix", callback_data="gen_type:image-to-image")],
-        [InlineKeyboardButton("🎬 Script to video", callback_data="gen_type:text-to-video")],
-        [InlineKeyboardButton("🎞️ Animate image", callback_data="gen_type:image-to-video")],
-        [InlineKeyboardButton("🎵 Audio/Music", callback_data="gen_type:audio-to-audio")],
-        [InlineKeyboardButton("✍️ Text/Translate", callback_data="gen_type:text-to-text")],
-        [InlineKeyboardButton("🖼️ Quality enhance", callback_data="gen_type:upscale")],
-        [InlineKeyboardButton("💳 Balance / Access", callback_data="check_balance")],
-        [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
-    ]
+    else:
+        return [
+            [InlineKeyboardButton("⚡ FREE FAST TOOLS", callback_data="fast_tools")],
+            [InlineKeyboardButton("🎨 Visual generation", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton("🧩 Image remix", callback_data="gen_type:image-to-image")],
+            [InlineKeyboardButton("🎬 Script to video", callback_data="gen_type:text-to-video")],
+            [InlineKeyboardButton("🎞️ Animate image", callback_data="gen_type:image-to-video")],
+            [InlineKeyboardButton("🎵 Audio/Music", callback_data="gen_type:audio-to-audio")],
+            [InlineKeyboardButton("✍️ Text/Translate", callback_data="gen_type:text-to-text")],
+            [InlineKeyboardButton("🖼️ Quality enhance", callback_data="gen_type:upscale")],
+            [InlineKeyboardButton("💳 Balance / Access", callback_data="check_balance")],
+            [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
+        ]
 
 
 async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any]:
