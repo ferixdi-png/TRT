@@ -81,24 +81,22 @@ class TestWebhookEventLoopRegression:
                                                 assert result is mock_bot_module.application
                                                 mock_bot_module.main.assert_called_once()
     
-    def test_webhook_sync_adds_post_shutdown_hook(self):
+    def test_webhook_sync_no_post_shutdown_hook(self):
         """
-        Тест: run_webhook_sync добавляет post_shutdown хук для очистки singleton_lock.
+        Тест: run_webhook_sync не пытается вызвать несуществующий add_post_shutdown_hook.
         """
         mock_app = Mock(spec=Application)
-        mock_app.add_post_shutdown_hook = Mock()
         mock_app.run_webhook = Mock()
         
         with patch('bot_kie._resolve_webhook_url_from_env', return_value='https://test.com/webhook'):
             with patch('bot_kie.logger'):
                 run_webhook_sync(mock_app)
                 
-                # Проверяем, что хук был добавлен
-                mock_app.add_post_shutdown_hook.assert_called_once()
+                # Проверяем, что run_webhook был вызван
+                mock_app.run_webhook.assert_called_once()
                 
-                # Проверяем, что хук является coroutine функцией
-                hook_func = mock_app.add_post_shutdown_hook.call_args[0][0]
-                assert asyncio.iscoroutinefunction(hook_func)
+                # Проверяем, что add_post_shutdown_hook НЕ был вызван (метода не существует)
+                assert not hasattr(mock_app, 'add_post_shutdown_hook') or not mock_app.add_post_shutdown_hook.called
     
     def test_webhook_sync_raises_error_without_webhook_url(self):
         """
@@ -111,27 +109,25 @@ class TestWebhookEventLoopRegression:
                 with pytest.raises(RuntimeError, match="WEBHOOK_URL not set"):
                     run_webhook_sync(mock_app)
     
-    @pytest.mark.asyncio
-    async def test_post_shutdown_hook_releases_singleton_lock(self):
+    def test_webhook_sync_cleanup_on_shutdown_not_needed(self):
         """
-        Тест: post_shutdown хук корректно освобождает singleton_lock.
+        Тест: run_webhook_sync не требует cleanup хука - PTB управляет автоматически.
         """
         mock_app = Mock(spec=Application)
-        mock_app.add_post_shutdown_hook = Mock()
         mock_app.run_webhook = Mock()
         
-        # Мокаем release_singleton_lock
         with patch('bot_kie._resolve_webhook_url_from_env', return_value='https://test.com/webhook'):
             with patch('bot_kie.logger'):
                 run_webhook_sync(mock_app)
                 
-                # Получаем хук функцию
-                hook_func = mock_app.add_post_shutdown_hook.call_args[0][0]
+                # Проверяем, что run_webhook был вызван
+                mock_app.run_webhook.assert_called_once()
                 
-                # Мокаем release_singleton_lock через правильный импорт
-                with patch('app.utils.singleton_lock.release_singleton_lock') as mock_release:
-                    await hook_func()
-                    mock_release.assert_called_once()
+                # Проверяем параметры вызова
+                call_args = mock_app.run_webhook.call_args
+                assert call_args.kwargs['listen'] == '0.0.0.0'
+                assert call_args.kwargs['url_path'] == 'webhook'
+                assert call_args.kwargs['webhook_url'] == 'https://test.com/webhook'
 
 
 if __name__ == "__main__":
