@@ -14406,37 +14406,47 @@ async def _button_callback_impl(
                         ]]),
                         parse_mode='HTML'
                     )
-                    return ConversationHandler.END
-                
-                # Формируем сообщение
-                text = (
-                    "⚡ <b>FREE FAST TOOLS</b>\n\n"
-                    f"🎁 <b>Бесплатные генерации:</b> {await get_user_free_generations_remaining(user_id)} шт.\n\n"
-                    "Выберите бесплатную модель:\n\n"
-                )
-                
-                # Формируем клавиатуру с top-5 моделями
-                keyboard = []
-                for top_model in top_models:
-                    keyboard.append([InlineKeyboardButton(
-                        f"{top_model.model_emoji} {top_model.model_name}",
-                        callback_data=f"model:{top_model.model_id}"
-                    )])
-                
-                keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
-                
-                await query.edit_message_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
+                else:
+                    await show_free_tools_menu(query, user_id, user_lang, top_models)
             except Exception as e:
                 logger.error(f"Error in fast_tools: {e}", exc_info=True)
                 try:
                     await query.answer("❌ Ошибка при загрузке бесплатных инструментов", show_alert=True)
                 except:
                     pass
-            return ConversationHandler.END
+        
+        if data == "special_tools":
+            # Answer callback immediately to show button was pressed
+            try:
+                await query.answer()
+            except:
+                pass
+            reset_session_on_navigation(user_id, reason="special_tools")
+            
+            # Show special tools menu (audio, text, upscale, etc.)
+            try:
+                user_lang = get_user_language(user_id)
+                
+                # Формируем меню спец-инструментов
+                special_tools_keyboard = [
+                    [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
+                    [InlineKeyboardButton("✍️ Работа с текстом", callback_data="gen_type:text-to-text")],
+                    [InlineKeyboardButton("🖼️ Улучшение изображения", callback_data="gen_type:upscale")],
+                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
+                ]
+                
+                await query.edit_message_text(
+                    "🧰 <b>Спец-инструменты</b>\n\n"
+                    "Дополнительные инструменты для работы с контентом:",
+                    reply_markup=InlineKeyboardMarkup(special_tools_keyboard),
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.error(f"Error in special_tools: {e}", exc_info=True)
+                try:
+                    await query.answer("❌ Ошибка при загрузке спец-инструментов", show_alert=True)
+                except:
+                    pass
         
         if data == "check_balance":
             # Answer callback immediately to show button was pressed
@@ -26794,6 +26804,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^fast_tools$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^special_tools$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'),
