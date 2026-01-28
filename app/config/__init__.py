@@ -2,11 +2,17 @@
 Конфигурация приложения.
 """
 
+import os
 from .validation import ConfigValidator, ConfigValidationError, validate_config_on_startup
 
 # Глобальные переменные для кэша
 _original_get_settings = None
 _Settings_class = None
+
+# Экспорт переменных окружения для совместимости с bot_kie.py
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+BOT_MODE = os.getenv('BOT_MODE', 'polling').lower()
+WEBHOOK_URL = os.getenv('WEBHOOK_URL', '').strip()
 
 def get_settings(validate: bool = False):
     """Получить глобальный экземпляр Settings (singleton)"""
@@ -58,5 +64,8 @@ __all__ = [
     "validate_config_on_startup",
     "get_settings",
     "Settings",
-    "reset_settings"
+    "reset_settings",
+    "BOT_TOKEN",
+    "BOT_MODE",
+    "WEBHOOK_URL",
 ]
