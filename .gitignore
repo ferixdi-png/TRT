@@ -106,6 +106,9 @@ logs/
 *.tmp
 *.corrupted.*
 
+# Test-generated incident files
+data/incidents/
+
 # Temporary files
 *.tmp
 *.temp
