@@ -1,0 +1,267 @@
+{
+  "timestamp": "2026-01-28T06:04:34.743858+00:00",
+  "result": "FAIL",
+  "meta": {
+    "bot_instance_id": "",
+    "bot_mode": "auto",
+    "port": 10000
+  },
+  "sections": {
+    "CONFIG": {
+      "status": "FAIL",
+      "checks": {
+        "ADMIN_ID": {
+          "status": "FAIL",
+          "details": "missing",
+          "hint": "Set ADMIN_ID"
+        },
+        "BOT_INSTANCE_ID": {
+          "status": "FAIL",
+          "details": "missing",
+          "hint": "Set BOT_INSTANCE_ID"
+        },
+        "BOT_MODE": {
+          "status": "DEGRADED",
+          "details": "default=auto"
+        },
+        "WEBHOOK_BASE_URL": {
+          "status": "FAIL",
+          "details": "missing",
+          "hint": "Set WEBHOOK_BASE_URL"
+        },
+        "PORT": {
+          "status": "OK",
+          "details": "10000"
+        },
+        "STORAGE_MODE": {
+          "status": "OK",
+          "details": "db-only"
+        },
+        "KIE_API_KEY": {
+          "status": "DEGRADED",
+          "details": "NOT_SET",
+          "hint": "AI disabled"
+        },
+        "PAYMENT_SUPPORT": {
+          "status": "DEGRADED",
+          "details": "owner defaults",
+          "hint": "Set PAYMENT_/SUPPORT_ vars"
+        }
+      }
+    },
+    "NETWORK/PORT": {
+      "status": "OK",
+      "checks": {
+        "healthcheck_bind": {
+          "status": "OK",
+          "details": "bind ok 0.0.0.0:10000"
+        }
+      },
+      "meta": {
+        "status": "OK",
+        "details": "bind ok 0.0.0.0:10000"
+      }
+    },
+    "DATABASE": {
+      "status": "FAIL",
+      "checks": {
+        "connect": {
+          "status": "FAIL",
+          "details": "DATABASE_URL missing",
+          "hint": "Set DATABASE_URL"
+        },
+        "query": {
+          "status": "FAIL",
+          "details": "DATABASE_URL missing",
+          "hint": "Set DATABASE_URL"
+        },
+        "pool_size": {
+          "status": "OK",
+          "details": "5"
+        }
+      },
+      "meta": {
+        "status": "FAIL",
+        "details": "DATABASE_URL missing",
+        "hint": "Set DATABASE_URL"
+      }
+    },
+    "STORAGE": {
+      "status": "FAIL",
+      "checks": {
+        "backend": {
+          "status": "OK",
+          "details": "db-only"
+        },
+        "tenant_namespace": {
+          "status": "FAIL",
+          "details": "missing",
+          "hint": "Set BOT_INSTANCE_ID"
+        },
+        "rw_smoke": {
+          "status": "OK",
+          "details": "rw ok"
+        },
+        "lock_concurrency": {
+          "status": "DEGRADED",
+          "details": "locks unavailable"
+        }
+      },
+      "meta": {
+        "status": "OK",
+        "details": "rw ok"
+      }
+    },
+    "REDIS": {
+      "status": "DEGRADED",
+      "checks": {
+        "ping": {
+          "status": "DEGRADED",
+          "details": "not configured",
+          "hint": "Set REDIS_URL to enable"
+        }
+      },
+      "meta": {
+        "status": "DEGRADED",
+        "details": "not configured",
+        "hint": "Set REDIS_URL to enable"
+      }
+    },
+    "TELEGRAM": {
+      "status": "FAIL",
+      "checks": {
+        "token_format": {
+          "status": "FAIL",
+          "details": "missing",
+          "hint": "Set TELEGRAM_BOT_TOKEN"
+        },
+        "webhook_mode": {
+          "status": "OK",
+          "details": "polling/auto"
+        },
+        "getMe": {
+          "status": "OK",
+          "details": "skipped"
+        }
+      },
+      "meta": {
+        "status": "OK",
+        "details": "skipped"
+      }
+    },
+    "WEBHOOK": {
+      "status": "OK",
+      "checks": {
+        "base_url": {
+          "status": "OK",
+          "details": "polling/auto"
+        },
+        "handler": {
+          "status": "OK",
+          "details": "not required"
+        }
+      }
+    },
+    "AI": {
+      "status": "DEGRADED",
+      "checks": {
+        "KIE": {
+          "status": "DEGRADED",
+          "details": "NOT_SET",
+          "hint": "AI disabled"
+        }
+      },
+      "meta": {
+        "status": "DEGRADED",
+        "details": "NOT_SET",
+        "hint": "AI disabled"
+      }
+    },
+    "UX": {
+      "status": "OK",
+      "checks": {
+        "handlers": {
+          "status": "OK",
+          "details": "handlers registered"
+        },
+        "unknown_callback": {
+          "status": "OK",
+          "details": "fallback ok"
+        },
+        "anti_double_click_guard": {
+          "status": "OK",
+          "details": "guard ok"
+        }
+      }
+    },
+    "DATA_INTEGRITY": {
+      "status": "OK",
+      "checks": {
+        "base_structures": {
+          "status": "OK",
+          "details": "initialized: user_registry.json, payments.json, referrals.json"
+        }
+      },
+      "meta": {
+        "status": "OK",
+        "details": "initialized: user_registry.json, payments.json, referrals.json"
+      }
+    }
+  },
+  "summary": {
+    "CONFIG": {
+      "status": "FAIL"
+    },
+    "NETWORK/PORT": {
+      "status": "OK",
+      "details": "bind ok 0.0.0.0:10000"
+    },
+    "DATABASE": {
+      "status": "FAIL",
+      "details": "DATABASE_URL missing"
+    },
+    "STORAGE": {
+      "status": "FAIL",
+      "details": "rw ok"
+    },
+    "REDIS": {
+      "status": "DEGRADED",
+      "details": "not configured"
+    },
+    "TELEGRAM": {
+      "status": "FAIL",
+      "details": "skipped"
+    },
+    "WEBHOOK": {
+      "status": "OK"
+    },
+    "AI": {
+      "status": "DEGRADED",
+      "details": "NOT_SET"
+    },
+    "UX": {
+      "status": "OK"
+    },
+    "DATA_INTEGRITY": {
+      "status": "OK",
+      "details": "initialized: user_registry.json, payments.json, referrals.json"
+    }
+  },
+  "critical_failures": {
+    "ADMIN_ID": "Set ADMIN_ID to numeric Telegram user id(s)",
+    "BOT_INSTANCE_ID": "Set BOT_INSTANCE_ID to lowercase identifier",
+    "DATABASE": "Verify DATABASE_URL and DB availability",
+    "TELEGRAM_BOT_TOKEN": "Set TELEGRAM_BOT_TOKEN"
+  },
+  "degraded_notes": {
+    "BOT_MODE": "BOT_MODE not set; default applied",
+    "KIE_API_KEY": "AI generation disabled",
+    "PAYMENT_SUPPORT": "Owner defaults in use"
+  },
+  "how_to_fix": [
+    "ADMIN_ID: Set ADMIN_ID to numeric Telegram user id(s)",
+    "BOT_INSTANCE_ID: Set BOT_INSTANCE_ID to lowercase identifier",
+    "DATABASE: Verify DATABASE_URL and DB availability",
+    "TELEGRAM_BOT_TOKEN: Set TELEGRAM_BOT_TOKEN"
+  ]
+}
