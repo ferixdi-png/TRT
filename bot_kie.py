@@ -28672,9 +28672,6 @@ async def main():
         
         def run_webhook_sync(application, webhook_url, port, url_path, listen_address, drop_pending_updates, allowed_updates):
             """Запускает webhook в синхронном режиме с правильным event loop."""
-            import nest_asyncio
-            nest_asyncio.apply()
-            
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_closed():
