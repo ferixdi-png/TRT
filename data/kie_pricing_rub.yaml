@@ -1494,19 +1494,7 @@ models:
         price_rub: 47.14
         params: {}
         notes: reference-to-video Fast
-  - id: sora-2-pro-storyboard
-    skus:
-      - unit: video
-        price_rub: 117.85
-        params:
-          duration: "10"
-        notes: storyboard Pro 10s
-      - unit: video
-        price_rub: 212.14
-        params:
-          duration: "25"
-        notes: storyboard Pro 15–25s
-  - id: kling/v2-5-turbo
+  - id: kling/v2-5-turbo:
     skus:
       - unit: image
         price_rub: 33.0
