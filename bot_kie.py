@@ -28655,7 +28655,6 @@ async def main():
             await ensure_webhook_mode(
                 temp_bot,
                 webhook_url,
-                cycle_timeout_s=30,
             )
         
         logger.info("🌐 Starting bot in webhook mode...")
