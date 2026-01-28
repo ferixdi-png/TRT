@@ -29799,6 +29799,20 @@ async def main():
         await cleanup_storage()
         await cleanup_http_client()
         
+        # Cleanup background tasks чтобы предотвратить GatheringFuture exceptions
+        if _background_tasks:
+            logger.info(f"Cleaning up {len(_background_tasks)} background tasks")
+            for task in list(_background_tasks):
+                if not task.done():
+                    task.cancel()
+            # Собираем отменённые задачи
+            if _background_tasks:
+                try:
+                    await asyncio.gather(*_background_tasks, return_exceptions=True)
+                except Exception:
+                    pass  # Игнорируем ошибки при cleanup
+            _background_tasks.clear()
+        
         # Освобождаем single instance lock перед выходом (дополнительно к atexit)
         try:
             from app.locking.single_instance import release_single_instance_lock
@@ -29968,6 +29982,8 @@ def run_webhook_sync(application):
     """
     import os
     import asyncio
+    import signal
+    import sys
     from telegram import Update
     
     webhook_url = _resolve_webhook_url_from_env()
@@ -29985,6 +30001,31 @@ def run_webhook_sync(application):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         logger.debug(f"✅ Created new event loop: {loop}")
+    
+    # Добавляем graceful shutdown handler
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+        
+        # Cleanup background tasks
+        if _background_tasks:
+            logger.info(f"Cleaning up {len(_background_tasks)} background tasks on signal")
+            for task in list(_background_tasks):
+                if not task.done():
+                    task.cancel()
+            # Собираем отменённые задачи
+            try:
+                loop = asyncio.get_event_loop()
+                if loop and not loop.is_closed():
+                    loop.run_until_complete(asyncio.gather(*_background_tasks, return_exceptions=True))
+            except Exception:
+                pass
+            _background_tasks.clear()
+        
+        sys.exit(0)
+    
+    # Регистрируем signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
     
     # Запускаем webhook в sync режиме - PTB сам управляет loop
     # Cleanup будет происходить автоматически при остановке
