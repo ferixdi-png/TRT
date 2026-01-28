@@ -360,18 +360,21 @@ async def main() -> None:
 def run() -> None:
     """Synchronous wrapper for running via __main__."""
     try:
-        # P0 FIX: Проверяем режим бота - для webhook не используем asyncio.run()
+        # P0 FIX: Для webhook режима запускаем main() как coroutine без asyncio.run()
         bot_mode = os.getenv("BOT_MODE", "").lower().strip()
         if bot_mode == "webhook":
-            # В webhook режиме запускаем синхронно, чтобы избежать конфликта loop
-            logger.info("Webhook mode detected: using sync startup to avoid event loop conflicts")
+            # В webhook режиме запускаем main() напрямую как coroutine
+            logger.info("Webhook mode detected: running main() as coroutine")
             import asyncio
+            
+            # Создаем новый loop и запускаем main() как coroutine
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(main())
             finally:
-                loop.close()
+                # Не закрываем loop - пусть PTB сам управляет им
+                logger.info("Webhook mode completed, leaving loop management to PTB")
         else:
             # Для polling режима оставляем как было
             asyncio.run(main())

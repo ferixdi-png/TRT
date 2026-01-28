@@ -29426,7 +29426,7 @@ async def main():
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
         
-        # ЗАПУСК WEBHOOK СЕРВЕРА вместо return
+        # Запуск webhook сервера (оригинальный способ)
         await application.run_webhook(
             listen="0.0.0.0",
             port=int(os.getenv("PORT", "10000")),
