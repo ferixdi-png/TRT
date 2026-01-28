@@ -241,6 +241,24 @@ def build_param_combinations(model_id: str) -> Tuple[List[Dict[str, str]], List[
     return combos, issues
 
 
+def get_all_skus_with_pricing() -> Dict[str, Dict[str, Any]]:
+    """
+    Get all SKUs with their pricing information.
+    Returns a dict mapping sku_id to pricing info.
+    """
+    all_skus = {}
+    for model_id in list_all_models():
+        for sku in list_model_skus(model_id):
+            all_skus[sku.sku_id] = {
+                "model_id": sku.model_id,
+                "price_rub": float(sku.price_rub),
+                "unit": sku.unit,
+                "params": sku.params,
+                "is_free_sku": sku.is_free_sku,
+            }
+    return all_skus
+
+
 def validate_pricing_schema_consistency() -> Dict[str, List[str]]:
     """Validate SKU params against model schema and generation types."""
     from app.kie_catalog import get_model

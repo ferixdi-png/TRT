@@ -5826,12 +5826,25 @@ async def use_free_generation(user_id: int, sku_id: str, *, correlation_id: Opti
     return result.get("status") == "ok"
 
 
-async def is_free_generation_available(user_id: int, sku_id: str) -> bool:
-    """Check if free generation is available for this user and model."""
-    from app.pricing.free_policy import is_sku_free_daily
-
-    if not is_sku_free_daily(sku_id):
+async def is_free_generation_available(user_id: int, sku_id: str, source: str = "unknown") -> bool:
+    """
+    Check if free generation is available for this user and model.
+    
+    Args:
+        user_id: ID пользователя
+        sku_id: SKU модели
+        source: источник запроса (например, 'fast_tools')
+    
+    Returns:
+        True если бесплатная генерация доступна
+    """
+    from app.pricing.free_policy import is_fast_tools_free_sku
+    
+    # Проверяем что бесплатный доступ разрешен через FAST TOOLS и только для top-5 самых дешёвых SKU
+    if not is_fast_tools_free_sku(sku_id, source):
         return False
+    
+    # Проверяем лимиты бесплатных генераций
     status = await get_free_generation_status(user_id)
     return int(status.get("total_remaining", 0)) > 0
 
@@ -13077,6 +13090,9 @@ async def _button_callback_impl(
                 update_id=update_id,
                 chat_id=query.message.chat_id if query.message else None,
             )
+            # Устанавливаем источник бесплатной генерации
+            if user_id in user_sessions:
+                user_sessions[user_id]["free_source"] = "fast_tools"
             set_session_context(
                 user_id,
                 to_context=UI_CONTEXT_FREE_TOOLS_MENU,
@@ -13623,7 +13639,8 @@ async def _button_callback_impl(
                         await query.edit_message_text(blocked_text, parse_mode="HTML")
                         return ConversationHandler.END
                     sku_id = session.get("sku_id", "")
-                    is_free = await is_free_generation_available(user_id, sku_id)
+                    source = session.get("free_source", "unknown")
+                    is_free = await is_free_generation_available(user_id, sku_id, source)
                     if price is None:
                         blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
                         await query.edit_message_text(blocked_text, parse_mode="HTML")
@@ -13764,7 +13781,8 @@ async def _button_callback_impl(
                     # Calculate price for confirmation message
                     is_admin_user = get_is_admin(user_id)
                     sku_id = session.get("sku_id", "")
-                    is_free = await is_free_generation_available(user_id, sku_id)
+                    source = session.get("free_source", "unknown")
+                    is_free = await is_free_generation_available(user_id, sku_id, source)
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if is_free:
                         price = 0.0
@@ -14363,31 +14381,25 @@ async def _button_callback_impl(
                 pass
             reset_session_on_navigation(user_id, reason="fast_tools")
             
+            # Сохраняем source для проверки бесплатного доступа
+            session = user_sessions.get(user_id, {})
+            if session:
+                session['free_source'] = 'fast_tools'
+            
             # Show free tools menu - только top-5 дешёвых моделей
             try:
                 user_lang = get_user_language(user_id)
                 
-                # Получаем top-5 самых дешёвых SKU
-                from app.models.registry import get_models_static_only
-                from app.pricing import get_from_price_value
+                # Используем новый PricingService для получения топ-5
+                from app.services.pricing import get_pricing_service
                 
-                all_models = get_models_static_only()
-                # Фильтруем модели с ценой и сортируем по цене
-                models_with_price = []
-                for model in all_models:
-                    model_id = model.get('id', '')
-                    price = get_from_price_value(model_id)
-                    if price is not None and price > 0:
-                        models_with_price.append((model, price))
+                pricing_service = get_pricing_service()
+                top_models, error_msg = pricing_service.get_free_models_for_ui(user_lang)
                 
-                # Сортируем по цене (возрастание) и берем top-5
-                models_with_price.sort(key=lambda x: x[1])
-                top_models = [model for model, price in models_with_price[:5]]
-                
-                if not top_models:
+                if error_msg:
                     await query.edit_message_text(
-                        "⚡ <b>FREE FAST TOOLS</b>\n\n"
-                        "❌ Бесплатные модели временно недоступны.\n\n"
+                        f"⚡ <b>FREE FAST TOOLS</b>\n\n"
+                        f"❌ {error_msg}\n\n"
                         "Попробуйте другие разделы меню.",
                         reply_markup=InlineKeyboardMarkup([[
                             InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")
@@ -14405,15 +14417,10 @@ async def _button_callback_impl(
                 
                 # Формируем клавиатуру с top-5 моделями
                 keyboard = []
-                for model in top_models:
-                    model_id = model.get('id', '')
-                    model_name = model.get('name', model_id)
-                    model_emoji = model.get('emoji', '🤖')
-                    price = get_from_price_value(model_id)
-                    
+                for top_model in top_models:
                     keyboard.append([InlineKeyboardButton(
-                        f"{model_emoji} {model_name}",
-                        callback_data=f"model:{model_id}"
+                        f"{top_model.model_emoji} {top_model.model_name}",
+                        callback_data=f"model:{top_model.model_id}"
                     )])
                 
                 keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
@@ -17605,7 +17612,8 @@ async def _button_callback_impl(
             if model_spec.modes and len(model_spec.modes) > 1 and mode_index is None:
                 user_balance = await get_user_balance_async(user_id)
                 sku_id = session.get("sku_id", "")
-                is_free_available = await is_free_generation_available(user_id, sku_id)
+                source = session.get("free_source", "unknown")
+                is_free_available = await is_free_generation_available(user_id, sku_id, source)
                 is_admin_check = get_is_admin(user_id) if user_id is not None else False
                 min_price: Optional[float] = None
                 session["model_id"] = model_id
@@ -17684,7 +17692,8 @@ async def _button_callback_impl(
             
             # Check for free generations for free models
             sku_id = session.get("sku_id", "")
-            is_free_available = await is_free_generation_available(user_id, sku_id)
+            source = session.get("free_source", "unknown")
+            is_free_available = await is_free_generation_available(user_id, sku_id, source)
             from app.pricing.free_policy import is_sku_free_daily
             remaining_free = (
                 await get_user_free_generations_remaining(user_id)
@@ -18848,7 +18857,8 @@ async def send_confirmation_message(
     user_lang = get_user_language(user_id)
     is_admin_user = get_is_admin(user_id)
     sku_id = session.get("sku_id", "")
-    is_free = await is_free_generation_available(user_id, sku_id)
+    source = session.get("free_source", "unknown")
+    is_free = await is_free_generation_available(user_id, sku_id, source)
     mode_index = _resolve_mode_index(model_id, params, user_id)
     price_quote = _update_price_quote(
         session,
@@ -21216,7 +21226,8 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                         
                         # Calculate price for confirmation
                         sku_id = session.get("sku_id", "")
-                        is_free = await is_free_generation_available(user_id, sku_id)
+                        source = session.get("free_source", "unknown")
+                        is_free = await is_free_generation_available(user_id, sku_id, source)
                         price = calculate_price_rub(model_id, params, is_admin_user)
                         if price is None:
                             blocked_text = format_pricing_blocked_message(model_id, user_lang=user_lang)
@@ -21778,7 +21789,8 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     # КРИТИЧНО: Всегда показываем цену или информацию о бесплатной генерации
                     is_admin_user = get_is_admin(user_id)
                     sku_id = session.get("sku_id", "")
-                    is_free = await is_free_generation_available(user_id, sku_id)
+                    source = session.get("free_source", "unknown")
+                    is_free = await is_free_generation_available(user_id, sku_id, source)
                     free_info = ""
                     if is_free:
                         remaining = await get_user_free_generations_remaining(user_id)
@@ -21917,7 +21929,8 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                         
                         is_admin_user = get_is_admin(user_id)
                         sku_id = session.get("sku_id", "")
-                        is_free = await is_free_generation_available(user_id, sku_id)
+                        source = session.get("free_source", "unknown")
+                        is_free = await is_free_generation_available(user_id, sku_id, source)
                         free_info = ""
                         if is_free:
                             remaining = await get_user_free_generations_remaining(user_id)
