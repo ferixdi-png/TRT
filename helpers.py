@@ -101,6 +101,7 @@ async def build_main_menu_keyboard(
     """
     if user_lang == "ru":
         return [
+            [InlineKeyboardButton("⚡ FREE FAST TOOLS", callback_data="fast_tools")],
             [InlineKeyboardButton(" Генерация визуала", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Ремикс изображения", callback_data="gen_type:image-to-image")],
             [InlineKeyboardButton("🎬 Видео по сценарию", callback_data="gen_type:text-to-video")],
@@ -108,11 +109,11 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
             [InlineKeyboardButton("✍️ Текст/Перевод", callback_data="gen_type:text-to-text")],
             [InlineKeyboardButton("🖼️ Улучшение качества", callback_data="gen_type:upscale")],
-            [InlineKeyboardButton("🪄 Другие инструменты", callback_data="other_models")],
             [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
         ]
     return [
+        [InlineKeyboardButton("⚡ FREE FAST TOOLS", callback_data="fast_tools")],
         [InlineKeyboardButton("🎨 Visual generation", callback_data="gen_type:text-to-image")],
         [InlineKeyboardButton("🧩 Image remix", callback_data="gen_type:image-to-image")],
         [InlineKeyboardButton("🎬 Script to video", callback_data="gen_type:text-to-video")],
@@ -120,7 +121,6 @@ async def build_main_menu_keyboard(
         [InlineKeyboardButton("🎵 Audio/Music", callback_data="gen_type:audio-to-audio")],
         [InlineKeyboardButton("✍️ Text/Translate", callback_data="gen_type:text-to-text")],
         [InlineKeyboardButton("🖼️ Quality enhance", callback_data="gen_type:upscale")],
-        [InlineKeyboardButton("🪄 Other tools", callback_data="other_models")],
         [InlineKeyboardButton("💳 Balance / Access", callback_data="check_balance")],
         [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
     ]
