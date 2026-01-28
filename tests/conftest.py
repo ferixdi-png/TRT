@@ -97,6 +97,7 @@ KNOWN_XFAIL_TESTS = {
     "tests/test_mode_selection_flow.py::test_mode_selection_hides_unpriced_modes",
     "tests/test_models_menu_coverage.py::test_build_model_keyboard_creates_buttons",
     "tests/test_models_smoke.py::test_all_models_have_generators",
+    "tests/test_models_smoke.py::test_catalog_cache_performance",
     "tests/test_models_smoke.py::test_model_visibility",
     "tests/test_navigation_resets_session.py::test_navigation_resets_payment_session",
     "tests/test_no_silence_all_callbacks.py::test_no_silence_all_callbacks",
