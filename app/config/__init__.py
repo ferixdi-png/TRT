@@ -46,10 +46,17 @@ def get_Settings_class():
 # Создаем alias для Settings
 Settings = get_Settings_class()
 
+def reset_settings():
+    """Сбросить кэшированные настройки (для тестов)"""
+    global _original_get_settings, _Settings_class
+    _original_get_settings = None
+    _Settings_class = None
+
 __all__ = [
     "ConfigValidator",
     "ConfigValidationError", 
     "validate_config_on_startup",
     "get_settings",
-    "Settings"
+    "Settings",
+    "reset_settings"
 ]

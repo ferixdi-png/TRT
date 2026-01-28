@@ -107,8 +107,8 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🎞️ Анимировать изображение", callback_data="gen_type:image-to-video")],
             [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
             [InlineKeyboardButton("✍️ Текст/Перевод", callback_data="gen_type:text-to-text")],
-            [InlineKeyboardButton("�️ Улучшение качества", callback_data="gen_type:upscale")],
-            [InlineKeyboardButton("� Другие инструменты", callback_data="other_models")],
+            [InlineKeyboardButton("🖼️ Улучшение качества", callback_data="gen_type:upscale")],
+            [InlineKeyboardButton("🪄 Другие инструменты", callback_data="other_models")],
             [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
         ]

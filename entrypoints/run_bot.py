@@ -199,17 +199,23 @@ async def main() -> None:
     port = resolve_port()
     logger.info("Python entrypoint starting: healthcheck -> bot")
 
+    # P0 FIX: В webhook режиме не стартуем healthcheck чтобы избежать конфликта портов
+    bot_mode = os.getenv("BOT_MODE", "").lower().strip()
+    if bot_mode == "webhook":
+        logger.info("Webhook mode detected: skipping healthcheck server to avoid port conflicts")
+        health_started = False
+    else:
+        logger.info("Polling mode detected: starting healthcheck server")
+        health_started = await start_healthcheck(port)
+
     loop = asyncio.get_running_loop()
     shutdown_event = asyncio.Event()
     bot_task = None
     stop_task = None
-    health_started = False
     storage = None
     stopping = False
 
     try:
-        health_started = await start_healthcheck(port)
-
         from app.storage import get_storage
         from app.diagnostics.billing_preflight import (
             format_billing_preflight_report,
@@ -354,7 +360,21 @@ async def main() -> None:
 def run() -> None:
     """Synchronous wrapper for running via __main__."""
     try:
-        asyncio.run(main())
+        # P0 FIX: Проверяем режим бота - для webhook не используем asyncio.run()
+        bot_mode = os.getenv("BOT_MODE", "").lower().strip()
+        if bot_mode == "webhook":
+            # В webhook режиме запускаем синхронно, чтобы избежать конфликта loop
+            logger.info("Webhook mode detected: using sync startup to avoid event loop conflicts")
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(main())
+            finally:
+                loop.close()
+        else:
+            # Для polling режима оставляем как было
+            asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Shutdown requested (KeyboardInterrupt)")
     except asyncio.CancelledError:
