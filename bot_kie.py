@@ -27036,11 +27036,20 @@ _webhook_setter_lock = asyncio.Lock()
 
 def _webhook_is_application_initialized(application: Optional[Application]) -> bool:
     if application is None:
+        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+        logger.info("🔍 WEBHOOK_APP_CHECK application=None result=false")
         return False
     initialized_attr = getattr(application, "initialized", None)
     if isinstance(initialized_attr, bool):
-        return initialized_attr
-    return bool(getattr(application, "_initialized", False))
+        result = initialized_attr
+    else:
+        result = bool(getattr(application, "_initialized", False))
+    
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+    logger.info("🔍 WEBHOOK_APP_CHECK initialized=%s _initialized=%s result=%s", 
+                initialized_attr, getattr(application, "_initialized", None), result)
+    
+    return result
 
 
 def _should_log_webhook_early_update(now: float, throttle_seconds: float) -> bool:
