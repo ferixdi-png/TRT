@@ -10539,6 +10539,12 @@ async def respond_price_undefined(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+    logger.info("🚀 /start command received! user_id=%s chat_id=%s update_id=%s", 
+                update.effective_user.id if update.effective_user else "unknown",
+                update.effective_chat.id if update.effective_chat else "unknown", 
+                update.update_id if hasattr(update, 'update_id') else "unknown")
+    
     start_ts = time.monotonic()
     increment_update_metric("handler_enter")
     correlation_id: Optional[str] = None
