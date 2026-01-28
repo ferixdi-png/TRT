@@ -1744,37 +1744,6 @@ models:
         type: string
         required: true
     model_mode: text_to_image
-  sora-2-pro-storyboard:
-    model_type: image_to_video
-    input:
-      prompt:
-        type: string
-        required: true
-      image_input:
-        type: array
-        item_type: string
-        required: true
-      n_frames:
-        type: enum
-        required: true
-        values:
-        - '10'
-        - '15'
-        - '25'
-      duration:
-        type: enum
-        required: false
-        values:
-        - '10'
-        - '15'
-        - '25'
-      aspect_ratio:
-        type: enum
-        required: false
-        values:
-        - portrait
-        - landscape
-    model_mode: image_to_video
   kling/v2-5-turbo:
     model_type: text_to_image
     input:

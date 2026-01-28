@@ -855,19 +855,6 @@ models:
     notes: Pro High-15.0s
   description_ru: 'Pro-режим Sora 2: фото в видео с высокой детализацией. Для серьёзных
     проектов.'
-- id: sora-2-pro-storyboard
-  title_ru: OpenAI Sora 2 Pro Storyboard
-  type: t2i
-  modes:
-  - unit: image
-    credits: 150.0
-    official_usd: 0.75
-    notes: Pro-10.0s
-  - unit: image
-    credits: 270.0
-    official_usd: 1.35
-    notes: Pro-15-25s
-  description_ru: Создание раскадровки и анимации по сценарию. Для режиссёров и сценаристов.
 - id: sora-watermark-remover
   title_ru: OpenAI Sora 2 Watermark Remover
   type: watermark_remove
