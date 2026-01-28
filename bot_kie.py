@@ -29403,9 +29403,12 @@ async def main():
     logger.info(f"📡 Bot mode: {bot_mode}")
     
     # Если webhook режим - НЕ запускаем polling
+    logger.info("🔍 BOT_MODE_CHECK bot_mode=%s", bot_mode)
     if bot_mode == "webhook":
+        logger.info("🔍 WEBHOOK_MODE_ENTERED registering_application=true")
         global _application_for_webhook
         await _register_webhook_application(application)  # Register app for webhook handler
+        logger.info("🔍 WEBHOOK_MODE_REGISTERED application_registered=true")
         
         webhook_url = _resolve_webhook_url_from_env()
         if not webhook_url:
@@ -29414,6 +29417,8 @@ async def main():
             return
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
+    else:
+        logger.info("🔍 POLLING_MODE_ENTERED webhook_skipped=true")
 
         try:
             try:
