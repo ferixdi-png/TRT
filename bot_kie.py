@@ -27330,6 +27330,7 @@ async def _run_webhook_setter_cycle(
     try:
         from telegram import Bot
         from telegram.request import HTTPXRequest
+        from app.bot_mode import ensure_webhook_mode
 
         request_timeout = _resolve_telegram_request_timeout(cycle_timeout_s)
         request = HTTPXRequest(
