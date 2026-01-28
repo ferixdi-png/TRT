@@ -15,7 +15,6 @@ from app.pricing.coverage_guard import DisabledModelInfo
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Test isolation issue: passes alone, fails in group")
 async def test_start_falls_back_to_minimal_menu_on_timeout(harness, monkeypatch):
     async def slow_keyboard(*_args, **_kwargs):
         await asyncio.sleep(0.2)
