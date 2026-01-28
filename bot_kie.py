@@ -28293,6 +28293,44 @@ async def _run_webhook_initialization(
     _schedule_webhook_setter(webhook_url)
 
 
+def run_webhook_sync(application, webhook_url, port, url_path, listen_address, drop_pending_updates, allowed_updates):
+    """Запускает webhook в синхронном режиме с правильным event loop."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            logger.warning("Event loop is closed, creating new one")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        logger.info("No event loop found, creating new one")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    async def run_webhook():
+        await application.bot.set_webhook(
+            url=webhook_url,
+            drop_pending_updates=drop_pending_updates,
+            allowed_updates=allowed_updates
+        )
+        await application.run_webhook(
+            listen_address=listen_address,
+            port=port,
+            url_path=url_path,
+            drop_pending_updates=drop_pending_updates,
+            allowed_updates=allowed_updates
+        )
+    
+    try:
+        loop.run_until_complete(run_webhook())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        raise
+    finally:
+        logger.info("Webhook shutdown complete")
+
+
 async def main():
     """Start the bot."""
     global storage, kie
@@ -28669,43 +28707,6 @@ async def main():
             "🌐 Webhook configuration: url=%s port=%s path=%s listen=%s",
             webhook_url, port, url_path, listen_address
         )
-        
-        def run_webhook_sync(application, webhook_url, port, url_path, listen_address, drop_pending_updates, allowed_updates):
-            """Запускает webhook в синхронном режиме с правильным event loop."""
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_closed():
-                    logger.warning("Event loop is closed, creating new one")
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-            except RuntimeError:
-                logger.info("No event loop found, creating new one")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            async def run_webhook():
-                await application.bot.set_webhook(
-                    url=webhook_url,
-                    drop_pending_updates=drop_pending_updates,
-                    allowed_updates=allowed_updates
-                )
-                await application.run_webhook(
-                    listen_address=listen_address,
-                    port=port,
-                    url_path=url_path,
-                    drop_pending_updates=drop_pending_updates,
-                    allowed_updates=allowed_updates
-                )
-            
-            try:
-                loop.run_until_complete(run_webhook())
-            except KeyboardInterrupt:
-                logger.info("Bot stopped by user")
-            except Exception as e:
-                logger.error(f"Webhook error: {e}")
-                raise
-            finally:
-                logger.info("Webhook shutdown complete")
         
         # Запускаем webhook в синхронном режиме с правильным event loop
         run_webhook_sync(
