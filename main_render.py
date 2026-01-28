@@ -689,6 +689,8 @@ async def _initialize_application(settings):
         setattr(application, "_initialized", True)
     else:
         await application.initialize()
+        # Гарантируем установку _initialized атрибута после инициализации
+        setattr(application, "_initialized", True)
     init_ms = int((time.monotonic() - init_started) * 1000)
     _app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
