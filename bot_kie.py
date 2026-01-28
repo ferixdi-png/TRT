@@ -29425,8 +29425,17 @@ async def main():
             return
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
-        # КРИТИЧЕСКИЙ RETURN чтобы не уйти в polling режим
-        return
+        
+        # ЗАПУСК WEBHOOK СЕРВЕРА вместо return
+        await application.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.getenv("PORT", "10000")),
+            url_path=webhook_url.split("/")[-1],  # webhook
+            webhook_url=webhook_url,
+            drop_pending_updates=True,
+            secret_token=os.getenv("WEBHOOK_SECRET_TOKEN"),
+        )
+        return  # Этот return сработает только после остановки webhook сервера
     else:
         logger.info("🔍 POLLING_MODE_ENTERED webhook_skipped=true")
 
