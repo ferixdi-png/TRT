@@ -1,1 +1,23 @@
-{}
+{
+  "4242": {
+    "user_id": 4242,
+    "username": "test_user",
+    "first_name": "Test",
+    "last_name": "",
+    "updated_at": "2026-01-28T16:22:37.971258"
+  },
+  "4343": {
+    "user_id": 4343,
+    "username": "test_user",
+    "first_name": "Test",
+    "last_name": "",
+    "updated_at": "2026-01-28T16:22:38.042940"
+  },
+  "9911": {
+    "user_id": 9911,
+    "username": "test_user",
+    "first_name": "Test",
+    "last_name": "",
+    "updated_at": "2026-01-28T16:22:38.874839"
+  }
+}
