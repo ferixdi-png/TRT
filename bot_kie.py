@@ -28370,7 +28370,23 @@ def run_webhook_sync(application, webhook_url, port, url_path, listen_address, d
         )
     
     try:
-        loop.run_until_complete(run_webhook())
+        # Проверяем если loop уже запущен
+        if loop.is_running():
+            # Если loop уже запущен, используем nest_asyncio для запуска
+            try:
+                import nest_asyncio
+                nest_asyncio.apply(loop)
+                logger.info("Event loop is already running, using nest_asyncio")
+                loop.run_until_complete(run_webhook())
+            except ImportError:
+                # Если nest_asyncio недоступен, пробуем альтернативный подход
+                logger.warning("nest_asyncio not available, trying alternative approach")
+                # Создаем future и ждем его завершения
+                future = asyncio.run_coroutine_threadsafe(run_webhook(), loop)
+                future.result()  # Блокирующий вызов для результата
+        else:
+            # Если loop не запущен, используем стандартный подход
+            loop.run_until_complete(run_webhook())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
