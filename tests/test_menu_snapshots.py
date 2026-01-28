@@ -19,12 +19,12 @@ async def test_main_menu_keyboard_snapshot():
     keyboard_rows = await build_main_menu_keyboard(user_id=123, user_lang="ru", is_new=False)
     snapshot = _serialize_rows(keyboard_rows)
     assert snapshot == [
-        [("🆓 FAST TOOLS", "free_tools")],
+        [("🆓 FAST TOOLS", "fast_tools")],
         [("🎨 Генерация визуала", "gen_type:text-to-image")],
         [("🧩 Ремикс изображения", "gen_type:image-to-image")],
         [("🎬 Видео по сценарию", "gen_type:text-to-video")],
-        [("🎞️ Анимировать изображение", "gen_type:image-to-video")],
-        [("🧰 Спец-инструменты", "other_models")],
+        [("🪄 Анимировать изображение", "gen_type:image-to-video")],
+        [("🧰 Спец-инструменты", "special_tools")],
         [("💳 Баланс / Доступ", "check_balance")],
         [("🤝 Партнёрка", "referral_info")],
     ]

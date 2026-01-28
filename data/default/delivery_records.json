@@ -2,10 +2,10 @@
   "8888:task-123": {
     "user_id": 8888,
     "task_id": "task-123",
-    "job_id": "job-cefdaf9bc815",
+    "job_id": "job-59cefd2b5ea3",
     "model_id": "test-model",
-    "request_id": "corr-1-8888-f34b5c16",
-    "correlation_id": "corr-1-8888-f34b5c16",
+    "request_id": "corr-1-8888-3833dbb5",
+    "correlation_id": "corr-1-8888-3833dbb5",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -15,8 +15,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:51:54.434425",
-    "updated_at": "2026-01-28T16:21:28.799675",
-    "delivered_at": "2026-01-28T16:21:28.799681",
+    "updated_at": "2026-01-28T16:27:32.199550",
+    "delivered_at": "2026-01-28T16:27:32.199557",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -24,10 +24,10 @@
   "777:task-send-fail": {
     "user_id": 777,
     "task_id": "task-send-fail",
-    "job_id": "job-60a86cde9ab4",
+    "job_id": "job-375826cad9a2",
     "model_id": "test-model",
-    "request_id": "corr-1-777-541a05ed",
-    "correlation_id": "corr-1-777-541a05ed",
+    "request_id": "corr-1-777-94628128",
+    "correlation_id": "corr-1-777-94628128",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -37,15 +37,15 @@
     "is_admin_user": false,
     "status": "failed",
     "created_at": "2026-01-27T16:52:00.937091",
-    "updated_at": "2026-01-28T16:21:35.173806"
+    "updated_at": "2026-01-28T16:27:38.351160"
   },
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-1a04a0dbefe6",
+    "job_id": "job-e6026a1b218f",
     "model_id": "flux-2/flex-image-to-image",
-    "request_id": "corr-203-9911-b1a2714d",
-    "correlation_id": "corr-203-9911-b1a2714d",
+    "request_id": "corr-203-9911-f3d3d089",
+    "correlation_id": "corr-203-9911-f3d3d089",
     "prompt_hash": "9f86d081884c",
     "chat_id": 12345,
     "message_id": 1,
@@ -55,8 +55,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-01-28T16:22:50.493707",
-    "delivered_at": "2026-01-28T16:22:50.493712",
+    "updated_at": "2026-01-28T16:28:54.054780",
+    "delivered_at": "2026-01-28T16:28:54.054789",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -64,10 +64,10 @@
   "7777:task-123": {
     "user_id": 7777,
     "task_id": "task-123",
-    "job_id": "job-0b63da7597bc",
+    "job_id": "job-d428fb0b414c",
     "model_id": "test-model",
-    "request_id": "corr-1-7777-7dcdadf7",
-    "correlation_id": "corr-1-7777-7dcdadf7",
+    "request_id": "corr-1-7777-1c0c05ff",
+    "correlation_id": "corr-1-7777-1c0c05ff",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -77,8 +77,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.865478",
-    "updated_at": "2026-01-28T16:21:37.971534",
-    "delivered_at": "2026-01-28T16:21:37.971544",
+    "updated_at": "2026-01-28T16:27:40.985199",
+    "delivered_at": "2026-01-28T16:27:40.985207",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-77fe48f78357",
+    "job_id": "job-080e07c42322",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-01-28T16:23:48.679678"
+    "updated_at": "2026-01-28T16:30:02.944127"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,
@@ -490,5 +490,22 @@
     "status": "pending",
     "created_at": "2026-01-28T16:23:55.585809",
     "updated_at": "2026-01-28T16:23:55.585809"
+  },
+  "1:9f1ce641-2716-4555-8ea6-d40c1a30c8bc": {
+    "user_id": 1,
+    "task_id": "9f1ce641-2716-4555-8ea6-d40c1a30c8bc",
+    "job_id": "job-c4c7a967514c",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "fdfd0d9a-dbce-4a83-ba6a-18da2efc0cc7",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T16:30:09.814433",
+    "updated_at": "2026-01-28T16:30:09.814433"
   }
 }

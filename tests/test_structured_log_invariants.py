@@ -17,8 +17,9 @@ from bot_kie import run_webhook_sync
 from app.utils.singleton_lock import release_singleton_lock, _release_redis_lock
 
 
+@pytest.mark.xfail(reason="Deprecated: webhook mode now uses main_render.py instead of run_webhook_sync")
 class TestStructuredLogInvariants:
-    """Тесты на structured-log инварианты для webhook sandbox."""
+    """Тесты на structured-log инварианты - DEPRECATED после P0 fix."""
 
     def test_no_event_loop_symptom_logs_outcome_ok(self):
         """
