@@ -13,15 +13,16 @@ def get_settings(validate: bool = False):
     global _original_get_settings
     if _original_get_settings is None:
         # Отложенный импорт только при вызове функции
+        # Импортируем НАПРЯМУЮ из app/config.py, минуя deprecated config.py
         import importlib.util
         import os
         
-        # Импортируем config.py из корня проекта
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "config.py")
-        spec = importlib.util.spec_from_file_location("config_module", config_path)
-        config_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(config_module)
-        _original_get_settings = config_module.get_settings
+        # Импортируем app/config.py (не корневой config.py!)
+        app_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.py")
+        spec = importlib.util.spec_from_file_location("app_config_module", app_config_path)
+        app_config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(app_config_module)
+        _original_get_settings = app_config_module.get_settings
     
     return _original_get_settings(validate)
 
