@@ -2,10 +2,10 @@
   "8888:task-123": {
     "user_id": 8888,
     "task_id": "task-123",
-    "job_id": "job-59cefd2b5ea3",
+    "job_id": "job-119e08ab65cb",
     "model_id": "test-model",
-    "request_id": "corr-1-8888-3833dbb5",
-    "correlation_id": "corr-1-8888-3833dbb5",
+    "request_id": "corr-1-8888-5989275c",
+    "correlation_id": "corr-1-8888-5989275c",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -15,8 +15,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:51:54.434425",
-    "updated_at": "2026-01-28T16:27:32.199550",
-    "delivered_at": "2026-01-28T16:27:32.199557",
+    "updated_at": "2026-01-28T16:44:04.439423",
+    "delivered_at": "2026-01-28T16:44:04.439429",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -24,10 +24,10 @@
   "777:task-send-fail": {
     "user_id": 777,
     "task_id": "task-send-fail",
-    "job_id": "job-375826cad9a2",
+    "job_id": "job-272a978e715f",
     "model_id": "test-model",
-    "request_id": "corr-1-777-94628128",
-    "correlation_id": "corr-1-777-94628128",
+    "request_id": "corr-1-777-c2bb6c31",
+    "correlation_id": "corr-1-777-c2bb6c31",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -37,15 +37,15 @@
     "is_admin_user": false,
     "status": "failed",
     "created_at": "2026-01-27T16:52:00.937091",
-    "updated_at": "2026-01-28T16:27:38.351160"
+    "updated_at": "2026-01-28T16:44:10.627221"
   },
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-e6026a1b218f",
+    "job_id": "job-fd735e0d4b2a",
     "model_id": "flux-2/flex-image-to-image",
-    "request_id": "corr-203-9911-f3d3d089",
-    "correlation_id": "corr-203-9911-f3d3d089",
+    "request_id": "corr-203-9911-277eea0d",
+    "correlation_id": "corr-203-9911-277eea0d",
     "prompt_hash": "9f86d081884c",
     "chat_id": 12345,
     "message_id": 1,
@@ -55,8 +55,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-01-28T16:28:54.054780",
-    "delivered_at": "2026-01-28T16:28:54.054789",
+    "updated_at": "2026-01-28T16:45:12.892409",
+    "delivered_at": "2026-01-28T16:45:12.892415",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -64,10 +64,10 @@
   "7777:task-123": {
     "user_id": 7777,
     "task_id": "task-123",
-    "job_id": "job-d428fb0b414c",
+    "job_id": "job-4fc1bb3f32cf",
     "model_id": "test-model",
-    "request_id": "corr-1-7777-1c0c05ff",
-    "correlation_id": "corr-1-7777-1c0c05ff",
+    "request_id": "corr-1-7777-0a5d5006",
+    "correlation_id": "corr-1-7777-0a5d5006",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -77,8 +77,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.865478",
-    "updated_at": "2026-01-28T16:27:40.985199",
-    "delivered_at": "2026-01-28T16:27:40.985207",
+    "updated_at": "2026-01-28T16:44:13.232344",
+    "delivered_at": "2026-01-28T16:44:13.232352",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-080e07c42322",
+    "job_id": "job-0be96aa2118a",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-01-28T16:30:02.944127"
+    "updated_at": "2026-01-28T16:46:11.211011"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,
@@ -507,5 +507,56 @@
     "status": "pending",
     "created_at": "2026-01-28T16:30:09.814433",
     "updated_at": "2026-01-28T16:30:09.814433"
+  },
+  "1:c133f078-29a8-43f7-a5ef-f230cf71b1da": {
+    "user_id": 1,
+    "task_id": "c133f078-29a8-43f7-a5ef-f230cf71b1da",
+    "job_id": "job-8342aac9a2ef",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "326f6aa5-6653-486a-b454-f4cd42dd6cbd",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T16:36:09.433487",
+    "updated_at": "2026-01-28T16:36:09.433487"
+  },
+  "1:c27d6f8f-4dd8-47c1-90b8-489397d9c132": {
+    "user_id": 1,
+    "task_id": "c27d6f8f-4dd8-47c1-90b8-489397d9c132",
+    "job_id": "job-75f1f9058be7",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "5f466931-d69f-4275-af2e-dbcdc663da9d",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T16:41:44.902789",
+    "updated_at": "2026-01-28T16:41:44.902789"
+  },
+  "1:1ba4f431-fe25-4400-99e2-1e227195fb08": {
+    "user_id": 1,
+    "task_id": "1ba4f431-fe25-4400-99e2-1e227195fb08",
+    "job_id": "job-690fe1b189b6",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "1d7ede65-df9f-4b43-9efa-ec093954c6c9",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T16:46:22.336612",
+    "updated_at": "2026-01-28T16:46:22.336612"
   }
 }

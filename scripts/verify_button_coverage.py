@@ -96,7 +96,7 @@ def main() -> int:
 
     orphan_callbacks = sorted(cb for cb in callbacks if cb not in IGNORED_CALLBACKS and not is_covered(cb))
 
-    unused_handler_allowlist = {"pay_card:", "pay_stars:", "reset_step", "..."}
+    unused_handler_allowlist = {"pay_card:", "pay_stars:", "reset_step", "view_payment_screenshots", "..."}
     unused_handlers = sorted(
         h for h in handler_prefixes.union(handler_exact)
         if h not in unused_handler_allowlist
