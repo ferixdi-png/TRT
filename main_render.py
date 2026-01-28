@@ -553,6 +553,9 @@ def build_webhook_handler(
         route: str,
         request_id: Optional[str],
     ) -> None:
+        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+        logger.info("🔍 PROCESS_GUARD_START correlation_id=%s", correlation_id)
+        
         try:
             await asyncio.wait_for(
                 _process_raw_update(
@@ -564,7 +567,11 @@ def build_webhook_handler(
                 ),
                 timeout=process_timeout_seconds,
             )
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 PROCESS_GUARD_DONE correlation_id=%s", correlation_id)
         except asyncio.TimeoutError:
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 PROCESS_GUARD_TIMEOUT correlation_id=%s", correlation_id)
             log_critical_event(
                 correlation_id=correlation_id,
                 update_id=None,
@@ -583,6 +590,8 @@ def build_webhook_handler(
                 elapsed_ms=process_timeout_seconds * 1000,
             )
         except Exception as exc:
+            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+            logger.info("🔍 PROCESS_GUARD_EXCEPTION correlation_id=%s error=%s", correlation_id, exc)
             logger.exception("WEBHOOK correlation_id=%s process_raw_failed=true error=%s", correlation_id, exc)
             log_critical_event(
                 correlation_id=correlation_id,
