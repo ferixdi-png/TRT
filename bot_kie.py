@@ -17430,11 +17430,11 @@ async def _button_callback_impl(
             session["model_id"] = model_id
             session["model_info"] = model_info
             session["active_model_id"] = model_id
+            session_gen_type = _resolve_session_gen_type(session, None)
+            model_gen_type = _derive_model_gen_type(model_spec)
             if model_gen_type:
                 session["active_gen_type"] = model_gen_type
                 session["gen_type"] = model_gen_type
-            session_gen_type = _resolve_session_gen_type(session, None)
-            model_gen_type = _derive_model_gen_type(model_spec)
             registry_gen_type = session.get("gen_type") or session_gen_type
             registry_entry = await _get_registry_model_entry(
                 model_id,
@@ -29425,6 +29425,8 @@ async def main():
             return
         
         logger.info(f"🌐 Starting webhook mode: {webhook_url}")
+        # КРИТИЧЕСКИЙ RETURN чтобы не уйти в polling режим
+        return
     else:
         logger.info("🔍 POLLING_MODE_ENTERED webhook_skipped=true")
 
