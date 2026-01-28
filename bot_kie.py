@@ -2964,11 +2964,19 @@ except ImportError:
     def get_bot_mode() -> str:
         """Fallback для get_bot_mode"""
         mode = os.getenv("BOT_MODE", "").lower().strip()
+        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+        logger.info("🔍 FALLBACK_GET_BOT_MODE BOT_MODE_env=%s PORT_env=%s WEBHOOK_URL_env=%s", 
+                    os.getenv("BOT_MODE"), os.getenv("PORT"), bool(os.getenv("WEBHOOK_URL")))
+        
         if not mode:
             if os.getenv("PORT") and os.getenv("WEBHOOK_URL"):
                 mode = "webhook"
             else:
                 mode = "polling"
+        
+        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+        logger.info("🔍 FALLBACK_BOT_MODE_RESULT mode=%s", mode)
+        
         if mode not in ["polling", "webhook", "web", "smoke"]:
             raise ValueError(f"Invalid BOT_MODE: {mode}")
         return mode
