@@ -7094,7 +7094,27 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         log_timeout=False,
     )
 
-    stats = get_extended_admin_stats()
+    # Run sync stats gathering in thread pool to avoid blocking event loop
+    try:
+        stats = await asyncio.to_thread(get_extended_admin_stats)
+    except Exception as stats_exc:
+        logger.error("ADMIN_STATS_FAILED error=%s", stats_exc, exc_info=True)
+        stats = {
+            'total_users': 0,
+            'active_today': 0,
+            'active_week': 0,
+            'active_month': 0,
+            'top_models': [],
+            'total_revenue': 0,
+            'revenue_today': 0,
+            'revenue_week': 0,
+            'revenue_month': 0,
+            'total_payments': 0,
+            'successful_payments': 0,
+            'conversion_rate': 0,
+            'avg_check': 0,
+            'total_generations': 0,
+        }
 
     kie_balance_info = ""
     correlation_id = get_correlation_id() or uuid.uuid4().hex
