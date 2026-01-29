@@ -24816,7 +24816,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         immediate_result = state_resolution.canonical_state in CANONICAL_SUCCESS_STATES
         if not immediate_result:
             # Launch inline polling as background task (non-blocking)
-            # This allows webhook to return immediately while polling continues
+            # Capture bot reference before creating closure
+            bot_instance = context.bot
+            
             async def _inline_poll_task():
                 inline_poll_attempts = int(os.getenv("INLINE_POLL_ATTEMPTS", "12"))
                 inline_poll_interval = float(os.getenv("INLINE_POLL_INTERVAL_SECONDS", "2.5"))
@@ -24864,7 +24866,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                 "prompt": prompt_value,
                             }
                             poll_delivered = await deliver_job_result(
-                                application.bot,
+                                bot_instance,
                                 storage_instance,
                                 job=job_data,
                                 status_record=status,
