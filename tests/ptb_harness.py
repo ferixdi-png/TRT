@@ -50,6 +50,11 @@ class PTBHarness:
         self._patches: List[Any] = []
         self._message_id_counter: int = 1000
         self._update_id_counter: int = 0
+        self._callback_id_counter: int = 0
+
+    def _next_callback_id(self) -> int:
+        self._callback_id_counter += 1
+        return self._callback_id_counter
 
     def _next_message_id(self) -> int:
         self._message_id_counter += 1
@@ -209,7 +214,7 @@ class PTBHarness:
             from_user=user
         )
         return CallbackQuery(
-            id="test_callback_id",
+            id=f"callback_{self._next_callback_id()}",
             from_user=user,
             chat_instance="test_instance",
             data=data,
