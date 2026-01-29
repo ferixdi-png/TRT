@@ -4817,6 +4817,7 @@ async def _build_referral_info_text(user_id: int, user_lang: str) -> tuple[str, 
     bonus_total = int(stats.get("bonus_total", 0))
     bonus_total_display = _format_stat(bonus_total)
 
+    copy_hint = "📋 <i>Tap the link above to copy</i>" if user_lang == 'en' else "📋 <i>Нажмите на ссылку выше, чтобы скопировать</i>"
     referral_text = (
         f'{t("msg_referral_title", lang=user_lang)}\n\n'
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -4828,7 +4829,7 @@ async def _build_referral_info_text(user_id: int, user_lang: str) -> tuple[str, 
         f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
         f'{t("msg_referral_link_title", lang=user_lang)}\n\n'
         f'<code>{referral_link}</code>\n\n'
-        f'📋 <i>Нажмите на ссылку выше, чтобы скопировать</i>\n\n'
+        f'{copy_hint}\n\n'
         f'{t("msg_referral_send", lang=user_lang, bonus=REFERRAL_BONUS_GENERATIONS)}'
     )
     metrics = {
@@ -9826,18 +9827,28 @@ async def show_free_tools_menu(query, user_id: int, user_lang: str, top_models: 
         limit_per_day = snapshot.get("limit_per_day", 5)
         is_admin = snapshot.get("is_admin", False)
         
-        # Формируем сообщение с понятной информацией о лимитах
-        if is_admin:
-            free_info = "🎁 <b>Админ:</b> безлимитные генерации (квота не расходуется)"
-        elif remaining > 0:
-            free_info = f"🎁 <b>Бесплатных осталось:</b> {remaining} из {limit_per_day} в день"
+        # Формируем сообщение с понятной информацией о лимитах (с локализацией)
+        if user_lang == 'ru':
+            if is_admin:
+                free_info = "🎁 <b>Админ:</b> безлимитные генерации (квота не расходуется)"
+            elif remaining > 0:
+                free_info = f"🎁 <b>Бесплатных осталось:</b> {remaining} из {limit_per_day} в день"
+            else:
+                free_info = f"🎁 <b>Бесплатных осталось:</b> 0 из {limit_per_day} в день\n💳 Пополните баланс для продолжения"
+            select_text = "Выберите бесплатную модель:"
         else:
-            free_info = f"🎁 <b>Бесплатных осталось:</b> 0 из {limit_per_day} в день\n💳 Пополните баланс для продолжения"
+            if is_admin:
+                free_info = "🎁 <b>Admin:</b> unlimited generations (quota not consumed)"
+            elif remaining > 0:
+                free_info = f"🎁 <b>Free remaining:</b> {remaining} of {limit_per_day} per day"
+            else:
+                free_info = f"🎁 <b>Free remaining:</b> 0 of {limit_per_day} per day\n💳 Top up balance to continue"
+            select_text = "Select a free model:"
         
         text = (
             "⚡ <b>FREE FAST TOOLS</b>\n\n"
             f"{free_info}\n\n"
-            "Выберите бесплатную модель:\n\n"
+            f"{select_text}\n\n"
         )
         
         # Формируем клавиатуру с top-5 моделями
@@ -14614,17 +14625,26 @@ async def _button_callback_impl(
             try:
                 user_lang = get_user_language(user_id)
                 
-                # Формируем меню спец-инструментов
-                special_tools_keyboard = [
-                    [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
-                    [InlineKeyboardButton("✍️ Работа с текстом", callback_data="gen_type:text-to-text")],
-                    [InlineKeyboardButton("🖼️ Улучшение изображения", callback_data="gen_type:upscale")],
-                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
-                ]
+                # Формируем меню спец-инструментов с локализацией
+                if user_lang == 'ru':
+                    special_tools_keyboard = [
+                        [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
+                        [InlineKeyboardButton("✍️ Работа с текстом", callback_data="gen_type:text-to-text")],
+                        [InlineKeyboardButton("🖼️ Улучшение изображения", callback_data="gen_type:upscale")],
+                        [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
+                    ]
+                    menu_text = "🧰 <b>Спец-инструменты</b>\n\nДополнительные инструменты для работы с контентом:"
+                else:
+                    special_tools_keyboard = [
+                        [InlineKeyboardButton("🎵 Audio/Music", callback_data="gen_type:audio-to-audio")],
+                        [InlineKeyboardButton("✍️ Text Processing", callback_data="gen_type:text-to-text")],
+                        [InlineKeyboardButton("🖼️ Image Enhancement", callback_data="gen_type:upscale")],
+                        [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
+                    ]
+                    menu_text = "🧰 <b>Special Tools</b>\n\nAdditional tools for content creation:"
                 
                 await query.edit_message_text(
-                    "🧰 <b>Спец-инструменты</b>\n\n"
-                    "Дополнительные инструменты для работы с контентом:",
+                    menu_text,
                     reply_markup=InlineKeyboardMarkup(special_tools_keyboard),
                     parse_mode='HTML'
                 )
