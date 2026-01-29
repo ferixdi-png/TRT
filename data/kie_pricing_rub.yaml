@@ -1557,6 +1557,17 @@ models:
   - id: midjourney/api
     skus:
       - unit: request
-        price_rub: 6.29
-        params: {}
-        notes: text-to-image fast
+        price_rub: 2.33
+        params:
+          speed: relaxed
+        notes: relaxed mode
+      - unit: request
+        price_rub: 6.22
+        params:
+          speed: fast
+        notes: fast mode (default)
+      - unit: request
+        price_rub: 12.45
+        params:
+          speed: turbo
+        notes: turbo mode
