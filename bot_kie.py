@@ -8748,6 +8748,7 @@ def _build_minimal_menu_keyboard(user_lang: str, *, include_refresh: bool = Fals
                 [InlineKeyboardButton("Balance / Payment", callback_data="check_balance")],
                 [InlineKeyboardButton("Help", callback_data="help_menu")],
                 [InlineKeyboardButton("Profile", callback_data="my_generations")],
+                [InlineKeyboardButton("🌐 Language / Язык", callback_data="change_language")],
             ]
         )
     else:
@@ -8757,6 +8758,7 @@ def _build_minimal_menu_keyboard(user_lang: str, *, include_refresh: bool = Fals
                 [InlineKeyboardButton("Баланс / Оплата", callback_data="check_balance")],
                 [InlineKeyboardButton("Помощь", callback_data="help_menu")],
                 [InlineKeyboardButton("Профиль", callback_data="my_generations")],
+                [InlineKeyboardButton("🌐 Язык / Language", callback_data="change_language")],
             ]
         )
     return InlineKeyboardMarkup(rows)
@@ -12220,11 +12222,15 @@ async def _button_callback_impl(
             
             if user_id not in saved_generations:
                 logger.warning(f"No saved generation data for user {user_id}")
-                await query.edit_message_text(
+                user_lang = get_user_language(user_id)
+                no_data_text = (
                     "❌ <b>Данные для повторной генерации не найдены</b>\n\n"
-                    "Начните новую генерацию через меню.",
-                    parse_mode='HTML'
+                    "Начните новую генерацию через меню."
+                ) if user_lang == 'ru' else (
+                    "❌ <b>No data found for repeat generation</b>\n\n"
+                    "Start a new generation from the menu."
                 )
+                await query.edit_message_text(no_data_text, parse_mode='HTML')
                 return ConversationHandler.END
             
             saved_data = saved_generations[user_id]
@@ -14595,17 +14601,20 @@ async def _button_callback_impl(
                 pass
             
             # Check if user is blocked
+            user_lang = get_user_language(user_id)
             if is_user_blocked(user_id):
-                await query.edit_message_text(
+                blocked_text = (
                     "❌ <b>Ваш аккаунт заблокирован</b>\n\n"
-                    "Обратитесь к администратору для разблокировки.",
-                    parse_mode='HTML'
+                    "Обратитесь к администратору для разблокировки."
+                ) if user_lang == 'ru' else (
+                    "❌ <b>Your account is blocked</b>\n\n"
+                    "Please contact the administrator to unblock."
                 )
+                await query.edit_message_text(blocked_text, parse_mode='HTML')
                 return ConversationHandler.END
             
             # Get payment details to show immediately
             payment_details = get_payment_details()
-            user_lang = get_user_language(user_id)
             
             # Show amount selection - focus on small amounts with marketing
             keyboard = [
@@ -14623,23 +14632,47 @@ async def _button_callback_impl(
             current_balance = await get_user_balance_async(user_id)
             balance_str = format_rub_amount(current_balance)
             
+            if user_lang == 'ru':
+                topup_text = (
+                    f'💳 <b>ПОПОЛНЕНИЕ БАЛАНСА</b> 💳\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'💰 <b>Твой текущий баланс:</b> {balance_str}\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'{payment_details}\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'💡 <b>Доступные модели:</b>\n'
+                    f'• От 4 ₽ за видео\n'
+                    f'• От 1 ₽ за изображение\n'
+                    f'• Редактирование от 1 ₽\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'🚀 <b>ВЫБЕРИ СУММУ:</b>\n'
+                    f'• Быстрый выбор: 50, 100, 150 ₽\n'
+                    f'• Или укажи свою сумму\n\n'
+                    f'📝 <b>Ограничения:</b>\n'
+                    f'Минимум: 50 ₽ | Максимум: 50000 ₽'
+                )
+            else:
+                topup_text = (
+                    f'💳 <b>TOP UP BALANCE</b> 💳\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'💰 <b>Your current balance:</b> {balance_str}\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'{payment_details}\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'💡 <b>Available models:</b>\n'
+                    f'• From 4 ₽ per video\n'
+                    f'• From 1 ₽ per image\n'
+                    f'• Editing from 1 ₽\n\n'
+                    f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+                    f'🚀 <b>SELECT AMOUNT:</b>\n'
+                    f'• Quick select: 50, 100, 150 ₽\n'
+                    f'• Or enter your amount\n\n'
+                    f'📝 <b>Limits:</b>\n'
+                    f'Minimum: 50 ₽ | Maximum: 50000 ₽'
+                )
+            
             await query.edit_message_text(
-                f'💳 <b>ПОПОЛНЕНИЕ БАЛАНСА</b> 💳\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'💰 <b>Твой текущий баланс:</b> {balance_str}\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'{payment_details}\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'💡 <b>Доступные модели:</b>\n'
-                f'• От 4 ₽ за видео\n'
-                f'• От 1 ₽ за изображение\n'
-                f'• Редактирование от 1 ₽\n\n'
-                f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                f'🚀 <b>ВЫБЕРИ СУММУ:</b>\n'
-                f'• Быстрый выбор: 50, 100, 150 ₽\n'
-                f'• Или укажи свою сумму\n\n'
-                f'📝 <b>Ограничения:</b>\n'
-                f'Минимум: 50 ₽ | Максимум: 50000 ₽',
+                topup_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
@@ -16079,6 +16112,103 @@ async def _button_callback_impl(
                 try:
                     await query.message.reply_text(
                         help_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='HTML'
+                    )
+                except:
+                    pass
+            return ConversationHandler.END
+        
+        if data == "change_language":
+            # Показываем меню выбора языка
+            try:
+                await query.answer()
+            except:
+                pass
+            
+            user_lang = get_user_language(user_id)
+            
+            if user_lang == 'ru':
+                lang_text = (
+                    '🌐 <b>ВЫБОР ЯЗЫКА</b>\n\n'
+                    '━━━━━━━━━━━━━━━━━━━━\n\n'
+                    '🇷🇺 Текущий язык: <b>Русский</b>\n\n'
+                    'Выберите предпочтительный язык интерфейса:'
+                )
+            else:
+                lang_text = (
+                    '🌐 <b>LANGUAGE SELECTION</b>\n\n'
+                    '━━━━━━━━━━━━━━━━━━━━\n\n'
+                    '🇬🇧 Current language: <b>English</b>\n\n'
+                    'Select your preferred interface language:'
+                )
+            
+            keyboard = [
+                [InlineKeyboardButton("🇷🇺 Русский", callback_data="set_language:ru")],
+                [InlineKeyboardButton("🇬🇧 English", callback_data="set_language:en")],
+                [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
+            ]
+            
+            try:
+                await query.edit_message_text(
+                    lang_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.error(f"Error editing message in change_language: {e}", exc_info=True)
+                try:
+                    await query.message.reply_text(
+                        lang_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='HTML'
+                    )
+                except:
+                    pass
+            return ConversationHandler.END
+        
+        if data.startswith("set_language:"):
+            # Устанавливаем выбранный язык
+            try:
+                await query.answer()
+            except:
+                pass
+            
+            new_lang = data.split(":")[1]
+            if new_lang not in ('ru', 'en'):
+                new_lang = 'ru'
+            
+            # Сохраняем язык
+            set_user_language(user_id, new_lang)
+            
+            if new_lang == 'ru':
+                success_text = (
+                    '✅ <b>Язык изменён!</b>\n\n'
+                    '🇷🇺 Теперь интерфейс бота на русском языке.\n\n'
+                    'Нажмите кнопку ниже, чтобы вернуться в главное меню.'
+                )
+            else:
+                success_text = (
+                    '✅ <b>Language changed!</b>\n\n'
+                    '🇬🇧 Now the bot interface is in English.\n\n'
+                    'Click the button below to return to the main menu.'
+                )
+            
+            keyboard = [
+                [InlineKeyboardButton(t('btn_back_to_menu', lang=new_lang), callback_data="back_to_menu")]
+            ]
+            
+            try:
+                await query.edit_message_text(
+                    success_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.error(f"Error editing message in set_language: {e}", exc_info=True)
+                try:
+                    await query.message.reply_text(
+                        success_text,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='HTML'
                     )
@@ -27046,6 +27176,8 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^change_language$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^set_language:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^select_model:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^model:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^modelk:'),
@@ -27107,6 +27239,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^change_language$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^set_language:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
@@ -27146,6 +27280,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^change_language$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^set_language:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
@@ -27193,6 +27329,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^referral_info$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^help_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^support_contact$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^change_language$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^set_language:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^generate_again$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^my_generations$'),
