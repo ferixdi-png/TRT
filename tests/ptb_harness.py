@@ -141,6 +141,13 @@ class PTBHarness:
             request_dedupe_store._memory_entries.clear()
             request_dedupe_store._memory_job_tasks.clear()
             request_dedupe_store._memory_request_map.clear()
+            
+            # Initialize deps with user_sessions from bot_kie for session sync
+            class MockDeps:
+                pass
+            deps = MockDeps()
+            deps.user_sessions = bot_kie.user_sessions
+            self.application.bot_data["deps"] = deps
         except Exception:
             pass
     

@@ -235,7 +235,9 @@ async def create_application(settings: Optional[Settings] = None, *, bot_overrid
     # Инициализируем dependency container
     deps = DependencyContainer()
     await deps.initialize(settings)
-    deps.user_sessions = get_session_store().data
+    # Use user_sessions from bot_kie as the single source of truth
+    from bot_kie import user_sessions as bot_user_sessions
+    deps.user_sessions = bot_user_sessions
     application.bot_data["deps"] = deps
     
     logger.info("[OK] Application created with dependency container")

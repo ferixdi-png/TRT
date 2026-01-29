@@ -2,10 +2,10 @@
   "8888:task-123": {
     "user_id": 8888,
     "task_id": "task-123",
-    "job_id": "job-119e08ab65cb",
+    "job_id": "job-f1c3e9036d0d",
     "model_id": "test-model",
-    "request_id": "corr-1-8888-5989275c",
-    "correlation_id": "corr-1-8888-5989275c",
+    "request_id": "corr-1-8888-203f93d8",
+    "correlation_id": "corr-1-8888-203f93d8",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -15,8 +15,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:51:54.434425",
-    "updated_at": "2026-01-28T16:44:04.439423",
-    "delivered_at": "2026-01-28T16:44:04.439429",
+    "updated_at": "2026-01-29T06:01:41.025759",
+    "delivered_at": "2026-01-29T06:01:41.025768",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -24,10 +24,10 @@
   "777:task-send-fail": {
     "user_id": 777,
     "task_id": "task-send-fail",
-    "job_id": "job-272a978e715f",
+    "job_id": "job-2b8af9bc624f",
     "model_id": "test-model",
-    "request_id": "corr-1-777-c2bb6c31",
-    "correlation_id": "corr-1-777-c2bb6c31",
+    "request_id": "corr-1-777-530db5a3",
+    "correlation_id": "corr-1-777-530db5a3",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -37,15 +37,15 @@
     "is_admin_user": false,
     "status": "failed",
     "created_at": "2026-01-27T16:52:00.937091",
-    "updated_at": "2026-01-28T16:44:10.627221"
+    "updated_at": "2026-01-29T06:01:53.174788"
   },
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-fd735e0d4b2a",
+    "job_id": "job-9e260464a8db",
     "model_id": "flux-2/flex-image-to-image",
-    "request_id": "corr-203-9911-277eea0d",
-    "correlation_id": "corr-203-9911-277eea0d",
+    "request_id": "corr-203-9911-08865cf1",
+    "correlation_id": "corr-203-9911-08865cf1",
     "prompt_hash": "9f86d081884c",
     "chat_id": 12345,
     "message_id": 1,
@@ -55,8 +55,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-01-28T16:45:12.892409",
-    "delivered_at": "2026-01-28T16:45:12.892415",
+    "updated_at": "2026-01-29T06:03:10.858672",
+    "delivered_at": "2026-01-29T06:03:10.858696",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -64,10 +64,10 @@
   "7777:task-123": {
     "user_id": 7777,
     "task_id": "task-123",
-    "job_id": "job-4fc1bb3f32cf",
+    "job_id": "job-40233038d578",
     "model_id": "test-model",
-    "request_id": "corr-1-7777-0a5d5006",
-    "correlation_id": "corr-1-7777-0a5d5006",
+    "request_id": "corr-1-7777-468b81ea",
+    "correlation_id": "corr-1-7777-468b81ea",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -77,8 +77,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.865478",
-    "updated_at": "2026-01-28T16:44:13.232344",
-    "delivered_at": "2026-01-28T16:44:13.232352",
+    "updated_at": "2026-01-29T06:01:57.123236",
+    "delivered_at": "2026-01-29T06:01:57.123255",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-0be96aa2118a",
+    "job_id": "job-5e2541b367c1",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-01-28T16:46:11.211011"
+    "updated_at": "2026-01-29T06:04:34.827703"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,
@@ -558,5 +558,73 @@
     "status": "pending",
     "created_at": "2026-01-28T16:46:22.336612",
     "updated_at": "2026-01-28T16:46:22.336612"
+  },
+  "1:eecbebf6-7848-49de-aac4-f7870cfd7891": {
+    "user_id": 1,
+    "task_id": "eecbebf6-7848-49de-aac4-f7870cfd7891",
+    "job_id": "job-872b6e00995b",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "74519bac-34e4-46c6-9d8f-09bfd5a86da9",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T20:58:03.234591",
+    "updated_at": "2026-01-28T20:58:03.234591"
+  },
+  "1:826fde84-db20-4a37-8d9c-e18173722ae1": {
+    "user_id": 1,
+    "task_id": "826fde84-db20-4a37-8d9c-e18173722ae1",
+    "job_id": "job-5f1c3c77ce6c",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "5dedf9bf-e602-4119-96b9-59b55defdbf6",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T21:02:32.022033",
+    "updated_at": "2026-01-28T21:02:32.022033"
+  },
+  "1:8eafdda3-b59c-44d8-b4bb-234eadf11f46": {
+    "user_id": 1,
+    "task_id": "8eafdda3-b59c-44d8-b4bb-234eadf11f46",
+    "job_id": "job-5bfd7ef9854d",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "6f14df0f-d5a7-4e66-9b1c-8acd6ce6f57b",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-28T21:27:15.562644",
+    "updated_at": "2026-01-28T21:27:15.562644"
+  },
+  "1:981e46f7-0b50-4d67-8b14-d19f20d560b6": {
+    "user_id": 1,
+    "task_id": "981e46f7-0b50-4d67-8b14-d19f20d560b6",
+    "job_id": "job-0868263a2e91",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "6c4cfcf4-90df-4a96-836b-77d57096ed1f",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-01-29T06:04:46.988452",
+    "updated_at": "2026-01-29T06:04:46.988452"
   }
 }
