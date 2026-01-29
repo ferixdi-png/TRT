@@ -228,10 +228,14 @@ def resolve_price_quote(
         )
         return None
 
+    # Always calculate real price for display purposes
+    real_price_rub = _quantize_price(_to_decimal(sku.price_rub))
+    
+    # For billing: admin and free SKUs don't pay
     if is_admin or sku.is_free_sku:
         price_rub = Decimal("0")
     else:
-        price_rub = _quantize_price(_to_decimal(sku.price_rub))
+        price_rub = real_price_rub
     if sku.sku_key not in _pricing_ok_logged:
         _pricing_ok_logged.add(sku.sku_key)
         logger.info(
@@ -253,5 +257,6 @@ def resolve_price_quote(
         "free_sku": sku.is_free_sku,
         "admin_free": is_admin,
         "fallback_sku": fallback_used,
+        "real_price_rub": float(real_price_rub),  # Always show real price for display
     }
     return PriceQuote(price_rub=price_rub, currency="RUB", breakdown=breakdown, sku_id=sku.sku_key)

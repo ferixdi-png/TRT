@@ -19243,12 +19243,19 @@ async def send_confirmation_message(
         chat_id=update.effective_chat.id if update.effective_chat else None,
         is_admin=is_admin_user,
     )
+    # For admin: show real price for understanding, but they don't pay
+    admin_free = price_quote.get("breakdown", {}).get("admin_free", False) if price_quote else False
+    real_price_for_display = price_quote.get("breakdown", {}).get("real_price_rub") if price_quote else None
+    
     if is_free:
         price_display = "0.00"
     elif price_quote:
         from app.pricing.price_resolver import format_price_rub as format_price_value
-
-        price_display = format_price_value(price_quote.get("price_rub"))
+        # For admin: use real price for display purposes
+        if admin_free and real_price_for_display is not None:
+            price_display = format_price_value(real_price_for_display)
+        else:
+            price_display = format_price_value(price_quote.get("price_rub"))
     else:
         price_display = None
     if not is_free and not price_display:
@@ -19276,6 +19283,13 @@ async def send_confirmation_message(
             f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
             if user_lang == 'ru'
             else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day"
+        )
+    elif admin_free:
+        # Admin sees real price for reference but doesn't pay
+        price_info = (
+            f"👑 <b>АДМИН БЕЗЛИМИТ</b>\n💰 Стоимость модели: {price_display} ₽\n✅ Списание: 0.00 ₽"
+            if user_lang == 'ru'
+            else f"👑 <b>ADMIN UNLIMITED</b>\n💰 Model price: {price_display} ₽\n✅ Charge: 0.00 ₽"
         )
     elif not price_display:
         price_info = price_line
@@ -19312,9 +19326,12 @@ async def send_confirmation_message(
         keyboard.insert(0, [InlineKeyboardButton(t('btn_confirm_generate', lang=user_lang), callback_data="confirm_generate")])
 
     # Extract numeric price from quote
+    # For admin: use real price for display, actual charge is 0
     price_numeric = 0.0
     if is_free:
         price_numeric = 0.0
+    elif admin_free and real_price_for_display is not None:
+        price_numeric = float(real_price_for_display)
     elif price_quote:
         price_numeric = float(price_quote.get("price_rub", 0.0))
     
@@ -19332,6 +19349,7 @@ async def send_confirmation_message(
         discount=None,
         user_balance=user_balance,
         correlation_id=correlation_id,
+        is_admin=admin_free,  # Pass admin status for proper display
     )
     confirm_msg = _append_free_counter_text(confirm_msg_base, free_counter_line)
 
