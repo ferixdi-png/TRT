@@ -18411,7 +18411,19 @@ def build_enum_keyboard_with_prices(
     if price_depends:
         display_values = [value for value in enum_values if str(value) in param_price_map]
         if not display_values:
-            return None, "", []
+            # Fallback: try without current_params filter (might have invalid param values)
+            price_depends_fallback, param_price_map_fallback = _get_param_price_variants(
+                model_id,
+                param_name,
+                {},
+            )
+            if price_depends_fallback and param_price_map_fallback:
+                param_price_map = param_price_map_fallback
+                display_values = [value for value in enum_values if str(value) in param_price_map]
+            if not display_values:
+                # Still no values - show all enum values without prices
+                display_values = list(enum_values)
+                price_depends = False
 
     price_variants_text = ""
     if price_depends:
