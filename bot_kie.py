@@ -11226,7 +11226,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             log_user_action(
                 "button_click",
                 user_id,
-                callback_data=data,
+                data=data,
                 model_id=session.get("model_id") if isinstance(session, dict) else None,
             )
             
