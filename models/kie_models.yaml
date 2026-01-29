@@ -1730,20 +1730,54 @@ models:
         type: string
         required: true
     model_mode: text_to_image
-  google/veo-3:
-    model_type: text_to_image
-    input:
-      prompt:
-        type: string
-        required: true
-    model_mode: text_to_image
   google/veo-3.1:
-    model_type: text_to_image
+    model_type: text_to_video
     input:
       prompt:
         type: string
         required: true
-    model_mode: text_to_image
+        max: 5000
+      model:
+        type: enum
+        required: true
+        values:
+          - veo3
+          - veo3_fast
+        default: veo3_fast
+      generationType:
+        type: enum
+        required: false
+        values:
+          - TEXT_2_VIDEO
+          - FIRST_AND_LAST_FRAMES_2_VIDEO
+          - REFERENCE_2_VIDEO
+        default: TEXT_2_VIDEO
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+          - "16:9"
+          - "9:16"
+          - Auto
+        default: "16:9"
+      imageUrls:
+        type: array
+        item_type: string
+        required: false
+        max_items: 3
+      seeds:
+        type: integer
+        required: false
+        min: 10000
+        max: 99999
+      enableTranslation:
+        type: boolean
+        required: false
+        default: true
+      watermark:
+        type: string
+        required: false
+    model_mode: text_to_video
   kling/v2-5-turbo:
     model_type: text_to_image
     input:
