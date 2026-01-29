@@ -23176,6 +23176,31 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     duplicate_job_id = None
     async with active_generations_lock:
         user_active_generations = [(uid, tid) for (uid, tid) in active_generations.keys() if uid == user_id]
+        
+        # Check MAX_CONCURRENT_GENERATIONS_PER_USER limit (защита от злоупотреблений)
+        if len(user_active_generations) >= MAX_CONCURRENT_GENERATIONS_PER_USER:
+            user_lang = get_user_language(user_id) if user_id else 'ru'
+            limit_text = (
+                f"⚠️ <b>Превышен лимит генераций</b>\n\n"
+                f"У вас уже {len(user_active_generations)} активных генераций.\n"
+                f"Максимум: {MAX_CONCURRENT_GENERATIONS_PER_USER}\n\n"
+                f"Дождитесь завершения текущих генераций."
+                if user_lang == 'ru' else
+                f"⚠️ <b>Generation limit exceeded</b>\n\n"
+                f"You have {len(user_active_generations)} active generations.\n"
+                f"Maximum: {MAX_CONCURRENT_GENERATIONS_PER_USER}\n\n"
+                f"Wait for current generations to complete."
+            )
+            logger.warning(
+                "CONCURRENT_GENERATION_LIMIT user_id=%s active=%d max=%d",
+                user_id, len(user_active_generations), MAX_CONCURRENT_GENERATIONS_PER_USER
+            )
+            await send_or_edit_message(
+                limit_text,
+                reply_markup=build_back_to_menu_keyboard(user_lang),
+            )
+            return ConversationHandler.END
+        
         if user_active_generations:
             # Check if there's a recent generation for this model (within last 10 seconds)
             import time
