@@ -7043,9 +7043,13 @@ def get_extended_admin_stats() -> dict:
 
 async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE, is_callback: bool = False):
     """Render admin panel with extended statistics."""
+    correlation_id = get_correlation_id() or uuid.uuid4().hex
     if is_callback:
         query = update_or_query
+        update = query.message  # for compatibility
         user_id = query.from_user.id
+        chat_id = query.message.chat_id if query.message else None
+        update_id = query.message.message_id if query.message else 0
         message_func = query.edit_message_text
         try:
             await query.answer()
@@ -7054,6 +7058,8 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
     else:
         update = update_or_query
         user_id = update.effective_user.id
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        update_id = update.update_id
         message_func = update.message.reply_text
 
     if not is_admin(user_id):
@@ -7069,8 +7075,8 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         label="generation_types",
         correlation_id=correlation_id,
         user_id=user_id,
-        chat_id=update.effective_chat.id if update.effective_chat else None,
-        update_id=update.update_id,
+        chat_id=chat_id,
+        update_id=update_id,
         default=[],
         raise_on_timeout=False,
         log_timeout=False,
@@ -7081,8 +7087,8 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         label="models_count",
         correlation_id=correlation_id,
         user_id=user_id,
-        chat_id=update.effective_chat.id if update.effective_chat else None,
-        update_id=update.update_id,
+        chat_id=chat_id,
+        update_id=update_id,
         default=0,
         raise_on_timeout=False,
         log_timeout=False,
@@ -7180,6 +7186,11 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML',
     )
+
+
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /admin command."""
+    await render_admin_panel(update, context, is_callback=False)
 
 
 def _resolve_payment_details() -> tuple[str, str, str, str]:
@@ -19257,9 +19268,9 @@ async def send_confirmation_message(
     if is_free:
         remaining = await get_user_free_generations_remaining(user_id)
         price_info = (
-            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день\n{price_line}"
+            f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
             if user_lang == 'ru'
-            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day\n{price_line}"
+            else f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day"
         )
     elif not price_display:
         price_info = price_line
@@ -27504,6 +27515,7 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
+    application.add_handler(CommandHandler('admin', admin_command))
     
     # Telegram Stars payment handlers
     application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
