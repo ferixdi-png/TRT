@@ -175,6 +175,50 @@ _kie_credits_cache: Dict[str, Any] = {"timestamp": 0.0, "value": None}
 _background_tasks: Set[asyncio.Task] = set()
 
 
+# ============================================================================
+# USER ACTION LOGGING - простые читаемые логи для быстрой диагностики
+# ============================================================================
+def log_user_action(
+    action: str,
+    user_id: Optional[int] = None,
+    *,
+    data: Optional[str] = None,
+    model_id: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Простое логирование действий пользователя для быстрого grep и анализа.
+    
+    Формат: USER_ACTION action=X user_id=Y data=Z model_id=M state=S
+    
+    Примеры grep:
+        grep "USER_ACTION" logs.txt
+        grep "USER_ACTION.*user_id=123" logs.txt
+        grep "USER_ACTION.*action=select_model" logs.txt
+        grep "USER_ACTION.*error=" logs.txt
+    """
+    parts = [f"USER_ACTION action={action}"]
+    if user_id is not None:
+        parts.append(f"user_id={user_id}")
+    if data:
+        # Обрезаем длинные данные
+        data_truncated = data[:100] + "..." if len(data) > 100 else data
+        parts.append(f"data={data_truncated}")
+    if model_id:
+        parts.append(f"model_id={model_id}")
+    if state:
+        parts.append(f"state={state}")
+    if error:
+        parts.append(f"error={error}")
+    if extra:
+        for k, v in extra.items():
+            if v is not None:
+                parts.append(f"{k}={v}")
+    logger.info(" ".join(parts))
+
+
 def _log_background_task_result(task: asyncio.Task, *, action: str) -> None:
     try:
         task.result()
@@ -10680,10 +10724,14 @@ async def respond_price_undefined(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Единый стартовый UX: главное меню."""
     # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
+    user_id_log = update.effective_user.id if update.effective_user else None
     logger.info("🚀 /start command received! user_id=%s chat_id=%s update_id=%s", 
-                update.effective_user.id if update.effective_user else "unknown",
+                user_id_log or "unknown",
                 update.effective_chat.id if update.effective_chat else "unknown", 
                 update.update_id if hasattr(update, 'update_id') else "unknown")
+    
+    # Простой читаемый лог для быстрого анализа
+    log_user_action("command_start", user_id_log)
     
     start_ts = time.monotonic()
     increment_update_metric("handler_enter")
@@ -11058,6 +11106,8 @@ async def reset_wizard_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
+    user_id = update.effective_user.id if update.effective_user else None
+    log_user_action("command", user_id, extra={"cmd": "/help"})
     await update.message.reply_text(
         '📋 <b>Доступные команды:</b>\n\n'
         '/start - Начать работу с ботом\n'
@@ -11082,6 +11132,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_models(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List available models from static menu."""
     user_id = update.effective_user.id
+    log_user_action("command", user_id, extra={"cmd": "/models"})
     
     # Get models grouped by category
     categories = get_categories_from_registry()
@@ -11168,6 +11219,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(
                 f"🔘 BUTTON_CLICK user_id={user_id} callback_data={data} "
                 f"message_id={query.message.message_id if query.message else None}"
+            )
+            
+            # Простой читаемый лог для быстрого анализа
+            session = user_sessions.get(user_id, {}) if user_id else {}
+            log_user_action(
+                "button_click",
+                user_id,
+                callback_data=data,
+                model_id=session.get("model_id") if isinstance(session, dict) else None,
             )
             
             if data == "back_to_menu":
@@ -11556,6 +11616,16 @@ async def _button_callback_impl(
             return ConversationHandler.END
 
         logger.info(f"Button callback received: user_id={user_id}, data='{data}'")
+        
+        # Простой читаемый лог для быстрого анализа
+        session = user_sessions.get(user_id, {}) if user_id else {}
+        log_user_action(
+            "button_click",
+            user_id,
+            data=data,
+            model_id=session.get("model_id") if isinstance(session, dict) else None,
+            state=session.get("waiting_for") if isinstance(session, dict) else None,
+        )
         
         if not data:
             logger.error("No data in callback_query")
@@ -17636,6 +17706,9 @@ async def _button_callback_impl(
             model_id = canonicalize_model_id(parts[1])
             logger.debug(f"🔥🔥🔥 SELECT_MODEL: Parsed model_id={model_id}, user_id={user_id}")
             
+            # Простой читаемый лог для быстрого анализа
+            log_user_action("select_model", user_id, model_id=model_id)
+            
             # Сначала пробуем получить из нового каталога
             model_info = None
             catalog_model = None
@@ -22433,6 +22506,16 @@ async def _global_text_router_impl(update: Update, context: ContextTypes.DEFAULT
         f"📝 TEXT_MESSAGE user_id={user_id} text_preview={text_preview!r}"
     )
     
+    # Простой читаемый лог для быстрого анализа
+    session = user_sessions.get(user_id, {}) if user_id else {}
+    log_user_action(
+        "text_received",
+        user_id,
+        model_id=session.get("model_id") if isinstance(session, dict) else None,
+        state=session.get("waiting_for") if isinstance(session, dict) else None,
+        extra={"text_len": len(text) if text else 0},
+    )
+    
     if _should_dedupe_update(
         update,
         context,
@@ -22512,6 +22595,15 @@ async def _global_photo_router_impl(update: Update, context: ContextTypes.DEFAUL
     )
     update_id = update.update_id
     user_id = update.effective_user.id if update.effective_user else None
+    
+    # Простой читаемый лог для быстрого анализа
+    session = user_sessions.get(user_id, {}) if user_id else {}
+    log_user_action(
+        "photo_received",
+        user_id,
+        model_id=session.get("model_id") if isinstance(session, dict) else None,
+        state=session.get("waiting_for") if isinstance(session, dict) else None,
+    )
     if _should_dedupe_update(
         update,
         context,
@@ -22870,6 +22962,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         callback_data=query.data if query else None,
     )
     logger.debug(f"🔥🔥🔥 CONFIRM_GENERATION ENTRY: user_id={user_id}, query_id={query.id if query else 'None'}, data={query.data if query else 'None'}")
+    
+    # Простой читаемый лог для быстрого анализа
+    session = user_sessions.get(user_id, {}) if user_id else {}
+    log_user_action(
+        "confirm_generation",
+        user_id,
+        model_id=session.get("model_id") if isinstance(session, dict) else None,
+        extra={"sku_id": session.get("sku_id") if isinstance(session, dict) else None},
+    )
+    
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
     correlation_id = ensure_correlation_id(update, context)
@@ -24498,6 +24600,13 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             stage="GEN_START",
             outcome="start",
         )
+        # Простой читаемый лог для быстрого анализа
+        log_user_action(
+            "generation_started",
+            user_id,
+            model_id=model_id,
+            extra={"sku_id": session.get("sku_id"), "price_rub": session.get("price_quote", {}).get("price_rub")},
+        )
         log_task_lifecycle(
             state="create_start",
             user_id=user_id,
@@ -25088,6 +25197,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             error_code=exc.error_code or "KIE_REQUEST_FAILED",
             fix_hint=exc.user_message or ERROR_CATALOG.get("KIE_FAIL_STATE"),
         )
+        log_user_action("generation_failed", user_id, model_id=model_id, extra={"stage": "KIE_CREATE", "error": str(exc)[:100]})
         if _is_kie_model_not_supported(exc.user_message or str(exc)):
             correlation_suffix = _short_correlation_suffix(correlation_id)
             current_sku_id = None
