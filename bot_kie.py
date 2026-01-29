@@ -9878,17 +9878,23 @@ async def show_main_menu(
 
     try:
         if user_id:
-            cached_lang = _get_menu_dep_cache(session, MAIN_MENU_LANG_CACHE_TTL_SECONDS)
-            if cached_lang and cached_lang.get("user_lang"):
-                user_lang = cached_lang["user_lang"]
+            # Приоритет: 1) явно установленный язык через set_language
+            #            2) кэш меню
+            #            3) язык Telegram клиента
+            if has_user_language_set(user_id):
+                user_lang = get_user_language(user_id)
             else:
-                try:
-                    if update.effective_user and update.effective_user.language_code:
-                        lang_code = update.effective_user.language_code.lower()
-                        user_lang = "en" if lang_code.startswith("en") else "ru"
-                except Exception:
-                    user_lang = "ru"
-                _set_menu_dep_cache(session, user_lang=user_lang)
+                cached_lang = _get_menu_dep_cache(session, MAIN_MENU_LANG_CACHE_TTL_SECONDS)
+                if cached_lang and cached_lang.get("user_lang"):
+                    user_lang = cached_lang["user_lang"]
+                else:
+                    try:
+                        if update.effective_user and update.effective_user.language_code:
+                            lang_code = update.effective_user.language_code.lower()
+                            user_lang = "en" if lang_code.startswith("en") else "ru"
+                    except Exception:
+                        user_lang = "ru"
+            _set_menu_dep_cache(session, user_lang=user_lang)
 
         if user_id:
             _schedule_menu_dependency_refresh(
