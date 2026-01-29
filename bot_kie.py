@@ -11498,6 +11498,10 @@ async def _button_callback_impl(
     """Handle button callbacks. CRITICAL: Always calls query.answer() to prevent button hanging."""
     import time
     start_time = time.time()
+    query = update.callback_query
+    _data_preview = query.data if query else None
+    _user_preview = query.from_user.id if query and query.from_user else None
+    logger.info("BUTTON_CALLBACK_IMPL_ENTRY user_id=%s data=%s", _user_preview, _data_preview)
     query = None
     user_id = None
     data = None
@@ -12283,10 +12287,11 @@ async def _button_callback_impl(
         
         if data == "back_to_menu":
             # Answer callback immediately to show button was pressed
+            logger.info("BACK_TO_MENU_HANDLER_REACHED user_id=%s data=%s", user_id, data)
             try:
                 await query.answer()
-            except:
-                pass
+            except Exception as ans_err:
+                logger.warning("BACK_TO_MENU_ANSWER_FAILED user_id=%s error=%s", user_id, ans_err)
             correlation_id = ensure_correlation_id(update, context)
             partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
             try:
