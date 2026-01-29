@@ -2450,7 +2450,8 @@ async def _render_gen_type_menu(
             )
         except Exception as e2:
             logger.error("Error sending new message in gen_type: %s", e2, exc_info=True)
-            await query.answer("❌ Ошибка. Попробуйте еще раз", show_alert=True)
+            error_msg = "❌ Error. Please try again" if user_lang == "en" else "❌ Ошибка. Попробуйте еще раз"
+            await query.answer(error_msg, show_alert=True)
 
     log_structured_event(
         correlation_id=correlation_id,
@@ -11634,7 +11635,8 @@ async def _button_callback_impl(
                 await query.answer(t('error_no_data', lang=user_lang), show_alert=True)
             except:
                 try:
-                    await query.answer("❌ Ошибка: нет данных в кнопке", show_alert=True)
+                    fallback_msg = "❌ Error: no data in button" if user_lang == 'en' else "❌ Ошибка: нет данных в кнопке"
+                    await query.answer(fallback_msg, show_alert=True)
                 except:
                     pass
             return ConversationHandler.END
@@ -11887,7 +11889,8 @@ async def _button_callback_impl(
         # Try to answer anyway if we have query
         if query:
             try:
-                await query.answer("❌ Ошибка обработки кнопки. Попробуйте /start", show_alert=True)
+                error_msg = "❌ Button processing error. Try /start" if user_lang == 'en' else "❌ Ошибка обработки кнопки. Попробуйте /start"
+                await query.answer(error_msg, show_alert=True)
             except:
                 pass
         return ConversationHandler.END
@@ -13405,7 +13408,8 @@ async def _button_callback_impl(
                     )
                 except Exception as e2:
                     logger.error(f"Error sending new message in free_tools: {e2}", exc_info=True)
-                    await query.answer("❌ Ошибка. Попробуйте еще раз", show_alert=True)
+                    error_msg = "❌ Error. Please try again" if user_lang == 'en' else "❌ Ошибка. Попробуйте еще раз"
+                    await query.answer(error_msg, show_alert=True)
             
             # Return SELECTING_MODEL state so that select_model: buttons work
             return SELECTING_MODEL
