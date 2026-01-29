@@ -283,9 +283,35 @@ class PostgresStorage(BaseStorage):
         )
 
     async def add_user_balance(self, user_id: int, amount: float) -> float:
-        balance_before = await self.get_user_balance(user_id)
-        new_balance = balance_before + amount
-        await self.set_user_balance(user_id, new_balance)
+        """Add to user balance with transaction lock to prevent race conditions."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # Ensure file exists
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.balances_file,
+                )
+                # Lock row and get current balance
+                payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.balances_file,
+                )
+                balances = self._coerce_payload(payload, filename=self.balances_file)
+                balance_before = float(balances.get(str(user_id), 0.0))
+                new_balance = balance_before + amount
+                balances[str(user_id)] = new_balance
+                
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.balances_file,
+                    json.dumps(balances),
+                )
         logger.info(
             "BALANCE_ADD user_id=%s amount=%.2f balance_before=%.2f balance_after=%.2f",
             user_id,
@@ -296,20 +322,48 @@ class PostgresStorage(BaseStorage):
         return new_balance
 
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
-        balance_before = await self.get_user_balance(user_id)
-        if balance_before < amount:
-            logger.warning(
-                "Insufficient balance: user_id=%s required=%.2f available=%.2f",
-                user_id,
-                amount,
-                balance_before,
-            )
-            return False
-        new_balance = balance_before - amount
-        if new_balance < 0:
-            logger.error("Negative balance prevented user_id=%s new_balance=%.2f", user_id, new_balance)
-            return False
-        await self.set_user_balance(user_id, new_balance)
+        """Subtract from user balance with transaction lock to prevent race conditions."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # Ensure file exists
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.balances_file,
+                )
+                # Lock row and get current balance
+                payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.balances_file,
+                )
+                balances = self._coerce_payload(payload, filename=self.balances_file)
+                balance_before = float(balances.get(str(user_id), 0.0))
+                
+                if balance_before < amount:
+                    logger.warning(
+                        "Insufficient balance: user_id=%s required=%.2f available=%.2f",
+                        user_id,
+                        amount,
+                        balance_before,
+                    )
+                    return False
+                    
+                new_balance = balance_before - amount
+                if new_balance < 0:
+                    logger.error("Negative balance prevented user_id=%s new_balance=%.2f", user_id, new_balance)
+                    return False
+                    
+                balances[str(user_id)] = new_balance
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.balances_file,
+                    json.dumps(balances),
+                )
         logger.info(
             "BALANCE_SUBTRACT user_id=%s amount=%.2f balance_before=%.2f balance_after=%.2f",
             user_id,
