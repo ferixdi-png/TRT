@@ -11092,6 +11092,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id = query.from_user.id if query.from_user else None
             user_lang = get_user_language(user_id) if user_id else "ru"
             data = query.data
+            
+            # Логируем нажатие на кнопку для отладки
+            logger.info(
+                f"🔘 BUTTON_CLICK user_id={user_id} callback_data={data} "
+                f"message_id={query.message.message_id if query.message else None}"
+            )
+            
             if data == "back_to_menu":
                 pass
             elif data == "check_balance":
@@ -22255,6 +22262,14 @@ async def _global_text_router_impl(update: Update, context: ContextTypes.DEFAULT
     )
     update_id = update.update_id
     user_id = update.effective_user.id if update.effective_user else None
+    text = update.message.text if update.message else None
+    text_preview = (text[:50] + "...") if text and len(text) > 50 else text
+    
+    # Логируем текстовое сообщение для отладки
+    logger.info(
+        f"📝 TEXT_MESSAGE user_id={user_id} text_preview={text_preview!r}"
+    )
+    
     if _should_dedupe_update(
         update,
         context,
