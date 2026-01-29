@@ -27526,6 +27526,28 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
     
+    # CRITICAL: Dedicated back_to_menu handler with high priority to ensure it always works
+    async def back_to_menu_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Dedicated fallback handler for back_to_menu - ensures main menu always accessible."""
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        logger.info("BACK_TO_MENU_FALLBACK_HANDLER user_id=%s", user_id)
+        try:
+            await query.answer()
+        except Exception as e:
+            logger.warning("BACK_TO_MENU_FALLBACK_ANSWER_FAILED error=%s", e)
+        correlation_id = ensure_correlation_id(update, context)
+        try:
+            await ensure_main_menu(update, context, source="back_to_menu_fallback", correlation_id=correlation_id, prefer_edit=True)
+        except Exception as exc:
+            logger.error("BACK_TO_MENU_FALLBACK_FAILED error=%s", exc, exc_info=True)
+            # Last resort - send minimal menu
+            user_lang = get_user_language(user_id) if user_id else "ru"
+            await _show_minimal_menu(update, context, source="back_fallback", correlation_id=correlation_id, prefer_edit=False)
+        return ConversationHandler.END
+    
+    application.add_handler(CallbackQueryHandler(back_to_menu_fallback, pattern='^back_to_menu$'), group=1)
+    
     # Базовые callback handlers
     application.add_handler(CallbackQueryHandler(button_callback, block=True))
     
