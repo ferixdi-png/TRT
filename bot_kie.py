@@ -12686,9 +12686,11 @@ async def _button_callback_impl(
             lang = parts[1]
             if lang in ['ru', 'en']:
                 set_user_language(user_id, lang)
-                await query.answer(t('language_set', lang))
-                # Show main menu after language selection
-                await start(update, context)
+                logger.info(f"LANGUAGE_CHANGED user_id={user_id} new_lang={lang}")
+                await query.answer()
+                # Сразу показываем главное меню на новом языке
+                correlation_id = ensure_correlation_id(update, context)
+                await ensure_main_menu(update, context, source="language_change", correlation_id=correlation_id, prefer_edit=True)
                 return ConversationHandler.END
             else:
                 await query.answer("Неверный язык / Invalid language")
@@ -16180,40 +16182,11 @@ async def _button_callback_impl(
             
             # Сохраняем язык
             set_user_language(user_id, new_lang)
+            logger.info(f"LANGUAGE_CHANGED user_id={user_id} new_lang={new_lang}")
             
-            if new_lang == 'ru':
-                success_text = (
-                    '✅ <b>Язык изменён!</b>\n\n'
-                    '🇷🇺 Теперь интерфейс бота на русском языке.\n\n'
-                    'Нажмите кнопку ниже, чтобы вернуться в главное меню.'
-                )
-            else:
-                success_text = (
-                    '✅ <b>Language changed!</b>\n\n'
-                    '🇬🇧 Now the bot interface is in English.\n\n'
-                    'Click the button below to return to the main menu.'
-                )
-            
-            keyboard = [
-                [InlineKeyboardButton(t('btn_back_to_menu', lang=new_lang), callback_data="back_to_menu")]
-            ]
-            
-            try:
-                await query.edit_message_text(
-                    success_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except Exception as e:
-                logger.error(f"Error editing message in set_language: {e}", exc_info=True)
-                try:
-                    await query.message.reply_text(
-                        success_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='HTML'
-                    )
-                except:
-                    pass
+            # Сразу показываем главное меню на новом языке
+            correlation_id = ensure_correlation_id(update, context)
+            await ensure_main_menu(update, context, source="language_change", correlation_id=correlation_id, prefer_edit=True)
             return ConversationHandler.END
         
         if data == "support_contact":
