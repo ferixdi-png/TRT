@@ -7043,7 +7043,6 @@ def get_extended_admin_stats() -> dict:
 
 async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE, is_callback: bool = False):
     """Render admin panel with extended statistics."""
-    correlation_id = get_correlation_id() or uuid.uuid4().hex
     if is_callback:
         query = update_or_query
         update = query.message  # for compatibility
@@ -7051,16 +7050,18 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         chat_id = query.message.chat_id if query.message else None
         update_id = query.message.message_id if query.message else 0
         message_func = query.edit_message_text
+        correlation_id = get_correlation_id(update_id, user_id)
+    else:
+        update = update_or_query
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        update_id = update.message_id
+        message_func = update.message.reply_text
+        correlation_id = get_correlation_id(update_id, user_id)
         try:
             await query.answer()
         except Exception:
             pass
-    else:
-        update = update_or_query
-        user_id = update.effective_user.id
-        chat_id = update.effective_chat.id if update.effective_chat else None
-        update_id = update.update_id
-        message_func = update.message.reply_text
 
     if not is_admin(user_id):
         if is_callback:
@@ -7117,7 +7118,7 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         }
 
     kie_balance_info = ""
-    correlation_id = get_correlation_id() or uuid.uuid4().hex
+    # correlation_id уже установлен выше в начале функции
     if kie is not None:
         try:
             balance_result = await get_kie_credits_cached(correlation_id=correlation_id)
