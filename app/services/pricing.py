@@ -38,11 +38,13 @@ class PricingService:
         
     def get_top_5_models(self) -> List[TopModel]:
         """
-        Возвращает топ-5 самых дешёвых моделей.
+        Возвращает топ-5 самых дешёвых моделей text-to-image.
+        
+        ВАЖНО: Fast Tools = только text-to-image модели!
         Детерминированный выбор по базовой цене.
         
         Returns:
-            List[TopModel] - топ-5 моделей
+            List[TopModel] - топ-5 моделей text-to-image
         """
         # Проверяем кэш
         now = datetime.now()
@@ -54,9 +56,15 @@ class PricingService:
         # Загружаем данные
         models_data = self._load_all_models_with_pricing()
         
-        # Фильтруем и сортируем
+        # Фильтруем ТОЛЬКО text-to-image модели и сортируем
         valid_models = []
         for model_data in models_data:
+            # СТРОГО: Fast Tools = только text-to-image
+            model_type = model_data.get('model_type', '')
+            model_mode = model_data.get('model_mode', '')
+            if model_type not in ('text_to_image', 'text-to-image') and model_mode not in ('text_to_image', 'text-to-image'):
+                continue
+            
             # Берем только самые дешёвые SKU для каждой модели
             cheapest_sku = self._get_cheapest_sku(model_data)
             if cheapest_sku:
@@ -79,7 +87,11 @@ class PricingService:
         self._top_models_cache = top_5
         self._cache_timestamp = now
         
-        logger.info(f"Top-5 models calculated: {[m.model_id for m in top_5]}")
+        # Детальное логирование для отладки
+        logger.info(
+            f"FAST_TOOLS_TOP5 total_text_to_image={len(valid_models)} "
+            f"selected=[{', '.join(f'{m.model_id}:{m.price_rub}₽' for m in top_5)}]"
+        )
         return top_5
     
     def _load_all_models_with_pricing(self) -> List[Dict[str, Any]]:
