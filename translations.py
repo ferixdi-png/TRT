@@ -291,16 +291,32 @@ TRANSLATIONS = {
     },
     'en': {
         'welcome_new': (
-            '👋 <b>Welcome, {name}!</b>\n'
-            '🖼️ Photos · 🎥 Video · 🔊 Audio · 🪄 Upscale · 🧼 Background remove\n'
-            '💳 Pay in rubles · fast results · many models\n'
-            '➡️ Start: choose a model → enter params → confirm'
+            '� <b>FERIXDI AI</b> — AI studio in Telegram\n'
+            'Quick and simple: try free tools first, upgrade if you like it.\n\n'
+            '✅ <b>What I can do:</b>\n'
+            '• 🆓 Start with free tools\n'
+            '• � Photo / video / audio / text / upscale / background — dozens of AI models\n'
+            '• 🎛️ Flexible params: format, style, aspect ratio, quality, etc.\n'
+            '• ⚡️ Fast results without extra steps\n'
+            '• 💳 Like it — unlock advanced models\n\n'
+            'How to use:\n'
+            '1) Choose a tool\n'
+            '2) Enter text or upload a file\n'
+            '3) Confirm — get the result'
         ),
         'welcome_returning': (
-            '👋 <b>Welcome back, {name}!</b>\n'
-            '🖼️ Photos · 🎥 Video · 🔊 Audio · 🪄 Upscale · 🧼 Background remove\n'
-            '💳 Pay in rubles · fast results · many models\n'
-            '➡️ Start: choose a model → enter params → confirm'
+            '� <b>FERIXDI AI</b> — AI studio in Telegram\n'
+            'Quick and simple: try free tools first, upgrade if you like it.\n\n'
+            '✅ <b>What I can do:</b>\n'
+            '• 🆓 Start with free tools\n'
+            '• � Photo / video / audio / text / upscale / background — dozens of AI models\n'
+            '• 🎛️ Flexible params: format, style, aspect ratio, quality, etc.\n'
+            '• ⚡️ Fast results without extra steps\n'
+            '• 💳 Like it — unlock advanced models\n\n'
+            'How to use:\n'
+            '1) Choose a tool\n'
+            '2) Enter text or upload a file\n'
+            '3) Confirm — get the result'
         ),
         'select_language': (
             '🌍 <b>Choose language / Выберите язык</b>\n\n'
