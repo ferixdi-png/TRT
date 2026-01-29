@@ -2686,35 +2686,6 @@
         }
       }
     },
-    "elevenlabs/speech-to-text": {
-      "model_type": "speech_to_text",
-      "output_type": "audio",
-      "input": {
-        "audio_url": {
-          "type": "string",
-          "required": true
-        },
-        "language_code": {
-          "type": "string",
-          "required": false,
-          "max": 500
-        },
-        "tag_audio_events": {
-          "type": "boolean",
-          "required": false
-        },
-        "diarize": {
-          "type": "boolean",
-          "required": false
-        }
-      },
-      "payload_example": {
-        "model": "elevenlabs/speech-to-text",
-        "input": {
-          "audio_url": "example"
-        }
-      }
-    },
     "grok/imagine": {
       "model_type": "text_to_image",
       "output_type": "text",
@@ -2758,22 +2729,6 @@
       },
       "payload_example": {
         "model": "flux/kontext",
-        "input": {
-          "prompt": "example"
-        }
-      }
-    },
-    "google/veo-3": {
-      "model_type": "text_to_image",
-      "output_type": "text",
-      "input": {
-        "prompt": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "payload_example": {
-        "model": "google/veo-3",
         "input": {
           "prompt": "example"
         }
@@ -2859,54 +2814,6 @@
         }
       }
     },
-    "elevenlabs/audio-isolation": {
-      "model_type": "audio_to_audio",
-      "output_type": "audio",
-      "input": {
-        "audio_url": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "payload_example": {
-        "model": "elevenlabs/audio-isolation",
-        "input": {
-          "audio_url": "example"
-        }
-      }
-    },
-    "elevenlabs/sound-effect": {
-      "model_type": "text_to_image",
-      "output_type": "text",
-      "input": {
-        "prompt": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "payload_example": {
-        "model": "elevenlabs/sound-effect",
-        "input": {
-          "prompt": "example"
-        }
-      }
-    },
-    "elevenlabs/text-to-speech": {
-      "model_type": "text_to_speech",
-      "output_type": "audio",
-      "input": {
-        "text": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "payload_example": {
-        "model": "elevenlabs/text-to-speech",
-        "input": {
-          "text": "example"
-        }
-      }
-    },
     "google/nanobanana-gemini-2.5-flash": {
       "model_type": "text_to_image",
       "output_type": "text",
@@ -2934,22 +2841,6 @@
       },
       "payload_example": {
         "model": "runway/gen-4",
-        "input": {
-          "prompt": "example"
-        }
-      }
-    },
-    "suno/v5": {
-      "model_type": "text_to_image",
-      "output_type": "text",
-      "input": {
-        "prompt": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "payload_example": {
-        "model": "suno/v5",
         "input": {
           "prompt": "example"
         }
