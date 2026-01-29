@@ -17137,13 +17137,11 @@ async def _button_callback_impl(
             if user_lang == 'ru':
                 keyboard = [
                     [InlineKeyboardButton("✅ Начать генерацию", callback_data=f"start:{model_id}")],
-                    [InlineKeyboardButton("ℹ️ Пример запроса", callback_data=f"example:{model_id}")],
                     [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]
                 ]
             else:
                 keyboard = [
                     [InlineKeyboardButton("✅ Start generation", callback_data=f"start:{model_id}")],
-                    [InlineKeyboardButton("ℹ️ Example request", callback_data=f"example:{model_id}")],
                     [InlineKeyboardButton("⬅️ Back", callback_data="back_to_menu")]
                 ]
             
@@ -17230,7 +17228,6 @@ async def _button_callback_impl(
                 
                 keyboard = [
                     [InlineKeyboardButton("🚀 Сгенерировать" if user_lang == 'ru' else "🚀 Generate", callback_data=f"select_model:{model_id}")],
-                    [InlineKeyboardButton("ℹ️ Инфо" if user_lang == 'ru' else "ℹ️ Info", callback_data=f"info:{model_id}")],
                     [InlineKeyboardButton("⬅️ Назад" if user_lang == 'ru' else "⬅️ Back", callback_data=f"model:{model_id}")]
                 ]
                 
@@ -17392,7 +17389,6 @@ async def _button_callback_impl(
             
             keyboard = [
                 [InlineKeyboardButton("🚀 Сгенерировать" if user_lang == 'ru' else "🚀 Generate", callback_data=f"select_model:{model_id}")],
-                [InlineKeyboardButton("📸 Пример" if user_lang == 'ru' else "📸 Example", callback_data=f"example:{model_id}")],
                 [InlineKeyboardButton("⬅️ Назад" if user_lang == 'ru' else "⬅️ Back", callback_data=f"model:{model_id}")]
             ]
             
