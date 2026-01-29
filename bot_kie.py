@@ -27514,7 +27514,6 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
             CommandHandler('cancel', cancel),
-            CommandHandler('start', start_command),
         ],
         per_message=True,
         per_chat=True,
