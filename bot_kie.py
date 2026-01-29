@@ -26314,10 +26314,8 @@ async def handle_successful_payment(update: Update, context: ContextTypes.DEFAUL
         
         user_lang = get_user_language(user_id)
         
-        # Зачисляем баланс
-        current_balance = await get_user_balance_async(user_id)
-        new_balance = current_balance + amount_rub
-        await set_user_balance_async(user_id, new_balance)
+        # Зачисляем баланс АТОМАРНО (защита от race conditions)
+        new_balance = await add_user_balance_async(user_id, amount_rub)
         
         # Сохраняем информацию о платеже
         payment_record = {
