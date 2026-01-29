@@ -2840,26 +2840,108 @@
         }
       },
       "payload_example": {
-        "model": "runway/gen-4",
-        "input": {
-          "prompt": "example"
-        }
       }
     },
-    "midjourney/api": {
-      "model_type": "text_to_image",
-      "output_type": "text",
+    "payload_example": {
+      "model": "google/veo-3.1",
       "input": {
-        "prompt": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "payload_example": {
-        "model": "midjourney/api",
-        "input": {
-          "prompt": "example"
-        }
+        "prompt": "example"
+      }
+    }
+  },
+  "sora-2-pro-storyboard": {
+    "model_type": "text_to_image",
+    "output_type": "text",
+    "input": {
+      "prompt": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "payload_example": {
+      "model": "sora-2-pro-storyboard",
+      "input": {
+        "prompt": "example"
+      }
+    }
+  },
+  "kling/v2-5-turbo": {
+    "model_type": "text_to_image",
+    "output_type": "text",
+    "input": {
+      "prompt": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "payload_example": {
+      "model": "kling/v2-5-turbo",
+      "input": {
+        "prompt": "example"
+      }
+    }
+  },
+  "hailuo/2.3": {
+    "model_type": "text_to_image",
+    "output_type": "text",
+    "input": {
+      "prompt": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "payload_example": {
+      "model": "hailuo/2.3",
+      "input": {
+        "prompt": "example"
+      }
+    }
+  },
+  "infinitalk/from-audio": {
+    "model_type": "audio_to_audio",
+    "output_type": "audio",
+    "input": {
+      "prompt": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "payload_example": {
+      "model": "infinitalk/from-audio",
+      "input": {
+        "prompt": "example"
+      }
+    }
+  },
+  "google/nanobanana-gemini-2.5-flash": {
+    "model_type": "text_to_image",
+    "output_type": "text",
+    "input": {
+      "prompt": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "payload_example": {
+      "model": "google/nanobanana-gemini-2.5-flash",
+      "input": {
+        "prompt": "example"
+      }
+    }
+  },
+  "runway/gen-4": {
+    "model_type": "text_to_image",
+    "output_type": "text",
+    "input": {
+      "prompt": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "payload_example": {
+      "model": "runway/gen-4",
+      "input": {
+        "prompt": "example"
       }
     }
   }
