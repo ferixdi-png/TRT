@@ -679,6 +679,39 @@ class PostgresStorage(BaseStorage):
         data[str(user_id)] = int(max(0, remaining_count))
         await self._save_json(self.referral_free_bank_file, data)
 
+    async def add_referral_free_bank(self, user_id: int, bonus: int) -> int:
+        """Add to referral free bank with transaction lock to prevent race conditions."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "INSERT INTO storage_json (partner_id, filename, payload) VALUES ($1, $2, '{}'::jsonb) "
+                    "ON CONFLICT DO NOTHING",
+                    self.partner_id,
+                    self.referral_free_bank_file,
+                )
+                payload = await conn.fetchval(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2 FOR UPDATE",
+                    self.partner_id,
+                    self.referral_free_bank_file,
+                )
+                data = self._coerce_payload(payload, filename=self.referral_free_bank_file)
+                current = int(data.get(str(user_id), 0))
+                new_total = current + bonus
+                data[str(user_id)] = new_total
+                await conn.execute(
+                    "UPDATE storage_json SET payload=$3::jsonb, updated_at=now() "
+                    "WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    self.referral_free_bank_file,
+                    json.dumps(data),
+                )
+        logger.info(
+            "REFERRAL_FREE_BANK_ADD user_id=%s bonus=%d before=%d after=%d",
+            user_id, bonus, current, new_total,
+        )
+        return new_total
+
     async def get_admin_limit(self, user_id: int) -> float:
         from app.config import get_settings
 

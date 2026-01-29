@@ -496,6 +496,14 @@ async def add_referral_free_bonus(user_id: int, bonus_count: Optional[int] = Non
     cfg = get_free_tools_config()
     bonus = cfg.referral_bonus if bonus_count is None else int(bonus_count)
     storage = get_storage()
+    
+    # Используем атомарную операцию если доступна (защита от race conditions)
+    if hasattr(storage, 'add_referral_free_bank'):
+        new_total = await storage.add_referral_free_bank(user_id, bonus)
+        # Логирование уже в storage
+        return new_total
+    
+    # Fallback для совместимости
     current = await storage.get_referral_free_bank(user_id)
     new_total = current + bonus
     await storage.set_referral_free_bank(user_id, new_total)
