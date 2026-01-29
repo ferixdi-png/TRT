@@ -14453,6 +14453,7 @@ async def _button_callback_impl(
                     await query.answer("❌ Ошибка при загрузке бесплатных инструментов", show_alert=True)
                 except:
                     pass
+            return ConversationHandler.END
         
         if data == "special_tools":
             # Answer callback immediately to show button was pressed
@@ -14486,6 +14487,7 @@ async def _button_callback_impl(
                     await query.answer("❌ Ошибка при загрузке спец-инструментов", show_alert=True)
                 except:
                     pass
+            return ConversationHandler.END
         
         if data == "check_balance":
             # Answer callback immediately to show button was pressed
