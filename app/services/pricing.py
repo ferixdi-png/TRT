@@ -156,6 +156,9 @@ class PricingService:
         
         for sku in skus:
             price = sku.get('price_rub', 0)
+            # Пропускаем SKU без цены или с нулевой ценой
+            if price <= 0:
+                continue
             if price < cheapest_price:
                 cheapest_price = price
                 cheapest = sku.copy()

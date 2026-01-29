@@ -109,6 +109,7 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🧰 Спец-инструменты", callback_data="special_tools")],
             [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
+            [InlineKeyboardButton("🌐 Язык / Language", callback_data="change_language")],
         ]
     else:
         return [
@@ -120,6 +121,7 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🧰 Special Tools", callback_data="special_tools")],
             [InlineKeyboardButton("💳 Balance / Access", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
+            [InlineKeyboardButton("🌐 Language / Язык", callback_data="change_language")],
         ]
 
 
