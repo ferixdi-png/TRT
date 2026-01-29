@@ -267,24 +267,45 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
         limit = balance_info.get('limit', 0)
         spent = balance_info.get('spent', 0)
         remaining = balance_info.get('remaining', 0)
-        return (
-            f'👑 <b>Админ с лимитом</b>\n\n'
-            f'💳 <b>Лимит:</b> {limit:.2f} ₽\n'
-            f'💸 <b>Потрачено:</b> {spent:.2f} ₽\n'
-            f'✅ <b>Осталось:</b> {remaining:.2f} ₽\n\n'
-            f'💰 <b>Баланс пользователя:</b> {balance_str} ₽'
-        )
-    elif is_main_admin:
-        balance_text = f'💳 <b>Ваш баланс:</b> {balance_str} ₽\n\n'
-        if balance_info.get('kie_credits_rub_str'):
-            balance_text += (
-                f'🔧 <b>Баланс системы генерации:</b> {balance_info["kie_credits_rub_str"]} ₽\n'
-                f'<i>({balance_info["kie_credits"]} кредитов)</i>'
+        if user_lang == 'en':
+            return (
+                f'👑 <b>Admin with limit</b>\n\n'
+                f'💳 <b>Limit:</b> {limit:.2f} RUB\n'
+                f'💸 <b>Spent:</b> {spent:.2f} RUB\n'
+                f'✅ <b>Remaining:</b> {remaining:.2f} RUB\n\n'
+                f'💰 <b>User balance:</b> {balance_str} RUB'
             )
-        elif balance_info.get("kie_credits_error"):
-            balance_text += balance_info["kie_credits_error"]
         else:
-            balance_text += 'ℹ️ Внутренний баланс доступен, внешний недоступен'
+            return (
+                f'👑 <b>Админ с лимитом</b>\n\n'
+                f'💳 <b>Лимит:</b> {limit:.2f} ₽\n'
+                f'💸 <b>Потрачено:</b> {spent:.2f} ₽\n'
+                f'✅ <b>Осталось:</b> {remaining:.2f} ₽\n\n'
+                f'💰 <b>Баланс пользователя:</b> {balance_str} ₽'
+            )
+    elif is_main_admin:
+        if user_lang == 'en':
+            balance_text = f'💳 <b>Your balance:</b> {balance_str} RUB\n\n'
+            if balance_info.get('kie_credits_rub_str'):
+                balance_text += (
+                    f'🔧 <b>Generation system balance:</b> {balance_info["kie_credits_rub_str"]} RUB\n'
+                    f'<i>({balance_info["kie_credits"]} credits)</i>'
+                )
+            elif balance_info.get("kie_credits_error"):
+                balance_text += balance_info["kie_credits_error"]
+            else:
+                balance_text += 'ℹ️ Internal balance available, external unavailable'
+        else:
+            balance_text = f'💳 <b>Ваш баланс:</b> {balance_str} ₽\n\n'
+            if balance_info.get('kie_credits_rub_str'):
+                balance_text += (
+                    f'🔧 <b>Баланс системы генерации:</b> {balance_info["kie_credits_rub_str"]} ₽\n'
+                    f'<i>({balance_info["kie_credits"]} кредитов)</i>'
+                )
+            elif balance_info.get("kie_credits_error"):
+                balance_text += balance_info["kie_credits_error"]
+            else:
+                balance_text += 'ℹ️ Внутренний баланс доступен, внешний недоступен'
         return balance_text
     else:
         # Regular user
@@ -376,8 +397,9 @@ def get_balance_keyboard(balance_info: Dict[str, Any], user_lang: str = 'ru') ->
     keyboard = []
     
     if balance_info['is_limited_admin']:
+        back_text = "◀️ Back to menu" if user_lang == 'en' else "◀️ Назад в меню"
         keyboard.append([
-            InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_menu")
+            InlineKeyboardButton(back_text, callback_data="back_to_menu")
         ])
     else:
         keyboard.append([
