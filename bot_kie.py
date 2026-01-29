@@ -3626,7 +3626,7 @@ def _resolve_price_for_display(
 
 
 def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = False, user_id: int = None) -> str:
-    """Get formatted price text for a model (from-price for menu cards)."""
+    """Get formatted price text for a model (exact price for cheapest SKU)."""
     from app.pricing.price_ssot import get_min_price
 
     if user_id is not None:
@@ -3635,8 +3635,8 @@ def get_model_price_text(model_id: str, params: dict = None, is_admin: bool = Fa
     if price is None:
         min_price = get_min_price(model_id)
         if min_price is None:
-            return "💰 <b>от — ₽</b>"
-        return f"💰 <b>от {format_rub_amount(float(min_price))}</b>"
+            return "💰 <b>Цена уточняется</b>"
+        return f"💰 <b>{format_rub_amount(float(min_price))} ₽</b>"
     return format_price_rub(price, is_admin)
 
 
@@ -12342,7 +12342,7 @@ async def _button_callback_impl(
                 default_params = {"quality": "basic"}  # Basic quality (same price, but for consistency)
             
             min_price = get_from_price_value(model_id)
-            price_text = format_price_rub(min_price, is_admin) if min_price is not None else "💰 <b>от — ₽</b>"
+            price_text = format_price_rub(min_price, is_admin) if min_price is not None else "💰 <b>Цена уточняется</b>"
             
             # Calculate how many generations available
             if is_admin:
@@ -14722,10 +14722,10 @@ async def _button_callback_impl(
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'{payment_details}\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💡 <b>Доступные модели:</b>\n'
-                    f'• От 4 ₽ за видео\n'
-                    f'• От 1 ₽ за изображение\n'
-                    f'• Редактирование от 1 ₽\n\n'
+                    f'💡 <b>Примеры цен:</b>\n'
+                    f'• Видео: 4-50 ₽\n'
+                    f'• Изображение: 0.6-3 ₽\n'
+                    f'• Редактирование: 1-5 ₽\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🚀 <b>ВЫБЕРИ СУММУ:</b>\n'
                     f'• Быстрый выбор: 50, 100, 150 ₽\n'
@@ -14741,10 +14741,10 @@ async def _button_callback_impl(
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'{payment_details}\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💡 <b>Available models:</b>\n'
-                    f'• From 4 ₽ per video\n'
-                    f'• From 1 ₽ per image\n'
-                    f'• Editing from 1 ₽\n\n'
+                    f'💡 <b>Price examples:</b>\n'
+                    f'• Video: 4-50 ₽\n'
+                    f'• Image: 0.6-3 ₽\n'
+                    f'• Editing: 1-5 ₽\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🚀 <b>SELECT AMOUNT:</b>\n'
                     f'• Quick select: 50, 100, 150 ₽\n'
@@ -14947,10 +14947,10 @@ async def _button_callback_impl(
                 f'💰 <b>ВВЕДИ СВОЮ СУММУ</b> 💰\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'📝 <b>Просто отправь число</b> (например: 250)\n\n'
-                f'💡 <b>Доступные модели:</b>\n'
-                f'• От 3.86 ₽ за видео\n'
-                f'• От 0.62 ₽ за изображение\n'
-                f'• Редактирование от 0.5 ₽\n\n'
+                f'💡 <b>Примеры цен:</b>\n'
+                f'• Видео: 4-50 ₽\n'
+                f'• Изображение: 0.6-3 ₽\n'
+                f'• Редактирование: 1-5 ₽\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                 f'📋 <b>Ограничения:</b>\n'
                 f'• Минимум: 50 ₽\n'
