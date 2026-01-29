@@ -116,7 +116,7 @@ class TestPartnerIsolationInvariants:
             'charge_balance_once',
             'consume_free_generation_once',
             '_save_json_unlocked',
-            '_load_json',
+            '_load_json_unlocked',
         ]
         
         for method_name in methods_to_check:
