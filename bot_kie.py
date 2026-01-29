@@ -325,8 +325,8 @@ def _get_callback_wait_text(callback_data: Optional[str], user_lang: str) -> Opt
         callback_data.startswith(prefix) for prefix in LONG_CALLBACK_PREFIXES
     ):
         if user_lang == "en":
-            return "⏳ Please wait…"
-        return "⏳ Пожалуйста, подождите…"
+            return "⏳ Processing…"
+        return "⏳ Обработка…"
     return None
 
 
@@ -1057,7 +1057,8 @@ elif os.getenv("SKIP_CONFIG_INIT", "0") != "1" and os.getenv("TEST_MODE", "0") !
 import httpx
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
-    ConversationHandler, CallbackQueryHandler, TypeHandler
+    ConversationHandler, CallbackQueryHandler, TypeHandler,
+    PreCheckoutQueryHandler
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand
 from telegram.ext import ContextTypes
@@ -4011,26 +4012,12 @@ def _build_insufficient_funds_text(user_lang: str, price: float, balance: float)
     )
     if user_lang == "ru":
         return (
-            "❌ <b>Недостаточно средств</b>\n\n"
-            f"💰 <b>Стоимость:</b> {price_str}\n"
-            f"💳 <b>Баланс:</b> {balance_str}\n"
-            f"❌ <b>Не хватает:</b> {needed_str}\n\n"
-            f"{rounding_note}\n\n"
-            "Что можно сделать:\n"
-            "• Пополнить баланс\n"
-            "• Посмотреть способы оплаты\n"
-            "• Написать в поддержку"
+            f"💳 <b>Недостаточно средств</b>\n\n"
+            f"Нужно: {price_str} · Баланс: {balance_str}"
         )
     return (
-        "❌ <b>Insufficient funds</b>\n\n"
-        f"💰 <b>Price:</b> {price_str}\n"
-        f"💳 <b>Balance:</b> {balance_str}\n"
-        f"❌ <b>Missing:</b> {needed_str}\n\n"
-        f"{rounding_note}\n\n"
-        "What you can do:\n"
-        "• Top up your balance\n"
-        "• See payment options\n"
-        "• Contact support"
+        f"💳 <b>Insufficient funds</b>\n\n"
+        f"Need: {price_str} · Balance: {balance_str}"
     )
 
 
@@ -4131,36 +4118,32 @@ def _build_kie_request_failed_message(
         )
     if status == 402:
         return (
-            "⚠️ <b>Недостаточно средств на KIE аккаунте</b>\n\n"
-            "Пополните баланс KIE аккаунта и попробуйте снова."
+            "💳 <b>Сервис временно недоступен</b>\n\nПовторите позже."
             if user_lang == "ru"
-            else "⚠️ <b>KIE account has insufficient credits</b>\n\nPlease top up and try again."
+            else "💳 <b>Service temporarily unavailable</b>\n\nTry again later."
         )
     if status == 422:
         return (
-            "⚠️ <b>Ошибка параметров модели</b>\n\n"
-            "Проверьте значения параметров и попробуйте снова."
+            "📎 <b>Неверные параметры</b>\n\nПроверьте значения и повторите"
             if user_lang == "ru"
-            else "⚠️ <b>Check the parameters</b>\n\nSome values are invalid. Please adjust your request."
+            else "📎 <b>Invalid parameters</b>\n\nCheck values and try again"
         )
     if status == 429:
         return (
-            "⏳ <b>Слишком много запросов</b>\n\n"
-            "Очередь перегружена. Попробуйте через пару минут."
+            "⏳ <b>Слишком много запросов</b>\n\nПодождите минуту"
             if user_lang == "ru"
-            else "⏳ <b>Too many requests</b>\n\nQueue is busy. Please try again in a few minutes."
+            else "⏳ <b>Too many requests</b>\n\nWait a minute"
         )
     if status == 500:
         return (
-            "❌ <b>Ошибка сервера</b>\n\n"
-            "Мы уже ищем причину. Попробуйте позже."
+            "🔧 <b>Временные неполадки</b>\n\nПопробуйте позже"
             if user_lang == "ru"
-            else "❌ <b>Server error</b>\n\nWe're investigating. Please try again later."
+            else "🔧 <b>Temporary issues</b>\n\nTry again later"
         )
     return (
-        "❌ <b>Не удалось запустить генерацию</b>\n\nПопробуйте позже."
+        "🔧 <b>Не удалось запустить</b>\n\nПопробуйте позже"
         if user_lang == "ru"
-        else "❌ <b>Could not start generation</b>\n\nPlease try again later."
+        else "🔧 <b>Could not start</b>\n\nTry again later"
     )
 
 
@@ -8955,6 +8938,78 @@ def _build_start_ack_text(user_lang: str) -> str:
     return "⏳ Preparing the menu..." if user_lang == "en" else "⏳ Готовлю меню..."
 
 
+async def _show_language_selection(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    correlation_id: Optional[str] = None,
+    edit_message_id: Optional[int] = None,
+) -> bool:
+    """
+    Показывает экран выбора языка для новых пользователей.
+    
+    Returns:
+        True если экран показан, False если пользователь уже выбрал язык.
+    """
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    
+    if not user_id or not chat_id:
+        return False
+    
+    # Проверяем, выбрал ли пользователь язык ранее
+    if has_user_language_set(user_id):
+        return False
+    
+    # Показываем экран выбора языка
+    keyboard = [
+        [
+            InlineKeyboardButton("🇷🇺 Русский", callback_data="set_language:ru"),
+            InlineKeyboardButton("🇬🇧 English", callback_data="set_language:en"),
+        ]
+    ]
+    
+    welcome_text = (
+        "🌍 <b>Выберите язык / Choose language</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🇷🇺 Нажмите «Русский» для продолжения на русском языке\n\n"
+        "🇬🇧 Press «English» to continue in English\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    
+    try:
+        if edit_message_id:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=edit_message_id,
+                text=welcome_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML',
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=welcome_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML',
+            )
+        
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            update_id=update.update_id if hasattr(update, 'update_id') else None,
+            action="LANGUAGE_SELECTION_SHOWN",
+            action_path="command:/start",
+            stage="UI_ROUTER",
+            outcome="shown",
+        )
+        return True
+    except Exception as exc:
+        logger.error("Failed to show language selection: %s", exc, exc_info=True)
+        return False
+
+
 async def _send_start_ack(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -10580,15 +10635,9 @@ async def respond_price_undefined(
         format_pricing_blocked_message(model_id, user_lang=user_lang)
         if model_id
         else (
-            "❌ <b>Цена не определена</b>\n\n"
-            "Причина: цена для модели не найдена.\n"
-            "Пожалуйста, выберите другую модель или попробуйте позже."
+            "❌ <b>Цена недоступна</b>\n\nВыберите другую модель."
             if user_lang == "ru"
-            else (
-                "❌ <b>Price is unavailable</b>\n\n"
-                "Reason: pricing for this model is missing.\n"
-                "Please select another model or try again later."
-            )
+            else "❌ <b>Price unavailable</b>\n\nSelect another model."
         )
     )
     if correlation_id:
@@ -10769,6 +10818,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     update_id=update.update_id,
                     chat_id=chat_id,
                 )
+            
+            # Проверяем, новый ли это пользователь (нет сохранённого языка)
+            # Если да — показываем экран выбора языка
+            if user_id and not has_user_language_set(user_id):
+                language_shown = await _show_language_selection(
+                    update,
+                    context,
+                    correlation_id=correlation_id,
+                    edit_message_id=start_ack_message_id,
+                )
+                if language_shown:
+                    # Экран выбора языка показан, ждём выбора пользователя
+                    return
+            
             budget_ms = max(0, int(START_HANDLER_BUDGET_MS))
             start_budget_timeout = False
             try:
@@ -11579,9 +11642,9 @@ async def _button_callback_impl(
             except Exception as exc:
                 logger.error("Error in other_models handler: %s", exc, exc_info=True)
                 fallback_text = (
-                    "❌ Не удалось открыть модель. Попробуйте позже."
+                    "❌ Модель недоступна. Повторите позже."
                     if user_lang == "ru"
-                    else "❌ Unable to open model. Please try again later."
+                    else "❌ Model unavailable. Try later."
                 )
                 try:
                     await query.answer(fallback_text, show_alert=True)
@@ -12266,42 +12329,18 @@ async def _button_callback_impl(
                 
                 if user_lang == 'ru':
                     insufficient_msg = (
-                        f"❌ <b>Недостаточно средств для генерации</b>\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Ваш баланс:</b> {format_price_rub(user_balance, is_admin)}\n"
-                        f"💵 <b>Требуется минимум:</b> {price_text}\n"
-                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💡 <b>Что делать:</b>\n"
-                        f"• Пополните баланс через кнопку ниже\n"
+                        f"💳 <b>Недостаточно средств</b>\n\n"
+                        f"Нужно: {price_text} · Баланс: {format_price_rub(user_balance, is_admin)}"
                     )
-                    
                     if remaining_free > 0:
-                        insufficient_msg += f"• Используйте бесплатные генерации бесплатных моделей ({remaining_free} доступно)\n"
-                    
-                    insufficient_msg += (
-                        f"• Пригласите друга и получите бонусы\n\n"
-                        f"🔄 После пополнения попробуйте генерацию снова."
-                    )
+                        insufficient_msg += f"\n\n💡 Доступно {remaining_free} бесплатных генераций"
                 else:
                     insufficient_msg = (
-                        f"❌ <b>Insufficient Funds for Generation</b>\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💳 <b>Your balance:</b> {format_price_rub(user_balance, is_admin)}\n"
-                        f"💵 <b>Minimum required:</b> {price_text}\n"
-                        f"❌ <b>Need:</b> {needed_str}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💡 <b>What to do:</b>\n"
-                        f"• Top up balance via button below\n"
+                        f"💳 <b>Insufficient funds</b>\n\n"
+                        f"Need: {price_text} · Balance: {format_price_rub(user_balance, is_admin)}"
                     )
-                    
                     if remaining_free > 0:
-                        insufficient_msg += f"• Use free models generations ({remaining_free} available)\n"
-                    
-                    insufficient_msg += (
-                        f"• Invite a friend and get bonuses\n\n"
-                        f"🔄 After topping up, try generation again."
-                    )
+                        insufficient_msg += f"\n\n💡 {remaining_free} free generations available"
                 
                 await query.edit_message_text(
                     _append_free_counter_text(insufficient_msg, free_counter_line),
@@ -12555,34 +12594,34 @@ async def _button_callback_impl(
                 is_audio = is_audio_model(model_id)
                 
                 if has_image_input:
-                    ref_hint = "реф-картинку" if session.get("image_ref_prompt") else "изображение"
+                    ref_hint = "референс" if session.get("image_ref_prompt") else "изображение"
                     if is_video:
                         prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите видео, которое хотите сгенерировать.\n\n"
-                            f"💡 <i>После ввода промпта вы сможете добавить {ref_hint} (опционально)</i>"
+                            f"📝 <b>Шаг 1 · Промпт</b>\n\n"
+                            f"Опишите видео\n\n"
+                            f"💡 Далее можно добавить {ref_hint}"
                         )
                     else:
                         prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите изображение, которое хотите сгенерировать.\n\n"
-                            f"💡 <i>После ввода промпта вы сможете добавить {ref_hint} (опционально)</i>"
+                            f"📝 <b>Шаг 1 · Промпт</b>\n\n"
+                            f"Опишите изображение\n\n"
+                            f"💡 Далее можно добавить {ref_hint}"
                         )
                 else:
                     if is_video:
                         prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите видео, которое хотите сгенерировать:"
+                            f"📝 <b>Шаг 1 · Промпт</b>\n\n"
+                            f"Опишите видео"
                         )
                     elif is_audio:
                         prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите контент для обработки:"
+                            f"📝 <b>Шаг 1 · Промпт</b>\n\n"
+                            f"Опишите аудио"
                         )
                     else:
                         prompt_text += (
-                            f"📝 <b>Шаг 1: Введите промпт</b>\n\n"
-                            f"Опишите изображение, которое хотите сгенерировать:"
+                            f"📝 <b>Шаг 1 · Промпт</b>\n\n"
+                            f"Опишите изображение"
                         )
                 price_line = _build_current_price_line(
                     session,
@@ -13036,9 +13075,9 @@ async def _button_callback_impl(
             )
             user_lang = get_user_language(user_id)
             loading_text = (
-                "⏳ <b>Загружаю меню...</b>\n\nПожалуйста, подождите пару секунд."
+                "⏳ <b>Загрузка...</b>"
                 if user_lang == "ru"
-                else "⏳ <b>Loading menu...</b>\n\nPlease wait a moment."
+                else "⏳ <b>Loading...</b>"
             )
             await _safe_edit_or_reply(query, loading_text, parse_mode="HTML")
             _create_background_task(
@@ -13560,7 +13599,7 @@ async def _button_callback_impl(
                     except Exception as exc:
                         logger.error("Error in handle_show_all_models_list: %s", exc, exc_info=True)
                         fallback = (
-                            "❌ Ошибка при загрузке моделей. Попробуйте позже." if user_lang == 'ru' else "❌ Error loading models. Please try later."
+                            "❌ Не удалось загрузить. Повторите позже." if user_lang == 'ru' else "❌ Failed to load. Try later."
                         )
                         try:
                             await query.edit_message_text(fallback, parse_mode='HTML')
@@ -13580,9 +13619,9 @@ async def _button_callback_impl(
                 logger.error(f"Error in handle_show_all_models_list: {e}", exc_info=True)
                 user_lang = get_user_language(user_id)
                 if user_lang == 'ru':
-                    error_msg = "❌ Ошибка при загрузке моделей. Попробуйте позже."
+                    error_msg = "❌ Не удалось загрузить. Повторите позже."
                 else:
-                    error_msg = "❌ Error loading models. Please try later."
+                    error_msg = "❌ Failed to load. Try later."
                 await query.answer(error_msg, show_alert=True)
                 return SELECTING_MODEL
             
@@ -14623,6 +14662,9 @@ async def _button_callback_impl(
             examples_count = int(amount / 0.62)  # free tools price
             video_count = int(amount / 3.86)  # Basic video price
             
+            # Рассчитываем количество звёзд (примерно 1 звезда = 1.3 ₽)
+            stars_amount = max(1, int(amount / 1.3))
+            
             # Show payment method selection
             amount_display = format_rub_amount(amount)
             if user_lang == 'ru':
@@ -14635,7 +14677,7 @@ async def _button_callback_impl(
                     f'• ~{video_count} видео (базовая модель)\n'
                     f'• Или комбинацию разных моделей!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>ОПЛАТА ТОЛЬКО ПО СБП:</b>'
+                    f'💳 <b>ВЫБЕРИТЕ СПОСОБ ОПЛАТЫ:</b>'
                 )
             else:
                 payment_text = (
@@ -14647,17 +14689,19 @@ async def _button_callback_impl(
                     f'• ~{video_count} videos (basic model)\n'
                     f'• Or a combination of different models!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>PAYMENT ONLY VIA SBP:</b>'
+                    f'💳 <b>CHOOSE PAYMENT METHOD:</b>'
                 )
             
             # Store amount in session
             user_sessions[user_id] = {
                 'topup_amount': amount,
+                'stars_amount': stars_amount,
                 'waiting_for': 'payment_method'
             }
             
             keyboard = [
                 [InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")],
+                [InlineKeyboardButton(f"⭐ Telegram Stars ({stars_amount} ⭐)", callback_data=f"pay_stars:{amount}:{stars_amount}")],
                 [
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                     InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -14675,9 +14719,57 @@ async def _button_callback_impl(
             )
             return SELECTING_AMOUNT
         
-        # Handle payment method selection
+        # Handle Telegram Stars payment
         if data.startswith("pay_stars:"):
-            await query.answer("Сейчас доступна только оплата по СБП.", show_alert=True)
+            # Parse amount and stars from callback data
+            parts = data.split(":")
+            if len(parts) < 3:
+                await query.answer("Ошибка формата", show_alert=True)
+                return SELECTING_AMOUNT
+            try:
+                amount_rub = float(parts[1])
+                stars_amount = int(parts[2])
+            except (ValueError, TypeError):
+                await query.answer("Ошибка данных", show_alert=True)
+                return SELECTING_AMOUNT
+            
+            user_lang = get_user_language(user_id)
+            
+            # Создаём invoice для Telegram Stars
+            title = "Пополнение баланса" if user_lang == 'ru' else "Balance Top-up"
+            description = f"{format_rub_amount(amount_rub)} на баланс" if user_lang == 'ru' else f"{format_rub_amount(amount_rub)} to balance"
+            
+            # Формируем payload для идентификации платежа
+            payload = f"topup:{user_id}:{amount_rub}:{stars_amount}:{int(time.time())}"
+            
+            try:
+                # Отправляем invoice с currency=XTR (Telegram Stars)
+                await context.bot.send_invoice(
+                    chat_id=chat_id,
+                    title=title,
+                    description=description,
+                    payload=payload,
+                    provider_token="",  # Пустой для Telegram Stars
+                    currency="XTR",  # Telegram Stars
+                    prices=[{"label": title, "amount": stars_amount}],  # amount в Stars
+                )
+                
+                # Сохраняем информацию о pending платеже
+                user_sessions[user_id] = {
+                    'invoice_payload': payload,
+                    'topup_amount': amount_rub,
+                    'stars_amount': stars_amount,
+                    'waiting_for': 'stars_payment'
+                }
+                
+                logger.info(f"STARS_INVOICE_SENT user_id={user_id} amount_rub={amount_rub} stars={stars_amount} payload={payload}")
+                
+                await query.answer()
+            except Exception as e:
+                logger.error(f"Failed to send stars invoice: {e}", exc_info=True)
+                error_msg = "Ошибка создания платежа. Попробуйте СБП." if user_lang == 'ru' else "Payment error. Try SBP."
+                await query.answer(error_msg, show_alert=True)
+            
             return SELECTING_AMOUNT
         
         if data.startswith("pay_sbp:"):
@@ -16343,11 +16435,10 @@ async def _button_callback_impl(
                 logger.error(f"Error in gen_view API calls: {e}", exc_info=True)
                 try:
                     user_lang = get_user_language(user_id) if user_id else 'ru'
-                    error_msg = "Ошибка сервера, попробуйте позже" if user_lang == 'ru' else "Server error, please try later"
+                    error_msg = "⚠️ Сбой. Повторите позже." if user_lang == 'ru' else "⚠️ Error. Try later."
                     await query.answer(error_msg, show_alert=True)
                 except:
                     pass
-            
             try:
                 await query.answer("✅ Результаты отправлены")
             except:
@@ -17907,42 +17998,18 @@ async def _button_callback_impl(
                 
                 if user_lang == 'ru':
                     insufficient_msg = (
-                        f"❌ <b>Недостаточно средств для генерации</b>\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"{balance_line}\n"
-                        f"{price_line}\n"
-                        f"❌ <b>Не хватает:</b> {needed_str}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💡 <b>Что делать:</b>\n"
-                        f"• Пополните баланс через кнопку ниже\n"
+                        f"💳 <b>Недостаточно средств</b>\n\n"
+                        f"{balance_line}\n{price_line}"
                     )
-                    
                     if remaining_free > 0:
-                        insufficient_msg += f"• Используйте бесплатные генерации бесплатных моделей ({remaining_free} доступно)\n"
-                    
-                    insufficient_msg += (
-                        f"• Пригласите друга и получите бонусы\n\n"
-                        f"🔄 После пополнения попробуйте генерацию снова."
-                    )
+                        insufficient_msg += f"\n\n💡 Доступно {remaining_free} бесплатных генераций"
                 else:
                     insufficient_msg = (
-                        f"❌ <b>Insufficient Funds for Generation</b>\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"{balance_line}\n"
-                        f"{price_line}\n"
-                        f"❌ <b>Need:</b> {needed_str}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💡 <b>What to do:</b>\n"
-                        f"• Top up balance via button below\n"
+                        f"💳 <b>Insufficient funds</b>\n\n"
+                        f"{balance_line}\n{price_line}"
                     )
-                    
                     if remaining_free > 0:
-                        insufficient_msg += f"• Use free models generations ({remaining_free} available)\n"
-                    
-                    insufficient_msg += (
-                        f"• Invite a friend and get bonuses\n\n"
-                        f"🔄 After topping up, try generation again."
-                    )
+                        insufficient_msg += f"\n\n💡 {remaining_free} free generations available"
                 
                 await query.edit_message_text(
                     insufficient_msg,
@@ -18108,7 +18175,7 @@ async def _button_callback_impl(
                 logger.error(f"❌❌❌ ERROR in confirm_generation fallback: {e}", exc_info=True)
                 try:
                     user_lang = get_user_language(user_id) if user_id else 'ru'
-                    error_msg = "Ошибка сервера, попробуйте позже" if user_lang == 'ru' else "Server error, please try later"
+                    error_msg = "⚠️ Сбой. Повторите позже." if user_lang == 'ru' else "⚠️ Error. Try later."
                     await query.answer(error_msg, show_alert=True)
                 except Exception:
                     pass
@@ -18330,32 +18397,31 @@ def _build_model_card(
     required_params: List[str],
     user_lang: str,
 ) -> str:
+    """Build premium model card with clean structure."""
     name = model_info.get("name") or model_spec.title_ru or model_spec.id
-    description_ru = model_spec.description_ru or "Генерация результата по вашему запросу."
+    description_ru = model_spec.description_ru or "Генерация по вашему запросу"
     inputs_line = _summarize_required_inputs(required_params, model_spec.schema_properties or {}, user_lang)
     output_label = _resolve_output_type_label(model_spec, user_lang)
+    
     if user_lang == "ru":
-        usage_line = "Как пользоваться: заполните обязательные входы и нажмите «Сгенерировать»."
         card_parts = [
-            f"🪪 <b>Карточка модели</b>",
-            f"🤖 <b>{name}</b>",
-            f"📝 {description_ru}",
+            f"<b>{name}</b>",
+            f"{description_ru}",
+            "",
         ]
         if inputs_line:
-            card_parts.append(f"📥 {inputs_line}")
-        card_parts.append(f"📤 Результат: {output_label}")
-        card_parts.append(f"💡 {usage_line}")
+            card_parts.append(f"📥 Вход: {inputs_line}")
+        card_parts.append(f"📤 Выход: {output_label}")
         return "\n".join(card_parts)
-    usage_line = "How to use: provide required inputs and tap “Generate”."
+    
     card_parts = [
-        f"🪪 <b>Model card</b>",
-        f"🤖 <b>{name}</b>",
-        f"📝 {description_ru}",
+        f"<b>{name}</b>",
+        f"{description_ru}",
+        "",
     ]
     if inputs_line:
-        card_parts.append(f"📥 {inputs_line}")
+        card_parts.append(f"📥 Input: {inputs_line}")
     card_parts.append(f"📤 Output: {output_label}")
-    card_parts.append(f"💡 {usage_line}")
     return "\n".join(card_parts)
 
 
@@ -20597,6 +20663,9 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             examples_count = int(amount / 0.62)  # free tools price
             video_count = int(amount / 3.86)  # Basic video price
             
+            # Рассчитываем количество звёзд (примерно 1 звезда = 1.3 ₽)
+            stars_amount = max(1, int(amount / 1.3))
+            
             # Show payment method selection
             amount_display = format_rub_amount(amount)
             if user_lang == 'ru':
@@ -20609,7 +20678,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     f'• ~{video_count} видео (базовая модель)\n'
                     f'• Или комбинацию разных моделей!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>ОПЛАТА ТОЛЬКО ПО СБП:</b>'
+                    f'💳 <b>ВЫБЕРИТЕ СПОСОБ ОПЛАТЫ:</b>'
                 )
             else:
                 payment_text = (
@@ -20621,17 +20690,19 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     f'• ~{video_count} videos (basic model)\n'
                     f'• Or a combination of different models!\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
-                    f'💳 <b>PAYMENT ONLY VIA SBP:</b>'
+                    f'💳 <b>CHOOSE PAYMENT METHOD:</b>'
                 )
             
             # Store amount in session
             user_sessions[user_id] = {
                 'topup_amount': amount,
+                'stars_amount': stars_amount,
                 'waiting_for': 'payment_method'
             }
             
             keyboard = [
                 [InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")],
+                [InlineKeyboardButton(f"⭐ Telegram Stars ({stars_amount} ⭐)", callback_data=f"pay_stars:{amount}:{stars_amount}")],
                 [
                     InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
                     InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu")
@@ -21077,11 +21148,9 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             except Exception as e:
                 logger.error(f"❌❌❌ FILE UPLOAD API ERROR in upload_image_to_hosting (image): {e}", exc_info=True)
                 user_lang = get_user_language(user_id) if user_id else 'ru'
-                error_msg = "Ошибка сервера, попробуйте позже" if user_lang == 'ru' else "Server error, please try later"
+                error_msg = "⚠️ Не удалось загрузить. Повторите." if user_lang == 'ru' else "⚠️ Upload failed. Try again."
                 await update.message.reply_text(
-                    f"❌ <b>{error_msg}</b>\n\n"
-                    f"Не удалось загрузить изображение.\n"
-                    f"Попробуйте еще раз через несколько секунд.",
+                    f"<b>{error_msg}</b>",
                     parse_mode='HTML'
                 )
                 return INPUTTING_PARAMS
@@ -21321,40 +21390,25 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                         # Prepare price info
                         if is_free:
                             remaining = await get_user_free_generations_remaining(user_id)
-                            price_info = f"🎁 <b>БЕСПЛАТНАЯ ГЕНЕРАЦИЯ!</b>\nОсталось бесплатных: {remaining}/{FREE_GENERATIONS_PER_DAY} в день"
+                            price_info = f"🎁 Бесплатно · {remaining} из {FREE_GENERATIONS_PER_DAY} сегодня"
+                            price_info_en = f"🎁 Free · {remaining} of {FREE_GENERATIONS_PER_DAY} today"
                         else:
-                            price_info = f"💰 <b>Стоимость:</b> {price_str}"
+                            price_info = f"💰 {price_str} · с баланса"
+                            price_info_en = f"💰 {price_str} · from balance"
                         
                         if user_lang == 'en':
-                            price_info_en = f"🎁 <b>FREE GENERATION!</b>\nRemaining free: {remaining}/{FREE_GENERATIONS_PER_DAY} per day" if is_free else f"💰 <b>Cost:</b> {price_str}"
                             confirm_text = (
-                                f"📋 <b>Generation Confirmation</b>\n\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                f"🤖 <b>Model:</b> {model_name}\n\n"
-                                f"⚙️ <b>Parameters:</b>\n{params_text}\n\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                f"{price_info_en}\n\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                f"💡 <b>What's next:</b>\n"
-                                f"• Generation will start after confirmation\n"
-                                f"• Result will come automatically\n"
-                                f"• Usually takes from 10 seconds to 2 minutes\n\n"
-                                f"🚀 <b>Ready to start?</b>"
+                                f"📋 <b>Confirmation</b>\n\n"
+                                f"{model_name}\n"
+                                f"{params_text}\n\n"
+                                f"{price_info_en}"
                             )
                         else:
                             confirm_text = (
-                                f"📋 <b>Подтверждение генерации</b>\n\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                f"🤖 <b>Модель:</b> {model_name}\n\n"
-                                f"⚙️ <b>Параметры:</b>\n{params_text}\n\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                f"{price_info}\n\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                f"💡 <b>Что будет дальше:</b>\n"
-                                f"• Генерация начнется после подтверждения\n"
-                                f"• Результат придет автоматически\n"
-                                f"• Обычно это занимает от 10 секунд до 2 минут\n\n"
-                                f"🚀 <b>Готовы начать?</b>"
+                                f"📋 <b>Подтверждение</b>\n\n"
+                                f"{model_name}\n"
+                                f"{params_text}\n\n"
+                                f"{price_info}"
                             )
                         
                         # Check if we have update.message or need to use context.bot
@@ -23363,17 +23417,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as exc:
         logger.warning("Failed to resolve free counter line: %s", exc)
     loading_msg = (
-        "🔄 <b>Создаю задачу генерации...</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "⏳ <b>Подождите, обрабатываю ваш запрос</b>\n\n"
-        "🤖 <b>Модель:</b> {model_name}\n\n"
-        "💡 Обычно это занимает несколько секунд..."
+        "⏳ <b>Принято</b>\n\n{model_name}"
     ).format(model_name=model_name) if user_lang == 'ru' else (
-        "🔄 <b>Creating generation task...</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "⏳ <b>Please wait, processing your request</b>\n\n"
-        "🤖 <b>Model:</b> {model_name}\n\n"
-        "💡 Usually takes a few seconds..."
+        "⏳ <b>Accepted</b>\n\n{model_name}"
     ).format(model_name=model_name)
     loading_msg = _append_free_counter_text(loading_msg, free_counter_line)
     request_key = None
@@ -23383,20 +23429,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     def _build_accept_text(task_id_value: str, *, dedup_join: bool = False) -> str:
         if user_lang == "ru":
-            join_line = "🔁 Это повторный запрос — подписываю на уже созданную задачу.\n\n" if dedup_join else ""
-            return (
-                "✅ <b>Задача принята</b>\n\n"
-                f"{join_line}"
-                f"Task ID: <code>{task_id_value}</code>\n"
-                "Пришлю результат сюда, как только он будет готов."
-            )
-        join_line = "🔁 This is a duplicate request — joining the existing task.\n\n" if dedup_join else ""
-        return (
-            "✅ <b>Task accepted</b>\n\n"
-            f"{join_line}"
-            f"Task ID: <code>{task_id_value}</code>\n"
-            "I'll send the result here as soon as it's ready."
-        )
+            return f"🚀 <b>В очереди</b>\n\n<code>{task_id_value}</code>"
+        return f"🚀 <b>In queue</b>\n\n<code>{task_id_value}</code>"
 
     async def _upsert_generation_job_meta(
         *,
@@ -24787,9 +24821,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             ]
         )
         summary_text = (
-            "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
+            "✅ <b>Готово</b>"
             if user_lang == "ru"
-            else "✅ <b>Generation completed!</b>\n\nResult is ready."
+            else "✅ <b>Done</b>"
         )
         balance_line = ""
         if not is_free and not is_admin_user and session.get("balance_charged"):
@@ -25435,12 +25469,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         await send_or_edit_message(
             _append_free_counter_text(
-                (
-                    "❌ <b>Ошибка генерации</b>\n\n"
-                    "Пожалуйста, попробуйте позже.\n"
-                    f"ID: {correlation_id}\n"
-                    "Код: <code>ERR_GEN_UNKNOWN</code>"
-                ),
+                f"❌ <b>Сбой генерации</b>\n\n<code>{correlation_id}</code>",
                 free_counter_line,
             ),
             parse_mode='HTML'
@@ -25523,7 +25552,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
             last_progress_update = elapsed
             try:
                 await status_message.edit_text(
-                    f"⏳ Генерирую… {int(elapsed)} сек",
+                    f"🎨 <b>Генерирую</b> · {int(elapsed)}с",
                     parse_mode='HTML'
                 )
             except Exception:
@@ -25607,29 +25636,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         "send_message",
                         chat_id=chat_id,
                         text=_append_free_counter_text(
-                            (
-                                "✅ <b>Генерация завершена!</b>\n\n"
-                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                "🎉 <b>Результат готов!</b>\n\n"
-                                "⏳ <b>Загружаю результат...</b>\n\n"
-                                "💡 <b>Что дальше:</b>\n"
-                                "• Результат будет показан ниже\n"
-                                "• Вы сможете сохранить или поделиться им\n"
-                                "• Можете создать новую генерацию\n\n"
-                                "✨ Скоро вы увидите созданный контент!"
-                                if user_lang == 'ru'
-                                else (
-                                    "✅ <b>Generation Completed!</b>\n\n"
-                                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                                    "🎉 <b>Result is ready!</b>\n\n"
-                                    "⏳ <b>Loading result...</b>\n\n"
-                                    "💡 <b>What's next:</b>\n"
-                                    "• Result will be shown below\n"
-                                    "• You can save or share it\n"
-                                    "• You can create a new generation\n\n"
-                                    "✨ You'll see the created content shortly!"
-                                )
-                            ),
+                            ("✅ <b>Готово</b>" if user_lang == 'ru' else "✅ <b>Done</b>"),
                             free_counter_line,
                         ),
                         parse_mode='HTML',
@@ -25839,9 +25846,9 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                             except Exception:
                                 free_counter_line = ""
                             summary_text = (
-                                "✅ <b>Генерация завершена!</b>\n\nРезультат готов."
+                                "✅ <b>Готово</b>"
                                 if user_lang == 'ru'
-                                else "✅ <b>Generation Completed!</b>\n\nResult is ready."
+                                else "✅ <b>Done</b>"
                             )
                             log_request_event(
                                 request_id=request_id or "unknown",
@@ -25925,7 +25932,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         "send_message",
                         chat_id=chat_id,
                         text=_append_free_counter_text(
-                            f"✅ <b>Генерация завершена!</b>\n\nРезультат: {result_json[:500]}",
+                            f"✅ <b>Готово</b>\n\n{result_json[:500]}" if user_lang == 'ru' else f"✅ <b>Done</b>\n\n{result_json[:500]}",
                             free_counter_line,
                         ),
                         reply_markup=reply_markup,
@@ -26007,10 +26014,8 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 except ImportError:
                     # Fallback если обработчик недоступен
                     user_message = (
-                        f"❌ <b>Генерация завершена с ошибкой</b>\n\n"
-                        f"Ошибка: {fail_msg}\n\n"
-                        "Это техническая проблема на стороне сервера, мы уже работаем над её решением.\n\n"
-                        "Пожалуйста, попробуйте позже."
+                        f"❌ <b>Ошибка</b>\n\n"
+                        f"Сервер временно недоступен. Повторите позже."
                     )
                 
                 free_counter_line = ""
@@ -26075,7 +26080,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 await _send_with_log(
                     "send_message",
                     chat_id=chat_id,
-                    text=f"❌ Превышено время ожидания. Попробуйте начать генерацию заново.",
+                    text=f"⏱ <b>Превышено время ожидания</b>\n\nСредства не списаны",
                     parse_mode='HTML'
                 )
                 break
@@ -26113,6 +26118,158 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
             text=f"⏰ Время ожидания истекло. Попробуйте начать генерацию заново.",
             parse_mode='HTML'
         )
+
+
+async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обработчик pre_checkout_query для Telegram Stars.
+    Вызывается Telegram перед списанием средств.
+    Нужно ответить ok=True для подтверждения платежа.
+    """
+    query = update.pre_checkout_query
+    user_id = query.from_user.id if query.from_user else None
+    payload = query.invoice_payload
+    
+    logger.info(f"STARS_PRE_CHECKOUT user_id={user_id} payload={payload} total_amount={query.total_amount} currency={query.currency}")
+    
+    try:
+        # Проверяем валидность payload
+        if not payload or not payload.startswith("topup:"):
+            await query.answer(ok=False, error_message="Invalid payment payload")
+            return
+        
+        # Парсим payload: topup:user_id:amount_rub:stars:timestamp
+        parts = payload.split(":")
+        if len(parts) < 5:
+            await query.answer(ok=False, error_message="Invalid payload format")
+            return
+        
+        payload_user_id = int(parts[1])
+        amount_rub = float(parts[2])
+        stars_amount = int(parts[3])
+        
+        # Проверяем, что user_id совпадает
+        if payload_user_id != user_id:
+            logger.warning(f"STARS_PRE_CHECKOUT_USER_MISMATCH payload_user={payload_user_id} actual_user={user_id}")
+            await query.answer(ok=False, error_message="User mismatch")
+            return
+        
+        # Проверяем, что сумма совпадает
+        if query.total_amount != stars_amount:
+            logger.warning(f"STARS_PRE_CHECKOUT_AMOUNT_MISMATCH expected={stars_amount} actual={query.total_amount}")
+            await query.answer(ok=False, error_message="Amount mismatch")
+            return
+        
+        # Всё ок - подтверждаем платёж
+        await query.answer(ok=True)
+        logger.info(f"STARS_PRE_CHECKOUT_OK user_id={user_id} stars={stars_amount} amount_rub={amount_rub}")
+        
+    except Exception as e:
+        logger.error(f"STARS_PRE_CHECKOUT_ERROR user_id={user_id} error={e}", exc_info=True)
+        await query.answer(ok=False, error_message="Payment processing error")
+
+
+async def handle_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обработчик successful_payment для Telegram Stars.
+    Вызывается после успешного списания средств.
+    Здесь нужно зачислить баланс пользователю.
+    """
+    payment = update.message.successful_payment
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    
+    payload = payment.invoice_payload
+    total_amount = payment.total_amount
+    currency = payment.currency
+    charge_id = payment.telegram_payment_charge_id
+    
+    logger.info(f"STARS_PAYMENT_SUCCESS user_id={user_id} payload={payload} amount={total_amount} currency={currency} charge_id={charge_id}")
+    
+    try:
+        # Парсим payload: topup:user_id:amount_rub:stars:timestamp
+        parts = payload.split(":")
+        if len(parts) < 5:
+            logger.error(f"STARS_PAYMENT_INVALID_PAYLOAD user_id={user_id} payload={payload}")
+            return
+        
+        payload_user_id = int(parts[1])
+        amount_rub = float(parts[2])
+        stars_amount = int(parts[3])
+        timestamp = int(parts[4])
+        
+        # Проверяем user_id
+        if payload_user_id != user_id:
+            logger.error(f"STARS_PAYMENT_USER_MISMATCH payload_user={payload_user_id} actual_user={user_id}")
+            return
+        
+        user_lang = get_user_language(user_id)
+        
+        # Зачисляем баланс
+        current_balance = await get_user_balance_async(user_id)
+        new_balance = current_balance + amount_rub
+        await set_user_balance_async(user_id, new_balance)
+        
+        # Сохраняем информацию о платеже
+        payment_record = {
+            "type": "telegram_stars",
+            "user_id": user_id,
+            "amount_rub": amount_rub,
+            "stars_amount": stars_amount,
+            "charge_id": charge_id,
+            "payload": payload,
+            "timestamp": timestamp,
+            "processed_at": int(time.time()),
+        }
+        
+        # Логируем успешный платёж
+        logger.info(f"STARS_BALANCE_CREDITED user_id={user_id} amount={amount_rub} new_balance={new_balance} charge_id={charge_id}")
+        
+        # Отправляем подтверждение пользователю
+        if user_lang == 'ru':
+            success_text = (
+                f"✅ <b>Платёж успешен!</b>\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"⭐ <b>Оплачено:</b> {stars_amount} звёзд\n"
+                f"💰 <b>Зачислено:</b> {format_rub_amount(amount_rub)}\n"
+                f"💳 <b>Новый баланс:</b> {format_rub_amount(new_balance)}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🎉 Спасибо за покупку! Теперь можете создавать!"
+            )
+        else:
+            success_text = (
+                f"✅ <b>Payment successful!</b>\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"⭐ <b>Paid:</b> {stars_amount} stars\n"
+                f"💰 <b>Credited:</b> {format_rub_amount(amount_rub)}\n"
+                f"💳 <b>New balance:</b> {format_rub_amount(new_balance)}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🎉 Thank you! Now you can create!"
+            )
+        
+        keyboard = [
+            [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
+        ]
+        
+        await update.message.reply_text(
+            success_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"STARS_PAYMENT_PROCESSING_ERROR user_id={user_id} error={e}", exc_info=True)
+        
+        # Отправляем сообщение об ошибке
+        user_lang = get_user_language(user_id) if user_id else 'ru'
+        error_text = (
+            "⚠️ Платёж получен, но произошла ошибка обработки.\n"
+            "Обратитесь в поддержку с ID платежа."
+            if user_lang == 'ru' else
+            "⚠️ Payment received but processing error occurred.\n"
+            "Contact support with payment ID."
+        )
+        await update.message.reply_text(error_text, parse_mode='HTML')
 
 
 async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -27109,6 +27266,10 @@ async def _register_all_handlers_internal(application: Application):
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler('generate', start_generation))
     application.add_handler(CommandHandler('models', list_models))
+    
+    # Telegram Stars payment handlers
+    application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
     
     # Базовые callback handlers
     application.add_handler(CallbackQueryHandler(button_callback, block=True))
