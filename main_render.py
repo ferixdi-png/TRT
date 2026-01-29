@@ -633,7 +633,15 @@ def build_webhook_handler(
         raw_body: bytes = b""
         try:
             raw_body = await request.read()
-            logger.info("WEBHOOK correlation_id=%s update_received=true", correlation_id)
+            logger.info("WEBHOOK correlation_id=%s update_received=true body_len=%s", correlation_id, len(raw_body))
+            # DEBUG: Log raw body for debugging
+            if raw_body:
+                try:
+                    import json
+                    body_preview = json.loads(raw_body.decode('utf-8'))
+                    logger.info("WEBHOOK correlation_id=%s body_preview=%s", correlation_id, str(body_preview)[:200])
+                except:
+                    logger.info("WEBHOOK correlation_id=%s body_raw=%s", correlation_id, raw_body[:200])
             _schedule_task(
                 _process_raw_update_guarded(
                     raw_body,
