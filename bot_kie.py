@@ -24819,6 +24819,104 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         state_resolution = normalize_provider_state(job_result.state)
         immediate_result = state_resolution.canonical_state in CANONICAL_SUCCESS_STATES
         if not immediate_result:
+            # Inline polling for fast delivery (especially for images)
+            # Poll KIE API directly to check if result is ready quickly
+            inline_poll_attempts = int(os.getenv("INLINE_POLL_ATTEMPTS", "12"))
+            inline_poll_interval = float(os.getenv("INLINE_POLL_INTERVAL_SECONDS", "2.5"))
+            from app.integrations.kie_stub import get_kie_client_or_stub
+            from app.delivery.reconciler import deliver_job_result, SUCCESS_STATES
+            
+            kie_client = get_kie_client_or_stub()
+            poll_delivered = False
+            
+            for attempt in range(inline_poll_attempts):
+                await asyncio.sleep(inline_poll_interval)
+                try:
+                    status = await kie_client.get_task_status(task_id, correlation_id=correlation_id)
+                    if not status.get("ok"):
+                        continue
+                    poll_state = normalize_provider_state(status.get("state"))
+                    log_structured_event(
+                        correlation_id=correlation_id,
+                        request_id=request_id,
+                        user_id=user_id,
+                        chat_id=chat_id_value,
+                        action="INLINE_POLL",
+                        action_path="confirm_generate",
+                        model_id=model_id,
+                        task_id=task_id,
+                        job_id=job_id,
+                        stage="INLINE_POLL",
+                        outcome=poll_state.canonical_state,
+                        poll_attempt=attempt + 1,
+                        param={"raw_state": poll_state.raw_state},
+                    )
+                    if poll_state.canonical_state in SUCCESS_STATES:
+                        # Result is ready - deliver immediately
+                        job_data = {
+                            "user_id": user_id,
+                            "chat_id": chat_id_value,
+                            "task_id": task_id,
+                            "job_id": job_id,
+                            "model_id": model_id,
+                            "correlation_id": correlation_id,
+                            "request_id": request_id,
+                            "prompt_hash": prompt_hash,
+                            "sku_id": sku_id,
+                            "price": price,
+                            "is_free": is_free,
+                            "is_admin_user": is_admin_user,
+                            "message_id": accept_message_id,
+                            "prompt": prompt_value,
+                        }
+                        poll_delivered = await deliver_job_result(
+                            application.bot,
+                            storage_instance,
+                            job=job_data,
+                            status_record=status,
+                            notify_user=False,
+                            source="confirm_generate.inline_poll",
+                            get_user_language=get_user_language,
+                        )
+                        if poll_delivered:
+                            log_structured_event(
+                                correlation_id=correlation_id,
+                                request_id=request_id,
+                                user_id=user_id,
+                                chat_id=chat_id_value,
+                                action="INLINE_POLL_DELIVERED",
+                                action_path="confirm_generate",
+                                model_id=model_id,
+                                task_id=task_id,
+                                job_id=job_id,
+                                stage="INLINE_POLL",
+                                outcome="delivered",
+                                poll_attempt=attempt + 1,
+                            )
+                            break
+                    elif poll_state.canonical_state in {"failed", "canceled"}:
+                        # Task failed - stop polling
+                        break
+                except Exception as poll_exc:
+                    logger.warning("inline_poll_error task_id=%s attempt=%s error=%s", task_id, attempt + 1, poll_exc)
+                    continue
+            
+            if not poll_delivered:
+                # Result not ready yet - reconciler will handle delivery
+                log_structured_event(
+                    correlation_id=correlation_id,
+                    request_id=request_id,
+                    user_id=user_id,
+                    chat_id=chat_id_value,
+                    action="INLINE_POLL_TIMEOUT",
+                    action_path="confirm_generate",
+                    model_id=model_id,
+                    task_id=task_id,
+                    job_id=job_id,
+                    stage="INLINE_POLL",
+                    outcome="reconciler_fallback",
+                    poll_attempt=inline_poll_attempts,
+                )
             return ConversationHandler.END
 
         delivered = False
