@@ -678,39 +678,6 @@ models:
     notes: up to 15 secondss-720p
   description_ru: Генерация говорящего видео из аудиозаписи. Синхронизация губ и мимика
     автоматом.
-- id: midjourney/api
-  title_ru: Midjourney Text to Image
-  type: t2i
-  modes:
-  - unit: image
-    credits: 3.0
-    official_usd: 0.015
-    notes: relaxed
-  - unit: image
-    credits: 8.0
-    official_usd: 0.04
-    notes: fast
-  - unit: image
-    credits: 16.0
-    official_usd: 0.08
-    notes: turbo
-  - unit: image
-    credits: 3.0
-    official_usd: 0.015
-    notes: relaxed
-  - unit: image
-    credits: 8.0
-    official_usd: 0.04
-    notes: fast
-  - unit: image
-    credits: 16.0
-    official_usd: 0.08
-    notes: turbo
-  - unit: image
-    credits: 60.0
-    official_usd: 0.3
-  description_ru: Доступ к Midjourney через API. Генерация художественных изображений
-    по промпту.
 - id: sora-2-text-to-video
   title_ru: OpenAI Sora 2 Text to Video
   type: t2v
