@@ -9718,10 +9718,23 @@ async def show_free_tools_menu(query, user_id: int, user_lang: str, top_models: 
         top_models: Список топ-5 моделей из PricingService
     """
     try:
-        # Формируем сообщение
+        # Получаем полную информацию о бесплатных генерациях
+        snapshot = await get_free_counter_snapshot(user_id)
+        remaining = snapshot.get("remaining", 0)
+        limit_per_day = snapshot.get("limit_per_day", 5)
+        is_admin = snapshot.get("is_admin", False)
+        
+        # Формируем сообщение с понятной информацией о лимитах
+        if is_admin:
+            free_info = "🎁 <b>Админ:</b> безлимитные генерации (квота не расходуется)"
+        elif remaining > 0:
+            free_info = f"🎁 <b>Бесплатных осталось:</b> {remaining} из {limit_per_day} в день"
+        else:
+            free_info = f"🎁 <b>Бесплатных осталось:</b> 0 из {limit_per_day} в день\n💳 Пополните баланс для продолжения"
+        
         text = (
             "⚡ <b>FREE FAST TOOLS</b>\n\n"
-            f"🎁 <b>Бесплатные генерации:</b> {await get_user_free_generations_remaining(user_id)} шт.\n\n"
+            f"{free_info}\n\n"
             "Выберите бесплатную модель:\n\n"
         )
         

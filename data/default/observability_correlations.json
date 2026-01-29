@@ -79,10 +79,10 @@
     "correlation_id": "corr-test",
     "request_id": "corr-test",
     "task_id": "task-123",
-    "job_id": "job-e0e6b77b2ba9",
+    "job_id": "job-15cbddda2171",
     "user_id": 42,
     "model_id": "sora-2-text-to-video",
-    "updated_at_ms": 1769659945823,
+    "updated_at_ms": 1769661164187,
     "missing_actions": [],
     "source": "run_generation.task_created"
   },
@@ -90,8 +90,8 @@
     "correlation_id": "corr-test",
     "request_id": "corr-test",
     "task_id": "task-123",
-    "job_id": "job-e0e6b77b2ba9",
-    "updated_at_ms": 1769659945823
+    "job_id": "job-15cbddda2171",
+    "updated_at_ms": 1769661164187
   },
   "1fc88320-e38e-444e-9774-b5268137a1be": {
     "correlation_id": "1fc88320-e38e-444e-9774-b5268137a1be",
@@ -3734,5 +3734,41 @@
     "task_id": null,
     "job_id": "job-06a99e3982ca",
     "updated_at_ms": 1769659858144
+  },
+  "corr-1-9911-b67591ed": {
+    "correlation_id": "corr-1-9911-b67591ed",
+    "request_id": "corr-1-9911-b67591ed",
+    "task_id": "task-123",
+    "job_id": "job-d99556b523ec",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1769661016473,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-b67591ed": {
+    "correlation_id": "corr-1-9911-b67591ed",
+    "request_id": "corr-1-9911-b67591ed",
+    "task_id": "task-123",
+    "job_id": "job-d99556b523ec",
+    "updated_at_ms": 1769661016473
+  },
+  "a151cde8-e581-4d51-a277-1fbaa7d78b6e": {
+    "correlation_id": "a151cde8-e581-4d51-a277-1fbaa7d78b6e",
+    "request_id": "a151cde8-e581-4d51-a277-1fbaa7d78b6e",
+    "task_id": null,
+    "job_id": "job-f6ea0f728758",
+    "user_id": 1,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1769661175306,
+    "missing_actions": [],
+    "source": "run_generation.start"
+  },
+  "request:a151cde8-e581-4d51-a277-1fbaa7d78b6e": {
+    "correlation_id": "a151cde8-e581-4d51-a277-1fbaa7d78b6e",
+    "request_id": "a151cde8-e581-4d51-a277-1fbaa7d78b6e",
+    "task_id": null,
+    "job_id": "job-f6ea0f728758",
+    "updated_at_ms": 1769661175306
   }
 }
