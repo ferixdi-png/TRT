@@ -1440,30 +1440,6 @@ models:
         price_rub: 3.93
         params: {}
         notes: Pro
-  - id: elevenlabs/audio-isolation
-    skus:
-      - unit: second
-        price_rub: 0.16
-        params: {}
-        notes: Audio Isolation (per second)
-  - id: elevenlabs/sound-effect
-    skus:
-      - unit: second
-        price_rub: 0.19
-        params: {}
-        notes: Sound Effect V2 (per second)
-  - id: elevenlabs/speech-to-text
-    skus:
-      - unit: minute
-        price_rub: 2.75
-        params: {}
-        notes: Speech to Text (per minute)
-  - id: elevenlabs/text-to-speech
-    skus:
-      - unit: 1000_chars
-        price_rub: 4.71
-        params: {}
-        notes: Text to Speech turbo 2.5
   - id: grok/imagine
     skus:
       - unit: video
@@ -1578,12 +1554,6 @@ models:
           duration: "5"
           resolution: 1080p
         notes: text-to-video 5s 1080p
-  - id: suno/v5
-    skus:
-      - unit: request
-        price_rub: 9.43
-        params: {}
-        notes: Generate Music
   - id: midjourney/api
     skus:
       - unit: request
