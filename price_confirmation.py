@@ -23,6 +23,7 @@ async def show_price_confirmation(
     bonus_available: float = 0.0,
     discount: Optional[float] = None,
     correlation_id: Optional[str] = None,
+    is_admin: bool = False,
 ) -> Optional[Any]:
     """
     Показывает финальное подтверждение с детализацией цены.
@@ -158,6 +159,12 @@ async def show_price_confirmation(
             
             if is_free:
                 message_text += f"🎁 <b>БЕСПЛАТНО</b> (используется бесплатный лимит)\n"
+            elif is_admin:
+                message_text += (
+                    f"👑 <b>АДМИН БЕЗЛИМИТ</b>\n"
+                    f"💰 Стоимость модели: <b>{price:.2f} ₽</b>\n"
+                    f"✅ К списанию: <b>0.00 ₽</b>\n"
+                )
             else:
                 message_text += (
                     f"💰 Стоимость: <b>{price:.2f} ₽</b>\n"
@@ -181,7 +188,7 @@ async def show_price_confirmation(
                 f"Текущий: <b>{user_balance:.2f}</b> ₽\n"
             )
             
-            if not is_free:
+            if not is_free and not is_admin:
                 message_text += f"После: <b>{balance_after:.2f}</b> ₽\n"
                 message_text += f"Списание: <b>−{final_price:.2f}</b> ₽\n"
                 
@@ -375,6 +382,7 @@ def build_confirmation_text(
     discount: Optional[float] = None,
     user_balance: Optional[float] = None,
     correlation_id: Optional[str] = None,
+    is_admin: bool = False,
 ) -> str:
     """
     Строит текст подтверждения генерации с детализацией цены.
@@ -513,6 +521,12 @@ def build_confirmation_text(
             
             if is_free:
                 message_text += f"🎁 <b>БЕСПЛАТНО</b> (используется бесплатный лимит)\n"
+            elif is_admin:
+                message_text += (
+                    f"👑 <b>АДМИН БЕЗЛИМИТ</b>\n"
+                    f"💰 Стоимость модели: <b>{price:.2f} ₽</b>\n"
+                    f"✅ К списанию: <b>0.00 ₽</b>\n"
+                )
             else:
                 message_text += (
                     f"💰 Стоимость: <b>{price:.2f} ₽</b>\n"
@@ -536,7 +550,7 @@ def build_confirmation_text(
                 f"Текущий: <b>{user_balance:.2f}</b> ₽\n"
             )
             
-            if not is_free:
+            if not is_free and not is_admin:
                 message_text += f"После: <b>{balance_after:.2f}</b> ₽\n"
                 message_text += f"Списание: <b>−{final_price:.2f}</b> ₽\n"
                 
