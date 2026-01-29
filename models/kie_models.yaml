@@ -1655,23 +1655,6 @@ models:
         - '21:9'
         - auto
     model_mode: image_edit
-  elevenlabs/speech-to-text:
-    model_type: speech_to_text
-    input:
-      audio_url:
-        type: string
-        required: true
-      language_code:
-        type: string
-        required: false
-        max: 500
-      tag_audio_events:
-        type: boolean
-        required: false
-      diarize:
-        type: boolean
-        required: false
-    model_mode: speech_to_text
   grok/imagine:
     model_type: text_to_image
     input:
@@ -1729,6 +1712,52 @@ models:
       prompt:
         type: string
         required: true
+      inputImage:
+        type: string
+        required: false
+        description: URL of input image for editing mode
+      aspectRatio:
+        type: enum
+        required: false
+        values:
+          - '21:9'
+          - '16:9'
+          - '4:3'
+          - '1:1'
+          - '3:4'
+          - '9:16'
+        default: '16:9'
+      model:
+        type: enum
+        required: false
+        values:
+          - flux-kontext-pro
+          - flux-kontext-max
+        default: flux-kontext-pro
+      outputFormat:
+        type: enum
+        required: false
+        values:
+          - jpeg
+          - png
+        default: jpeg
+      promptUpsampling:
+        type: boolean
+        required: false
+        default: false
+      enableTranslation:
+        type: boolean
+        required: false
+        default: true
+      safetyTolerance:
+        type: integer
+        required: false
+        min: 0
+        max: 6
+        default: 2
+      watermark:
+        type: string
+        required: false
     model_mode: text_to_image
   google/veo-3.1:
     model_type: text_to_video
@@ -1830,27 +1859,6 @@ models:
         - 480p
         - 720p
     model_mode: lip_sync
-  elevenlabs/audio-isolation:
-    model_type: audio_to_audio
-    input:
-      audio_url:
-        type: string
-        required: true
-    model_mode: audio_to_audio
-  elevenlabs/sound-effect:
-    model_type: text_to_image
-    input:
-      prompt:
-        type: string
-        required: true
-    model_mode: text_to_image
-  elevenlabs/text-to-speech:
-    model_type: text_to_speech
-    input:
-      text:
-        type: string
-        required: true
-    model_mode: text_to_speech
   google/nanobanana-gemini-2.5-flash:
     model_type: text_to_image
     input:
@@ -1877,17 +1885,92 @@ models:
         - 720p
         - 1080p
     model_mode: text_to_video
-  suno/v5:
-    model_type: text_to_image
-    input:
-      prompt:
-        type: string
-        required: true
-    model_mode: text_to_image
   midjourney/api:
     model_type: text_to_image
     input:
       prompt:
         type: string
         required: true
+        max: 2000
+      taskType:
+        type: enum
+        required: true
+        values:
+          - mj_txt2img
+          - mj_img2img
+          - mj_video
+          - mj_omni_reference
+        default: mj_txt2img
+      speed:
+        type: enum
+        required: false
+        values:
+          - relaxed
+          - fast
+          - turbo
+        default: fast
+      fileUrl:
+        type: string
+        required: false
+        description: Input image URL for image-to-image
+      fileUrls:
+        type: array
+        item_type: string
+        required: false
+        description: Input image URLs array
+      aspectRatio:
+        type: enum
+        required: false
+        values:
+          - '1:2'
+          - '9:16'
+          - '2:3'
+          - '3:4'
+          - '5:6'
+          - '6:5'
+          - '4:3'
+          - '3:2'
+          - '1:1'
+          - '16:9'
+          - '2:1'
+        default: '16:9'
+      version:
+        type: enum
+        required: false
+        values:
+          - '7'
+          - '6.1'
+          - '6'
+          - '5.2'
+          - '5.1'
+          - niji6
+          - niji7
+        default: '7'
+      variety:
+        type: integer
+        required: false
+        min: 0
+        max: 100
+        description: Controls diversity, increment by 5
+      stylization:
+        type: integer
+        required: false
+        min: 0
+        max: 1000
+        description: Artistic style intensity
+      weirdness:
+        type: integer
+        required: false
+        min: 0
+        max: 3000
+        description: Creativity and uniqueness
+      ow:
+        type: integer
+        required: false
+        min: 1
+        max: 1000
+        description: Omni intensity for mj_omni_reference
+      waterMark:
+        type: string
+        required: false
     model_mode: text_to_image
