@@ -19363,24 +19363,19 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             if price_depends:
                 display_values = [value for value in enum_values if str(value) in param_price_map]
                 if not display_values:
-                    blocked_text = (
-                        "⛔️ <b>Нет цены для доступных вариантов</b>"
-                        if user_lang == "ru"
-                        else "⛔️ <b>No price for available variants</b>"
+                    # Fallback: try without current_params filter
+                    price_depends_fallback, param_price_map_fallback = _get_param_price_variants(
+                        model_id,
+                        param_name,
+                        {},
                     )
-                    blocked_keyboard = InlineKeyboardMarkup([
-                        [
-                            InlineKeyboardButton(t('btn_back', lang=user_lang), callback_data="back_to_previous_step"),
-                            InlineKeyboardButton(t('btn_home', lang=user_lang), callback_data="back_to_menu"),
-                        ]
-                    ])
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=blocked_text,
-                        reply_markup=blocked_keyboard,
-                        parse_mode="HTML",
-                    )
-                    return INPUTTING_PARAMS
+                    if price_depends_fallback and param_price_map_fallback:
+                        param_price_map = param_price_map_fallback
+                        display_values = [value for value in enum_values if str(value) in param_price_map]
+                    if not display_values:
+                        # Still no values - show all enum values without prices
+                        display_values = list(enum_values)
+                        price_depends = False
 
             price_variants_text = ""
             if price_depends:
