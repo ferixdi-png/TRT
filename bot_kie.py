@@ -1483,15 +1483,18 @@ def _gen_type_to_model_type(gen_type: str) -> str:
         'image-to-video': 'image_to_video',
         'image-to-image': 'image_to_image',
         'image-edit': 'image_edit',
-        'upscale': 'image_upscale',
+        'upscale': 'upscale',
         'video-upscale': 'video_upscale',
         'video-edit': 'video_edit',
+        'video-editing': 'video_editing',
         'speech-to-video': 'speech_to_video',
         'text-to-speech': 'text_to_speech',
         'speech-to-text': 'speech_to_text',
         'text-to-music': 'text_to_music',
         'outpaint': 'outpaint',
-        'audio-to-audio': 'audio_to_audio',
+        'audio-to-audio': 'audio',
+        'lip-sync': 'lip_sync',
+        'text-to-text': 'text',
     }
     return reverse_mapping.get(gen_type, gen_type.replace("-", "_"))
 
@@ -2524,7 +2527,7 @@ def _determine_primary_input(
         for param_name, param_info in input_params.items():
             if _get_media_kind(param_name) == "image" and param_info.get("required", False):
                 return {"type": "image", "param": param_name}
-    if model_type in {"speech_to_text", "audio_to_audio", "speech_to_video"}:
+    if model_type in {"speech_to_text", "audio_to_audio", "speech_to_video", "lip_sync"}:
         if audio_param:
             return {"type": "audio", "param": audio_param}
     if model_type in {"video_editing"}:
@@ -14771,17 +14774,23 @@ async def _button_callback_impl(
                 # Формируем меню спец-инструментов с локализацией
                 if user_lang == 'ru':
                     special_tools_keyboard = [
-                        [InlineKeyboardButton("🎵 Аудио/Музыка", callback_data="gen_type:audio-to-audio")],
-                        [InlineKeyboardButton("✍️ Работа с текстом", callback_data="gen_type:text-to-text")],
+                        [InlineKeyboardButton("✍️ Текст в изображение", callback_data="gen_type:text-to-image")],
                         [InlineKeyboardButton("🖼️ Улучшение изображения", callback_data="gen_type:upscale")],
+                        [InlineKeyboardButton("🎬 Видео-инструменты", callback_data="gen_type:video-editing")],
+                        [InlineKeyboardButton("🎤 Видео из речи", callback_data="gen_type:speech-to-video")],
+                        [InlineKeyboardButton("👤 Аватары/липсинк", callback_data="gen_type:lip-sync")],
+                        [InlineKeyboardButton("🖼️ Расширение canvas", callback_data="gen_type:outpaint")],
                         [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
                     ]
                     menu_text = "🧰 <b>Спец-инструменты</b>\n\nДополнительные инструменты для работы с контентом:"
                 else:
                     special_tools_keyboard = [
-                        [InlineKeyboardButton("🎵 Audio/Music", callback_data="gen_type:audio-to-audio")],
-                        [InlineKeyboardButton("✍️ Text Processing", callback_data="gen_type:text-to-text")],
+                        [InlineKeyboardButton("✍️ Text to Image", callback_data="gen_type:text-to-image")],
                         [InlineKeyboardButton("🖼️ Image Enhancement", callback_data="gen_type:upscale")],
+                        [InlineKeyboardButton("🎬 Video Tools", callback_data="gen_type:video-editing")],
+                        [InlineKeyboardButton("🎤 Speech to Video", callback_data="gen_type:speech-to-video")],
+                        [InlineKeyboardButton("👤 Avatars/LipSync", callback_data="gen_type:lip-sync")],
+                        [InlineKeyboardButton("🖼️ Canvas Outpaint", callback_data="gen_type:outpaint")],
                         [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
                     ]
                     menu_text = "🧰 <b>Special Tools</b>\n\nAdditional tools for content creation:"
