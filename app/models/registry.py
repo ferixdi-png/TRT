@@ -660,15 +660,18 @@ def get_models_by_generation_type(gen_type: str) -> List[Dict[str, Any]]:
         'image-to-video': 'image_to_video',
         'image-to-image': 'image_to_image',
         'image-edit': 'image_edit',
-        'upscale': 'image_upscale',
+        'upscale': 'upscale',
         'video-upscale': 'video_upscale',
         'video-edit': 'video_edit',
+        'video-editing': 'video_editing',
         'speech-to-video': 'speech_to_video',
         'text-to-speech': 'text_to_speech',
         'speech-to-text': 'speech_to_text',
         'text-to-music': 'text_to_music',
         'outpaint': 'outpaint',
-        'audio-to-audio': 'audio_to_audio',
+        'audio-to-audio': 'audio',
+        'lip-sync': 'lip_sync',
+        'text-to-text': 'text',
     }
     model_type = reverse_mapping.get(gen_type, gen_type.replace('-', '_'))
     return get_models_by_model_type(model_type)
