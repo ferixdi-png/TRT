@@ -4188,9 +4188,13 @@ def _build_kie_request_failed_message(
         )
     if status == 500:
         return (
-            "🔧 <b>Временные неполадки</b>\n\nПопробуйте позже"
+            "⚠️ <b>Ошибка на стороне провайдера</b>\n\n"
+            "Сервис генерации временно недоступен.\n"
+            "Пожалуйста, повторите попытку через несколько минут."
             if user_lang == "ru"
-            else "🔧 <b>Temporary issues</b>\n\nTry again later"
+            else "⚠️ <b>Provider Error</b>\n\n"
+            "Generation service is temporarily unavailable.\n"
+            "Please try again in a few minutes."
         )
     return (
         "🔧 <b>Не удалось запустить</b>\n\nПопробуйте позже"
@@ -25178,13 +25182,27 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             # Уведомляем пользователя об ошибке
                             try:
                                 user_lang = get_user_language(user_id)
-                                error_msg = (
-                                    "❌ <b>Сбой генерации</b>\n\n"
-                                    f"<code>{correlation_id}</code>"
-                                    if user_lang == "ru" else
-                                    "❌ <b>Generation Failed</b>\n\n"
-                                    f"<code>{correlation_id}</code>"
-                                )
+                                # Понятное сообщение в зависимости от типа ошибки
+                                if fail_code in ("500", 500, "INTERNAL_ERROR"):
+                                    error_msg = (
+                                        "⚠️ <b>Ошибка на стороне провайдера</b>\n\n"
+                                        "Сервис генерации временно недоступен.\n"
+                                        "Пожалуйста, повторите попытку через несколько минут.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                        if user_lang == "ru" else
+                                        "⚠️ <b>Provider Error</b>\n\n"
+                                        "Generation service is temporarily unavailable.\n"
+                                        "Please try again in a few minutes.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                    )
+                                else:
+                                    error_msg = (
+                                        "❌ <b>Сбой генерации</b>\n\n"
+                                        f"<code>{correlation_id}</code>"
+                                        if user_lang == "ru" else
+                                        "❌ <b>Generation Failed</b>\n\n"
+                                        f"<code>{correlation_id}</code>"
+                                    )
                                 await bot_instance.send_message(
                                     chat_id=chat_id_value,
                                     text=error_msg,
