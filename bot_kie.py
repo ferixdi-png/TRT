@@ -25129,7 +25129,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                 storage_instance,
                                 job=job_data,
                                 status_record=status,
-                                notify_user=False,
+                                notify_user=True,
                                 source="confirm_generate.inline_poll",
                                 get_user_language=get_user_language,
                             )
@@ -25150,10 +25150,47 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                 )
                                 return
                         elif poll_state.canonical_state in {"failed", "canceled"}:
+                            # Уведомляем пользователя об ошибке
+                            try:
+                                user_lang = get_user_language(user_id)
+                                error_msg = (
+                                    "❌ <b>Сбой генерации</b>\n\n"
+                                    f"<code>{correlation_id}</code>"
+                                    if user_lang == "ru" else
+                                    "❌ <b>Generation Failed</b>\n\n"
+                                    f"<code>{correlation_id}</code>"
+                                )
+                                await bot_instance.send_message(
+                                    chat_id=chat_id_value,
+                                    text=error_msg,
+                                    parse_mode="HTML"
+                                )
+                            except Exception as notify_exc:
+                                logger.warning("Failed to notify user about generation failure: %s", notify_exc)
                             return
                     except Exception as poll_exc:
                         logger.warning("inline_poll_error task_id=%s attempt=%s error=%s", task_id, attempt + 1, poll_exc)
                         continue
+                
+                # Уведомляем пользователя о таймауте
+                try:
+                    user_lang = get_user_language(user_id)
+                    timeout_msg = (
+                        "⏳ <b>Генерация занимает больше времени</b>\n\n"
+                        "Задача всё ещё обрабатывается. Результат придет позже.\n"
+                        f"ID: {correlation_id}"
+                        if user_lang == "ru" else
+                        "⏳ <b>Generation taking longer</b>\n\n"
+                        "Task is still processing. Result will arrive later.\n"
+                        f"ID: {correlation_id}"
+                    )
+                    await bot_instance.send_message(
+                        chat_id=chat_id_value,
+                        text=timeout_msg,
+                        parse_mode="HTML"
+                    )
+                except Exception as notify_exc:
+                    logger.warning("Failed to notify user about poll timeout: %s", notify_exc)
                 
                 log_structured_event(
                     correlation_id=correlation_id,
