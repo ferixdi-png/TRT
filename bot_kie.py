@@ -6403,20 +6403,28 @@ def get_all_users() -> list:
     
     # From user registry (primary source - all users who used /start)
     registry = load_json_file(USER_REGISTRY_FILE, {})
-    user_ids.update([int(uid) for uid in registry.keys() if uid.isdigit()])
+    registry_users = [int(uid) for uid in registry.keys() if uid.isdigit()]
+    user_ids.update(registry_users)
+    logger.info("GET_ALL_USERS source=user_registry count=%d keys=%s", len(registry_users), list(registry.keys())[:5])
     
     # From user balances
     balances = load_json_file(BALANCES_FILE, {})
-    user_ids.update([int(uid) for uid in balances.keys() if uid.isdigit()])
+    balance_users = [int(uid) for uid in balances.keys() if uid.isdigit()]
+    user_ids.update(balance_users)
+    logger.info("GET_ALL_USERS source=balances count=%d keys=%s", len(balance_users), list(balances.keys())[:5])
     
     # From payments
     payments = load_json_file(PAYMENTS_FILE, {})
+    payment_users = []
     for payment in payments.values():
         if 'user_id' in payment:
+            payment_users.append(payment['user_id'])
             user_ids.add(payment['user_id'])
+    logger.info("GET_ALL_USERS source=payments count=%d", len(payment_users))
     
     # From referrals
     referrals = get_referrals_data()
+    referral_users = 0
     events = referrals.get("events")
     if isinstance(events, dict):
         for event in events.values():
@@ -6426,21 +6434,28 @@ def get_all_users() -> list:
                 value = event.get(key)
                 if isinstance(value, int):
                     user_ids.add(value)
+                    referral_users += 1
                 elif isinstance(value, str) and value.isdigit():
                     user_ids.add(int(value))
+                    referral_users += 1
     else:
         for user_key in referrals.keys():
             if isinstance(user_key, str) and user_key.isdigit():
                 user_ids.add(int(user_key))
+                referral_users += 1
             referred_users = referrals.get(user_key, {}).get('referred_users', [])
             user_ids.update(referred_users)
+            referral_users += len(referred_users)
+    logger.info("GET_ALL_USERS source=referrals count=%d", referral_users)
     
     # From free generations
     free_gens = get_free_generations_data()
-    for user_key in free_gens.keys():
-        if user_key.isdigit():
-            user_ids.add(int(user_key))
+    free_gen_users = [uid for uid in free_gens.keys() if uid.isdigit()]
+    for user_key in free_gen_users:
+        user_ids.add(int(user_key))
+    logger.info("GET_ALL_USERS source=free_generations count=%d keys=%s", len(free_gen_users), free_gen_users[:5])
     
+    logger.info("GET_ALL_USERS total_unique=%d", len(user_ids))
     return sorted(list(user_ids))
 
 
@@ -6957,14 +6972,17 @@ def get_extended_admin_stats() -> dict:
     import time
     from datetime import datetime, timedelta
     
+    logger.info("ADMIN_STATS_CALC_START")
+    
     now = time.time()
     today_start = int((datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).timestamp())
     week_start = int((datetime.now() - timedelta(days=7)).timestamp())
     month_start = int((datetime.now() - timedelta(days=30)).timestamp())
     
-    # Get all users
+    # Get all users with detailed logging
     all_users = get_all_users()
     total_users = len(all_users)
+    logger.info("ADMIN_STATS_USERS total_users=%d user_ids=%s", total_users, all_users[:10] if all_users else [])
     
     # Get active users (users with activity in period)
     history = load_json_file(GENERATIONS_HISTORY_FILE, {})
@@ -11260,10 +11278,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_lang = get_user_language(user_id) if user_id else "ru"
             data = query.data
             
-            # Логируем нажатие на кнопку для отладки
+            # CRITICAL: Log EVERY button click for debugging
+            correlation_id = ensure_correlation_id(update, context)
             logger.info(
-                f"🔘 BUTTON_CLICK user_id={user_id} callback_data={data} "
-                f"message_id={query.message.message_id if query.message else None}"
+                "BUTTON_CALLBACK_RECEIVED user_id=%s callback_data=%s message_id=%s correlation_id=%s",
+                user_id, data, query.message.message_id if query.message else None, correlation_id
+            )
+            log_structured_event(
+                correlation_id=correlation_id,
+                user_id=user_id,
+                chat_id=update.effective_chat.id if update.effective_chat else None,
+                update_id=update_id,
+                action="BUTTON_CLICK",
+                callback_data=data,
+                outcome="received",
             )
             
             # Простой читаемый лог для быстрого анализа
@@ -15067,6 +15095,11 @@ async def _button_callback_impl(
                 return ConversationHandler.END
 
             if data == "admin_stats":
+                logger.info("ADMIN_STATS_BUTTON_CLICKED user_id=%s", user_id)
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
                 await render_admin_panel(query, context, is_callback=True)
                 return ConversationHandler.END
             
