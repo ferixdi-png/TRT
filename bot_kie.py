@@ -14778,7 +14778,6 @@ async def _button_callback_impl(
                 # Формируем меню спец-инструментов с локализацией
                 if user_lang == 'ru':
                     special_tools_keyboard = [
-                        [InlineKeyboardButton("✍️ Текст в изображение", callback_data="gen_type:text-to-image")],
                         [InlineKeyboardButton("🖼️ Улучшение изображения", callback_data="gen_type:upscale")],
                         [InlineKeyboardButton("🎬 Видео-инструменты", callback_data="gen_type:video-editing")],
                         [InlineKeyboardButton("🎤 Видео из речи", callback_data="gen_type:speech-to-video")],
@@ -14789,7 +14788,6 @@ async def _button_callback_impl(
                     menu_text = "🧰 <b>Спец-инструменты</b>\n\nДополнительные инструменты для работы с контентом:"
                 else:
                     special_tools_keyboard = [
-                        [InlineKeyboardButton("✍️ Text to Image", callback_data="gen_type:text-to-image")],
                         [InlineKeyboardButton("🖼️ Image Enhancement", callback_data="gen_type:upscale")],
                         [InlineKeyboardButton("🎬 Video Tools", callback_data="gen_type:video-editing")],
                         [InlineKeyboardButton("🎤 Speech to Video", callback_data="gen_type:speech-to-video")],
