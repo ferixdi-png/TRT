@@ -180,6 +180,16 @@ class PostgresStorage(BaseStorage):
                     self.partner_id,
                     filename,
                 )
+                # AUDIT: Log critical files
+                if filename == "user_registry.json":
+                    if row:
+                        payload = row[0]
+                        keys_count = len(payload) if isinstance(payload, dict) else 0
+                        logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=true keys=%d", 
+                                   filename, self.partner_id, keys_count)
+                    else:
+                        logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=false", 
+                                   filename, self.partner_id)
                 if not row:
                     return {}
                 payload = row[0]
