@@ -12320,6 +12320,10 @@ async def _button_callback_impl(
                 session = ensure_session_cached(context, session_store, user_id, update_id)
                 for key in ("waiting_for", "current_param", "param_history", "params"):
                     session.pop(key, None)
+                # CRITICAL: Reset ui_context and welcome_version to force menu re-render
+                # This ensures back_to_menu ALWAYS shows the main menu regardless of current screen
+                session.pop("ui_context", None)
+                session.pop("welcome_version", None)
                 _clear_user_task_context(user_id, reason="back_to_menu", allow_mismatch=True)
                 await ensure_main_menu(update, context, source="back", correlation_id=correlation_id, prefer_edit=True)
             except Exception as exc:
@@ -27580,6 +27584,10 @@ async def _register_all_handlers_internal(application: Application):
         except Exception as e:
             logger.warning("BACK_TO_MENU_FALLBACK_ANSWER_FAILED error=%s", e)
         correlation_id = ensure_correlation_id(update, context)
+        # CRITICAL: Reset ui_context and welcome_version to force menu re-render
+        if user_id and user_id in user_sessions:
+            user_sessions[user_id].pop("ui_context", None)
+            user_sessions[user_id].pop("welcome_version", None)
         try:
             await ensure_main_menu(update, context, source="back_to_menu_fallback", correlation_id=correlation_id, prefer_edit=True)
         except Exception as exc:
