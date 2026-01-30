@@ -10207,6 +10207,7 @@ async def show_main_menu(
             previous_welcome_version == welcome_hash
             and update.callback_query
             and prefer_edit
+            and ui_context_before == UI_CONTEXT_MAIN_MENU
         ):
             try:
                 await update.callback_query.answer()
