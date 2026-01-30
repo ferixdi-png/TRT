@@ -4863,6 +4863,12 @@ async def handle_referral_info(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception:
             pass
         reset_session_on_navigation(user_id, reason="referral_info")
+        
+        # CRITICAL: Set ui_context to REFERRAL_INFO so back_to_menu knows we're not in MAIN_MENU
+        if user_id in user_sessions:
+            user_sessions[user_id]["ui_context"] = "REFERRAL_INFO"
+            logger.info("🎯 REFERRAL_INFO_UI_CONTEXT_SET user_id=%s ui_context=REFERRAL_INFO", user_id)
+        
         referral_text, metrics = await _build_referral_info_text(user_id, user_lang)
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton(t("btn_back_to_menu", lang=user_lang), callback_data="back_to_menu")]]
@@ -7087,6 +7093,11 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         else:
             await update.message.reply_text("❌ Эта команда доступна только администратору.")
         return
+
+    # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+    if user_id in user_sessions:
+        user_sessions[user_id]["ui_context"] = "ADMIN_PANEL"
+        logger.info("🎯 ADMIN_PANEL_UI_CONTEXT_SET user_id=%s ui_context=ADMIN_PANEL", user_id)
 
     generation_types = await _await_with_timeout(
         asyncio.to_thread(get_generation_types),
@@ -9653,6 +9664,14 @@ async def ensure_main_menu(
     prefer_edit: bool = True,
 ) -> dict:
     """Гарантирует MAIN_MENU и якорную клавиатуру после любых выходов."""
+    user_id = update.effective_user.id if update.effective_user else None
+    
+    # CRITICAL: Log EVERY call to ensure_main_menu
+    logger.info(
+        "🏠 ENSURE_MAIN_MENU_CALLED user_id=%s source=%s correlation_id=%s prefer_edit=%s",
+        user_id, source, correlation_id, prefer_edit
+    )
+    
     result = await show_main_menu(
         update,
         context,
@@ -9933,6 +9952,13 @@ async def show_main_menu(
     """Показывает единое главное меню для всех входов."""
     correlation_id = correlation_id or ensure_correlation_id(update, context)
     menu_start_ts = time.monotonic()
+    
+    # CRITICAL: Log EVERY call to show_main_menu
+    _user_id_early = update.effective_user.id if update.effective_user else None
+    logger.info(
+        "🏠 SHOW_MAIN_MENU_CALLED user_id=%s source=%s correlation_id=%s prefer_edit=%s",
+        _user_id_early, source, correlation_id, prefer_edit
+    )
     dedup_result = _safe_menu_renderer.get_if_duplicate(correlation_id, update.update_id)
     if dedup_result:
         log_structured_event(
@@ -10231,6 +10257,12 @@ async def show_main_menu(
             and prefer_edit
             and ui_context_before == UI_CONTEXT_MAIN_MENU
         ):
+            # CRITICAL: Log when we SKIP rendering
+            logger.info(
+                "⏭️ MENU_RENDER_SKIP user_id=%s source=%s ui_context_before=%s previous_welcome_version=%s welcome_hash=%s",
+                user_id, source, ui_context_before, previous_welcome_version, welcome_hash
+            )
+            
             try:
                 await update.callback_query.answer()
             except Exception:
@@ -11996,6 +12028,11 @@ async def _button_callback_impl(
                 await query.answer(t('error_already_claimed', lang=user_lang), show_alert=True)
                 return ConversationHandler.END
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "CLAIM_GIFT"
+                logger.info("🎯 CLAIM_GIFT_UI_CONTEXT_SET user_id=%s ui_context=CLAIM_GIFT", user_id)
+            
             user_lang = get_user_language(user_id)
             
             # Show initial spinning message
@@ -12337,26 +12374,43 @@ async def _button_callback_impl(
         
         if data == "back_to_menu":
             # Answer callback immediately to show button was pressed
-            logger.info("BACK_TO_MENU_HANDLER_REACHED user_id=%s data=%s", user_id, data)
+            logger.info("🔙 BACK_TO_MENU_HANDLER_REACHED user_id=%s data=%s update_id=%s", user_id, data, update_id)
             try:
                 await query.answer()
+                logger.info("🔙 BACK_TO_MENU_ANSWER_OK user_id=%s", user_id)
             except Exception as ans_err:
-                logger.warning("BACK_TO_MENU_ANSWER_FAILED user_id=%s error=%s", user_id, ans_err)
+                logger.warning("🔙 BACK_TO_MENU_ANSWER_FAILED user_id=%s error=%s", user_id, ans_err)
             correlation_id = ensure_correlation_id(update, context)
             partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
             try:
                 session = ensure_session_cached(context, session_store, user_id, update_id)
+                ui_context_before = session.get("ui_context")
+                welcome_version_before = session.get("welcome_version")
+                
+                logger.info(
+                    "🔙 BACK_TO_MENU_SESSION_BEFORE user_id=%s ui_context=%s welcome_version=%s",
+                    user_id, ui_context_before, welcome_version_before
+                )
+                
                 for key in ("waiting_for", "current_param", "param_history", "params"):
                     session.pop(key, None)
                 # CRITICAL: Reset ui_context and welcome_version to force menu re-render
                 # This ensures back_to_menu ALWAYS shows the main menu regardless of current screen
                 session.pop("ui_context", None)
                 session.pop("welcome_version", None)
+                
+                logger.info("🔙 BACK_TO_MENU_SESSION_CLEARED user_id=%s calling ensure_main_menu", user_id)
+                
                 _clear_user_task_context(user_id, reason="back_to_menu", allow_mismatch=True)
-                await ensure_main_menu(update, context, source="back", correlation_id=correlation_id, prefer_edit=True)
+                result = await ensure_main_menu(update, context, source="back", correlation_id=correlation_id, prefer_edit=True)
+                
+                logger.info(
+                    "🔙 BACK_TO_MENU_COMPLETED user_id=%s result_keys=%s",
+                    user_id, list(result.keys()) if result else None
+                )
             except Exception as exc:
                 logger.error(
-                    "BACK_TO_MENU_FAILED handler=back_to_menu user_id=%s partner_id=%s correlation_id=%s error=%s",
+                    "🔙 BACK_TO_MENU_FAILED handler=back_to_menu user_id=%s partner_id=%s correlation_id=%s error=%s",
                     user_id,
                     partner_id,
                     correlation_id,
@@ -14648,6 +14702,11 @@ async def _button_callback_impl(
                 pass
             reset_session_on_navigation(user_id, reason="fast_tools")
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "FAST_TOOLS"
+                logger.info("🎯 FAST_TOOLS_UI_CONTEXT_SET user_id=%s ui_context=FAST_TOOLS", user_id)
+            
             # Сохраняем source для проверки бесплатного доступа
             session = user_sessions.get(user_id, {})
             if session:
@@ -14690,6 +14749,11 @@ async def _button_callback_impl(
             except:
                 pass
             reset_session_on_navigation(user_id, reason="special_tools")
+            
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "SPECIAL_TOOLS"
+                logger.info("🎯 SPECIAL_TOOLS_UI_CONTEXT_SET user_id=%s ui_context=SPECIAL_TOOLS", user_id)
             
             # Show special tools menu (audio, text, upscale, etc.)
             try:
@@ -14734,6 +14798,11 @@ async def _button_callback_impl(
                 pass
             reset_session_on_navigation(user_id, reason="check_balance")
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "CHECK_BALANCE"
+                logger.info("🎯 CHECK_BALANCE_UI_CONTEXT_SET user_id=%s ui_context=CHECK_BALANCE", user_id)
+            
             # Check user's personal balance (используем helpers для устранения дублирования)
             try:
                 user_lang = get_user_language(user_id)
@@ -14771,6 +14840,11 @@ async def _button_callback_impl(
                 await query.answer()
             except:
                 pass
+            
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "TOPUP_BALANCE"
+                logger.info("🎯 TOPUP_BALANCE_UI_CONTEXT_SET user_id=%s ui_context=TOPUP_BALANCE", user_id)
             
             # Check if user is blocked
             user_lang = get_user_language(user_id)
@@ -14897,12 +14971,15 @@ async def _button_callback_impl(
                     f'💳 <b>CHOOSE PAYMENT METHOD:</b>'
                 )
             
-            # Store amount in session
-            user_sessions[user_id] = {
-                'topup_amount': amount,
-                'stars_amount': stars_amount,
-                'waiting_for': 'payment_method'
-            }
+            # Store amount in session (preserve existing keys like ui_context)
+            if user_id not in user_sessions:
+                user_sessions[user_id] = {}
+            user_sessions[user_id]['topup_amount'] = amount
+            user_sessions[user_id]['stars_amount'] = stars_amount
+            user_sessions[user_id]['waiting_for'] = 'payment_method'
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            user_sessions[user_id]["ui_context"] = "TOPUP_PAYMENT_METHOD"
+            logger.info("🎯 TOPUP_PAYMENT_METHOD_UI_CONTEXT_SET user_id=%s ui_context=TOPUP_PAYMENT_METHOD", user_id)
             
             keyboard = [
                 [InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")],
@@ -14995,11 +15072,15 @@ async def _button_callback_impl(
                 return ConversationHandler.END
 
             amount = session.get("topup_amount", amount)
-            user_sessions[user_id] = {
-                'topup_amount': amount,
-                'waiting_for': 'payment_screenshot',
-                'payment_method': 'sbp'
-            }
+            # Preserve existing keys like ui_context
+            if user_id not in user_sessions:
+                user_sessions[user_id] = {}
+            user_sessions[user_id]['topup_amount'] = amount
+            user_sessions[user_id]['waiting_for'] = 'payment_screenshot'
+            user_sessions[user_id]['payment_method'] = 'sbp'
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            user_sessions[user_id]["ui_context"] = "PAY_SBP_SCREENSHOT"
+            logger.info("🎯 PAY_SBP_UI_CONTEXT_SET user_id=%s ui_context=PAY_SBP_SCREENSHOT", user_id)
             
             payment_details = get_payment_details()
             keyboard = [
@@ -15033,6 +15114,10 @@ async def _button_callback_impl(
         
         if data == "topup_custom":
             # User wants to enter custom amount
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "TOPUP_CUSTOM"
+                logger.info("🎯 TOPUP_CUSTOM_UI_CONTEXT_SET user_id=%s ui_context=TOPUP_CUSTOM", user_id)
             await query.edit_message_text(
                 f'💰 <b>ВВЕДИ СВОЮ СУММУ</b> 💰\n\n'
                 f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -15772,6 +15857,11 @@ async def _button_callback_impl(
             except:
                 pass
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "TUTORIAL"
+                logger.info("🎯 TUTORIAL_UI_CONTEXT_SET user_id=%s ui_context=TUTORIAL", user_id)
+            
             try:
                 # Interactive tutorial for new users
                 tutorial_text = (
@@ -16130,6 +16220,11 @@ async def _button_callback_impl(
             except:
                 pass
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "HELP_MENU"
+                logger.info("🎯 HELP_MENU_UI_CONTEXT_SET user_id=%s ui_context=HELP_MENU", user_id)
+            
             # Get user language
             user_lang = get_user_language(user_id)
             is_new = await is_new_user_async(user_id)
@@ -16303,6 +16398,11 @@ async def _button_callback_impl(
             except:
                 pass
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "CHANGE_LANGUAGE"
+                logger.info("🎯 CHANGE_LANGUAGE_UI_CONTEXT_SET user_id=%s ui_context=CHANGE_LANGUAGE", user_id)
+            
             user_lang = get_user_language(user_id)
             
             if user_lang == 'ru':
@@ -16371,6 +16471,11 @@ async def _button_callback_impl(
             except:
                 pass
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "SUPPORT_CONTACT"
+                logger.info("🎯 SUPPORT_CONTACT_UI_CONTEXT_SET user_id=%s ui_context=SUPPORT_CONTACT", user_id)
+            
             # Get user language
             user_lang = get_user_language(user_id)
             support_info = get_support_contact()
@@ -16414,6 +16519,11 @@ async def _button_callback_impl(
                 await query.answer()
             except:
                 pass
+            
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "COPY_BOT"
+                logger.info("🎯 COPY_BOT_UI_CONTEXT_SET user_id=%s ui_context=COPY_BOT", user_id)
             
             # Get user language
             user_lang = get_user_language(user_id)
@@ -16472,6 +16582,11 @@ async def _button_callback_impl(
                 await query.answer()
             except:
                 pass
+            
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "MY_GENERATIONS"
+                logger.info("🎯 MY_GENERATIONS_UI_CONTEXT_SET user_id=%s ui_context=MY_GENERATIONS", user_id)
             
             # Show user's generation history
             history = get_user_generations_history(user_id, limit=20)
@@ -17059,6 +17174,11 @@ async def _button_callback_impl(
             except:
                 pass
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "MODEL_CARD"
+                logger.info("🎯 MODEL_CARD_UI_CONTEXT_SET user_id=%s ui_context=MODEL_CARD", user_id)
+            
             # Используем новый каталог
             user_lang = get_user_language(user_id)
             
@@ -17480,6 +17600,11 @@ async def _button_callback_impl(
                 await query.answer()
             except:
                 pass
+            
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "MODEL_CARD"
+                logger.info("🎯 MODEL_CARD_UI_CONTEXT_SET user_id=%s ui_context=MODEL_CARD (second handler)", user_id)
             
             # Используем новый каталог
             user_lang = get_user_language(user_id)
@@ -20988,12 +21113,13 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     f'💳 <b>CHOOSE PAYMENT METHOD:</b>'
                 )
             
-            # Store amount in session
-            user_sessions[user_id] = {
-                'topup_amount': amount,
-                'stars_amount': stars_amount,
-                'waiting_for': 'payment_method'
-            }
+            # Store amount in session (preserve existing keys like ui_context)
+            user_sessions[user_id]['topup_amount'] = amount
+            user_sessions[user_id]['stars_amount'] = stars_amount
+            user_sessions[user_id]['waiting_for'] = 'payment_method'
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            user_sessions[user_id]["ui_context"] = "TOPUP_PAYMENT_METHOD"
+            logger.info("🎯 TOPUP_CUSTOM_AMOUNT_UI_CONTEXT_SET user_id=%s ui_context=TOPUP_PAYMENT_METHOD", user_id)
             
             keyboard = [
                 [InlineKeyboardButton("💳 СБП / SBP", callback_data=f"pay_sbp:{amount}")],
@@ -28378,6 +28504,14 @@ async def create_webhook_handler():
         update_id = getattr(update, "update_id", None)
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
+        
+        # CRITICAL: Log processing start with full details
+        callback_data = update.callback_query.data if update.callback_query else None
+        logger.info(
+            "⚡ PROCESS_UPDATE_START update_id=%s user_id=%s callback_data=%s correlation_id=%s",
+            update_id, user_id, callback_data, correlation_id
+        )
+        
         increment_update_metric("webhook_process_start")
         log_structured_event(
             correlation_id=correlation_id,
@@ -28444,6 +28578,13 @@ async def create_webhook_handler():
             await asyncio.shield(process_task)
             duration_ms = int((time.monotonic() - process_started) * 1000)
             increment_update_metric("webhook_process_done")
+            
+            # CRITICAL: Log successful processing
+            logger.info(
+                "✅ PROCESS_UPDATE_DONE update_id=%s user_id=%s callback_data=%s duration_ms=%s outcome=OK",
+                update_id, user_id, callback_data, duration_ms
+            )
+            
             log_structured_event(
                 correlation_id=correlation_id,
                 request_id=request_id,
@@ -28463,6 +28604,13 @@ async def create_webhook_handler():
         except Exception as exc:
             outcome = "failed"
             increment_update_metric("webhook_process_done")
+            
+            # CRITICAL: Log failed processing
+            logger.error(
+                "❌ PROCESS_UPDATE_FAILED update_id=%s user_id=%s callback_data=%s error=%s",
+                update_id, user_id, callback_data, str(exc)[:200]
+            )
+            
             log_structured_event(
                 correlation_id=correlation_id,
                 request_id=request_id,
@@ -28543,6 +28691,10 @@ async def create_webhook_handler():
         update_id: Optional[int] = None
         request_id = None
         ack_deadline_ms = ack_max_ms
+        
+        # CRITICAL: Log EVERY incoming request immediately
+        logger.info("⚡ WEBHOOK_REQUEST_RECEIVED path=%s method=%s", request.path, request.method)
+        
         try:
             correlation_id = (
                 request.headers.get("X-Request-ID")
@@ -28551,7 +28703,7 @@ async def create_webhook_handler():
                 or str(uuid.uuid4())[:8]
             )
             request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
-            logger.debug(f"[WEBHOOK] {correlation_id} handler_invoked")
+            logger.info("⚡ WEBHOOK_CORR_ID correlation_id=%s request_id=%s", correlation_id, request_id)
             log_structured_event(
                 correlation_id=correlation_id,
                 request_id=request_id,
@@ -28698,6 +28850,19 @@ async def create_webhook_handler():
                     update_id = getattr(update, "update_id", None)
                     user_id = update.effective_user.id if update.effective_user else None
                     chat_id = update.effective_chat.id if update.effective_chat else None
+                    
+                    # CRITICAL: Log EVERY update with full details
+                    callback_data = update.callback_query.data if update.callback_query else None
+                    message_text = None
+                    if update.message and update.message.text:
+                        message_text = update.message.text[:50]
+                    elif update.message and update.message.caption:
+                        message_text = update.message.caption[:50]
+                    
+                    logger.info(
+                        "⚡ UPDATE_PARSED update_id=%s user_id=%s chat_id=%s type=%s callback_data=%s text=%s",
+                        update_id, user_id, chat_id, _resolve_update_type(update), callback_data, message_text
+                    )
                     if update_id is not None and _update_deduper.seen(update_id):
                         log_structured_event(
                             correlation_id=correlation_id,
