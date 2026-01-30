@@ -12692,6 +12692,7 @@ async def _button_callback_impl(
                     )
                     if 'prompt' in input_params:
                         step_text += "\n\n✅ <b>После загрузки:</b> вы сможете ввести промпт"
+                # Note: This else branch is for Russian, the if branch above handles English
 
                 free_counter_line = await _resolve_free_counter_line(
                     user_id,
@@ -12791,12 +12792,20 @@ async def _button_callback_impl(
                     ],
                     [InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")]
                 ]
-                image_text = (
-                    f"{model_info_text}\n\n"
-                    f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
-                    f"Отправьте фото, которое будет использовано как первый кадр видео.\n\n"
-                    f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>"
-                )
+                if user_lang == 'en':
+                    image_text = (
+                        f"{model_info_text}\n\n"
+                        f"📷 <b>Step 1: Upload image</b>\n\n"
+                        f"Send a photo to use as the first frame of the video.\n\n"
+                        f"💡 <i>After uploading the image, you can enter a prompt</i>"
+                    )
+                else:
+                    image_text = (
+                        f"{model_info_text}\n\n"
+                        f"📷 <b>Шаг 1: Загрузите изображение</b>\n\n"
+                        f"Отправьте фото, которое будет использовано как первый кадр видео.\n\n"
+                        f"💡 <i>После загрузки изображения вы сможете ввести промпт</i>"
+                    )
                 price_line = _build_current_price_line(
                     session,
                     user_lang=user_lang,
@@ -18864,14 +18873,14 @@ def _build_model_card(
 ) -> str:
     """Build premium model card with clean structure."""
     name = model_info.get("name") or model_spec.title_ru or model_spec.id
-    description_ru = model_spec.description_ru or "Генерация по вашему запросу"
     inputs_line = _summarize_required_inputs(required_params, model_spec.schema_properties or {}, user_lang)
     output_label = _resolve_output_type_label(model_spec, user_lang)
     
     if user_lang == "ru":
+        description = model_spec.description_ru or "Генерация по вашему запросу"
         card_parts = [
             f"<b>{name}</b>",
-            f"{description_ru}",
+            f"{description}",
             "",
         ]
         if inputs_line:
@@ -18879,9 +18888,11 @@ def _build_model_card(
         card_parts.append(f"📤 Выход: {output_label}")
         return "\n".join(card_parts)
     
+    # English: use description_en if available, otherwise fallback
+    description = getattr(model_spec, 'description_en', None) or model_spec.description_ru or "Generation by your request"
     card_parts = [
         f"<b>{name}</b>",
-        f"{description_ru}",
+        f"{description}",
         "",
     ]
     if inputs_line:
@@ -19775,12 +19786,22 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 action_path=f"param_prompt:{param_name}",
                 sku_id=sku_id,
             )
-            title_map = {
-                "image": "Загрузите изображение",
-                "video": "Загрузите видео",
-                "audio": "Загрузите аудио",
-            }
-            title = title_map.get(media_kind, "Загрузите файл")
+            if user_lang == 'ru':
+                title_map = {
+                    "image": "Загрузите изображение",
+                    "video": "Загрузите видео",
+                    "audio": "Загрузите аудио",
+                }
+                title = title_map.get(media_kind, "Загрузите файл")
+                max_size_text = "📏 Максимальный размер: 30 MB"
+            else:
+                title_map = {
+                    "image": "Upload image",
+                    "video": "Upload video",
+                    "audio": "Upload audio",
+                }
+                title = title_map.get(media_kind, "Upload file")
+                max_size_text = "📏 Max size: 30 MB"
             instruction_line = _media_first_instruction(user_lang) if not is_optional else ""
             prompt_text = (
                 f"📥 <b>{step_prefix}{title}</b>\n\n"
@@ -19793,7 +19814,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             if example_hint:
                 prompt_text += f"{example_line}"
             prompt_text += (
-                f"📏 Максимальный размер: 30 MB\n\n"
+                f"{max_size_text}\n\n"
                 f"{price_line}"
             )
             prompt_text = _append_free_counter_text(prompt_text, free_counter_line)
@@ -22228,8 +22249,9 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                         image_required = False
                     
                     if image_required:
+                        upload_btn_text = "📷 Upload image" if user_lang == 'en' else "📷 Загрузить изображение"
                         keyboard = [
-                            [InlineKeyboardButton("📷 Загрузить изображение", callback_data="add_image")],
+                            [InlineKeyboardButton(upload_btn_text, callback_data="add_image")],
                         ]
                         image_param_name = 'image_urls' if 'image_urls' in input_params else 'image_input'
                         free_counter_line = await _resolve_free_counter_line(
@@ -22239,9 +22261,18 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                             action_path=f"param_prompt:{image_param_name}",
                             sku_id=session.get("sku_id"),
                         )
+                        if user_lang == 'en':
+                            image_text_raw = (
+                                "📷 <b>Upload image for editing</b>\n\n"
+                                "Send a photo you want to edit."
+                            )
+                        else:
+                            image_text_raw = (
+                                "📷 <b>Загрузите изображение для редактирования</b>\n\n"
+                                "Отправьте фото, которое хотите отредактировать."
+                            )
                         image_text = _append_free_counter_text(
-                            "📷 <b>Загрузите изображение для редактирования</b>\n\n"
-                            "Отправьте фото, которое хотите отредактировать.",
+                            image_text_raw,
                             free_counter_line,
                         )
                         await update.message.reply_text(
