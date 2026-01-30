@@ -7055,13 +7055,9 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         update = update_or_query
         user_id = update.effective_user.id
         chat_id = update.effective_chat.id
-        update_id = update.message_id
+        update_id = update.update_id
         message_func = update.message.reply_text
         correlation_id = get_correlation_id(update_id, user_id)
-        try:
-            await query.answer()
-        except Exception:
-            pass
 
     if not is_admin(user_id):
         if is_callback:
