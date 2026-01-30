@@ -25150,6 +25150,31 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                 )
                                 return
                         elif poll_state.canonical_state in {"failed", "canceled"}:
+                            # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: ошибка генерации
+                            fail_code = status.get("failCode") or status.get("fail_code") or "UNKNOWN"
+                            fail_msg = status.get("failMsg") or status.get("fail_msg") or status.get("error") or "No details"
+                            logger.error(
+                                "❌ INLINE_POLL_FAILED correlation_id=%s task_id=%s user_id=%s model_id=%s "
+                                "state=%s fail_code=%s fail_msg=%s",
+                                correlation_id, task_id, user_id, model_id,
+                                poll_state.canonical_state, fail_code, fail_msg
+                            )
+                            log_structured_event(
+                                correlation_id=correlation_id,
+                                request_id=request_id,
+                                user_id=user_id,
+                                chat_id=chat_id_value,
+                                action="INLINE_POLL_FAILED",
+                                action_path="confirm_generate.bg",
+                                model_id=model_id,
+                                task_id=task_id,
+                                job_id=job_id,
+                                stage="INLINE_POLL",
+                                outcome="failed",
+                                error_code=fail_code,
+                                fix_hint=fail_msg,
+                                poll_attempt=attempt + 1,
+                            )
                             # Уведомляем пользователя об ошибке
                             try:
                                 user_lang = get_user_language(user_id)
@@ -25167,6 +25192,16 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                 )
                             except Exception as notify_exc:
                                 logger.warning("Failed to notify user about generation failure: %s", notify_exc)
+                            # Обновляем статус job в storage
+                            try:
+                                await storage_instance.update_job_status(
+                                    job_id,
+                                    "failed",
+                                    error_message=fail_msg,
+                                    error_code=fail_code,
+                                )
+                            except Exception as storage_exc:
+                                logger.warning("Failed to update job status: %s", storage_exc)
                             return
                     except Exception as poll_exc:
                         logger.warning("inline_poll_error task_id=%s attempt=%s error=%s", task_id, attempt + 1, poll_exc)
