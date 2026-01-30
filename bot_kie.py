@@ -26065,6 +26065,70 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 pass
         user_sessions.pop(user_id, None)
         return ConversationHandler.END
+    except (ConnectionResetError, ConnectionError, OSError) as e:
+        # Специальная обработка сетевых ошибок
+        logger.error(f"❌ Network error during generation: {e}", exc_info=True)
+        if prompt_hash:
+            await update_dedupe_entry(
+                user_id,
+                model_id,
+                prompt_hash,
+                task_id=session.get("task_id"),
+                job_id=job_id,
+                status="failed",
+                request_id=request_id,
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="CONFIRM_GENERATE",
+            action_path="confirm_generate",
+            model_id=model_id,
+            outcome="failed",
+            error_code="ERR_NETWORK_ERROR",
+        )
+        if job_id:
+            state_before = session.get("job_state") if "session" in locals() else None
+            _update_job_record(job_id, state="failed", failed_ts_ms=_now_ms())
+            _log_job_state_update(
+                correlation_id=correlation_id,
+                update_id=update.update_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                message_id=query.message.message_id if query and query.message else None,
+                callback_query_id=query.id if query else None,
+                callback_data=query.data if query else None,
+                job_id=job_id,
+                state_before=state_before,
+                state_after="failed",
+            )
+        log_structured_event(
+            correlation_id=correlation_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            action="GENERATION_FAILED",
+            action_path="confirm_generate",
+            model_id=model_id,
+            stage="NETWORK_ERROR",
+            outcome="failed",
+            error_code="ERR_NETWORK_ERROR",
+            fix_hint="Проблема с соединением KIE API. Попробуйте позже.",
+        )
+        # Гарантированное уведомление пользователя
+        try:
+            await send_or_edit_message(
+                _append_free_counter_text(
+                    "❌ <b>Ошибка соединения с KIE</b>\n\n"
+                    f"Сервис временно недоступен. Попробуйте позже.\n\n"
+                    f"ID: <code>{correlation_id}</code>",
+                    free_counter_line,
+                ),
+                parse_mode='HTML'
+            )
+        except Exception as notify_exc:
+            logger.error("Failed to notify user about network error: %s", notify_exc)
+        return ConversationHandler.END
     except Exception as e:
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
         if prompt_hash:
