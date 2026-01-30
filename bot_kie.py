@@ -6401,6 +6401,10 @@ def get_all_users() -> list:
     """Get list of all user IDs from various sources."""
     user_ids = set()
     
+    # From user registry (primary source - all users who used /start)
+    registry = load_json_file(USER_REGISTRY_FILE, {})
+    user_ids.update([int(uid) for uid in registry.keys() if uid.isdigit()])
+    
     # From user balances
     balances = load_json_file(BALANCES_FILE, {})
     user_ids.update([int(uid) for uid in balances.keys() if uid.isdigit()])
