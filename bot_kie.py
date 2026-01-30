@@ -123,6 +123,7 @@ KNOWN_CALLBACK_EXACT = {
     "admin_view_generations",
     "admin_settings",
     "admin_set_currency_rate",
+    "admin_config_check",
     "back_to_menu",
     "back_to_confirmation",
     "topup_balance",
@@ -15705,6 +15706,9 @@ async def _button_callback_impl(
                 "• HTML форматирование\n"
                 "• Изображения\n\n"
                 "Или нажмите /cancel для отмены.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_broadcast")]
+                ]),
                 parse_mode='HTML'
             )
             user_sessions[user_id] = {
@@ -15737,6 +15741,9 @@ async def _button_callback_impl(
             
             await query.edit_message_text(
                 currency_text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_settings")]
+                ]),
                 parse_mode='HTML'
             )
             
@@ -15810,6 +15817,9 @@ async def _button_callback_impl(
                 '<code>/search [запрос]</code>\n\n'
                 'Пример:\n'
                 '<code>/search нейросети</code>',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+                ]),
                 parse_mode='HTML'
             )
             return ConversationHandler.END
@@ -15826,6 +15836,9 @@ async def _button_callback_impl(
                 '<code>/add [заголовок] | [содержание]</code>\n\n'
                 'Пример:\n'
                 '<code>/add AI | Искусственный интеллект - это...</code>',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+                ]),
                 parse_mode='HTML'
             )
             return ConversationHandler.END
@@ -15843,6 +15856,9 @@ async def _button_callback_impl(
                     'Установите:\n'
                     '1. pip install Pillow pytesseract\n'
                     '2. Tesseract OCR (см. TESSERACT_INSTALL.txt)',
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+                    ]),
                     parse_mode='HTML'
                 )
                 return ConversationHandler.END
@@ -15855,6 +15871,9 @@ async def _button_callback_impl(
                 '✅ Поиск сумм\n'
                 '✅ Работа Tesseract OCR\n\n'
                 'Или нажмите /cancel для отмены.',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+                ]),
                 parse_mode='HTML'
             )
             user_sessions[user_id] = {
@@ -27521,6 +27540,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_set_currency_rate$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_config_check$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^view_payment_screenshots$'),
@@ -27562,6 +27582,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^all_models$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^gen_type:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^fast_tools$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^special_tools$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
@@ -27590,6 +27612,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_config_check$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
@@ -27609,6 +27632,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^fast_tools$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^special_tools$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^pay_sbp:'),
@@ -27634,6 +27659,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_config_check$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
@@ -27661,6 +27687,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^reset_step$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^fast_tools$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^special_tools$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^topup_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^topup_amount:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^pay_sbp:'),
@@ -27686,6 +27714,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_nav:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_gen_view:'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_settings$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_config_check$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_search$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
