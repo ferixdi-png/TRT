@@ -111,11 +111,14 @@ KNOWN_CALLBACK_EXACT = {
     "other_models",
     "all_models",
     "free_tools",
+    "fast_tools",
+    "special_tools",
     "check_balance",
     "copy_bot",
     "claim_gift",
     "help_menu",
     "support_contact",
+    "change_language",
     "admin_stats",
     "admin_view_generations",
     "admin_settings",
@@ -12432,6 +12435,11 @@ async def _button_callback_impl(
             # Generate again - restore model and show model info, then ask for new prompt
             await query.answer()  # Acknowledge the callback
             
+            # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "GENERATE_AGAIN"
+                logger.info("🎯 GENERATE_AGAIN_UI_CONTEXT_SET user_id=%s ui_context=GENERATE_AGAIN", user_id)
+            
             logger.info(f"Generate again requested by user {user_id}")
             
             if user_id not in saved_generations:
@@ -15036,13 +15044,16 @@ async def _button_callback_impl(
                     prices=[{"label": title, "amount": stars_amount}],  # amount в Stars
                 )
                 
-                # Сохраняем информацию о pending платеже
-                user_sessions[user_id] = {
-                    'invoice_payload': payload,
-                    'topup_amount': amount_rub,
-                    'stars_amount': stars_amount,
-                    'waiting_for': 'stars_payment'
-                }
+                # Сохраняем информацию о pending платеже (сохраняем существующие ключи)
+                if user_id not in user_sessions:
+                    user_sessions[user_id] = {}
+                user_sessions[user_id]['invoice_payload'] = payload
+                user_sessions[user_id]['topup_amount'] = amount_rub
+                user_sessions[user_id]['stars_amount'] = stars_amount
+                user_sessions[user_id]['waiting_for'] = 'stars_payment'
+                # CRITICAL: Set ui_context so back_to_menu knows we're not in MAIN_MENU
+                user_sessions[user_id]["ui_context"] = "PAY_STARS"
+                logger.info("🎯 PAY_STARS_UI_CONTEXT_SET user_id=%s ui_context=PAY_STARS", user_id)
                 
                 logger.info(f"STARS_INVOICE_SENT user_id={user_id} amount_rub={amount_rub} stars={stars_amount} payload={payload}")
                 
@@ -15133,9 +15144,10 @@ async def _button_callback_impl(
                 f'💬 <b>Отправь сумму цифрами</b> (например: 250)',
                 parse_mode='HTML'
             )
-            user_sessions[user_id] = {
-                'waiting_for': 'topup_amount_input'
-            }
+            # Сохраняем waiting_for, не перезаписывая ui_context
+            if user_id not in user_sessions:
+                user_sessions[user_id] = {}
+            user_sessions[user_id]['waiting_for'] = 'topup_amount_input'
             return SELECTING_AMOUNT
         
         # Admin functions (only for admin)
