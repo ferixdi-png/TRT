@@ -27,7 +27,27 @@ def _load_model_copy() -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _model_type_description(model_type: str) -> str:
+def _model_type_description(model_type: str, user_lang: str = "ru") -> str:
+    if user_lang == "en":
+        mapping = {
+            "text_to_image": "Text to image generation",
+            "image_to_image": "Image transformation by description",
+            "image_edit": "Image editing by request",
+            "outpaint": "Image expansion by description",
+            "upscale": "Image resolution enhancement",
+            "text_to_video": "Text to video generation",
+            "image_to_video": "Image to video animation",
+            "video_upscale": "Video quality enhancement",
+            "video_editing": "Video editing",
+            "speech_to_video": "Speech to video",
+            "lip_sync": "Lip sync with audio",
+            "text_to_speech": "Text to speech",
+            "text_to_audio": "Text to audio generation",
+            "audio_to_audio": "Audio processing",
+            "speech_to_text": "Speech to text recognition",
+            "text": "Text generation",
+        }
+        return mapping.get(model_type, "Result generation by request")
     mapping = {
         "text_to_image": "Генерация изображений по тексту",
         "image_to_image": "Преобразование изображений по описанию",
@@ -57,7 +77,7 @@ def _extract_brand(model_id: str) -> str:
     return model_id
 
 
-def _resolve_model_short(model_id: str, correlation_id: str | None) -> Tuple[str, bool, str | None]:
+def _resolve_model_short(model_id: str, correlation_id: str | None, user_lang: str = "ru") -> Tuple[str, bool, str | None]:
     copy = _load_model_copy()
     entry = copy.get(model_id)
     if isinstance(entry, dict) and entry.get("model_short"):
@@ -65,9 +85,12 @@ def _resolve_model_short(model_id: str, correlation_id: str | None) -> Tuple[str
 
     meta = get_model_meta(model_id) or {}
     model_type = str(meta.get("model_type") or "").lower()
-    description = _model_type_description(model_type)
+    description = _model_type_description(model_type, user_lang)
     brand = _extract_brand(model_id).replace("_", " ").title()
-    fallback_text = f"{brand}: {description}. Подходит, чтобы быстро попробовать результат."
+    if user_lang == "en":
+        fallback_text = f"{brand}: {description}. Good for quick testing."
+    else:
+        fallback_text = f"{brand}: {description}. Подходит, чтобы быстро попробовать результат."
     reason = "missing_model_short"
     log_structured_event(
         correlation_id=correlation_id,
@@ -109,7 +132,7 @@ def _resolve_sku_key(sku: Any) -> str | None:
     return getattr(sku, "sku_id", None) or getattr(sku, "sku_key", None)
 
 
-def _build_sku_placeholders(params: Dict[str, Any]) -> Dict[str, str | None]:
+def _build_sku_placeholders(params: Dict[str, Any], user_lang: str = "ru") -> Dict[str, str | None]:
     duration = params.get("duration")
     n_frames = params.get("n_frames")
     resolution = params.get("resolution") or params.get("size") or params.get("aspect_ratio")
@@ -120,15 +143,18 @@ def _build_sku_placeholders(params: Dict[str, Any]) -> Dict[str, str | None]:
     upscale = params.get("upscale_factor")
 
     if n_frames is not None and duration is None:
-        duration_value = f"{n_frames} кадров"
+        duration_value = f"{n_frames} frames" if user_lang == "en" else f"{n_frames} кадров"
     elif duration is not None:
-        duration_value = f"{duration} сек"
+        duration_value = f"{duration}s" if user_lang == "en" else f"{duration} сек"
     else:
         duration_value = None
 
     audio_value = None
     if sound is not None:
-        audio_value = "с аудио" if str(sound).lower() in {"true", "1", "yes"} else "без аудио"
+        if user_lang == "en":
+            audio_value = "with audio" if str(sound).lower() in {"true", "1", "yes"} else "no audio"
+        else:
+            audio_value = "с аудио" if str(sound).lower() in {"true", "1", "yes"} else "без аудио"
 
     mode_value = rendering_speed or quality
 
@@ -167,6 +193,7 @@ def _resolve_sku_short(
     model_id: str,
     sku: Any,
     correlation_id: str | None,
+    user_lang: str = "ru",
 ) -> Tuple[str, bool, str | None]:
     copy = _load_model_copy()
     entry = copy.get(model_id) or {}
@@ -181,9 +208,12 @@ def _resolve_sku_short(
             template = templates.get("default")
 
     if not template:
-        template = "Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio} • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}"
+        if user_lang == "en":
+            template = "Duration: {duration} • Resolution: {resolution} • Audio: {audio} • Mode: {mode} • Scale: {scale} • Format: {format} • Limit: {limit}"
+        else:
+            template = "Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio} • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}"
 
-    placeholders = _build_sku_placeholders(_normalize_sku_params(sku))
+    placeholders = _build_sku_placeholders(_normalize_sku_params(sku), user_lang)
     rendered = _render_template(str(template), placeholders)
     if rendered:
         return rendered, False, None
@@ -191,10 +221,11 @@ def _resolve_sku_short(
     sku_params = _normalize_sku_params(sku)
     if sku_params:
         summary = ", ".join(f"{key}={value}" for key, value in sorted(sku_params.items()))
-        return f"Параметры: {summary}", False, None
+        prefix = "Parameters" if user_lang == "en" else "Параметры"
+        return f"{prefix}: {summary}", False, None
 
     reason = "missing_sku_params"
-    fallback_text = "SKU: параметры не заданы"
+    fallback_text = "SKU: no parameters" if user_lang == "en" else "SKU: параметры не заданы"
     log_structured_event(
         correlation_id=correlation_id,
         action="MODEL_COPY_FALLBACK",
@@ -224,9 +255,10 @@ def build_step1_prompt_text(
     admin_flag: bool,
     *,
     correlation_id: str | None = None,
+    user_lang: str = "ru",
 ) -> str:
-    model_short, model_fallback, _ = _resolve_model_short(model_id, correlation_id)
-    sku_short, sku_fallback, _ = _resolve_sku_short(model_id, sku, correlation_id)
+    model_short, model_fallback, _ = _resolve_model_short(model_id, correlation_id, user_lang)
+    sku_short, sku_fallback, _ = _resolve_sku_short(model_id, sku, correlation_id, user_lang)
 
     price_text = billing_ctx.get("price_text") if isinstance(billing_ctx, dict) else None
     price_rub = billing_ctx.get("price_rub") if isinstance(billing_ctx, dict) else None
@@ -235,18 +267,24 @@ def build_step1_prompt_text(
     fallback_used = model_fallback or sku_fallback
 
     if admin_flag:
-        price_lines = [
-            "🎁 Бесплатно",
-            "🎁 Админ: безлимитные генерации (квота не расходуется).",
-        ]
+        if user_lang == "en":
+            price_lines = [
+                "🎁 Free",
+                "🎁 Admin: unlimited generations (quota not used).",
+            ]
+        else:
+            price_lines = [
+                "🎁 Бесплатно",
+                "🎁 Админ: безлимитные генерации (квота не расходуется).",
+            ]
         price_rub = 0
     else:
         if is_free:
-            price_lines = ["🎁 Бесплатно"]
+            price_lines = ["🎁 Free" if user_lang == "en" else "🎁 Бесплатно"]
         elif price_text:
             price_lines = [str(price_text)]
         else:
-            price_lines = ["Цена: уточняется"]
+            price_lines = ["Price: TBD" if user_lang == "en" else "Цена: уточняется"]
 
     log_structured_event(
         correlation_id=correlation_id,
@@ -270,16 +308,28 @@ def build_step1_prompt_text(
         correlation_id,
     )
 
-    lines = [
-        "📝 Шаг 1/3: Введите prompt:",
-        model_short,
-        sku_short,
-        "Макс. длина: 5000 символов",
-        "💡 Формат: текст",
-        "💡 Что делать:",
-        "• Введите значение в текстовом сообщении",
-        "• Отправьте значение текстом",
-    ]
+    if user_lang == "en":
+        lines = [
+            "📝 Step 1/3: Enter prompt:",
+            model_short,
+            sku_short,
+            "Max length: 5000 characters",
+            "💡 Format: text",
+            "💡 What to do:",
+            "• Enter text in a message",
+            "• Send text value",
+        ]
+    else:
+        lines = [
+            "📝 Шаг 1/3: Введите prompt:",
+            model_short,
+            sku_short,
+            "Макс. длина: 5000 символов",
+            "💡 Формат: текст",
+            "💡 Что делать:",
+            "• Введите значение в текстовом сообщении",
+            "• Отправьте значение текстом",
+        ]
     lines.extend(price_lines)
 
     text = "\n".join(line for line in lines if line)
